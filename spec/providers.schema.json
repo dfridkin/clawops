@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clawops.dev/schemas/provider.json",
+  "title": "ProviderAdapter",
+  "description": "Contract every cloud provider adapter must satisfy. Source of truth for src/providers/types.ts (generated). Per R-meta-1.",
+  "type": "object",
+  "required": ["name", "credentials", "regions", "instanceTypes", "stateBackend", "operations"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "enum": ["aws", "gcp", "azure", "local"],
+      "description": "Lowercase provider id"
+    },
+    "credentials": {
+      "type": "object",
+      "description": "How this provider's credentials are sourced (R6: never in tool args)",
+      "required": ["source"],
+      "properties": {
+        "source": {
+          "enum": ["env", "cli-profile", "file", "instance-metadata"],
+          "description": "Credential resolution mechanism"
+        },
+        "envVars": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Environment variables checked at startup (e.g., AWS_PROFILE)"
+        },
+        "profileName": {
+          "type": "string",
+          "description": "When source=cli-profile, the profile name in the cloud CLI's config"
+        },
+        "filePath": {
+          "type": "string",
+          "description": "When source=file, absolute path to credentials file"
+        }
+      }
+    },
+    "regions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Region IDs supported by this adapter (e.g., us-east-1, us-central1, eastus)"
+    },
+    "instanceTypes": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Mapping from clawops aliases to provider-native instance types",
+      "items": {
+        "type": "object",
+        "required": ["alias", "nativeId", "vcpu", "memoryGB", "arch"],
+        "properties": {
+          "alias": {
+            "enum": ["micro", "small", "medium", "large", "gpu"],
+            "description": "Normalized clawops alias"
+          },
+          "nativeId": {
+            "type": "string",
+            "description": "Provider-native instance type (e.g., t3.small, e2-small, Standard_B2s)"
+          },
+          "vcpu": { "type": "number", "minimum": 1 },
+          "memoryGB": { "type": "number", "minimum": 0.5 },
+          "arch": { "enum": ["x86_64", "arm64"] }
+        }
+      }
+    },
+    "stateBackend": {
+      "type": "object",
+      "required": ["scheme", "urlPattern"],
+      "properties": {
+        "scheme": {
+          "enum": ["s3", "gs", "azblob", "file"],
+          "description": "Pulumi state backend URL scheme"
+        },
+        "urlPattern": {
+          "type": "string",
+          "description": "URL template like 's3://{bucket}/clawops'"
+        }
+      }
+    },
+    "operations": {
+      "type": "object",
+      "required": ["provision", "destroy", "describe"],
+      "description": "Lifecycle operations every adapter must implement",
+      "properties": {
+        "provision": { "$ref": "#/$defs/Operation" },
+        "destroy": { "$ref": "#/$defs/Operation" },
+        "describe": { "$ref": "#/$defs/Operation" },
+        "refresh": { "$ref": "#/$defs/Operation" }
+      }
+    },
+    "supportedOpenclawVersions": {
+      "type": "object",
+      "properties": {
+        "min": { "type": "string", "description": "semver, e.g., 2026.4.5" },
+        "max": { "type": "string" },
+        "tested": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "$defs": {
+    "Operation": {
+      "type": "object",
+      "required": ["estimatedDurationSec", "idempotent", "destructive"],
+      "properties": {
+        "estimatedDurationSec": {
+          "type": "object",
+          "properties": {
+            "min": { "type": "number" },
+            "max": { "type": "number" },
+            "median": { "type": "number" }
+          },
+          "description": "Used by R12 to pick streaming tier (sync / progress / Tasks)"
+        },
+        "idempotent": { "type": "boolean" },
+        "destructive": { "type": "boolean" },
+        "supportsCancellation": { "type": "boolean", "default": true }
+      }
+    }
+  }
+}

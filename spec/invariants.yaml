@@ -1,0 +1,81 @@
+# Invariants enforced by tests.
+# tests/invariants.test.ts loads this file and asserts each rule via a corresponding check.
+# Adding an invariant here without adding the test is a CI failure.
+
+version: 1
+
+invariants:
+  - id: I1-no-secrets-in-config
+    rule: ~/.clawops/config.json schema must not include any secret-looking field
+    enforcement: tests/config/no-secrets.test.ts
+    derives_from: R6, N9
+
+  - id: I2-firewall-deny-default
+    rule: All ProviderAdapter program() outputs must produce a firewall/security group with no default 0.0.0.0/0 rules on any port
+    enforcement: tests/providers/firewall-defaults.test.ts
+    derives_from: R-meta-1, N10
+
+  - id: I3-mcp-tools-have-all-annotations
+    rule: Every tool in spec/mcp-tools.yaml has all four annotation hints AND a title
+    enforcement: tests/mcp/annotations.test.ts
+    derives_from: R10
+
+  - id: I4-mcp-tool-cap
+    rule: Total registered MCP tools across all toolsets ≤ 30
+    enforcement: tests/mcp/tool-cap.test.ts
+    derives_from: R1
+
+  - id: I5-mcp-prefix
+    rule: All MCP tool names start with `clawops_`
+    enforcement: tests/mcp/naming.test.ts
+    derives_from: R1
+
+  - id: I6-mcp-descriptions-include-when-not
+    rule: Every tool description includes the substring "Do NOT use" or "Do NOT use when"
+    enforcement: tests/mcp/descriptions.test.ts
+    derives_from: R3
+
+  - id: I7-stdio-no-stdout-writes
+    rule: No call to console.log, process.stdout.write outside of src/output/json.ts and src/output/human.ts
+    enforcement: tests/mcp/stdio-purity.test.ts (eslint rule + grep)
+    derives_from: R15
+
+  - id: I8-no-docx-in-repo
+    rule: No .docx, .pages, .rtf files committed
+    enforcement: scripts/verify-no-docx.ts (CI step)
+    derives_from: R-meta-2
+
+  - id: I9-generated-files-up-to-date
+    rule: src/providers/types.ts and src/mcp/tools/_generated.ts match output of `pnpm gen:schemas`
+    enforcement: pnpm gen:schemas --check (CI step)
+    derives_from: R-meta-1
+
+  - id: I10-deploy-plan-conforms
+    rule: Every plan produced by `clawops plan` passes ajv validation against spec/deploy-plan.schema.json
+    enforcement: tests/plan/schema.test.ts
+    derives_from: R-meta-4
+
+  - id: I11-tool-output-cap
+    rule: MCP tool outputs are <= 8KB after sanitization
+    enforcement: tests/mcp/output-size.test.ts
+    derives_from: R14
+
+  - id: I12-audit-log-sanitization
+    rule: src/mcp/audit.ts strips any field whose key matches the sensitive-key list before logging
+    enforcement: tests/mcp/audit-sanitization.test.ts
+    derives_from: R21
+
+  - id: I13-paths-absolute-on-input
+    rule: Any tool input field of type "path" rejects relative paths with a clear error
+    enforcement: tests/mcp/path-absolute.test.ts
+    derives_from: R7
+
+  - id: I14-cancellation-propagates
+    rule: Cancellation of a tool call propagates to the underlying subprocess within 5 seconds
+    enforcement: tests/integration/cancellation.test.ts
+    derives_from: R13
+
+  - id: I15-no-aws-cli-shellout
+    rule: No call to spawn/exec of "aws", "gcloud", "az", "ssh" binaries from src/. Use SDKs.
+    enforcement: scripts/lint-no-shellout.ts + grep
+    derives_from: §6 (use SDKs not shell)

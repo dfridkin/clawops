@@ -1,0 +1,448 @@
+# MCP Tool Catalog — Single source of truth for clawops's MCP server.
+# Generates src/mcp/tools/_generated.ts via scripts/gen-schemas.ts.
+# Every tool MUST follow R1–R25 (see DESIGN_RULES.md).
+#
+# Key rules enforced in this file:
+#   R1  — clawops_ prefix, toolset assignment, ≤30 tools total
+#   R3  — descriptions include "Use when" and "Do NOT use when"
+#   R5  — stackName optional with default; no hidden state
+#   R6  — no credentials in inputs
+#   R7  — paths are absolute
+#   R8  — enums for closed sets
+#   R10 — all four annotation hints set
+#   R11 — annotations bound to safety modes (--read-only, --no-destructive)
+
+version: 1
+
+toolsets:
+  - id: cli
+    description: 1:1 mappings of clawops CLI commands. Default toolset.
+  - id: workflow
+    description: Composite agent workflows (R2). Encode user intent.
+  - id: read
+    description: Read-only tools, the ONLY toolset enabled in --read-only mode (R18).
+  - id: admin
+    description: Stack management and multi-stack ops. Requires admin profile.
+
+# ────────────────────────────────────────────────────────────────────────────
+# READ-ONLY TOOLS
+# ────────────────────────────────────────────────────────────────────────────
+
+tools:
+  - name: clawops_status
+    toolset: [cli, read]
+    description: |
+      Get current status of a clawops-managed stack: gateway health, OpenClaw
+      version, agent count, uptime.
+
+      Use when: the user asks about the health of a deployed instance, whether
+      the gateway is responding, or wants a quick overview.
+
+      Do NOT use when: the user asks for live logs (use clawops_logs) or wants
+      to see specific configuration values (use clawops_config_get).
+    annotations:
+      title: Get Stack Status
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName:
+        type: string
+        optional: true
+        description: Stack name. Defaults to active stack from config.
+    output:
+      health: { type: enum, values: [healthy, degraded, down, unknown] }
+      gatewayUrl: { type: string, format: uri }
+      uptimeSec: { type: integer }
+      openclawVersion: { type: string }
+      agentCount: { type: integer }
+      provider: { type: enum, values: [aws, gcp, azure, local] }
+      region: { type: string }
+
+  - name: clawops_logs_tail
+    toolset: [cli, read]
+    description: |
+      Tail recent gateway logs from a clawops-managed instance.
+
+      Use when: the user wants to investigate recent activity or errors, or
+      asks "what's been happening" on the gateway.
+
+      Do NOT use when: the user wants real-time streaming logs (those are not
+      well-suited to tool calls; suggest the user run `clawops logs -f` directly
+      in their terminal). Do NOT use for instance-level system logs (use
+      clawops_ssh with `journalctl`).
+    annotations:
+      title: Tail Gateway Logs
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true }
+      tailLines: { type: integer, optional: true, default: 100, max: 1000 }
+      sinceMin: { type: integer, optional: true, description: "Lines since N minutes ago" }
+    output:
+      lines: { type: array, items: { type: string }, description: "Trimmed log lines (R14: hard cap 8KB)" }
+      truncated: { type: boolean }
+      fullLogResource: { type: string, format: uri, description: "clawops:// URI for full log" }
+
+  - name: clawops_stacks_list
+    toolset: [admin, read]
+    description: |
+      List all clawops-managed stacks across all configured providers.
+
+      Use when: the user wants an overview of their deployments, asks "what
+      stacks do I have", or wants to compare stacks before an operation.
+
+      Do NOT use when: the user named a specific stack — use clawops_status
+      directly with that name.
+    annotations:
+      title: List Stacks
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: false
+    input: {}
+    output:
+      stacks:
+        type: array
+        items:
+          type: object
+          properties:
+            name: { type: string }
+            provider: { type: enum, values: [aws, gcp, azure, local] }
+            region: { type: string }
+            health: { type: enum, values: [healthy, degraded, down, unknown] }
+
+  - name: clawops_config_get
+    toolset: [cli, read]
+    description: |
+      Read a configuration value from the remote OpenClaw gateway.
+
+      Use when: the user wants to inspect current OpenClaw config (e.g., which
+      model provider is active, which channels are enabled).
+
+      Do NOT use when: the user wants to change the config — use
+      clawops_config_set instead.
+    annotations:
+      title: Get OpenClaw Config Value
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true }
+      key: { type: string, description: "Dot-path config key, e.g., gateway.auth.mode" }
+    output:
+      value: { type: string, description: "Stringified value; complex objects are JSON-encoded" }
+
+  - name: clawops_agents_list
+    toolset: [cli, read]
+    description: |
+      List agents currently registered on the remote OpenClaw gateway.
+
+      Use when: the user wants to see which agents are running, debug agent
+      routing, or count active workspaces.
+
+      Do NOT use when: the user wants agent logs (use clawops_agents_logs).
+    annotations:
+      title: List OpenClaw Agents
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true }
+    output:
+      agents:
+        type: array
+        items:
+          type: object
+          properties:
+            id: { type: string }
+            name: { type: string }
+            status: { type: enum, values: [running, paused, errored, stopped] }
+            channels: { type: array, items: { type: string } }
+
+# ────────────────────────────────────────────────────────────────────────────
+# MUTATING CLI TOOLS (destructive flagged per R10/R11; elicitation per R19)
+# ────────────────────────────────────────────────────────────────────────────
+
+  - name: clawops_up
+    toolset: [cli]
+    description: |
+      Provision and deploy a clawops stack. Idempotent — re-running with no spec
+      change produces no diff. Long-running (median 3min, p99 8min) so emits
+      progress notifications per R12.
+
+      Use when: the user explicitly asks to deploy, provision, create, or "spin
+      up" a stack. Always after the user has reviewed a plan
+      (clawops_plan first when in doubt).
+
+      Do NOT use when: the user has not yet generated a plan and is in
+      exploratory/discovery mode — use clawops_plan first. Do NOT use for an
+      existing stack you only need to update; refresh first.
+    annotations:
+      title: Provision and Deploy Stack
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true }
+      provider:
+        type: enum
+        values: [aws, gcp, azure, local]
+        optional: true
+        description: Defaults to provider configured for this stack
+      region: { type: string, optional: true }
+      instanceType:
+        type: enum
+        values: [micro, small, medium, large, gpu]
+        optional: true
+        default: small
+      openclawVersion: { type: string, optional: true, description: "semver or 'stable'/'dev'" }
+      dryRun: { type: boolean, optional: true, default: false }
+    output:
+      taskId: { type: string, description: "For >60s ops; poll clawops_task_status" }
+      stackName: { type: string }
+      gatewayUrl: { type: string, format: uri }
+      resourceCount: { type: integer }
+
+  - name: clawops_destroy
+    toolset: [cli]
+    description: |
+      Destroy a clawops stack. Removes ALL provisioned resources. Triggers
+      elicitation confirmation showing the resource diff before execution
+      (R19). Cannot be undone.
+
+      Use when: the user explicitly asks to destroy, tear down, delete, or
+      remove a stack. Always confirm the stack name.
+
+      Do NOT use when: the user wants to stop the gateway temporarily — use
+      clawops_gateway_stop instead. Do NOT use when in doubt about which stack;
+      list first with clawops_stacks_list.
+    annotations:
+      title: Destroy Stack (DESTRUCTIVE)
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string }
+      yes: { type: boolean, optional: true, default: false, description: "Skip elicitation; CI/scripted use only" }
+    output:
+      taskId: { type: string }
+      destroyedResourceCount: { type: integer }
+
+  - name: clawops_apply
+    toolset: [cli]
+    description: |
+      Apply a previously-generated Maker plan (deploy-plan.schema.json).
+      Deterministic — the plan describes exactly what will be created.
+
+      Use when: the user has a plan file path and wants to apply it. This is
+      the agent-friendly path for any deploy/destroy operation.
+
+      Do NOT use when: there's no plan file — generate one first with
+      clawops_plan.
+    annotations:
+      title: Apply Maker Plan
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: false
+      openWorldHint: true
+    input:
+      planPath: { type: string, description: "Absolute path to plan JSON (R7)" }
+      yes: { type: boolean, optional: true, default: false }
+    output:
+      taskId: { type: string }
+      summary: { type: string, description: "Trimmed; full output as resource (R14)" }
+
+  - name: clawops_plan
+    toolset: [cli, read]
+    description: |
+      Generate a Maker deploy plan (does NOT apply). Plan is JSON conforming to
+      deploy-plan.schema.json — review before applying.
+
+      Use when: the user wants to see what would be created before committing,
+      or you (the agent) need a reviewable artifact for the user to approve.
+
+      Do NOT use when: the user has explicitly asked to deploy and you already
+      have their approval — go directly to clawops_up.
+    annotations:
+      title: Generate Deploy Plan
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true }
+      provider: { type: enum, values: [aws, gcp, azure, local], optional: true }
+      region: { type: string, optional: true }
+      instanceType: { type: enum, values: [micro, small, medium, large, gpu], optional: true }
+      outPath: { type: string, optional: true, description: "Absolute path to write plan; if omitted, plan returned inline" }
+    output:
+      planPath: { type: string, description: "Absolute path; only set if outPath provided" }
+      summary:
+        type: object
+        description: "Trimmed; full plan available at the planPath or inline"
+
+  - name: clawops_config_set
+    toolset: [cli]
+    description: |
+      Set a configuration value on the remote OpenClaw gateway. Optionally
+      restarts the gateway after.
+
+      Use when: the user wants to change OpenClaw configuration (model
+      provider, channel auth, gateway port).
+
+      Do NOT use when: the user is reading config — use clawops_config_get.
+      Do NOT bulk-edit; one key at a time so changes are auditable (R21).
+    annotations:
+      title: Set OpenClaw Config Value
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true }
+      key: { type: string }
+      value: { type: string, description: "Stringified; JSON for complex values" }
+      restart: { type: boolean, optional: true, default: false }
+    output:
+      previousValue: { type: string, optional: true }
+      restarted: { type: boolean }
+
+  - name: clawops_agents_restart
+    toolset: [cli]
+    description: |
+      Restart a specific OpenClaw agent on the remote gateway.
+
+      Use when: the user reports an agent is stuck, errored, or unresponsive;
+      or after a config change that the agent needs to pick up.
+
+      Do NOT use when: the issue is gateway-wide — use clawops_gateway_restart.
+    annotations:
+      title: Restart OpenClaw Agent
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true }
+      agentId: { type: string }
+    output:
+      previousStatus: { type: string }
+      newStatus: { type: string }
+
+  - name: clawops_gateway_restart
+    toolset: [cli]
+    description: |
+      Restart the OpenClaw gateway daemon on the remote instance.
+
+      Use when: a gateway-wide config change requires reload, or the gateway is
+      reported as unresponsive.
+
+      Do NOT use when: only a specific agent is affected — use
+      clawops_agents_restart. Brief downtime (~10s).
+    annotations:
+      title: Restart Gateway Daemon
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true }
+    output:
+      restartedAt: { type: string, format: date-time }
+      previousUptimeSec: { type: integer }
+
+# ────────────────────────────────────────────────────────────────────────────
+# COMPOSITE WORKFLOW TOOLS (R2: encode user intent, not API sequences)
+# ────────────────────────────────────────────────────────────────────────────
+
+  - name: clawops_workflow_deploy_app
+    toolset: [workflow]
+    description: |
+      Single-tool workflow that takes a user from "I want to deploy OpenClaw
+      to <provider>" to a verified, healthy gateway. Internally: plan → user
+      confirms (elicitation) → up → wait for healthy → return URL.
+
+      Use when: the user expresses end-to-end deployment intent ("deploy to
+      AWS", "spin up an OpenClaw on GCP for me").
+
+      Do NOT use when: the user is mid-deployment and only needs one step
+      (e.g., they already have a plan; use clawops_apply). Do NOT use for
+      destroying or updating — separate workflows.
+    annotations:
+      title: Deploy OpenClaw (End-to-End Workflow)
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      provider: { type: enum, values: [aws, gcp, azure, local] }
+      region: { type: string, optional: true }
+      stackName: { type: string, optional: true, default: "default" }
+      instanceType: { type: enum, values: [micro, small, medium, large, gpu], optional: true, default: small }
+    output:
+      taskId: { type: string }
+      gatewayUrl: { type: string, format: uri }
+      stackName: { type: string }
+
+  - name: clawops_workflow_recover
+    toolset: [workflow, read]
+    description: |
+      Diagnostic workflow for an unhealthy stack. Internally: status check →
+      gateway logs → agent logs → systemd service status → produces a structured
+      diagnostic report with suggested remediation.
+
+      Use when: the user reports any "not working" symptom and you don't know
+      where to start. Best entry point for troubleshooting.
+
+      Do NOT use when: the user has already identified the problem and asks for
+      a specific fix.
+    annotations:
+      title: Recover/Diagnose Stack
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true }
+    output:
+      report:
+        type: object
+        properties:
+          gatewayHealth: { type: string }
+          gatewayLogsExcerpt: { type: array, items: { type: string } }
+          systemdStatus: { type: string }
+          suggestedActions: { type: array, items: { type: string } }
+
+  - name: clawops_task_status
+    toolset: [cli, read]
+    description: |
+      Poll the status of a long-running clawops task (returned by clawops_up,
+      clawops_destroy, clawops_apply, etc.). Per R12 streaming model.
+
+      Use when: the user is waiting on a long-running deploy/destroy and wants
+      progress, OR you need to check whether a previously-started operation
+      finished.
+
+      Do NOT use when: there is no active taskId — start the operation first.
+    annotations:
+      title: Get Task Status
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: false
+    input:
+      taskId: { type: string }
+    output:
+      status: { type: enum, values: [working, input_required, completed, failed, cancelled] }
+      progress: { type: number, minimum: 0, maximum: 1 }
+      message: { type: string, optional: true }
+      result: { type: object, optional: true, description: "Present when status=completed" }
+      error: { type: string, optional: true, description: "Present when status=failed" }

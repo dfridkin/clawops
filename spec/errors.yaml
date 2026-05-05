@@ -1,0 +1,175 @@
+# Error Taxonomy — machine-readable companion to ADR 0005.
+# Used by `pnpm gen:schemas` to emit src/errors/_generated.ts.
+# Update via PR; CI verifies generated file matches.
+
+version: 1
+
+# Top-level error classes; each maps to an exit code (ADR 0005).
+classes:
+  - id: UsageError
+    exitCode: 2
+    description: User input is invalid; user must change input
+    retryable: false
+    userActionRequired: true
+
+  - id: AuthError
+    exitCode: 3
+    description: Credentials missing, invalid, or insufficient
+    retryable: false
+    userActionRequired: true
+
+  - id: StateError
+    exitCode: 4
+    description: clawops-managed state is corrupt or inconsistent
+    retryable: false
+    userActionRequired: true
+
+  - id: ProviderError
+    exitCode: 5
+    description: Cloud provider rejected the request (non-auth)
+    retryable: depends   # per-taxon
+    userActionRequired: depends
+
+  - id: NetworkError
+    exitCode: 6
+    description: Network connectivity failure
+    retryable: true
+    userActionRequired: false
+
+  - id: OperationalError
+    exitCode: 1
+    description: Operation-time error during a valid operation
+    retryable: depends
+    userActionRequired: depends
+
+  - id: CancelledError
+    exitCode: 130
+    description: User-initiated cancellation
+    retryable: true
+    userActionRequired: false
+
+# Specific taxonomy IDs that errors must use as their `errorClass` field.
+# Every thrown ClawopsError MUST have one of these IDs.
+taxonomy:
+  # Usage
+  - id: usage.invalid_flag
+    class: UsageError
+    suggestedAction: "Check the flag spelling and value with `clawops <command> --help`."
+  - id: usage.missing_arg
+    class: UsageError
+    suggestedAction: "Provide the missing argument; see `clawops <command> --help`."
+  - id: usage.invalid_path
+    class: UsageError
+    suggestedAction: "Provide an absolute path. Relative paths are not accepted (R7)."
+  - id: usage.invalid_plan
+    class: UsageError
+    suggestedAction: "Plan failed schema validation. Regenerate with `clawops plan`."
+
+  # Auth
+  - id: auth.no_credentials
+    class: AuthError
+    suggestedAction: "Run `clawops init` to configure credentials."
+  - id: auth.expired
+    class: AuthError
+    suggestedAction: "Re-authenticate with your cloud provider; for AWS run `aws sso login`."
+  - id: auth.insufficient_permissions
+    class: AuthError
+    suggestedAction: "The configured credentials lack required IAM permissions; see docs/providers/<name>.md."
+
+  # State
+  - id: state.lock_held
+    class: StateError
+    suggestedAction: "Another clawops operation may be in progress; wait or run `clawops stacks unlock <name>` if certain it's stale."
+  - id: state.signature_mismatch
+    class: StateError
+    suggestedAction: "The plan file has been modified since generation; regenerate with `clawops plan`."
+  - id: state.backend_unreachable
+    class: StateError
+    suggestedAction: "Cannot reach the state backend (e.g., S3 bucket); verify access and connectivity."
+  - id: state.corrupt
+    class: StateError
+    suggestedAction: "State file is corrupt; consider `clawops state recover` or contact support."
+
+  # Provider
+  - id: provider.quota_exceeded
+    class: ProviderError
+    retryable: true
+    suggestedAction: "Cloud quota exceeded; wait or request a quota increase from your provider."
+  - id: provider.region_unsupported
+    class: ProviderError
+    retryable: false
+    userActionRequired: true
+    suggestedAction: "Selected region does not support the requested resource; choose a different region."
+  - id: provider.api_rate_limited
+    class: ProviderError
+    retryable: true
+    suggestedAction: "Cloud API rate-limited; clawops will retry with backoff."
+  - id: provider.resource_not_found
+    class: ProviderError
+    retryable: false
+    suggestedAction: "Required cloud resource not found; check stack state with `clawops status`."
+  - id: provider.resource_exists
+    class: ProviderError
+    retryable: false
+    suggestedAction: "Resource with this name already exists; use `--stack` to deploy to a different name."
+
+  # Network
+  - id: network.timeout
+    class: NetworkError
+    suggestedAction: "Network timeout; check connectivity and retry."
+  - id: network.dns_failure
+    class: NetworkError
+    suggestedAction: "DNS resolution failed; check DNS configuration."
+  - id: network.tls_failure
+    class: NetworkError
+    retryable: false
+    userActionRequired: true
+    suggestedAction: "TLS handshake failed; check certificate validity and trust chain."
+
+  # Operational
+  - id: op.timeout
+    class: OperationalError
+    retryable: true
+    suggestedAction: "Operation timed out; retry. If persistent, increase timeout via --timeout flag."
+  - id: op.unexpected_state
+    class: OperationalError
+    retryable: false
+    suggestedAction: "Cloud resource in unexpected state; run `clawops refresh` then `clawops status`."
+  - id: op.openclaw_unhealthy
+    class: OperationalError
+    retryable: true
+    suggestedAction: "OpenClaw gateway not responding; check `clawops logs` for issues."
+  - id: op.ssh_connect_failed
+    class: OperationalError
+    retryable: true
+    suggestedAction: "SSH connection failed; check key path, host availability, and security group."
+
+  # Cancellation
+  - id: op.cancelled
+    class: CancelledError
+    suggestedAction: "Operation cancelled by user."
+
+# Sensitive field patterns for redaction (R21).
+# Used by both pino logger config and src/mcp/audit.ts.
+redaction:
+  patterns:
+    - authorization
+    - "*.authorization"
+    - token
+    - "*.token"
+    - password
+    - "*.password"
+    - secret
+    - "*.secret"
+    - connectionString
+    - "*.connectionString"
+    - aws_access_key_id
+    - "*.aws_access_key_id"
+    - aws_secret_access_key
+    - "*.aws_secret_access_key"
+    - GOOGLE_APPLICATION_CREDENTIALS
+    - AZURE_CLIENT_SECRET
+    - HCLOUD_TOKEN
+    - DO_API_TOKEN
+    - CLOUDFLARE_API_TOKEN
+  censor: "***"

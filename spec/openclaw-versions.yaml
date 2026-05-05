@@ -1,0 +1,51 @@
+# OpenClaw Version Compatibility Matrix
+# Used by `clawops doctor` and adapters to validate deployment targets.
+# Update via /openclaw-config skill.
+
+version: 1
+
+# Minimum and maximum versions clawops supports
+support:
+  min: "2026.4.5"
+  max: ""  # empty = unbounded
+  recommended: "2026.4.5"
+
+# Provider-specific quirks discovered through testing
+quirks:
+  - id: aws-bedrock-aws-profile
+    description: |
+      OpenClaw 2026.4.5+ ignores `auth: "aws-sdk"` in openclaw.json's Bedrock
+      provider config. Instead, AWS_PROFILE must be set in the systemd
+      EnvironmentFile so the AWS SDK resolves credentials via IMDS.
+    affected:
+      versions: ">=2026.4.5"
+      providers: [aws]
+      configs: [openclaw.models.providers.amazon-bedrock]
+    workaround: |
+      AWS adapter MUST emit BOTH:
+      1. openclaw.json with `auth: "aws-sdk"` (for older versions, ignored by newer)
+      2. systemd EnvironmentFile with `AWS_PROFILE=default` (or the profile name)
+      Adapter should test the rendered systemd unit includes the EnvironmentFile.
+    discoveredFrom: aws-samples/sample-OpenClaw-on-AWS-with-Bedrock troubleshooting docs
+
+  - id: pnpm-pulumi-hoisting
+    description: |
+      pnpm's default hoisting strategy can place @pulumi/pulumi at a depth that
+      breaks the Automation API's worker spawn. Pin @pulumi/pulumi at the workspace
+      root and add a .npmrc entry: `public-hoist-pattern[]=@pulumi/*`
+    affected:
+      versions: "*"
+      providers: ["*"]
+    workaround: See docs/decisions/0003-pulumi-pnpm.md
+
+# Tested combinations — populated by CI matrix
+tested:
+  - openclawVersion: "2026.4.5"
+    providers: [aws, gcp, local]
+    nodeVersions: ["20.x", "22.x"]
+    lastTestedAt: "2026-04-15"
+
+# Known incompatible combinations
+incompatible:
+  - openclawVersionRange: "<2026.4.5"
+    reason: "Below clawops's declared minimum support. Earlier OpenClaw versions used different config paths and channel registration semantics."
