@@ -120,13 +120,12 @@ export default defineCommand({
 })
 
 async function confirm(message: string): Promise<boolean> {
-  // Dynamic import so the rest of the module loads without inquirer in tests
-  const { default: inquirer } = await import('inquirer')
-  const { confirmed } = await inquirer.prompt<{ confirmed: boolean }>([{
-    type: 'confirm',
-    name: 'confirmed',
-    message,
-    default: false,
-  }])
-  return confirmed
+  const { createInterface } = await import('node:readline/promises')
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  try {
+    const answer = await rl.question(`${message} (y/N) `)
+    return answer.trim().toLowerCase() === 'y'
+  } finally {
+    rl.close()
+  }
 }
