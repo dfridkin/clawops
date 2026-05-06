@@ -41,4 +41,4 @@ The Word doc from v0.1 has been **superseded and should be deleted** — see ADR
 
 ## Version
 
-v0.2 — May 2026 — Renamed from "clawctl" to "clawops" after npm/brand collision check.
+v0.2 — May 2026 — Renamed to "clawops" after npm/brand collision check.

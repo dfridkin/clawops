@@ -1,5 +1,6 @@
 import { defineCommand } from 'citty'
 import process from 'node:process'
+import { success, failure, warn } from '../../output/human.js'
 
 export default defineCommand({
   meta: {
@@ -7,12 +8,12 @@ export default defineCommand({
     description: 'Check system prerequisites and configuration',
   },
   async run() {
-    const results: Array<{ label: string; ok: boolean; note?: string }> = []
+    const checks: Array<{ label: string; ok: boolean; note?: string }> = []
 
     // Node.js version check
     const nodeVersion = process.version
     const nodeMajor = parseInt(nodeVersion.slice(1).split('.')[0] ?? '0', 10)
-    results.push({
+    checks.push({
       label: `Node.js ${nodeVersion}`,
       ok: nodeMajor >= 20,
       note: nodeMajor < 20 ? 'requires >=20' : undefined,
@@ -29,27 +30,29 @@ export default defineCommand({
     for (const { label, env } of credChecks) {
       const present = Boolean(process.env[env])
       if (present) anyCredential = true
-      results.push({ label, ok: present })
+      checks.push({ label, ok: present })
     }
 
-    // Print results
-    console.log('\nclawops doctor\n')
-    for (const r of results) {
-      const icon = r.ok ? '✓' : '✗'
-      const note = r.note ? `  (${r.note})` : ''
-      console.log(`  ${icon}  ${r.label}${note}`)
+    process.stdout.write('\nclawops doctor\n\n')
+    for (const c of checks) {
+      const note = c.note ? `  (${c.note})` : ''
+      if (c.ok) {
+        success(`${c.label}${note}`)
+      } else {
+        failure(`${c.label}${note}`)
+      }
     }
 
     if (!anyCredential) {
-      console.log(
-        '\n  ⚠  No cloud credentials detected.\n' +
-          '     Set AWS_PROFILE, GOOGLE_APPLICATION_CREDENTIALS, or AZURE_CLIENT_ID.\n',
+      process.stdout.write('\n')
+      warn(
+        'No cloud credentials detected.\n' +
+          '     Set AWS_PROFILE, GOOGLE_APPLICATION_CREDENTIALS, or AZURE_CLIENT_ID.',
       )
-    } else {
-      console.log()
     }
+    process.stdout.write('\n')
 
-    const nodeOk = results.find(r => r.label.startsWith('Node'))?.ok ?? false
+    const nodeOk = checks.find((c) => c.label.startsWith('Node'))?.ok ?? false
     if (!nodeOk) process.exit(1)
   },
 })

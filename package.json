@@ -19,9 +19,10 @@
     "dev": "tsx src/cli/index.ts",
     "build": "tsup",
     "test": "vitest run",
+    "test:pulumi": "vitest run tests/pulumi",
     "test:changed": "vitest --changed",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint --max-warnings=0 .",
+    "lint": "eslint --max-warnings=0 src tests scripts",
     "gen:schemas": "tsx scripts/gen-schemas.ts",
     "changeset": "changeset",
     "release": "changeset publish"

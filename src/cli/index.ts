@@ -1,22 +1,23 @@
 import { defineCommand, runMain } from 'citty'
 
-import initCmd from './commands/init'
-import upCmd from './commands/up'
-import downCmd from './commands/down'
-import statusCmd from './commands/status'
-import planCmd from './commands/plan'
-import applyCmd from './commands/apply'
-import destroyCmd from './commands/destroy'
-import sshCmd from './commands/ssh'
-import tunnelCmd from './commands/tunnel'
-import logsCmd from './commands/logs'
-import configCmd from './commands/config'
-import agentsCmd from './commands/agents'
-import gatewayCmd from './commands/gateway'
-import backupCmd from './commands/backup'
-import stacksCmd from './commands/stacks'
-import doctorCmd from './commands/doctor'
-import mcpCmd from './commands/mcp'
+import initCmd from './commands/init.js'
+import upCmd from './commands/up.js'
+import downCmd from './commands/down.js'
+import statusCmd from './commands/status.js'
+import planCmd from './commands/plan.js'
+import applyCmd from './commands/apply.js'
+import destroyCmd from './commands/destroy.js'
+import sshCmd from './commands/ssh.js'
+import tunnelCmd from './commands/tunnel.js'
+import logsCmd from './commands/logs.js'
+import configCmd from './commands/config.js'
+import agentsCmd from './commands/agents.js'
+import gatewayCmd from './commands/gateway.js'
+import backupCmd from './commands/backup.js'
+import stacksCmd from './commands/stacks.js'
+import doctorCmd from './commands/doctor.js'
+import mcpCmd from './commands/mcp.js'
+import { handleError } from './error-handler.js'
 
 const main = defineCommand({
   meta: {
@@ -54,4 +55,8 @@ const main = defineCommand({
   },
 })
 
-await runMain(main)
+try {
+  await runMain(main)
+} catch (err) {
+  handleError(err)
+}
