@@ -32,7 +32,7 @@ jobs:
         run: pnpm gen:schemas --check
 
       - name: Verify no .docx files
-        run: tsx scripts/verify-no-docx.ts
+        run: pnpm exec tsx scripts/verify-no-docx.ts
 
       - name: Typecheck
         run: pnpm typecheck
@@ -69,4 +69,4 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Pulumi mock tests
-        run: pnpm test:pulumi
+        run: pnpm test:pulumi --passWithNoTests

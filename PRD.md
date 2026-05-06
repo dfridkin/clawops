@@ -197,9 +197,9 @@ Working backwards from a usable v1.0. Each milestone is independently shippable 
 
 | Phase | Name | Key Deliverables | Target |
 |---|---|---|---|
-| **M0** | Skeleton | Repo scaffold, citty wiring, output module (human + JSON), `doctor` (local checks), `--version`, CI green | Week 1 |
-| **M1** | GCP MVP | Pulumi workspace module, GCP adapter (VM + firewall + static IP), `init`/`up`/`down`/`status`/`ssh`/`logs` (GCP only) | Week 3 |
-| **M2** | Remote Mgmt | SSH transport module, `tunnel`, `config get/set/unset`, `agents list/restart`, `gateway status/restart` | Week 5 |
+| **M0** ✅ | Skeleton | Repo scaffold, citty wiring, output module (human + JSON), `doctor` (local checks), `--version`, CI green | Week 1 |
+| **M1** ✅ | GCP MVP | Pulumi workspace module, GCP adapter (VM + firewall + static IP), `init`/`up`/`down`/`status`/`ssh`/`logs` (GCP only) | Week 3 |
+| **M2** ✅ | Remote Mgmt | SSH transport module, `tunnel`, `config get/set/unset`, `agents list/restart`, `gateway status/restart/update` | Week 5 |
 | **M3** | AWS + Azure | AWS adapter (EC2 + SG + Elastic IP + SSM), Azure adapter (VM + NSG + Key Vault + Managed Identity), `stacks list/delete`, multi-stack via `--stack` | Week 8 |
 | **M4** | Local VM | Local adapter (SSH bootstrap, no Pulumi), `file://` state backend, `init --provider local --host <ip>`, `backup create/restore` | Week 10 |
 | **M5** | MCP Layer | `clawops mcp serve` (stdio), all CLI tools as MCP tools, `--read-only` mode, elicitation for destructive, `mcp install --claude/--cursor/...` | Week 12 |
