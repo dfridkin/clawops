@@ -758,31 +758,31 @@ Per the TDD rule and the Claude Code research findings:
 
 (Mirrors PRD §7. Detail of acceptance criteria per milestone.)
 
-### M0 — Skeleton (Week 1)
-- [ ] Repo scaffold with all directories from §1
-- [ ] `pnpm install`, `pnpm typecheck`, `pnpm test` all green on empty test
-- [ ] CI pipeline running on PR
-- [ ] `clawops --version` works
-- [ ] `clawops doctor` checks: node version, presence of credentials env vars
-- [ ] CLAUDE.md, AGENTS.md, all `.claude/skills/` and `.claude/rules/` present
-- [ ] First ADR (0001-supersede-word-doc.md) committed
+### M0 — Skeleton (Week 1) ✅
+- [x] Repo scaffold with all directories from §1
+- [x] `pnpm install`, `pnpm typecheck`, `pnpm test` all green on empty test
+- [x] CI pipeline running on PR
+- [x] `clawops --version` works
+- [x] `clawops doctor` checks: node version, presence of credentials env vars
+- [x] CLAUDE.md, AGENTS.md, all `.claude/skills/` and `.claude/rules/` present
+- [x] First ADR (0001-supersede-word-doc.md) committed
 
-### M1 — GCP MVP (Week 3)
-- [ ] `src/pulumi/automation.ts` working against `gs://` backend
-- [ ] GCP adapter: provision VM + firewall + static IP
-- [ ] `clawops init --provider gcp --non-interactive` writes valid config
-- [ ] `clawops up` end-to-end against real GCP project (sandbox)
-- [ ] `clawops down --destroy` cleanly removes all resources
-- [ ] `clawops status --json` returns valid output
-- [ ] `clawops ssh` opens session
-- [ ] `clawops logs -f` streams gateway logs
+### M1 — GCP MVP (Week 3) ✅
+- [x] `src/pulumi/automation.ts` working against `gs://` backend
+- [x] GCP adapter: provision VM + firewall + static IP
+- [x] `clawops init --provider gcp --non-interactive` writes valid config
+- [x] `clawops up` end-to-end against real GCP project (sandbox)
+- [x] `clawops down --destroy` cleanly removes all resources
+- [x] `clawops status --json` returns valid output
+- [x] `clawops ssh` opens session
+- [x] `clawops logs -f` streams gateway logs
 
-### M2 — Remote Mgmt (Week 5)
-- [ ] `clawops tunnel` forwards port + opens browser
-- [ ] `clawops config get/set/unset` against remote OpenClaw
-- [ ] `clawops agents list/restart` proxies cleanly
-- [ ] `clawops gateway status/restart/update` works
-- [ ] SSH transport supports cancellation (R13)
+### M2 — Remote Mgmt (Week 5) ✅
+- [x] `clawops tunnel` forwards port + opens browser
+- [x] `clawops config get/set/unset` against remote OpenClaw
+- [x] `clawops agents list/restart` proxies cleanly
+- [x] `clawops gateway status/restart/update` works
+- [x] SSH transport supports cancellation (R13)
 
 ### M3 — AWS + Azure (Week 8)
 - [ ] AWS adapter: full lifecycle, Bedrock optional
