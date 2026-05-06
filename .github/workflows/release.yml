@@ -6,14 +6,16 @@ on:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
-      id-token: write   # for npm provenance
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@v4
@@ -26,19 +28,16 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '22.x'
           cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Create Release PR or publish
+      - name: Create Release PR
         uses: changesets/action@v1
         with:
-          publish: pnpm release
           title: 'chore: version packages'
           commit: 'chore: version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
