@@ -15,7 +15,7 @@ describe('FakeSshSession.tunnel()', () => {
   it('calls the registered onTunnel handler with correct args', async () => {
     const session = new FakeSshSession()
     const handler = vi.fn(
-      (localPort: number, remoteHost: string, remotePort: number): TunnelHandle => ({
+      (localPort: number, _remoteHost: string, _remotePort: number): TunnelHandle => ({
         localPort,
         close: vi.fn(),
       }),
