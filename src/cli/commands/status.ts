@@ -22,10 +22,11 @@ export default defineCommand({
       const state = ctx.localState
 
       if (Boolean(args.json)) {
-        printJson(state
-          ? jsonOk({ stack: ctx.stackName, ...state })
-          : jsonOk({ stack: ctx.stackName, status: 'not bootstrapped' }),
-        )
+        if (state) {
+          printJson(jsonOk({ stack: ctx.stackName, ...state }))
+        } else {
+          printJson(jsonOk({ stack: ctx.stackName, status: 'not bootstrapped' }))
+        }
         return
       }
 

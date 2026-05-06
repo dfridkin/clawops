@@ -81,14 +81,14 @@ describe('localBootstrap()', () => {
       expect.objectContaining({ host: '10.0.0.1', port: 22, user: 'root' }),
     )
     expect(mockSession.exec).toHaveBeenCalledTimes(1)
-    const [cmd] = mockSession.exec.mock.calls[0] as [string]
+    const [cmd] = mockSession.exec.mock.calls[0] as unknown as [string]
     expect(cmd).toContain('base64 -d')
     expect(cmd).toContain('sudo bash')
   })
 
   it('renders OPENCLAW_VERSION into the script', async () => {
     await localBootstrap({ ...BASE_OPTS, openclawVersion: '2099.1' })
-    const [cmd] = mockSession.exec.mock.calls[0] as [string]
+    const [cmd] = mockSession.exec.mock.calls[0] as unknown as [string]
     // The b64 payload contains the rendered script; decode and check
     const b64Match = cmd.match(/echo '([A-Za-z0-9+/=]+)'/)
     expect(b64Match).toBeTruthy()

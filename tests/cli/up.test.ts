@@ -16,7 +16,8 @@ const mockLocalBootstrap = vi.mocked(localBootstrap)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRunFn = (ctx: any) => Promise<void>
 
-let cmd: Awaited<ReturnType<typeof import('../../src/cli/commands/up.js')>>['default']
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let cmd: any
 
 beforeEach(async () => {
   vi.clearAllMocks()
