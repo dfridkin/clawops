@@ -126,6 +126,25 @@ usermod -aG docker clawops
 
 # Pull OpenClaw image
 OPENCLAW_VERSION="${openclawVersion}"
-docker pull ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION} 2>/dev/null || true
+docker pull ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION}
+
+# Create default openclaw.json if not present
+OPENCLAW_CONFIG=/home/clawops/openclaw.json
+if [ ! -f "\${OPENCLAW_CONFIG}" ]; then
+  cat > "\${OPENCLAW_CONFIG}" <<'OPENCLAWJSON'
+{"version":"2026.4","gateway":{"port":18789,"auth":{"mode":"token"}},"models":{},"channels":[]}
+OPENCLAWJSON
+  chown clawops:clawops "\${OPENCLAW_CONFIG}"
+fi
+
+# Start OpenClaw container
+docker stop openclaw 2>/dev/null || true
+docker rm   openclaw 2>/dev/null || true
+docker run -d \\
+  --name openclaw \\
+  --restart unless-stopped \\
+  -p ${GATEWAY_PORT}:${GATEWAY_PORT} \\
+  -v "\${OPENCLAW_CONFIG}":/app/config.json:ro \\
+  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION}
 `
 }

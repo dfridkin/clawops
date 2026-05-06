@@ -1,15 +1,21 @@
 // FakeSshClient — in-process test double for SshSession.
 // Use in unit tests that exercise SSH-dependent code without a real connection.
 
-import type { SshSession, SshExecResult } from '../../src/transport/ssh.js'
+import type { SshSession, SshExecResult, TunnelHandle } from '../../src/transport/ssh.js'
 import { Readable } from 'node:stream'
 
 export type ExecHandler = (command: string) => SshExecResult | Promise<SshExecResult>
 export type StreamHandler = (command: string) => NodeJS.ReadableStream
+export type TunnelHandler = (
+  localPort: number,
+  remoteHost: string,
+  remotePort: number,
+) => TunnelHandle
 
 export class FakeSshSession implements SshSession {
   private execHandlers: ExecHandler[] = []
   private streamHandlers: StreamHandler[] = []
+  private tunnelHandlers: TunnelHandler[] = []
   closed = false
 
   /** Queue a handler that will respond to the next exec() call. */
@@ -21,6 +27,12 @@ export class FakeSshSession implements SshSession {
   /** Queue a handler that will respond to the next stream() call. */
   onStream(handler: StreamHandler): this {
     this.streamHandlers.push(handler)
+    return this
+  }
+
+  /** Queue a handler that will respond to the next tunnel() call. */
+  onTunnel(handler: TunnelHandler): this {
+    this.tunnelHandlers.push(handler)
     return this
   }
 
@@ -40,6 +52,19 @@ export class FakeSshSession implements SshSession {
       return Readable.from([`no stream handler for: ${command}`])
     }
     return handler(command)
+  }
+
+  async tunnel(
+    localPort: number,
+    remoteHost: string,
+    remotePort: number,
+    _signal?: AbortSignal,
+  ): Promise<TunnelHandle> {
+    const handler = this.tunnelHandlers.shift()
+    if (!handler) {
+      return { localPort, close: () => {} }
+    }
+    return handler(localPort, remoteHost, remotePort)
   }
 
   close(): void {

@@ -2,9 +2,16 @@
 // Per R13: every call accepts an AbortSignal.
 
 import { readFileSync, appendFileSync, mkdirSync } from 'node:fs'
+import { createServer, type Server, type Socket } from 'node:net'
 import path from 'node:path'
 import { Client, type ConnectConfig } from 'ssh2'
 import { NetworkError } from '../errors/index.js'
+
+/** Handle returned by SshSession.tunnel(); call close() to tear down. */
+export interface TunnelHandle {
+  localPort: number
+  close(): void
+}
 
 export interface SshConnectOpts {
   host: string
@@ -26,6 +33,17 @@ export interface SshSession {
   exec(command: string, signal?: AbortSignal): Promise<SshExecResult>
   /** Run a command and return its stdout as a readable stream (for log tailing). */
   stream(command: string, signal?: AbortSignal): Promise<NodeJS.ReadableStream>
+  /**
+   * Open a local TCP server on localPort that forwards connections to
+   * remoteHost:remotePort via SSH direct-tcpip. Returns a TunnelHandle;
+   * call handle.close() to tear down the server and all open sockets.
+   */
+  tunnel(
+    localPort: number,
+    remoteHost: string,
+    remotePort: number,
+    signal?: AbortSignal,
+  ): Promise<TunnelHandle>
   close(): void
 }
 
@@ -90,6 +108,57 @@ class Ssh2Session implements SshSession {
         }
 
         resolve(channel)
+      })
+    })
+  }
+
+  tunnel(
+    localPort: number,
+    remoteHost: string,
+    remotePort: number,
+    signal?: AbortSignal,
+  ): Promise<TunnelHandle> {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new NetworkError('Operation aborted'))
+        return
+      }
+
+      const sockets = new Set<Socket>()
+
+      const server: Server = createServer((socket) => {
+        sockets.add(socket)
+        socket.on('close', () => sockets.delete(socket))
+
+        this.client.forwardOut('127.0.0.1', localPort, remoteHost, remotePort, (err, channel) => {
+          if (err) {
+            socket.destroy()
+            return
+          }
+          socket.pipe(channel)
+          channel.pipe(socket)
+          channel.on('close', () => socket.destroy())
+          socket.on('close', () => channel.destroy())
+        })
+      })
+
+      const closeAll = (): void => {
+        for (const s of sockets) s.destroy()
+        server.close()
+      }
+
+      server.on('error', (err: NodeJS.ErrnoException) => {
+        const msg =
+          err.code === 'EADDRINUSE'
+            ? `Port ${localPort} is already in use`
+            : `Tunnel server error: ${err.message}`
+        reject(new NetworkError(msg))
+      })
+
+      server.listen(localPort, '127.0.0.1', () => {
+        const handle: TunnelHandle = { localPort, close: closeAll }
+        signal?.addEventListener('abort', closeAll, { once: true })
+        resolve(handle)
       })
     })
   }
