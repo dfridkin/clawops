@@ -8,11 +8,13 @@ import { setConfig, getConfigDir, getConfig } from '../../config/store.js'
 import type { ClawopsConfig } from '../../config/store.js'
 import { UsageError } from '../../errors/index.js'
 
-const SUPPORTED_PROVIDERS = ['gcp'] as const
+const SUPPORTED_PROVIDERS = ['gcp', 'aws', 'azure'] as const
 type SupportedProvider = (typeof SUPPORTED_PROVIDERS)[number]
 
-const PROVIDER_DEFAULTS: Record<SupportedProvider, { region: string; credEnv: string }> = {
-  gcp: { region: 'us-central1', credEnv: 'GOOGLE_APPLICATION_CREDENTIALS' },
+const PROVIDER_DEFAULTS: Record<SupportedProvider, { region: string; credEnv: string; stateScheme: string }> = {
+  gcp:   { region: 'us-central1', credEnv: 'GOOGLE_APPLICATION_CREDENTIALS', stateScheme: 'gs://' },
+  aws:   { region: 'us-east-1',   credEnv: 'AWS_PROFILE',                    stateScheme: 's3://' },
+  azure: { region: 'eastus',      credEnv: 'AZURE_CLIENT_ID',                stateScheme: 'azblob://' },
 }
 
 export default defineCommand({
@@ -62,7 +64,7 @@ export default defineCommand({
     const stateUrl =
       typeof args.state === 'string'
         ? args.state
-        : `gs://CHANGEME/clawops` // placeholder — update before `clawops up`
+        : `${defaults.stateScheme}CHANGEME/clawops` // placeholder — update before `clawops up`
 
     const configDir = getConfigDir()
     mkdirSync(configDir, { recursive: true })
@@ -107,8 +109,8 @@ export default defineCommand({
     if (stateUrl.includes('CHANGEME')) {
       process.stdout.write('\n')
       info(
-        'Update stateUrl in the config to a real GCS bucket before running `clawops up`.\n' +
-          `  Example: clawops init --provider ${provider} --state gs://your-bucket/clawops`,
+        `Update stateUrl in the config to a real state backend before running \`clawops up\`.\n` +
+          `  Example: clawops init --provider ${provider} --state ${defaults.stateScheme}your-bucket/clawops`,
       )
     }
 

@@ -87,9 +87,19 @@ function makeProviderProxy(name: ProviderName): ProviderAdapter {
         resolved = mod.default
         return resolved
       }
+      case 'aws': {
+        const mod = await import('../providers/aws/index.js')
+        resolved = mod.default
+        return resolved
+      }
+      case 'azure': {
+        const mod = await import('../providers/azure/index.js')
+        resolved = mod.default
+        return resolved
+      }
       default:
         throw new UsageError(
-          `Provider "${name}" is not yet supported. Supported providers: gcp`,
+          `Provider "${name}" is not yet supported. Supported providers: gcp, aws, azure`,
         )
     }
   }

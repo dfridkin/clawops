@@ -1,0 +1,119 @@
+# Example: deploy clawops stack to AWS or Azure from GitHub Actions using OIDC.
+# Copy this file into your repo's .github/workflows/ and customise the marked sections.
+# See docs/github-actions-oidc.md for full setup instructions.
+
+name: "[Example] OIDC Deploy"
+
+on:
+  # Trigger manually from the Actions tab for testing
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "Cloud provider (aws | azure)"
+        required: true
+        default: "aws"
+      stack:
+        description: "Stack name"
+        required: true
+        default: "default"
+
+permissions:
+  id-token: write   # Required for OIDC token exchange
+  contents: read
+
+jobs:
+  # ── AWS deploy ──────────────────────────────────────────────────────────────
+  deploy-aws:
+    name: Deploy (AWS)
+    if: ${{ inputs.provider == 'aws' }}
+    runs-on: ubuntu-latest
+    environment: production   # CHANGE: your GitHub environment name
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Exchanges the GitHub OIDC token for AWS credentials.
+      # Sets AWS_ROLE_ARN + AWS_WEB_IDENTITY_TOKEN_FILE in the environment.
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # CHANGE: your IAM role ARN (see docs/github-actions-oidc.md)
+          role-to-assume: arn:aws:iam::123456789012:role/clawops-deploy
+          aws-region: us-east-1
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: pnpm
+
+      - name: Install clawops
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate credentials
+        run: pnpx clawops doctor --provider aws
+
+      - name: Plan
+        run: pnpx clawops plan --stack ${{ inputs.stack }}
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
+      - name: Deploy
+        run: pnpx clawops up --stack ${{ inputs.stack }}
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
+  # ── Azure deploy ─────────────────────────────────────────────────────────────
+  deploy-azure:
+    name: Deploy (Azure)
+    if: ${{ inputs.provider == 'azure' }}
+    runs-on: ubuntu-latest
+    environment: production   # CHANGE: your GitHub environment name
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Exchanges the GitHub OIDC token for Azure credentials.
+      # Sets AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_FEDERATED_TOKEN_FILE.
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}       # CHANGE: your app registration client ID
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}       # CHANGE: your Entra ID tenant ID
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: pnpm
+
+      - name: Install clawops
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate credentials
+        run: pnpx clawops doctor --provider azure
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_FEDERATED_TOKEN_FILE: ${{ env.AZURE_FEDERATED_TOKEN_PATH }}
+
+      - name: Plan
+        run: pnpx clawops plan --stack ${{ inputs.stack }}
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_FEDERATED_TOKEN_FILE: ${{ env.AZURE_FEDERATED_TOKEN_PATH }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
+      - name: Deploy
+        run: pnpx clawops up --stack ${{ inputs.stack }}
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_FEDERATED_TOKEN_FILE: ${{ env.AZURE_FEDERATED_TOKEN_PATH }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
