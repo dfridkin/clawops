@@ -30,7 +30,7 @@ jobs:
     environment: production   # CHANGE: your GitHub environment name
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Exchanges the GitHub OIDC token for AWS credentials.
       # Sets AWS_ROLE_ARN + AWS_WEB_IDENTITY_TOKEN_FILE in the environment.
@@ -40,11 +40,11 @@ jobs:
           role-to-assume: arn:aws:iam::123456789012:role/clawops-deploy
           aws-region: us-east-1
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: latest
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22.x"
           cache: pnpm
@@ -73,7 +73,7 @@ jobs:
     environment: production   # CHANGE: your GitHub environment name
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Exchanges the GitHub OIDC token for Azure credentials.
       # Sets AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_FEDERATED_TOKEN_FILE.
@@ -83,11 +83,11 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}       # CHANGE: your Entra ID tenant ID
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: latest
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22.x"
           cache: pnpm
