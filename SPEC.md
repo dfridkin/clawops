@@ -816,6 +816,7 @@ Per the TDD rule and the Claude Code research findings:
 - [ ] `clawops doctor` covers all credentials, state backends, SSH keys, Pulumi engine
 - [ ] All mutating commands support `--dry-run`
 - [ ] CI integration guide (docs/ci.md)
+- [ ] Restore `.github/workflows/release.yml` (removed in M3 to save Actions minutes): changesets/action creates version-bump PRs; on merge runs `pnpm release` → `tsup build && npm publish --provenance`
 - [ ] First npm publish with `--provenance`
 - [ ] README + docs site (clawops.dev) live
 - [ ] Demo video / blog post
