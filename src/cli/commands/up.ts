@@ -23,6 +23,52 @@ export default defineCommand({
   async run({ args }) {
     const { buildContext } = await import('../context.js')
 
+    const ctx = buildContext(args)
+    const openclawVersion = typeof args['openclaw-version'] === 'string'
+      ? args['openclaw-version']
+      : 'stable'
+
+    // ── Local provider path (no Pulumi) ────────────────────────────────────────
+    if (ctx.adapter.name === 'local') {
+      const stackConfig = ctx.config.stacks[ctx.stackName]
+      if (!stackConfig?.localOpts) {
+        throw new UsageError(
+          `Stack "${ctx.stackName}" has no localOpts. ` +
+            'Run `clawops init --provider local --host <HOST>` first.',
+        )
+      }
+
+      const { localOpts } = stackConfig
+      const { localBootstrap } = await import('../../providers/local/bootstrap.js')
+
+      const abortController = new AbortController()
+      process.on('SIGINT', () => abortController.abort())
+      process.on('SIGTERM', () => abortController.abort())
+
+      const spin = spinner(`Bootstrapping local host "${localOpts.host}"...`)
+      try {
+        const state = await localBootstrap({
+          host: localOpts.host,
+          port: localOpts.sshPort,
+          user: localOpts.sshUser,
+          privateKeyPath: localOpts.sshKeyPath,
+          knownHostsPath: ctx.config.ssh.knownHostsPath,
+          openclawVersion,
+          stackName: ctx.stackName,
+          noWait: Boolean(args['no-wait']),
+          signal: abortController.signal,
+        })
+        spin.succeed(`Host "${localOpts.host}" bootstrapped`)
+        info(`Gateway URL: ${state.gatewayUrl}`)
+        info(`SSH:         ${state.sshUser}@${state.sshHost}:${state.sshPort}`)
+      } catch (err) {
+        spin.fail('Bootstrap failed')
+        throw err
+      }
+      return
+    }
+
+    // ── Cloud provider path (Pulumi) ───────────────────────────────────────────
     const instanceAlias = typeof args['instance-type'] === 'string' ? args['instance-type'] : 'small'
     if (!VALID_INSTANCE_TYPES.includes(instanceAlias as typeof VALID_INSTANCE_TYPES[number])) {
       throw new UsageError(
@@ -30,10 +76,8 @@ export default defineCommand({
       )
     }
 
-    const ctx = buildContext(args)
     const isDryRun = Boolean(args['dry-run'])
 
-    // Validate provider credentials before spending time on Pulumi workspace init
     const validation = await ctx.adapter.validateConfig()
     if (!validation.ok) {
       for (const e of validation.errors) failure(e)
@@ -42,14 +86,10 @@ export default defineCommand({
 
     const stack = await ctx.getStack()
 
-    // Set stack config values read by the inline Pulumi program
     const region = typeof args.region === 'string' ? args.region : ctx.adapter.defaultRegion()
     const instanceType = ctx.adapter.normalizeInstanceType(
       instanceAlias as typeof VALID_INSTANCE_TYPES[number],
     )
-    const openclawVersion = typeof args['openclaw-version'] === 'string'
-      ? args['openclaw-version']
-      : 'stable'
 
     await stack.setConfig('region', { value: region })
     await stack.setConfig('instanceType', { value: instanceType })
@@ -80,7 +120,6 @@ export default defineCommand({
       })
       spin.succeed(`Stack "${ctx.stackName}" deployed`)
 
-      // Show key outputs
       const outputs = result.outputs
       if (outputs['publicIp']) {
         info(`Public IP:   ${outputs['publicIp'].value}`)

@@ -5,6 +5,7 @@ import { vi } from 'vitest'
 import { MINIMAL_CONFIG } from './config.js'
 import type { ClawopsContext } from '../../src/cli/context.js'
 import type { BaseStackOutputs } from '../../src/pulumi/outputs.js'
+import type { LocalState } from '../../src/providers/local/state.js'
 
 export const FAKE_BASE_OUTPUTS: BaseStackOutputs = {
   instanceId: 'i-test-123',
@@ -48,5 +49,57 @@ export function makeFakeContext(): ClawopsContext {
     getStack: vi.fn().mockResolvedValue({
       outputs: vi.fn().mockResolvedValue(FAKE_OUTPUT_MAP),
     }),
+  } as unknown as ClawopsContext
+}
+
+export const FAKE_LOCAL_STATE: LocalState = {
+  instanceId: 'local:10.0.0.1',
+  publicIp: '10.0.0.1',
+  gatewayUrl: 'http://10.0.0.1:18789',
+  sshHost: '10.0.0.1',
+  sshPort: 22,
+  sshUser: 'root',
+  region: 'local',
+  provisionedAt: '2026-05-06T00:00:00.000Z',
+  privateKeyPath: '/tmp/test-id_ed25519',
+  knownHostsPath: '/tmp/test-known_hosts',
+}
+
+const LOCAL_CONFIG = {
+  ...MINIMAL_CONFIG,
+  defaults: { stack: 'local-default', provider: 'local' as const },
+  stacks: {
+    'local-default': {
+      provider: 'local' as const,
+      stateUrl: 'file://~/.clawops/state',
+      credentialsRef: { source: 'file' as const, envVars: [] as string[] },
+      localOpts: {
+        host: '10.0.0.1',
+        sshUser: 'root',
+        sshPort: 22,
+        sshKeyPath: '/tmp/test-id_ed25519',
+      },
+    },
+  },
+}
+
+/** Returns a ClawopsContext for the local provider, bypassing Pulumi entirely. */
+export function makeLocalFakeContext(localState: LocalState | null = FAKE_LOCAL_STATE): ClawopsContext {
+  return {
+    config: LOCAL_CONFIG,
+    stackName: 'local-default',
+    localState,
+    adapter: {
+      name: 'local',
+      getConnectionInfo: () => FAKE_CONN,
+      normalizeInstanceType: () => 'local',
+      defaultRegion: () => 'local',
+      stateBackendUrl: () => 'file://~/.clawops/state',
+      validateConfig: vi.fn().mockResolvedValue({ ok: true, errors: [] }),
+      get program() {
+        return async () => ({})
+      },
+    },
+    getStack: vi.fn().mockRejectedValue(new Error('local provider does not use Pulumi stacks')),
   } as unknown as ClawopsContext
 }

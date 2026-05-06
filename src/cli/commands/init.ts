@@ -8,10 +8,13 @@ import { setConfig, getConfigDir, getConfig } from '../../config/store.js'
 import type { ClawopsConfig } from '../../config/store.js'
 import { UsageError } from '../../errors/index.js'
 
-const SUPPORTED_PROVIDERS = ['gcp', 'aws', 'azure'] as const
+const SUPPORTED_PROVIDERS = ['gcp', 'aws', 'azure', 'local'] as const
 type SupportedProvider = (typeof SUPPORTED_PROVIDERS)[number]
 
-const PROVIDER_DEFAULTS: Record<SupportedProvider, { region: string; credEnv: string; stateScheme: string }> = {
+const PROVIDER_DEFAULTS: Record<
+  Exclude<SupportedProvider, 'local'>,
+  { region: string; credEnv: string; stateScheme: string }
+> = {
   gcp:   { region: 'us-central1', credEnv: 'GOOGLE_APPLICATION_CREDENTIALS', stateScheme: 'gs://' },
   aws:   { region: 'us-east-1',   credEnv: 'AWS_PROFILE',                    stateScheme: 's3://' },
   azure: { region: 'eastus',      credEnv: 'AZURE_CLIENT_ID',                stateScheme: 'azblob://' },
@@ -29,6 +32,11 @@ export default defineCommand({
     stack: { type: 'string', description: 'Stack name (default: "default")' },
     'non-interactive': { type: 'boolean', description: 'Suppress all prompts; requires --provider' },
     force: { type: 'boolean', description: 'Overwrite existing config without prompting' },
+    // local-specific
+    host: { type: 'string', description: '[local] Hostname or IP of the target machine' },
+    'ssh-user': { type: 'string', description: '[local] SSH login user (default: root)' },
+    'ssh-port': { type: 'string', description: '[local] SSH port (default: 22)' },
+    'key-path': { type: 'string', description: '[local] Path to an existing SSH private key' },
   },
   async run({ args }) {
     const nonInteractive = Boolean(args['non-interactive'])
@@ -59,21 +67,19 @@ export default defineCommand({
       process.exit(1)
     }
 
-    const defaults = PROVIDER_DEFAULTS[provider]
-    const region = typeof args.region === 'string' ? args.region : defaults.region
-    const stateUrl =
-      typeof args.state === 'string'
-        ? args.state
-        : `${defaults.stateScheme}CHANGEME/clawops` // placeholder — update before `clawops up`
-
     const configDir = getConfigDir()
     mkdirSync(configDir, { recursive: true })
 
-    // Generate SSH key pair if not already present
-    const keyPath = path.join(configDir, 'id_ed25519')
+    // Generate (or reuse) SSH key pair
+    const keyPath = typeof args['key-path'] === 'string'
+      ? args['key-path']
+      : path.join(configDir, 'id_ed25519')
     const knownHostsPath = path.join(configDir, 'known_hosts')
 
     if (!existsSync(keyPath)) {
+      if (typeof args['key-path'] === 'string') {
+        throw new UsageError(`SSH key not found at ${keyPath}`)
+      }
       info('Generating SSH key pair...')
       const { privateKey } = generateKeyPairSync('ed25519', {
         privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
@@ -89,32 +95,69 @@ export default defineCommand({
       writeFileSync(knownHostsPath, '', 'utf-8')
     }
 
-    const config: ClawopsConfig = {
-      version: 1,
-      defaults: { stack: stackName, provider },
-      stacks: {
-        [stackName]: {
-          provider,
-          stateUrl,
-          region,
-          credentialsRef: { source: 'env', envVars: [defaults.credEnv] },
+    let config: ClawopsConfig
+
+    if (provider === 'local') {
+      const host = typeof args.host === 'string' ? args.host : ''
+      if (!host) {
+        throw new UsageError('--host is required for the local provider')
+      }
+      const sshUser = typeof args['ssh-user'] === 'string' ? args['ssh-user'] : 'root'
+      const sshPort = typeof args['ssh-port'] === 'string' ? parseInt(args['ssh-port'], 10) : 22
+
+      config = {
+        version: 1,
+        defaults: { stack: stackName, provider },
+        stacks: {
+          [stackName]: {
+            provider,
+            stateUrl: 'file://~/.clawops/state',
+            credentialsRef: { source: 'file', envVars: [] },
+            localOpts: { host, sshUser, sshPort, sshKeyPath: keyPath },
+          },
         },
-      },
-      ssh: { keyPath, knownHostsPath },
+        ssh: { keyPath, knownHostsPath },
+      }
+    } else {
+      const defaults = PROVIDER_DEFAULTS[provider]
+      const region = typeof args.region === 'string' ? args.region : defaults.region
+      const stateUrl =
+        typeof args.state === 'string'
+          ? args.state
+          : `${defaults.stateScheme}CHANGEME/clawops`
+
+      config = {
+        version: 1,
+        defaults: { stack: stackName, provider },
+        stacks: {
+          [stackName]: {
+            provider,
+            stateUrl,
+            region,
+            credentialsRef: { source: 'env', envVars: [defaults.credEnv] },
+          },
+        },
+        ssh: { keyPath, knownHostsPath },
+      }
+
+      if (stateUrl.includes('CHANGEME')) {
+        process.stdout.write('\n')
+        info(
+          `Update stateUrl in the config to a real state backend before running \`clawops up\`.\n` +
+            `  Example: clawops init --provider ${provider} --state ${defaults.stateScheme}your-bucket/clawops`,
+        )
+      }
+
+      process.stdout.write('\n')
+      success(`Provider: ${provider}  Region: ${region}  Stack: ${stackName}`)
+      setConfig(config)
+      success(`Config written to ${path.join(configDir, 'config.json')}`)
+      return
     }
 
     setConfig(config)
     success(`Config written to ${path.join(configDir, 'config.json')}`)
-
-    if (stateUrl.includes('CHANGEME')) {
-      process.stdout.write('\n')
-      info(
-        `Update stateUrl in the config to a real state backend before running \`clawops up\`.\n` +
-          `  Example: clawops init --provider ${provider} --state ${defaults.stateScheme}your-bucket/clawops`,
-      )
-    }
-
     process.stdout.write('\n')
-    success(`Provider: ${provider}  Region: ${region}  Stack: ${stackName}`)
+    success(`Provider: ${provider}  Stack: ${stackName}`)
   },
 })

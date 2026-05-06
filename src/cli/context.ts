@@ -5,13 +5,19 @@
 import type { Stack } from '@pulumi/pulumi/automation'
 import { requireConfig, getConfigDir, type ClawopsConfig } from '../config/store.js'
 import type { ProviderAdapter, ProviderName } from '../providers/types.js'
+import { readLocalState, type LocalState } from '../providers/local/state.js'
 import { UsageError } from '../errors/index.js'
 
 export interface ClawopsContext {
   config: ClawopsConfig
   adapter: ProviderAdapter
   stackName: string
-  /** Lazily create/select the Pulumi stack. Cached after first call. */
+  /**
+   * For local stacks: persisted state from ~/.clawops/state/<stack>.json,
+   * or null if not yet bootstrapped. Undefined for cloud-backed stacks.
+   */
+  localState?: LocalState | null
+  /** Lazily create/select the Pulumi stack. Throws for local provider. */
   getStack(): Promise<Stack>
 }
 
@@ -38,13 +44,26 @@ export function buildContext(args: ContextArgs): ClawopsContext {
 
   const adapter = loadProvider(providerName as ProviderName)
 
+  // For local stacks, load persisted connection state from disk (synchronous).
+  // Returns null when the host has not been bootstrapped yet.
+  const localState: LocalState | null | undefined =
+    providerName === 'local' ? readLocalState(stackName) : undefined
+
   let stackCache: Stack | null = null
 
   return {
     config,
     adapter,
     stackName,
+    localState,
     async getStack() {
+      if (providerName === 'local') {
+        throw new UsageError(
+          'The local provider does not use Pulumi stacks. ' +
+            'Use `clawops up` to bootstrap the host instead.',
+        )
+      }
+
       if (stackCache) return stackCache
 
       const stackConfig = config.stacks[stackName]
@@ -69,10 +88,6 @@ export function buildContext(args: ContextArgs): ClawopsContext {
 }
 
 function loadProvider(name: ProviderName): ProviderAdapter {
-  // Providers are registered via dynamic import when actually used.
-  // For M1, only GCP is supported.
-  // Dynamic import happens inside getStack() for Pulumi-backed providers.
-  // This function returns a proxy that loads the real adapter on first method call.
   return makeProviderProxy(name)
 }
 
@@ -97,9 +112,14 @@ function makeProviderProxy(name: ProviderName): ProviderAdapter {
         resolved = mod.default
         return resolved
       }
+      case 'local': {
+        const mod = await import('../providers/local/index.js')
+        resolved = mod.default
+        return resolved
+      }
       default:
         throw new UsageError(
-          `Provider "${name}" is not yet supported. Supported providers: gcp, aws, azure`,
+          `Provider "${name}" is not yet supported. Supported providers: gcp, aws, azure, local`,
         )
     }
   }
@@ -108,8 +128,6 @@ function makeProviderProxy(name: ProviderName): ProviderAdapter {
   return {
     name,
     get program() {
-      // For GCP the program is a sync getter; for the proxy we must have a value
-      // Programs are only used inside getStack() which is async, so this is safe.
       return async () => {
         const adapter = await resolve()
         return adapter.program()

@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
-**Version:** 0.2
-**Status:** Pre-implementation
+**Version:** 0.4
+**Status:** M4 complete — pre-M5 coverage pass done; 239 tests passing
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -784,17 +784,22 @@ Per the TDD rule and the Claude Code research findings:
 - [x] `clawops gateway status/restart/update` works
 - [x] SSH transport supports cancellation (R13)
 
-### M3 — AWS + Azure (Week 8)
-- [ ] AWS adapter: full lifecycle, Bedrock optional
-- [ ] Azure adapter: full lifecycle, Key Vault integration
-- [ ] `clawops stacks list/delete` for multi-stack
-- [ ] `--stack` flag fully wired across all commands
-- [ ] OIDC GitHub Actions workflow as docs/example
+### M3 — AWS + Azure (Week 8) ✅
+- [x] AWS adapter: full lifecycle, Bedrock optional
+- [x] Azure adapter: full lifecycle, Key Vault integration
+- [x] `clawops stacks list/delete` for multi-stack
+- [x] `--stack` flag fully wired across all commands
+- [x] OIDC GitHub Actions workflow as docs/example
 
-### M4 — Local VM (Week 10)
-- [ ] Local adapter: SSH bootstrap, no Pulumi
-- [ ] `file://` state backend
-- [ ] `clawops backup create/restore`
+### M4 — Local VM (Week 10) ✅
+- [x] Local adapter: SSH bootstrap, no Pulumi
+- [x] `file://` state backend (`~/.clawops/state/<stack>.json`, atomic write)
+- [x] `clawops backup create/restore` (docker exec streaming)
+- [x] `clawops init --provider local --host <HOST>` writes `localOpts`
+- [x] `clawops up` local path: renders bootstrap.sh.tmpl, runs over SSH, polls health
+- [x] `clawops status` local path: reads `LocalState`, renders table or "not bootstrapped"
+- [x] `clawops ssh` local path: connects using `LocalState` connection info
+- [x] Pre-M5 coverage pass: 239 tests across 27 files (errors, outputs, validate, pool, context, init, status, up)
 
 ### M5 — MCP Layer (Week 12)
 - [ ] `clawops mcp serve` (stdio) with all CLI tools registered

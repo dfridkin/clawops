@@ -14,11 +14,40 @@ export default defineCommand({
   },
   async run({ args }) {
     const { buildContext } = await import('../context.js')
-    const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
 
     const ctx = buildContext(args)
-    const stack = await ctx.getStack()
 
+    // ── Local provider path ────────────────────────────────────────────────────
+    if (ctx.adapter.name === 'local') {
+      const state = ctx.localState
+
+      if (Boolean(args.json)) {
+        printJson(state
+          ? jsonOk({ stack: ctx.stackName, ...state })
+          : jsonOk({ stack: ctx.stackName, status: 'not bootstrapped' }),
+        )
+        return
+      }
+
+      const rows: string[][] = [['Stack', ctx.stackName]]
+      if (state) {
+        rows.push(['Provider', 'local'])
+        rows.push(['Host', state.sshHost])
+        rows.push(['SSH', `${state.sshUser}@${state.sshHost}:${state.sshPort}`])
+        rows.push(['Gateway URL', state.gatewayUrl])
+        rows.push(['Bootstrapped', state.provisionedAt])
+      } else {
+        rows.push(['Status', 'not bootstrapped (run `clawops up`)'])
+      }
+
+      process.stdout.write('\n' + renderTable(['Field', 'Value'], rows) + '\n\n')
+      return
+    }
+
+    // ── Cloud provider path (Pulumi) ───────────────────────────────────────────
+    const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
+
+    const stack = await ctx.getStack()
     const outputMap = await stack.outputs()
     const outputs: Record<string, unknown> = Object.fromEntries(
       Object.entries(outputMap).map(([k, v]) => [k, v.value]),

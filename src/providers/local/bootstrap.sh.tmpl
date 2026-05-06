@@ -1,0 +1,71 @@
+#!/bin/bash
+# clawops bootstrap script — idempotent; safe to re-run.
+# Rendered by clawops and executed via SSH on the target host.
+set -euo pipefail
+
+OPENCLAW_VERSION="{{OPENCLAW_VERSION}}"
+OPENCLAW_PORT=18789
+OPENCLAW_USER=clawops
+OPENCLAW_CONFIG=/home/${OPENCLAW_USER}/openclaw.json
+SERVICE_FILE=/etc/systemd/system/openclaw.service
+
+# ── Create clawops user ────────────────────────────────────────────────────────
+id -u "${OPENCLAW_USER}" &>/dev/null || useradd -m -s /bin/bash "${OPENCLAW_USER}"
+
+# ── Install Docker ─────────────────────────────────────────────────────────────
+if ! command -v docker &>/dev/null; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -q
+  apt-get install -y -q ca-certificates curl gnupg lsb-release
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  chmod a+r /etc/apt/keyrings/docker.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+    https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+    > /etc/apt/sources.list.d/docker.list
+  apt-get update -q
+  apt-get install -y -q docker-ce docker-ce-cli containerd.io
+  systemctl enable --now docker
+fi
+
+usermod -aG docker "${OPENCLAW_USER}" || true
+
+# ── Pull OpenClaw image ────────────────────────────────────────────────────────
+docker pull "ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}"
+
+# ── Write default openclaw.json if absent ─────────────────────────────────────
+if [ ! -f "${OPENCLAW_CONFIG}" ]; then
+  cat > "${OPENCLAW_CONFIG}" <<'OPENCLAWJSON'
+{"version":"2026.4","gateway":{"port":18789,"auth":{"mode":"token"}},"models":{},"channels":[]}
+OPENCLAWJSON
+  chown "${OPENCLAW_USER}:${OPENCLAW_USER}" "${OPENCLAW_CONFIG}"
+fi
+
+# ── Write systemd service unit ─────────────────────────────────────────────────
+cat > "${SERVICE_FILE}" <<UNIT
+[Unit]
+Description=OpenClaw gateway
+After=docker.service
+Requires=docker.service
+
+[Service]
+User=${OPENCLAW_USER}
+Restart=always
+RestartSec=5
+ExecStartPre=-/usr/bin/docker stop openclaw
+ExecStartPre=-/usr/bin/docker rm openclaw
+ExecStart=/usr/bin/docker run --name openclaw --rm \
+  -p ${OPENCLAW_PORT}:${OPENCLAW_PORT} \
+  -v ${OPENCLAW_CONFIG}:/app/config.json:ro \
+  ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}
+ExecStop=/usr/bin/docker stop openclaw
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable openclaw
+systemctl restart openclaw
+echo "clawops: bootstrap complete"

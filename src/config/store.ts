@@ -16,11 +16,19 @@ const CredentialsRefSchema = z.object({
   profileName: z.string().optional(),
 })
 
+const LocalOptsSchema = z.object({
+  host: z.string(),
+  sshUser: z.string(),
+  sshPort: z.number(),
+  sshKeyPath: z.string(),
+})
+
 const StackConfigSchema = z.object({
   provider: z.string(),
   stateUrl: z.string(),
   region: z.string().optional(),
   credentialsRef: CredentialsRefSchema,
+  localOpts: LocalOptsSchema.optional(),
 })
 
 const ClawopsConfigSchema = z.object({

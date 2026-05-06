@@ -13,27 +13,47 @@ export default defineCommand({
   },
   async run({ args }) {
     const { buildContext } = await import('../context.js')
-    const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
     const { acquireSession, drainPool } = await import('../../transport/pool.js')
 
     const ctx = buildContext(args)
-    const stack = await ctx.getStack()
 
-    const outputMap = await stack.outputs()
-    const outputs: Record<string, unknown> = Object.fromEntries(
-      Object.entries(outputMap).map(([k, v]) => [k, v.value]),
-    )
-    if (!outputs['publicIp']) {
-      failure('Stack has no outputs. Run `clawops up` first.')
-      process.exit(4)
+    let conn: { host: string; port: number; user: string; privateKeyPath: string; knownHostsPath: string }
+
+    if (ctx.adapter.name === 'local') {
+      // Local path: read connection info from persisted state
+      const state = ctx.localState
+      if (!state) {
+        failure('Stack has no state. Run `clawops up` first.')
+        process.exit(4)
+      }
+      conn = {
+        host: state.sshHost,
+        port: state.sshPort,
+        user: state.sshUser,
+        privateKeyPath: state.privateKeyPath,
+        knownHostsPath: state.knownHostsPath,
+      }
+    } else {
+      // Cloud path: read connection info from Pulumi stack outputs
+      const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
+
+      const stack = await ctx.getStack()
+      const outputMap = await stack.outputs()
+      const outputs: Record<string, unknown> = Object.fromEntries(
+        Object.entries(outputMap).map(([k, v]) => [k, v.value]),
+      )
+      if (!outputs['publicIp']) {
+        failure('Stack has no outputs. Run `clawops up` first.')
+        process.exit(4)
+      }
+
+      const base = extractBaseOutputs(outputs)
+      conn = ctx.adapter.getConnectionInfo({
+        ...base,
+        privateKeyPath: ctx.config.ssh.keyPath,
+        knownHostsPath: ctx.config.ssh.knownHostsPath,
+      })
     }
-
-    const base = extractBaseOutputs(outputs)
-    const conn = ctx.adapter.getConnectionInfo({
-      ...base,
-      privateKeyPath: ctx.config.ssh.keyPath,
-      knownHostsPath: ctx.config.ssh.knownHostsPath,
-    })
 
     const remoteCommand = typeof args.command === 'string' ? args.command : null
 
@@ -59,7 +79,6 @@ export default defineCommand({
         if (result.stderr) process.stderr.write(result.stderr)
         process.exit(result.code)
       } else {
-        // Interactive shell: stream a login shell and pipe stdio
         const shellStream = await session.stream('bash -l', abortController.signal)
         shellStream.pipe(process.stdout)
         process.stdin.pipe(shellStream as unknown as NodeJS.WritableStream)
