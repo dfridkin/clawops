@@ -19,7 +19,7 @@
     "dev": "tsx src/cli/index.ts",
     "build": "tsup",
     "test": "vitest run",
-    "test:pulumi": "vitest run tests/pulumi",
+    "test:pulumi": "vitest run tests/providers/aws/program.test.ts tests/providers/azure/program.test.ts",
     "test:changed": "vitest --changed",
     "typecheck": "tsc --noEmit",
     "lint": "eslint --max-warnings=0 src tests scripts",
