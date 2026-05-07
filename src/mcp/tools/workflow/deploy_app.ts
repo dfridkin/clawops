@@ -2,7 +2,7 @@
 // Composite: elicit → up → status → return summary
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/dist/esm/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { WorkflowDeployAppInput } from '../_generated.js'
 import { handleUp } from '../cli/up.js'
 import { handleStatus } from '../cli/status.js'

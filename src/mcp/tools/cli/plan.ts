@@ -1,7 +1,7 @@
 // clawops_plan handler — M6 stub
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/dist/esm/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { PlanInput } from '../_generated.js'
 
 export async function handlePlan(_input: PlanInput, _server: McpServer): Promise<CallToolResult> {

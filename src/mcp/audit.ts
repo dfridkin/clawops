@@ -74,8 +74,8 @@ function getAuditLogPath(): string {
  */
 export function withAudit<T>(
   toolName: string,
-  handler: (input: T) => Promise<import('@modelcontextprotocol/sdk/dist/esm/types.js').CallToolResult>,
-): (input: T) => Promise<import('@modelcontextprotocol/sdk/dist/esm/types.js').CallToolResult> {
+  handler: (input: T) => Promise<import('@modelcontextprotocol/sdk/types.js').CallToolResult>,
+): (input: T) => Promise<import('@modelcontextprotocol/sdk/types.js').CallToolResult> {
   return async (input: T) => {
     const start = Date.now()
     try {

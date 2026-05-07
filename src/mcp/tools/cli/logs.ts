@@ -1,7 +1,7 @@
 // clawops_logs_tail handler
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/dist/esm/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { LogsTailInput } from '../_generated.js'
 import { buildContext } from '../../../cli/context.js'
 import { acquireSession, drainPool } from '../../../transport/pool.js'
@@ -41,8 +41,4 @@ export async function handleLogsTail(input: LogsTailInput, _server: McpServer): 
     release()
     drainPool()
   }
-}
-
-function okText(t: string): CallToolResult {
-  return { content: [{ type: 'text', text: t }] }
 }

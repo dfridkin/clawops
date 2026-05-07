@@ -2,7 +2,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/dist/esm/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { UpInput } from '../_generated.js'
 import { buildContext } from '../../../cli/context.js'
 import { UsageError } from '../../../errors/index.js'

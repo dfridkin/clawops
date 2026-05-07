@@ -1,7 +1,7 @@
 // clawops_agents_list + clawops_agents_restart handlers
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/dist/esm/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { AgentsListInput, AgentsRestartInput } from '../_generated.js'
 import { buildContext } from '../../../cli/context.js'
 import { acquireSession, drainPool } from '../../../transport/pool.js'

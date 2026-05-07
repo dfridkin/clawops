@@ -43,11 +43,11 @@ export async function resolveConn(ctx: ClawopsContext): Promise<ConnInfo> {
 }
 
 /** CallToolResult helper — error text with isError flag. */
-export function errText(message: string): import('@modelcontextprotocol/sdk/dist/esm/types.js').CallToolResult {
+export function errText(message: string): import('@modelcontextprotocol/sdk/types.js').CallToolResult {
   return { content: [{ type: 'text', text: message }], isError: true }
 }
 
 /** CallToolResult helper — plain text. */
-export function okText(t: string): import('@modelcontextprotocol/sdk/dist/esm/types.js').CallToolResult {
+export function okText(t: string): import('@modelcontextprotocol/sdk/types.js').CallToolResult {
   return { content: [{ type: 'text', text: t }] }
 }

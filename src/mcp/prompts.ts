@@ -1,5 +1,6 @@
 // MCP prompts — per SPEC.md §7.3.
 
+import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 export function registerPrompts(server: McpServer): void {
@@ -9,8 +10,8 @@ export function registerPrompts(server: McpServer): void {
     {
       description: 'Step-by-step guide to deploy OpenClaw on AWS',
       argsSchema: {
-        region: { type: 'string', description: 'AWS region (e.g. us-east-1)', required: false },
-        instanceType: { type: 'string', description: 'EC2 instance type (e.g. t3.medium)', required: false },
+        region: z.string().optional().describe('AWS region (e.g. us-east-1)'),
+        instanceType: z.string().optional().describe('EC2 instance type (e.g. t3.medium)'),
       },
     },
     ({ region, instanceType }) => {
@@ -83,7 +84,7 @@ The stack outputs a \`gatewayUrl\` — open it in your browser to reach the Open
     {
       description: 'Diagnostic playbook for a failed or unhealthy clawops stack',
       argsSchema: {
-        stackName: { type: 'string', description: 'Stack name to diagnose', required: false },
+        stackName: z.string().optional().describe('Stack name to diagnose'),
       },
     },
     ({ stackName }) => {
