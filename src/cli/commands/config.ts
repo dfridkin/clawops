@@ -54,9 +54,10 @@ export default defineCommand({
     description: 'Manage OpenClaw gateway configuration (get | set | unset)',
   },
   args: {
-    stack: { type: 'string', description: 'Target stack name' },
-    restart: { type: 'boolean', description: 'Restart gateway after set/unset' },
-    json: { type: 'boolean', description: 'Emit JSON (for get)' },
+    stack:     { type: 'string',  description: 'Target stack name' },
+    restart:   { type: 'boolean', description: 'Restart gateway after set/unset' },
+    json:      { type: 'boolean', description: 'Emit JSON (for get)' },
+    'dry-run': { type: 'boolean', description: 'Show what would change without writing' },
   },
   async run({ args }) {
     const { buildContext } = await import('../context.js')
@@ -132,6 +133,12 @@ export default defineCommand({
         setPath(cfg, key!, parsedValue)
       } else {
         deletePath(cfg, key!)
+      }
+
+      if (args['dry-run']) {
+        info(`Dry run — would write to ${OPENCLAW_CONFIG}:`)
+        process.stdout.write(JSON.stringify(cfg, null, 2) + '\n')
+        return
       }
 
       // Atomic write via base64 to avoid shell-escaping issues

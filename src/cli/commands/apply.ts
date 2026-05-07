@@ -13,7 +13,8 @@ export default defineCommand({
     description: 'Apply a Maker plan JSON produced by `clawops plan`',
   },
   args: {
-    yes: { type: 'boolean', description: 'Skip confirmation prompt' },
+    yes:       { type: 'boolean', description: 'Skip confirmation prompt' },
+    'dry-run': { type: 'boolean', description: 'Validate plan and show diff without applying' },
   },
   async run({ args }) {
     const { validatePlan } = await import('../../plan/validate.js')
@@ -61,6 +62,19 @@ export default defineCommand({
       process.stdout.write(
         `  ${create.length} to create, ${update.length} to update, ${del.length} to delete\n`,
       )
+      const rows: string[][] = [
+        ...create.map((r) => ['+', r.type, r.name ?? '']),
+        ...update.map((r) => ['~', r.resource.type, r.resource.name ?? '']),
+        ...del.map((r) => ['-', r.type, r.name ?? '']),
+      ]
+      if (rows.length > 0) {
+        process.stdout.write(renderTable(['Op', 'Resource Type', 'Name'], rows) + '\n')
+      }
+    }
+
+    if (args['dry-run']) {
+      info('Dry run — plan is valid. Pass --yes (without --dry-run) to apply.')
+      return
     }
 
     if (!args.yes) {

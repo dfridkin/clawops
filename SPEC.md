@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
-**Version:** 0.6
-**Status:** M6 complete — 287 tests passing
+**Version:** 0.7
+**Status:** M7 complete — 356 tests passing
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -826,11 +826,13 @@ Per the TDD rule and the Claude Code research findings:
 - [x] `clawops mcp serve --http <port>` implemented via `StreamableHTTPServerTransport`
 - [x] 287 tests passing across 32 test files
 
-### M7 — v1.0 Polish (Week 16)
-- [ ] `clawops doctor` covers all credentials, state backends, SSH keys, Pulumi engine
-- [ ] All mutating commands support `--dry-run`
-- [ ] CI integration guide (docs/ci.md)
-- [ ] Restore `.github/workflows/release.yml` (removed in M3 to save Actions minutes): changesets/action creates version-bump PRs; on merge runs `pnpm release` → `tsup build && npm publish --provenance`
+### M7 — v1.0 Polish (Week 16) ✅
+- [x] `clawops doctor` covers Node version, config validity, SSH key, provider credentials, Pulumi home dir
+- [x] All mutating commands support `--dry-run` (`up` already had it; added to `down`, `destroy`, `apply`, `config`)
+- [x] CI integration guide (`docs/ci.md`): OIDC for AWS/GCP, env vars reference, plan/apply in CI, no `clawops init` in CI
+- [x] Restore `.github/workflows/release.yml`: changesets/action creates version-bump PRs; on merge runs `pnpm release` → `tsup build && npm publish --provenance`
+- [x] `clawops destroy` implemented (was a stub throwing `Error('not yet implemented (M1)')`)
+- [x] 356 tests passing across 44 test files
 - [ ] First npm publish with `--provenance`
 - [ ] README + docs site (clawops.dev) live
 - [ ] Demo video / blog post

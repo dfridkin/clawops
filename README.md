@@ -86,19 +86,20 @@ clawops down --yes          # Destroy all infrastructure
 |---|---|
 | `init` | Interactive setup wizard — writes config, generates SSH key pair |
 | `up` | Provision or update stack (`--dry-run` for preview) |
-| `down` | Destroy stack (requires `--yes`) |
+| `down` | Destroy local-provider stack (requires `--yes`; `--dry-run` shows current outputs) |
+| `destroy` | Destroy cloud-provider stack with confirmation prompt (`--dry-run` shows current outputs) |
 | `status` | Show stack outputs: IP, gateway URL, region, provisioned time |
 | `plan` | Generate a Maker deploy-plan JSON artifact (dry-run safe) |
-| `apply` | Apply a previously reviewed plan file |
+| `apply` | Apply a previously reviewed plan file (`--dry-run` validates and shows diff without applying) |
 | `ssh` | Interactive SSH session or run a remote command |
 | `logs` | Stream OpenClaw logs (`-f`, `--tail N`, `--since 5m`) |
 | `tunnel` | Local port-forward to gateway UI over SSH |
-| `config` | Get/set remote OpenClaw config values |
+| `config` | Get/set remote OpenClaw config values (`--dry-run` shows would-write JSON) |
 | `agents` | List or restart OpenClaw agents |
 | `gateway` | Restart the OpenClaw gateway service |
 | `backup` | Create or restore an OpenClaw state backup |
 | `stacks` | List named stacks and their state |
-| `doctor` | Check credentials, SSH connectivity, and dependency health |
+| `doctor` | Check Node version, config, SSH key, provider credentials, and Pulumi home |
 | `mcp` | Start the embedded MCP server (`mcp serve`) |
 
 Full flag reference: `clawops <command> --help`
@@ -262,7 +263,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (336 tests, ~2s)
+pnpm test                  # vitest (356 tests, ~2s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm typecheck             # tsc --noEmit
 pnpm lint                  # eslint src/ tests/ scripts/ (--max-warnings=0)
@@ -323,7 +324,7 @@ Use `pnpm changeset` to record a release note before merging a `feat` or `fix`.
 | M4 — Local VM | ✅ | Local adapter (SSH bootstrap, no Pulumi); `doctor` |
 | M5 — MCP Layer | ✅ | `mcp serve` (stdio), all CLI ops as MCP tools, progress tracking |
 | M6 — Plan/Apply | ✅ | `plan` + `apply`; deploy-plan schema; MCP HTTP transport; `workflow_deploy_app` |
-| M7 — v1.0 Polish | Planned | `backup`, `--dry-run` everywhere, npm publish, `clawops mcp install` |
+| M7 — v1.0 Polish | ✅ | Full `doctor` surface; `destroy` command; `--dry-run` on `up`/`down`/`destroy`/`apply`/`config`; `release.yml`; CI integration guide |
 
 ---
 

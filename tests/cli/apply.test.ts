@@ -154,4 +154,17 @@ describe('apply command', () => {
       (cmd.run as AnyRunFn)({ args: { _: [tmpPlanPath], yes: true } }),
     ).rejects.toThrow('infra failure')
   })
+
+  it('--dry-run validates plan and prints diff without applying', async () => {
+    const chunks: string[] = []
+    vi.spyOn(process.stdout, 'write').mockImplementation((c) => { chunks.push(String(c)); return true })
+    vi.spyOn(console, 'log').mockImplementation((...args) => { chunks.push(args.join(' ')) })
+
+    await (cmd.run as AnyRunFn)({ args: { _: [tmpPlanPath], 'dry-run': true } })
+
+    expect(mockApplyPlan).not.toHaveBeenCalled()
+    expect(mockQuestion).not.toHaveBeenCalled()
+    const output = chunks.join('\n')
+    expect(output).toMatch(/[Dd]ry run|valid/)
+  })
 })

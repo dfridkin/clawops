@@ -1,58 +1,120 @@
 import { defineCommand } from 'citty'
 import process from 'node:process'
-import { success, failure, warn } from '../../output/human.js'
+import { accessSync, mkdirSync, constants } from 'node:fs'
+import path from 'node:path'
+import { success, failure, warn, info } from '../../output/human.js'
 
 export default defineCommand({
   meta: {
     name: 'doctor',
-    description: 'Check system prerequisites and configuration',
+    description: 'Check system prerequisites, config, SSH keys, and cloud credentials',
   },
   async run() {
-    const checks: Array<{ label: string; ok: boolean; note?: string }> = []
+    const { getConfig, getConfigDir } = await import('../../config/store.js')
 
-    // Node.js version check
+    process.stdout.write('\nclawops doctor\n')
+
+    // ── Runtime ─────────────────────────────────────────────────────────────
+    process.stdout.write('\nRuntime\n')
+
     const nodeVersion = process.version
     const nodeMajor = parseInt(nodeVersion.slice(1).split('.')[0] ?? '0', 10)
-    checks.push({
-      label: `Node.js ${nodeVersion}`,
-      ok: nodeMajor >= 20,
-      note: nodeMajor < 20 ? 'requires >=20' : undefined,
-    })
-
-    // Cloud credentials presence
-    const credChecks: Array<{ label: string; env: string }> = [
-      { label: 'AWS_PROFILE', env: 'AWS_PROFILE' },
-      { label: 'GOOGLE_APPLICATION_CREDENTIALS', env: 'GOOGLE_APPLICATION_CREDENTIALS' },
-      { label: 'AZURE_CLIENT_ID', env: 'AZURE_CLIENT_ID' },
-    ]
-
-    let anyCredential = false
-    for (const { label, env } of credChecks) {
-      const present = Boolean(process.env[env])
-      if (present) anyCredential = true
-      checks.push({ label, ok: present })
+    const nodeOk = nodeMajor >= 22
+    if (nodeOk) {
+      success(`Node.js ${nodeVersion}`)
+    } else {
+      failure(`Node.js ${nodeVersion}  (requires >=22)`)
     }
 
-    process.stdout.write('\nclawops doctor\n\n')
-    for (const c of checks) {
-      const note = c.note ? `  (${c.note})` : ''
-      if (c.ok) {
-        success(`${c.label}${note}`)
-      } else {
-        failure(`${c.label}${note}`)
+    // Pulumi home (embedded — just ensure the directory can be created)
+    const configDir = getConfigDir()
+    const pulumiHome = path.join(configDir, '.pulumi')
+    try {
+      mkdirSync(pulumiHome, { recursive: true })
+      success(`Pulumi home  ${pulumiHome}`)
+    } catch {
+      failure(`Pulumi home  ${pulumiHome}  (not writable)`)
+    }
+
+    // ── Config ───────────────────────────────────────────────────────────────
+    process.stdout.write('\nConfig\n')
+
+    const config = getConfig()
+    if (!config) {
+      warn('No config file found — run `clawops init` to create one')
+    } else {
+      success(`Config file  ${path.join(configDir, 'config.json')}`)
+    }
+
+    // ── SSH ──────────────────────────────────────────────────────────────────
+    process.stdout.write('\nSSH\n')
+
+    if (!config) {
+      info('SSH checks skipped — no config')
+    } else {
+      const keyPath = config.ssh.keyPath.replace(/^~/, process.env['HOME'] ?? '~')
+      try {
+        accessSync(keyPath, constants.R_OK)
+        success(`SSH key      ${keyPath}`)
+      } catch {
+        failure(`SSH key      ${keyPath}  (not found or not readable)`)
+      }
+
+      const knownHostsPath = config.ssh.knownHostsPath.replace(/^~/, process.env['HOME'] ?? '~')
+      try {
+        accessSync(knownHostsPath, constants.F_OK)
+        success(`known_hosts  ${knownHostsPath}`)
+      } catch {
+        warn(`known_hosts  ${knownHostsPath}  (does not exist — will be created on first connect)`)
       }
     }
 
-    if (!anyCredential) {
-      process.stdout.write('\n')
-      warn(
-        'No cloud credentials detected.\n' +
-          '     Set AWS_PROFILE, GOOGLE_APPLICATION_CREDENTIALS, or AZURE_CLIENT_ID.',
-      )
-    }
-    process.stdout.write('\n')
+    // ── Credentials ──────────────────────────────────────────────────────────
+    process.stdout.write('\nCredentials\n')
 
-    const nodeOk = checks.find((c) => c.label.startsWith('Node'))?.ok ?? false
+    if (!config) {
+      info('Credential checks skipped — no config')
+    } else {
+      const { getProvider } = await import('../../providers/index.js')
+
+      // Register all adapters (side-effect imports)
+      await import('../../providers/aws/index.js')
+      await import('../../providers/gcp/index.js')
+      await import('../../providers/azure/index.js')
+      await import('../../providers/local/index.js')
+
+      const checkedProviders = new Set<string>()
+      for (const [stackName, stackCfg] of Object.entries(config.stacks)) {
+        const providerName = stackCfg.provider
+        if (checkedProviders.has(providerName)) continue
+        checkedProviders.add(providerName)
+
+        if (providerName === 'local') {
+          success(`local  stack "${stackName}"  (SSH-only, no cloud credentials required)`)
+          continue
+        }
+
+        try {
+          const adapter = getProvider(providerName as 'aws' | 'gcp' | 'azure')
+          const result = await adapter.validateConfig()
+          if (result.ok) {
+            success(`${providerName}  stack "${stackName}"`)
+          } else {
+            for (const err of result.errors) {
+              failure(`${providerName}  stack "${stackName}"  — ${err}`)
+            }
+          }
+        } catch (err) {
+          failure(`${providerName}  stack "${stackName}"  — ${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+
+      if (checkedProviders.size === 0) {
+        warn('No stacks configured — run `clawops init`')
+      }
+    }
+
+    process.stdout.write('\n')
     if (!nodeOk) process.exit(1)
   },
 })
