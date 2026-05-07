@@ -94,7 +94,7 @@ function parseDiff(lines: string[]): DeployPlan['diff'] {
 
 export async function generatePlan(
   intent: GeneratePlanIntent,
-  opts?: { signal?: AbortSignal },
+  _opts?: { signal?: AbortSignal },
 ): Promise<DeployPlan> {
   if ((intent.provider as string) === 'local') {
     throw new UsageError(
@@ -144,7 +144,6 @@ export async function generatePlan(
     await stack.setConfig('openclawVersion', { value: openclawVersion })
 
     const outputLines: string[] = []
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const preview = await stack.preview({
       onOutput: (line) => outputLines.push(line),
     })

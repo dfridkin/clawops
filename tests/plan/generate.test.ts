@@ -44,6 +44,7 @@ beforeEach(async () => {
   vi.mocked(buildContext).mockReturnValue({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     config: {} as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     adapter: { name: 'aws' } as any,
     stackName: 'default',
     getStack: mockGetStack,
