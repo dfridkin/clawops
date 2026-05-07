@@ -12,6 +12,10 @@
   "files": [
     "dist"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dfridkin/clawops.git"
+  },
   "publishConfig": {
     "access": "public",
     "provenance": true
