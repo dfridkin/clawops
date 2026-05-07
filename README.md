@@ -3,7 +3,7 @@
 **clawops** is a provider-agnostic CLI for deploying and operating self-hosted [OpenClaw](https://github.com/openclaw/openclaw) instances across AWS, GCP, Azure, and local VMs. It uses the [Pulumi Automation API](https://www.pulumi.com/docs/using-pulumi/automation-api/) (embedded — no `pulumi` binary required) for idempotent infrastructure management and exposes every operation as both a CLI command and an [MCP](https://modelcontextprotocol.io/) tool, so Claude Code, Cursor, and other AI agents can drive deployments deterministically.
 
 ```bash
-npm install -g clawops
+npm install -g @clawops/cli
 clawops init --provider aws
 clawops plan --out /tmp/my-plan.json   # generate + review
 clawops apply /tmp/my-plan.json        # apply after review
@@ -38,9 +38,9 @@ Every existing OpenClaw deployment path is cloud-specific, Kubernetes-bound, or 
 ### Install
 
 ```bash
-npm install -g clawops
+npm install -g @clawops/cli
 # or without a global install:
-npx clawops
+npx @clawops/cli
 ```
 
 ### Provision on AWS
