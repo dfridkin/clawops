@@ -9,9 +9,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "resolveJsonModule": true,
-    "allowImportingTsExtensions": true,
-    "incremental": true,
-    "tsBuildInfoFile": ".tsbuildinfo"
+    "allowImportingTsExtensions": true
   },
   "include": ["src", "scripts", "tests"],
   "exclude": ["node_modules", "dist"]
