@@ -15,7 +15,7 @@ clawops/
 ├── CLAUDE.md                          # Root context for Claude Code
 ├── AGENTS.md                          # Mirror of CLAUDE.md (open standard)
 ├── README.md                          # Human-facing
-├── LICENSE                            # MIT
+├── LICENSE                            # MPL-2.0
 ├── package.json                       # exports + bin
 ├── tsconfig.json                      # strict mode
 ├── tsup.config.ts                     # bundler
@@ -805,7 +805,7 @@ Per the TDD rule and the Claude Code research findings:
 - [x] `clawops up` local path: renders bootstrap.sh.tmpl, runs over SSH, polls health
 - [x] `clawops status` local path: reads `LocalState`, renders table or "not bootstrapped"
 - [x] `clawops ssh` local path: connects using `LocalState` connection info
-- [x] Pre-M5 coverage pass: 239 tests across 27 files (errors, outputs, validate, pool, context, init, status, up); 287 tests across 32 files at M6
+- [x] Pre-M5 coverage pass: 239 tests across 27 files (errors, outputs, validate, pool, context, init, status, up); 336 tests across 40 files at M6
 
 ### M5 — MCP Layer (Week 12) ✅
 - [x] `clawops mcp serve` (stdio) with all CLI tools registered
@@ -824,7 +824,7 @@ Per the TDD rule and the Claude Code research findings:
 - [x] Plan diff rendering for human review (create/update/delete counts + resource table)
 - [x] MCP `clawops_workflow_deploy_app` uses plan flow internally (generatePlan → diff-informed elicitation → applyPlan)
 - [x] `clawops mcp serve --http <port>` implemented via `StreamableHTTPServerTransport`
-- [x] 287 tests passing across 32 test files
+- [x] 336 tests passing across 40 test files
 
 ### M7 — v1.0 Polish (Week 16) ✅
 - [x] `clawops doctor` covers Node version, config validity, SSH key, provider credentials, Pulumi home dir
