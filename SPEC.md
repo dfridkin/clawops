@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
-**Version:** 0.4
-**Status:** M4 complete — pre-M5 coverage pass done; 239 tests passing
+**Version:** 0.6
+**Status:** M6 complete — 287 tests passing
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -129,9 +129,14 @@ clawops/
     ├── pulumi/
     │   └── components.test.ts         # pulumi.runtime.setMocks() (borrowed pattern)
     ├── mcp/
-    │   └── tools.test.ts              # tool invocation + schema validation
+    │   ├── tools.test.ts              # tool invocation + schema validation
+    │   ├── server.test.ts             # MCP server bootstrap + stdio transport
+    │   └── http.test.ts               # StreamableHTTP transport
     ├── plan/
-    │   └── schema.test.ts             # ajv schema conformance
+    │   ├── schema.test.ts             # ajv schema conformance
+    │   ├── validate.test.ts           # validatePlan / assertValidPlan
+    │   ├── generate.test.ts           # generatePlan() + diff parsing
+    │   └── apply.test.ts              # applyPlan() execution
     └── e2e/                           # full-flow tests against LocalStack/sandbox
 ```
 
@@ -678,7 +683,7 @@ Sanitization (sensitive keys stripped): `Authorization`, `*token*`, `*secret*`, 
 | `@pulumi/azure-native` | ^2.x | Azure provider | — |
 | `@pulumi/command` | ^1.x | Remote command resource | — |
 | `@pulumi/docker` | ^4.x | Docker container resource | — |
-| `@modelcontextprotocol/sdk` | ~1.29.0 | MCP server primitives | R25 |
+| `@modelcontextprotocol/sdk` | ^1.0.0 | MCP server primitives (stdio + StreamableHTTP) | R25 |
 | `citty` | ^0.1.x | CLI framework | Q1 |
 | `ssh2` | ^1.x | SSH transport | — |
 | `ora` | ^8.x | Spinners (suppressed in --json) | F27 |
@@ -687,6 +692,7 @@ Sanitization (sensitive keys stripped): `Authorization`, `*token*`, `*secret*`, 
 | `inquirer` | ^9.x | Interactive prompts (init wizard) | — |
 | `zod` | ^3.x | Runtime schema validation | R8 |
 | `ajv` | ^8.x | JSON Schema validation | R-meta-4 |
+| `ajv-formats` | ^3.x | date-time / uri formats for ajv | R-meta-4 |
 | `vitest` | ^1.x | Test runner | — |
 | `tsup` | ^8.x | Bundler | — |
 | `aws-sdk-client-mock` | ^4.x | AWS SDK testing | TDD |
@@ -704,7 +710,7 @@ jobs:
   ci:
     steps:
       - checkout
-      - setup-node@v4 (Node 20.x and 22.x matrix)
+      - setup-node@v6 (Node 22.x)
       - pnpm install --frozen-lockfile
       - pnpm gen:schemas --check     # R-meta-1
       - scripts/verify-no-docx.ts    # R-meta-2
@@ -799,24 +805,26 @@ Per the TDD rule and the Claude Code research findings:
 - [x] `clawops up` local path: renders bootstrap.sh.tmpl, runs over SSH, polls health
 - [x] `clawops status` local path: reads `LocalState`, renders table or "not bootstrapped"
 - [x] `clawops ssh` local path: connects using `LocalState` connection info
-- [x] Pre-M5 coverage pass: 239 tests across 27 files (errors, outputs, validate, pool, context, init, status, up)
+- [x] Pre-M5 coverage pass: 239 tests across 27 files (errors, outputs, validate, pool, context, init, status, up); 287 tests across 32 files at M6
 
-### M5 — MCP Layer (Week 12)
-- [ ] `clawops mcp serve` (stdio) with all CLI tools registered
-- [ ] All tools annotated per R10
-- [ ] `--read-only` and `--no-destructive` modes filtering at registration
-- [ ] Elicitation wired for destructive tools
-- [ ] `clawops mcp install --claude/--cursor/...` writes correct config
-- [ ] Composite `clawops_workflow_deploy_app` working
-- [ ] Audit log writing structured JSON (stderr + disk)
-- [ ] **HTTP transport deferred to M6** — `--http` flag accepted but throws UsageError. Decision: stdio covers all primary clients (Claude Desktop, Cursor, VS Code); HTTP adds complexity for multi-user/remote scenarios better addressed in M6 alongside OAuth.
+### M5 — MCP Layer (Week 12) ✅
+- [x] `clawops mcp serve` (stdio) with all CLI tools registered
+- [x] All tools annotated per R10
+- [x] `--read-only` and `--no-destructive` modes filtering at registration
+- [x] Elicitation wired for destructive tools
+- [x] `clawops mcp install --claude/--cursor/...` writes correct config
+- [x] Composite `clawops_workflow_deploy_app` working
+- [x] Audit log writing structured JSON (stderr + disk)
+- [x] **HTTP transport:** `--http` flag initially threw UsageError (M5); implemented in M6 via `StreamableHTTPServerTransport`.
 
-### M6 — Plan/Apply (Week 14)
-- [ ] `spec/deploy-plan.schema.json` finalized
-- [ ] `clawops plan --out plan.json` emits valid plan
-- [ ] `clawops apply plan.json` executes deterministically
-- [ ] Plan diff rendering for human review
-- [ ] MCP `clawops_workflow_deploy_app` uses plan flow internally
+### M6 — Plan/Apply (Week 14) ✅
+- [x] `spec/deploy-plan.schema.json` finalized
+- [x] `clawops plan [--out plan.json]` emits valid plan; diff table rendered to stderr
+- [x] `clawops apply <plan.json>` executes deterministically with readline confirmation
+- [x] Plan diff rendering for human review (create/update/delete counts + resource table)
+- [x] MCP `clawops_workflow_deploy_app` uses plan flow internally (generatePlan → diff-informed elicitation → applyPlan)
+- [x] `clawops mcp serve --http <port>` implemented via `StreamableHTTPServerTransport`
+- [x] 287 tests passing across 32 test files
 
 ### M7 — v1.0 Polish (Week 16)
 - [ ] `clawops doctor` covers all credentials, state backends, SSH keys, Pulumi engine
