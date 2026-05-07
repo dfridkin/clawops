@@ -43,6 +43,7 @@ clawops/
 │       └── ssh.md                     # paths: src/transport/**
 ├── docs/
 │   ├── architecture.md
+│   ├── ci.md                          # CI integration guide (OIDC, env vars, plan/apply in CI)
 │   ├── providers/<name>.md            # one per provider
 │   └── decisions/                     # ADRs
 ├── spec/
@@ -131,12 +132,22 @@ clawops/
     ├── mcp/
     │   ├── tools.test.ts              # tool invocation + schema validation
     │   ├── server.test.ts             # MCP server bootstrap + stdio transport
-    │   └── http.test.ts               # StreamableHTTP transport
+    │   ├── http.test.ts               # StreamableHTTP transport
+    │   ├── apply.test.ts              # handleApply() handler
+    │   ├── plan.test.ts               # handlePlan() handler
+    │   └── deploy_app.test.ts         # handleWorkflowDeployApp() handler
     ├── plan/
     │   ├── schema.test.ts             # ajv schema conformance
     │   ├── validate.test.ts           # validatePlan / assertValidPlan
     │   ├── generate.test.ts           # generatePlan() + diff parsing
     │   └── apply.test.ts              # applyPlan() execution
+    ├── cli/
+    │   ├── commands.test.ts           # command registration smoke tests
+    │   ├── doctor.test.ts             # doctor surface checks
+    │   ├── destroy.test.ts            # destroy flow (local guard, --dry-run, --yes)
+    │   ├── down.test.ts               # down flow (--dry-run, --yes)
+    │   ├── apply.test.ts              # apply flow (--dry-run, readline confirm)
+    │   └── plan.test.ts               # plan flow (--out, provider forwarding)
     └── e2e/                           # full-flow tests against LocalStack/sandbox
 ```
 
@@ -464,10 +475,10 @@ Commands and their primary flag groups:
 # Lifecycle
 clawops init [--provider <p>] [--state <url>] [--non-interactive]
 clawops up [--provider <p>] [--region <r>] [--instance-type <t>] [--dry-run] [--no-wait] [--openclaw-version <v>]
-clawops down [--destroy]
-clawops destroy [--yes]
+clawops down [--yes] [--dry-run]                   # local provider; --dry-run shows current outputs
+clawops destroy [--yes] [--dry-run]                # cloud providers; --dry-run shows current outputs
 clawops plan [--provider <p>] [--out plan.json]
-clawops apply <plan.json> [--yes]
+clawops apply <plan.json> [--yes] [--dry-run]      # --dry-run validates + shows diff, no apply
 clawops refresh                       # detect drift
 clawops status [--json]
 
@@ -476,8 +487,8 @@ clawops ssh [-- <command>]
 clawops tunnel [--port 18789] [--no-open]
 clawops logs [-f] [--tail N] [--since DURATION]
 clawops config get <key>
-clawops config set <key> <value> [--restart]
-clawops config unset <key>
+clawops config set <key> <value> [--restart] [--dry-run]
+clawops config unset <key> [--dry-run]
 clawops agents list [--json]
 clawops agents restart <agentId>
 clawops agents logs <agentId> [-f]
@@ -726,8 +737,19 @@ Uses `changesets/action@v1`:
 - On merge to `main`: opens or updates a "Version Packages" PR
 - On merge of Version Packages PR: runs `pnpm release` (which calls `tsup build && npm publish --provenance`)
 - Provenance via `id-token: write` + `--provenance` flag
+- Publish step guarded by `HAS_NPM_TOKEN` env check — no-ops safely when `NPM_TOKEN` secret is absent
 
-### 10.3 No `git push` from CI
+### 10.3 CI Deployments (`docs/ci.md`)
+
+See [`docs/ci.md`](docs/ci.md) for the full guide covering:
+- Writing `~/.clawops/config.json` from env vars (never `clawops init` in CI)
+- AWS OIDC via `aws-actions/configure-aws-credentials@v4`
+- GCP Workload Identity Federation via `google-github-actions/auth@v2`
+- Provider-specific env var reference table
+- Plan → artifact → apply pattern across jobs
+- `clawops doctor` and `--dry-run` as preflight checks
+
+### 10.4 No `git push` from CI
 
 Per Anthropic security guidance: release workflow has minimum permissions, GH token scoped to `contents: write, packages: write, id-token: write` only.
 
@@ -832,7 +854,7 @@ Per the TDD rule and the Claude Code research findings:
 - [x] CI integration guide (`docs/ci.md`): OIDC for AWS/GCP, env vars reference, plan/apply in CI, no `clawops init` in CI
 - [x] Restore `.github/workflows/release.yml`: changesets/action creates version-bump PRs; on merge runs `pnpm release` → `tsup build && npm publish --provenance`
 - [x] `clawops destroy` implemented (was a stub throwing `Error('not yet implemented (M1)')`)
-- [x] 356 tests passing across 44 test files
+- [x] 356 tests passing across 40 test files
 - [ ] First npm publish with `--provenance`
 - [ ] README + docs site (clawops.dev) live
 - [ ] Demo video / blog post

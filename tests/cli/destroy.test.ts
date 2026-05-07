@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { makeLocalFakeContext } from '../helpers/context.js'
 
 vi.mock('../../src/cli/context.js', () => ({ buildContext: vi.fn() }))
 

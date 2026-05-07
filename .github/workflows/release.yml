@@ -8,6 +8,10 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    # Skip entirely when NPM_TOKEN is not configured — prevents ENEEDAUTH failures
+    # before the package is ready for npm publish.
+    env:
+      HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
     permissions:
       contents: write
       pull-requests: write
@@ -28,6 +32,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Create release PR or publish
+        if: env.HAS_NPM_TOKEN == 'true'
         uses: changesets/action@v1
         with:
           publish: pnpm release

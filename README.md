@@ -75,7 +75,8 @@ clawops config set maxAgents 8
 
 clawops tunnel              # Port-forward gateway UI to localhost
 
-clawops down --yes          # Destroy all infrastructure
+clawops destroy --yes       # Destroy cloud-provider stack (AWS/GCP/Azure)
+clawops down --yes          # Destroy local-provider stack
 ```
 
 ---
@@ -280,6 +281,7 @@ pnpm changeset             # record a release note before merging
 | `SPEC.md` | Full technical specification (milestones, rules, schemas) |
 | `DESIGN_RULES.md` | 25 normative rules (R1–R25) referenced throughout the codebase |
 | `docs/architecture.md` | Narrative system overview |
+| `docs/ci.md` | CI integration guide: OIDC, env vars, plan → apply in CI |
 | `docs/decisions/` | Architecture Decision Records |
 | `.claude/skills/` | Invokable procedures: `/add-provider`, `/release`, `/tdd`, `/mcp-tool` |
 | `.claude/rules/` | Path-scoped lint rules loaded by Claude Code |
