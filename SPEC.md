@@ -808,7 +808,8 @@ Per the TDD rule and the Claude Code research findings:
 - [ ] Elicitation wired for destructive tools
 - [ ] `clawops mcp install --claude/--cursor/...` writes correct config
 - [ ] Composite `clawops_workflow_deploy_app` working
-- [ ] Audit log writing structured JSON
+- [ ] Audit log writing structured JSON (stderr + disk)
+- [ ] **HTTP transport deferred to M6** — `--http` flag accepted but throws UsageError. Decision: stdio covers all primary clients (Claude Desktop, Cursor, VS Code); HTTP adds complexity for multi-user/remote scenarios better addressed in M6 alongside OAuth.
 
 ### M6 — Plan/Apply (Week 14)
 - [ ] `spec/deploy-plan.schema.json` finalized
