@@ -1,4 +1,4 @@
-// Unit tests for the `up` command — local bootstrap path.
+// Unit tests for the `up` command — local bootstrap + cloud Pulumi paths.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { makeLocalFakeContext, FAKE_LOCAL_STATE } from '../helpers/context.js'
@@ -12,6 +12,34 @@ import { localBootstrap } from '../../src/providers/local/bootstrap.js'
 
 const mockBuildContext = vi.mocked(buildContext)
 const mockLocalBootstrap = vi.mocked(localBootstrap)
+
+function makeCloudContext(overrides: Record<string, unknown> = {}) {
+  const mockSetConfig = vi.fn().mockResolvedValue(undefined)
+  const mockUp = vi.fn().mockResolvedValue({
+    outputs: {
+      publicIp: { value: '1.2.3.4' },
+      gatewayUrl: { value: 'https://1.2.3.4:18789' },
+    },
+    summary: { resourceChanges: { create: 2 } },
+  })
+  const mockPreview = vi.fn().mockResolvedValue({
+    changeSummary: { create: 2 },
+  })
+  const mockGetStack = vi.fn().mockResolvedValue({ up: mockUp, setConfig: mockSetConfig, preview: mockPreview })
+  const ctx = {
+    config: {},
+    stackName: 'default',
+    adapter: {
+      name: 'aws',
+      defaultRegion: () => 'us-east-1',
+      normalizeInstanceType: (a: string) => `${a}.large`,
+      validateConfig: vi.fn().mockResolvedValue({ ok: true, errors: [] }),
+    },
+    getStack: mockGetStack,
+    ...overrides,
+  }
+  return { ctx, mockUp, mockPreview, mockSetConfig, mockGetStack }
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRunFn = (ctx: any) => Promise<void>
@@ -111,5 +139,70 @@ describe('up command — local provider', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await expect((cmd.run as AnyRunFn)({ args: {} })).rejects.toThrow('SSH connection refused')
+  })
+})
+
+describe('up command — cloud provider path', () => {
+  beforeEach(() => {
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  it('calls stack.up() and prints public IP when confirmed', async () => {
+    const { ctx, mockUp } = makeCloudContext()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockBuildContext.mockReturnValue(ctx as any)
+
+    await (cmd.run as AnyRunFn)({ args: { 'instance-type': 'small' } })
+    expect(mockUp).toHaveBeenCalledOnce()
+  })
+
+  it('calls setConfig with instance type and region before stack.up()', async () => {
+    const { ctx, mockSetConfig } = makeCloudContext()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockBuildContext.mockReturnValue(ctx as any)
+
+    await (cmd.run as AnyRunFn)({ args: { 'instance-type': 'small', region: 'eu-west-1' } })
+    expect(mockSetConfig).toHaveBeenCalledWith('region', { value: 'eu-west-1' })
+    expect(mockSetConfig).toHaveBeenCalledWith('instanceType', expect.any(Object))
+    expect(mockSetConfig).toHaveBeenCalledWith('openclawVersion', { value: 'stable' })
+  })
+
+  it('runs preview (not up) when --dry-run is set', async () => {
+    const { ctx, mockUp, mockPreview } = makeCloudContext()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockBuildContext.mockReturnValue(ctx as any)
+
+    await (cmd.run as AnyRunFn)({ args: { 'instance-type': 'small', 'dry-run': true } })
+    expect(mockPreview).toHaveBeenCalledOnce()
+    expect(mockUp).not.toHaveBeenCalled()
+  })
+
+  it('uses default instance type "small" when --instance-type is absent', async () => {
+    const { ctx, mockSetConfig } = makeCloudContext()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockBuildContext.mockReturnValue(ctx as any)
+
+    await (cmd.run as AnyRunFn)({ args: {} })
+    const instanceTypeCall = mockSetConfig.mock.calls.find(([k]) => k === 'instanceType')
+    expect(instanceTypeCall).toBeDefined()
+  })
+
+  it('throws UsageError for unknown --instance-type', async () => {
+    const { ctx } = makeCloudContext()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockBuildContext.mockReturnValue(ctx as any)
+
+    await expect((cmd.run as AnyRunFn)({ args: { 'instance-type': 'gigantic' } })).rejects.toThrow('gigantic')
+  })
+
+  it('propagates stack.up() errors', async () => {
+    const { ctx, mockUp } = makeCloudContext()
+    mockUp.mockRejectedValue(new Error('pulumi: out of quota'))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockBuildContext.mockReturnValue(ctx as any)
+
+    await expect((cmd.run as AnyRunFn)({ args: {} })).rejects.toThrow('pulumi: out of quota')
   })
 })

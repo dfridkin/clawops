@@ -47,7 +47,7 @@ export async function applyPlan(
   await stack.setConfig('openclawVersion', { value: plan.spec.openclaw.version })
 
   const start = Date.now()
-  const result = await stack.up({ onOutput: opts?.onOutput })
+  const result = await stack.up({ onOutput: opts?.onOutput, signal: opts?.signal })
 
   const outputs: Record<string, unknown> = Object.fromEntries(
     Object.entries(result.outputs).map(([k, v]) => [k, v.value]),
