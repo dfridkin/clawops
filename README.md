@@ -1,52 +1,85 @@
 # clawops
 
-**clawops** is a provider-agnostic CLI for deploying and operating self-hosted [OpenClaw](https://github.com/openclaw/openclaw) instances across AWS, GCP, Azure, and local VMs. It uses the [Pulumi Automation API](https://www.pulumi.com/docs/using-pulumi/automation-api/) (embedded — no `pulumi` binary required) for idempotent infrastructure management and exposes every operation as both a CLI command and an [MCP](https://modelcontextprotocol.io/) tool, so Claude Code, Cursor, and other AI agents can drive deployments deterministically.
+Deploy OpenClaw once. Operate it from your terminal or Claude Code.
 
-```bash
-npm install -g @clawops/cli
-clawops init --provider aws
-clawops plan --out /tmp/my-plan.json   # generate + review
-clawops apply /tmp/my-plan.json        # apply after review
-clawops logs -f
-```
+**clawops** is a CLI and [MCP](https://modelcontextprotocol.io/) server for deploying and operating
+self-hosted [OpenClaw](https://github.com/openclaw/openclaw) instances. Provision on AWS, GCP,
+Azure, or any Linux VM — then manage day-to-day operations from the terminal, or let Claude Code
+and Cursor drive them through typed MCP tools with explicit safety controls.
 
 ---
 
-## Why clawops?
+## Who this is for
 
-Every existing OpenClaw deployment path is cloud-specific, Kubernetes-bound, or fully managed SaaS. No open-source tool unifies provisioning + lifecycle management + remote agent interaction across providers under a single CLI with first-class AI agent integration.
-
-| Capability | clawops |
-|---|---|
-| AWS, GCP, Azure, local VM | ✓ |
-| Idempotent infra via Pulumi (embedded) | ✓ |
-| SSH transport (pure Node — no system `ssh`) | ✓ |
-| MCP server (stdio + HTTP) | ✓ |
-| Plan → review → apply discipline | ✓ |
-| JSON output everywhere (`--json`) | ✓ |
-| No credentials in config | ✓ |
+- **OpenClaw users** who want the simplest path to self-hosting across cloud or local VMs, with
+  reliable deploy, status checks, logs, backups, and upgrades in a single CLI.
+- **Claude Code / Cursor / MCP users** looking for a real-world reference implementation of safe
+  infrastructure operations through MCP — typed tool schemas, read-only mode, destructive-action
+  confirmation, and audit logs.
+- **Self-hosted AI and local-first developers** who want to run their own AI assistant without
+  committing to Kubernetes, a managed SaaS platform, or a single cloud provider.
 
 ---
 
-## Quick Start
+## What clawops does
 
-### Prerequisites
+- Provisions and tears down OpenClaw infrastructure on **AWS, GCP, Azure, and local VMs** using
+  the Pulumi Automation API (embedded — no `pulumi` binary required).
+- Manages day-to-day operations: status, logs, SSH, tunnels, config, agents, gateway, backups.
+- Exposes every operation as a **typed MCP tool** so AI agents can drive ops safely.
+- Enforces a **plan → review → apply** discipline for cloud deployments.
+- Emits **JSON output everywhere** (`--json`) for scripting and automation.
+- Never stores cloud credentials — reads them from your environment's existing CLI profiles.
 
-- **Node.js ≥ 22** (LTS)
-- Cloud credentials available in the environment (see [Configuration](#configuration))
+## What clawops does not do
 
-### Install
+- **No high availability or clustering.** Optimized for single-node deployments.
+- **No Kubernetes.** It deploys to VMs, not container orchestration platforms.
+- **No OpenClaw skill/agent authoring.** clawops manages infrastructure; what runs on it is up to
+  you and OpenClaw.
+- **No TLS or domain automation** (yet). Bring your own reverse proxy or see
+  [`docs/limitations.md`](docs/limitations.md) for the manual path.
+- **No credential storage.** Cloud credentials must be configured in your environment before using
+  clawops. They are never written to `~/.clawops/config.json`.
+- **No native Windows.** WSL2 is fully supported; see [`docs/support-matrix.md`](docs/support-matrix.md).
+
+---
+
+## Quick Start — local VM (fastest path)
+
+The local provider needs only a Linux host reachable over SSH — no cloud account required.
+
+**Prerequisites:** Node.js ≥ 22, an SSH key, a Linux host (Ubuntu/Debian/RHEL) you can reach.
 
 ```bash
 npm install -g @clawops/cli
-# or without a global install:
-npx @clawops/cli
+
+# Check your environment
+clawops doctor
+
+# Configure clawops for a local host
+clawops init --provider local --host 192.168.1.50 --user ubuntu --key-path ~/.ssh/id_ed25519
+
+# Bootstrap OpenClaw on the host (installs Docker + OpenClaw over SSH)
+clawops up
+
+# Verify it's running
+clawops status
+
+# Start the MCP server for Claude Code
+clawops mcp serve
 ```
 
-### Provision on AWS
+See [`docs/examples/local-vm.md`](docs/examples/local-vm.md) for the full walkthrough including
+SSH prerequisites, firewall setup, and troubleshooting.
+
+## Quick Start — cloud (AWS)
 
 ```bash
-# Write ~/.clawops/config.json and generate an SSH key pair
+npm install -g @clawops/cli
+# or: npx @clawops/cli
+
+# Requires AWS credentials in your environment (AWS_PROFILE or ~/.aws/credentials)
 clawops init --provider aws
 
 # Edit ~/.clawops/config.json — set stateUrl to your S3 bucket:
@@ -55,19 +88,44 @@ clawops init --provider aws
 # Generate a deploy plan (runs pulumi preview internally)
 clawops plan --provider aws --stack default --out /tmp/plan.json
 
-# Review the plan JSON, then apply
+# Review the plan, then apply
 clawops apply /tmp/plan.json
-
-# Or preview + apply in one step (no plan file needed)
-clawops up
 ```
 
-### Day-to-day operations
+---
+
+## Connect Claude Code
+
+Add to your Claude Code MCP config (`~/.claude.json` or project `.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "clawops": {
+      "command": "clawops",
+      "args": ["mcp", "serve", "--read-only"]
+    }
+  }
+}
+```
+
+**Start with `--read-only`** — it enables status, logs, config reads, and diagnostics while
+blocking any operation that mutates infrastructure. Remove `--read-only` only once you understand
+which tools are destructive and have reviewed [`docs/security/mcp-safety.md`](docs/security/mcp-safety.md).
+
+Destructive tools (`clawops_destroy`, `clawops_up`, `clawops_config_set`, etc.) require explicit
+confirmation from the agent before executing — they will never run silently.
+
+For Cursor, VS Code, or HTTP mode setup see [`docs/mcp/`](docs/mcp/).
+
+---
+
+## Day-to-day operations
 
 ```bash
-clawops status              # Show stack outputs: IP, gateway URL, SSH info
+clawops status              # Stack outputs: IP, gateway URL, SSH info
 clawops logs -f             # Tail OpenClaw logs over SSH
-clawops ssh                 # Open an interactive SSH session
+clawops ssh                 # Interactive SSH session
 clawops ssh --command "docker ps"
 
 clawops config get maxAgents
@@ -75,7 +133,7 @@ clawops config set maxAgents 8
 
 clawops tunnel              # Port-forward gateway UI to localhost
 
-clawops destroy --yes       # Destroy cloud-provider stack (AWS/GCP/Azure)
+clawops destroy --yes       # Destroy cloud-provider stack
 clawops down --yes          # Destroy local-provider stack
 ```
 
@@ -90,7 +148,7 @@ clawops down --yes          # Destroy local-provider stack
 | `down` | Destroy local-provider stack (requires `--yes`; `--dry-run` shows current outputs) |
 | `destroy` | Destroy cloud-provider stack with confirmation prompt (`--dry-run` shows current outputs) |
 | `status` | Show stack outputs: IP, gateway URL, region, provisioned time |
-| `plan` | Generate a Maker deploy-plan JSON artifact (dry-run safe) |
+| `plan` | Generate a deploy-plan JSON artifact (dry-run safe) |
 | `apply` | Apply a previously reviewed plan file (`--dry-run` validates and shows diff without applying) |
 | `ssh` | Interactive SSH session or run a remote command |
 | `logs` | Stream OpenClaw logs (`-f`, `--tail N`, `--since 5m`) |
@@ -115,7 +173,7 @@ For non-local providers, clawops enforces a review-before-apply discipline:
 # 1. Generate a plan — runs `pulumi preview` internally, produces JSON
 clawops plan --provider aws --region us-east-1 --out /tmp/plan.json
 
-# 2. Review plan.json — it shows exactly which resources will change
+# 2. Review plan.json — the `diff` field shows projected changes at plan-generation time
 cat /tmp/plan.json | jq .diff
 
 # 3. Apply — reads and validates the plan file, then runs `pulumi up`
@@ -125,24 +183,28 @@ clawops apply /tmp/plan.json
 clawops apply /tmp/plan.json --yes    # skip prompt in automation
 ```
 
-The plan JSON conforms to `spec/deploy-plan.schema.json` (AJV-validated). Plans are portable — generated on one machine, applied on another.
+The plan JSON conforms to `spec/deploy-plan.schema.json` (AJV-validated) and captures reviewed
+intent: provider, region, instance type, CIDR ranges, and OpenClaw version. `apply` re-runs
+`pulumi up` using those parameters against the current live state — it does not replay a locked
+execution artifact. Review and apply in the same session to minimize drift risk.
+
+See [`docs/plan-apply.md`](docs/plan-apply.md) for full semantics, drift guidance, and the safe CI pattern.
 
 ---
 
 ## MCP server
 
-clawops ships an embedded [MCP](https://modelcontextprotocol.io/) server. Claude Code, Cursor, and any MCP-compatible agent can drive deployments without leaving the chat interface.
+clawops ships an embedded [MCP](https://modelcontextprotocol.io/) server. Claude Code, Cursor, and
+any MCP-compatible agent can drive deployments without leaving the chat interface.
 
 ### Stdio mode (Claude Code / VS Code)
-
-Add to your Claude Code MCP config (`~/.claude.json` or project `.mcp.json`):
 
 ```json
 {
   "mcpServers": {
     "clawops": {
       "command": "clawops",
-      "args": ["mcp", "serve"]
+      "args": ["mcp", "serve", "--read-only"]
     }
   }
 }
@@ -155,27 +217,31 @@ clawops mcp serve --http --port 3333 --bind 127.0.0.1
 # MCP HTTP server listening on 127.0.0.1:3333
 ```
 
-Point your MCP client at `http://127.0.0.1:3333`.
+Do not bind to a non-loopback address without additional authentication controls in front of it.
 
 ### Available tools
 
 | Tool | Toolset | Description |
 |---|---|---|
-| `clawops_up` | cli | Provision or update a stack |
 | `clawops_status` | read | Show stack outputs |
 | `clawops_logs_tail` | read | Tail OpenClaw logs |
-| `clawops_ssh_exec` | cli | Run a command over SSH |
+| `clawops_config_get` | read | Read a remote config value |
+| `clawops_agents_list` | read | List running agents |
+| `clawops_task_status` | read | Poll a long-running task |
+| `clawops_stacks_list` | admin | List all stacks and their state |
+| `clawops_up` | cli | Provision or update a stack |
 | `clawops_plan` | cli | Generate a deploy plan |
 | `clawops_apply` | cli | Apply a plan file |
-| `clawops_destroy` | cli | Destroy a stack (elicits confirmation) |
-| `clawops_config_get` | read | Read a remote config value |
+| `clawops_ssh_exec` | cli | Run a command over SSH |
 | `clawops_config_set` | cli | Write a remote config value |
-| `clawops_agents_list` | read | List running agents |
-| `clawops_stacks_list` | admin | List all stacks and their state |
-| `clawops_task_status` | read | Poll a long-running task |
+| `clawops_destroy` | cli | Destroy a stack (elicits confirmation) |
 | `clawops_workflow_deploy_app` | workflow | End-to-end deploy: plan → confirm → apply → status |
 
-Destructive tools require explicit confirmation (R19 elicitation) unless `yes: true` is passed.
+`read` toolset tools are available in `--read-only` mode. All other toolsets require full mode.
+Destructive tools require explicit confirmation (elicitation) unless `yes: true` is passed.
+
+See [`docs/security/tool-risk-matrix.md`](docs/security/tool-risk-matrix.md) for the full risk
+classification of every tool.
 
 ---
 
@@ -215,6 +281,17 @@ Config lives at `~/.clawops/config.json` (override with `$CLAWOPS_HOME`).
 
 ---
 
+## Known limitations
+
+See [`docs/limitations.md`](docs/limitations.md) for the full list. Key points:
+
+- **Single-node deployments only** — not a high-availability or clustering platform.
+- **`clawops apply` is not an immutable plan execution** — see [`docs/plan-apply.md`](docs/plan-apply.md).
+- **No TLS/domain automation** in the current release.
+- **MCP tools execute privileged operations** — use `--read-only` for first evaluation.
+
+---
+
 ## Architecture
 
 ```
@@ -241,7 +318,7 @@ Key design decisions:
 - **State in cloud blob storage:** GCS (`gs://`), S3 (`s3://`), Azure Blob — no local state files, no `pulumi.yaml`
 - **SSH via `ssh2`:** never shells out to `/usr/bin/ssh`; TOFU host verification against `~/.clawops/known_hosts`; connection pool with 5-min idle TTL
 - **Plan → apply discipline:** every non-local deployment goes through `generatePlan()` → review → `applyPlan()`; destructive changes always require human review of the plan JSON
-- **MCP-first:** every CLI operation has a typed MCP tool; schemas generated from `spec/mcp-tools.yaml`; all destructive tools use R19 elicitation
+- **MCP-first:** every CLI operation has a typed MCP tool; schemas generated from `spec/mcp-tools.yaml`; all destructive tools use elicitation
 
 See [`docs/architecture.md`](docs/architecture.md) for a full narrative, and [`docs/decisions/`](docs/decisions/) for ADRs.
 
@@ -264,8 +341,9 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (356 tests, ~2s)
+pnpm test                  # vitest (476 tests, ~2s)
 pnpm test:changed          # vitest --changed (fast edit loop)
+pnpm test:integration      # Docker-based SSH integration tests
 pnpm typecheck             # tsc --noEmit
 pnpm lint                  # eslint src/ tests/ scripts/ (--max-warnings=0)
 pnpm gen:schemas           # regenerate src/providers/types.ts + src/mcp/tools/_generated.ts
@@ -281,7 +359,10 @@ pnpm changeset             # record a release note before merging
 | `SPEC.md` | Full technical specification (milestones, rules, schemas) |
 | `DESIGN_RULES.md` | 25 normative rules (R1–R25) referenced throughout the codebase |
 | `docs/architecture.md` | Narrative system overview |
+| `docs/plan-apply.md` | Plan/apply semantics, drift guidance, CI pattern |
 | `docs/ci.md` | CI integration guide: OIDC, env vars, plan → apply in CI |
+| `docs/security/` | MCP safety model, tool risk matrix, redaction, audit logs |
+| `docs/providers/matrix.md` | Per-provider capability matrix |
 | `docs/decisions/` | Architecture Decision Records |
 | `.claude/skills/` | Invokable procedures: `/add-provider`, `/release`, `/tdd`, `/mcp-tool` |
 | `.claude/rules/` | Path-scoped lint rules loaded by Claude Code |
@@ -326,7 +407,9 @@ Use `pnpm changeset` to record a release note before merging a `feat` or `fix`.
 | M4 — Local VM | ✅ | Local adapter (SSH bootstrap, no Pulumi); `doctor` |
 | M5 — MCP Layer | ✅ | `mcp serve` (stdio), all CLI ops as MCP tools, progress tracking |
 | M6 — Plan/Apply | ✅ | `plan` + `apply`; deploy-plan schema; MCP HTTP transport; `workflow_deploy_app` |
-| M7 — v1.0 Polish | ✅ | Full `doctor` surface; `destroy` command; `--dry-run` on `up`/`down`/`destroy`/`apply`/`config`; `release.yml`; CI integration guide |
+| M7 — v1.0 Polish | ✅ | Full `doctor` surface; `destroy` command; `--dry-run` across commands; CI guide |
+
+See [`docs/roadmap.md`](docs/roadmap.md) for the public roadmap and upcoming work.
 
 ---
 

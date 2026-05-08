@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
-**Version:** 0.8
-**Status:** M8 complete — 476 unit+e2e tests passing; integration harness ready
+**Version:** 0.9
+**Status:** M8 complete (476 unit+e2e tests); Wave 1 complete — WO-01, WO-04, WO-17, WO-22 done
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -877,7 +877,7 @@ Per the TDD rule and the Claude Code research findings:
 
 ---
 
-## 13. References to Borrowed Patterns
+## 14. References to Borrowed Patterns
 
 Per the deep dive in research deliverable 4:
 
@@ -901,7 +901,202 @@ Per the deep dive in research deliverable 4:
 
 ---
 
-## 14. Anti-Goals (deliberately not doing)
+## 15. Adoption & Traction Roadmap
+
+This section tracks the eight adoption milestones defined in `docs/roadmap-docs/`. These are
+**distinct from the M0–M8 development milestones in §12**. Development milestones track *what is
+built*; adoption milestones track *whether the repo is understandable, trustworthy, and launchable*.
+
+Milestone labels use `R1–R8` to avoid collision. Each milestone maps to one or more work orders
+(WO-01 through WO-24) in `docs/roadmap-docs/docs/implementation/work-orders.md`.
+
+Execution is organized into waves (see `docs/roadmap-docs/docs/implementation/milestones.md`).
+WO-04 must be completed before WO-01 to avoid perpetuating inaccurate plan/apply language in the README.
+
+### Wave structure
+
+| Wave | Work Orders | Milestone(s) | Gate |
+|---|---|---|---|
+| 1 | WO-04, WO-01, WO-22, WO-17 | R1, R2, R6, R8 | Minimum viable public launch gate |
+| 2 | WO-02, WO-03 | R1 | First-run experience complete |
+| 3 | WO-07, WO-08, WO-09 | R3 | Soft launch: MCP safety documented |
+| 4 | WO-05, WO-06 | R2 | Plan surface code (WO-06 design-first) |
+| 5 | WO-10, WO-11, WO-13 | R4 | Operations guides |
+| 6 | WO-12, WO-14, WO-15 | R4, R5 | Operational code |
+| 7 | WO-19, WO-20, WO-21 | R6, R7 | Contributor + provider docs |
+| 8 | WO-23, WO-24 | R8 | Launch execution |
+
+### R1 — First-Run Experience
+
+Goal: let someone understand, install, deploy, and validate ClawOps quickly.
+
+Work orders: WO-01 (README), WO-02 (local/VPS quickstart), WO-03 (example configs).
+
+Deliverables:
+- `docs/quickstart.md`
+- `docs/examples/local-vm.md`
+- `docs/examples/aws-basic.md`
+- `examples/configs/` with realistic model/channel examples
+- README rewrite (positioning, quickstart inline, what it does/does not do)
+
+Status:
+- [x] WO-01: README positioning and first-success path
+- [ ] WO-02: Local/VPS quickstart
+- [ ] WO-03: Example OpenClaw model/channel configs
+
+### R2 — Plan/Apply Trust Model
+
+Goal: make plan/apply behavior accurate, inspectable, and safe.
+
+Work orders: WO-04 (semantics docs), WO-05 (plan summary output), WO-06 (drift warning design).
+
+**Important:** `clawops apply` re-runs `pulumi up` against the current live state using the
+parameters from the reviewed plan JSON. It does **not** execute a locked, provider-level plan
+artifact. This is intentional (no Pulumi native plan artifact API exists for programmatic use), but
+must be clearly documented. WO-04 must land before WO-01 to keep README language accurate.
+
+WO-06 (apply-time drift warning) touches `spec/deploy-plan.schema.json`, generated types, and
+`src/plan/apply.ts`. Treat as design-first: ADR required before implementation.
+
+Deliverables:
+- `docs/plan-apply.md` — precise semantics, what "plan" guarantees vs. does not guarantee
+- Plan summary table in `clawops plan` output
+- Drift warning on `clawops apply` when state changed since plan generation
+
+Status:
+- [x] WO-04: Plan/apply semantics docs
+- [ ] WO-05: Plan summary output
+- [ ] WO-06: Apply-time drift warning (design-first — ADR before code)
+
+### R3 — Security and MCP Safety
+
+Goal: give users a clear safety model for ClawOps as privileged tooling and MCP server.
+
+Work orders: WO-07 (MCP safety docs + tool risk matrix), WO-08 (read-only/no-destructive setup
+docs), WO-09 (audit log examples + redaction guarantees).
+
+Tool risk categories (from `docs/roadmap-docs/docs/security/mcp-safety-plan.md`):
+
+| Risk Level | Examples | Required guardrail |
+|---|---|---|
+| Read-only | `status`, `logs`, `config get` | Redaction, output cap |
+| Diagnostic | `doctor`, `task status` | Redaction, timeout |
+| Operational | `gateway restart`, `agents restart` | Confirmation or no-destructive filter |
+| Config-mutating | `config set/unset` | Confirmation, redaction, audit |
+| Provisioning | `up`, `apply` | Plan/review/apply + confirmation |
+| Destructive | `destroy`, `down` | Explicit confirmation + audit |
+| Remote execution | `ssh exec` | Strong opt-in + audit |
+
+Deliverables:
+- `docs/security/mcp-safety.md`
+- `docs/security/tool-risk-matrix.md`
+- `docs/security/redaction.md`
+- `docs/security/audit-logs.md`
+- `docs/mcp/read-only.md`
+
+Status:
+- [ ] WO-07: MCP safety docs and tool risk matrix
+- [ ] WO-08: Read-only/no-destructive MCP setup docs
+- [ ] WO-09: Audit log examples and redaction guarantees
+
+### R4 — Production Operations
+
+Goal: make single-node OpenClaw deployments credible for ongoing use.
+
+Work orders: WO-10 (operations guide), WO-11 (backup/restore validation plan), WO-12 (health check
+expansion), WO-13 (upgrade/rollback design).
+
+Deliverables:
+- `docs/operations.md`
+- `docs/upgrade-rollback.md`
+- `docs/backup-restore.md`
+- `docs/sizing.md`
+- Deeper health checks (container running ≠ healthy)
+- Log rotation and disk safety checks
+
+Status:
+- [ ] WO-10: Operations guide
+- [ ] WO-11: Backup/restore validation plan
+- [ ] WO-12: Health check expansion
+- [ ] WO-13: Upgrade/rollback design
+
+### R5 — Configuration and Secrets
+
+Goal: make real OpenClaw configuration safe, inspectable, and less confusing.
+
+Work orders: WO-14 (config validation design), WO-15 (secret redaction audit), WO-16 (model/channel
+config wizard design).
+
+Deliverables:
+- `docs/configuration.md`
+- `clawops config validate` command
+- Actionable config error messages
+- Secret source documentation
+- Redaction test coverage
+
+Status:
+- [ ] WO-14: Config validation design
+- [ ] WO-15: Secret redaction audit
+- [ ] WO-16: Model/channel config wizard design
+
+### R6 — Provider Reliability
+
+Goal: show which provider paths are supported and prove the most important ones.
+
+Work orders: WO-17 (provider capability matrix), WO-18 (local VM e2e test harness), WO-19 (provider
+troubleshooting docs).
+
+Deliverables:
+- `docs/providers/matrix.md`
+- Provider troubleshooting docs per provider
+- Local VM end-to-end test (real SSH, real bootstrap, real health check)
+
+Status:
+- [x] WO-17: Provider capability matrix
+- [ ] WO-18: Local VM end-to-end test harness
+- [ ] WO-19: Provider troubleshooting docs
+
+### R7 — Developer Experience
+
+Goal: make external contribution safer and easier.
+
+Work orders: WO-20 (contributor workflow docs), WO-21 (generated spec workflow docs).
+
+Deliverables:
+- Improved `CONTRIBUTING.md`
+- Provider adapter template
+- Command template
+- Generated-file check docs
+
+Status:
+- [ ] WO-20: Contributor workflow docs
+- [ ] WO-21: Generated spec workflow docs
+
+### R8 — Adoption and Launch
+
+Goal: make the repository easy to evaluate, share, and launch.
+
+Work orders: WO-22 (public roadmap + limitations), WO-23 (demo script), WO-24 (launch issue set).
+
+Launch readiness requires R1 Wave 1 complete, at minimum: WO-01 (README), WO-04 (plan/apply
+semantics), WO-22 (public roadmap), WO-17 (provider matrix). Full soft launch additionally requires
+R3 (MCP safety docs) complete.
+
+Deliverables:
+- `docs/roadmap.md` (public)
+- `docs/limitations.md`
+- `docs/comparisons.md`
+- Demo script (`examples/demo.sh` or `docs/demo.md`)
+- GitHub issue templates and seeded issues
+
+Status:
+- [x] WO-22: Public roadmap and limitations
+- [ ] WO-23: Demo script
+- [ ] WO-24: Launch issue set
+
+---
+
+## 16. Anti-Goals (deliberately not doing)
 
 - **No web UI in v1.** Even a tiny one creates a maintenance burden disproportionate to value vs. the agent integration path.
 - **No multi-region failover** in v1. Single-region per stack; multi-stack for HA.

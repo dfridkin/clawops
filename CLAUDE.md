@@ -75,6 +75,30 @@ can drive deployments deterministically.
 - Normative rules (R1–R25, R-meta-*) → `DESIGN_RULES.md`
 - Why we chose X over Y → `docs/decisions/00NN-*.md`
 
+## Living documentation
+
+Docs are part of every change, not an afterthought. When you make the changes below, update the
+corresponding documents in the same commit or PR.
+
+| When you… | Update… |
+|---|---|
+| Add, remove, or rename a CLI command or flag | `README.md` commands table + help text in the command file |
+| Change command behavior, output format, or semantics | `README.md` relevant section + `docs/operations.md` if day-2 ops |
+| Change plan/apply semantics (what plan stores, what apply executes) | `docs/plan-apply.md` + `README.md` Plan→Apply section + ADR if spec changes |
+| Add or remove a provider capability | `docs/providers/matrix.md` (supported/partial/planned/unsupported) |
+| Add a new provider | `docs/providers/matrix.md` new column + `README.md` provider list |
+| Change MCP tool risk level or safety behavior | `docs/security/tool-risk-matrix.md` + `docs/security/mcp-safety.md` |
+| Change secret handling or redaction | `docs/security/redaction.md` |
+| Add or change audit log fields | `docs/security/audit-logs.md` |
+| Complete an adoption work order (WO-01 through WO-24) | `docs/roadmap.md` mark ✅ + `SPEC.md §15` check the WO checkbox |
+| Complete a dev milestone (M0–M8) | `SPEC.md §12` mark milestone ✅ + update status line version |
+| Change the test count materially | `README.md` Development section + `SPEC.md` status line |
+| Change known limitations (add, remove, or qualify) | `docs/limitations.md` |
+| Change OpenClaw version compatibility | `spec/openclaw-versions.yaml` + `docs/` references |
+
+**Rule:** if a doc listed above exists and your change affects it, updating it is not optional.
+If the doc does not exist yet, note the gap in the PR description rather than silently skipping it.
+
 ## Quirks
 
 - Pulumi Automation API has a known-bad interaction with pnpm hoisting; pin
