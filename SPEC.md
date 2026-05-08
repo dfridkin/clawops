@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
 **Version:** 0.9
-**Status:** M8 complete (476 unit+e2e tests); Wave 2 complete — WO-01–WO-04, WO-17, WO-22 done
+**Status:** M8 complete (476 unit+e2e tests); Wave 3 complete — WO-01–WO-04, WO-07–WO-09, WO-17, WO-22 done
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -995,9 +995,9 @@ Deliverables:
 - `docs/mcp/read-only.md`
 
 Status:
-- [ ] WO-07: MCP safety docs and tool risk matrix
-- [ ] WO-08: Read-only/no-destructive MCP setup docs
-- [ ] WO-09: Audit log examples and redaction guarantees
+- [x] WO-07: MCP safety docs and tool risk matrix
+- [x] WO-08: Read-only/no-destructive MCP setup docs
+- [x] WO-09: Audit log examples and redaction guarantees
 
 ### R4 — Production Operations
 

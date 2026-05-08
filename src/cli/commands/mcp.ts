@@ -56,13 +56,18 @@ const CLAWOPS_ENTRY = {
 
 function getConfigPath(client: McpClient): string {
   const home = os.homedir()
+  const isLinux = process.platform === 'linux'
   switch (client) {
     case 'claude':
-      return path.join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
+      return isLinux
+        ? path.join(home, '.config', 'Claude', 'claude_desktop_config.json')
+        : path.join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
     case 'cursor':
       return path.join(home, '.cursor', 'mcp.json')
     case 'vscode':
-      return path.join(home, 'Library', 'Application Support', 'Code', 'User', 'mcp.json')
+      return isLinux
+        ? path.join(home, '.config', 'Code', 'User', 'mcp.json')
+        : path.join(home, 'Library', 'Application Support', 'Code', 'User', 'mcp.json')
     case 'windsurf':
       return path.join(home, '.codeium', 'windsurf', 'mcp_config.json')
     case 'zed':
