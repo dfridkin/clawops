@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
 **Version:** 0.9
-**Status:** M8 complete (476 unit+e2e tests); adoption roadmap R1–R8 in progress (Wave 1 pending)
+**Status:** M8 complete (476 unit+e2e tests); Wave 1 complete — WO-01, WO-04, WO-17, WO-22 done
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -940,7 +940,7 @@ Deliverables:
 - README rewrite (positioning, quickstart inline, what it does/does not do)
 
 Status:
-- [ ] WO-01: README positioning and first-success path
+- [x] WO-01: README positioning and first-success path
 - [ ] WO-02: Local/VPS quickstart
 - [ ] WO-03: Example OpenClaw model/channel configs
 
@@ -964,7 +964,7 @@ Deliverables:
 - Drift warning on `clawops apply` when state changed since plan generation
 
 Status:
-- [ ] WO-04: Plan/apply semantics docs
+- [x] WO-04: Plan/apply semantics docs
 - [ ] WO-05: Plan summary output
 - [ ] WO-06: Apply-time drift warning (design-first — ADR before code)
 
@@ -1052,7 +1052,7 @@ Deliverables:
 - Local VM end-to-end test (real SSH, real bootstrap, real health check)
 
 Status:
-- [ ] WO-17: Provider capability matrix
+- [x] WO-17: Provider capability matrix
 - [ ] WO-18: Local VM end-to-end test harness
 - [ ] WO-19: Provider troubleshooting docs
 
@@ -1090,7 +1090,7 @@ Deliverables:
 - GitHub issue templates and seeded issues
 
 Status:
-- [ ] WO-22: Public roadmap and limitations
+- [x] WO-22: Public roadmap and limitations
 - [ ] WO-23: Demo script
 - [ ] WO-24: Launch issue set
 
