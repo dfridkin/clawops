@@ -31,7 +31,7 @@ All 15 clawops MCP tools, their risk classification, and which safety mode inclu
 | `clawops_apply` | cli | High | ❌ | ❌ | ✅ |
 | `clawops_workflow_deploy_app` | workflow | High | ❌ | ❌ | ✅ |
 
-`--read-only` enables 5 tools. `--no-destructive` enables 8 tools. Default enables all 15.
+`--read-only` enables 8 tools (TOOLSETS.read). `--no-destructive` enables 8 tools (same set with default toolsets; filters destructiveHint=true from any active toolset). Default enables all 15.
 
 ## Annotations
 

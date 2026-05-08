@@ -1,8 +1,8 @@
 # Read-Only Mode
 
-Running clawops in `--read-only` mode limits the MCP server to 5 observability
-tools. The agent can answer questions about your deployment but cannot modify
-anything.
+Running clawops in `--read-only` mode limits the MCP server to **8 tools** from the
+curated `read` toolset. The agent can answer questions, generate plans for human
+review, and run recovery diagnostics — but cannot apply any changes.
 
 ## What `--read-only` enables
 
@@ -13,10 +13,13 @@ anything.
 | `clawops_stacks_list` | List known stacks and their last-known state |
 | `clawops_config_get` | Read a value from `openclaw.json` |
 | `clawops_agents_list` | List running agents and their status |
+| `clawops_plan` | Generate a deploy plan JSON (no infrastructure changes) |
+| `clawops_task_status` | Poll the status of an in-progress background task |
+| `clawops_workflow_recover` | Investigate a stuck deployment (reads logs + status) |
 
-All other tools (plan generation, config writes, restarts, infra changes) are
-disabled at server startup. The disabled tools are not registered — they never
-appear in the tool list sent to the AI client.
+All write, restart, and infrastructure tools are disabled at server startup. The
+disabled tools are not registered — they never appear in the tool list sent to the
+AI client.
 
 ## Configuration
 

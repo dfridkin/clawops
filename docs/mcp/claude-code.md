@@ -9,8 +9,11 @@ This guide covers connecting clawops to Claude Code (Claude Desktop and the
 clawops mcp install
 ```
 
-This writes a `clawops` entry to `~/Library/Application Support/Claude/claude_desktop_config.json`
-(macOS) or `~/.config/claude/claude_desktop_config.json` (Linux). The entry uses
+This writes a `clawops` entry to:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Linux: `~/.config/Claude/claude_desktop_config.json`
+
+The entry uses
 `["mcp", "serve"]` with no safety flag — all 15 tools are enabled by default.
 
 **Recommendation:** Add `--read-only` before first use:

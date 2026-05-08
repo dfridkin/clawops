@@ -8,32 +8,12 @@ This guide covers connecting clawops to Cursor and choosing the right safety mod
 clawops mcp install
 ```
 
-This writes a `clawops` entry to `.cursor/mcp.json` (project-level) if a `.cursor/`
-directory is detected, otherwise to `~/.cursor/mcp.json` (global).
+This writes a `clawops` entry to `~/.cursor/mcp.json`.
 
 The entry uses `["mcp", "serve"]` with no safety flag. **Add `--read-only` before
 use** — see below.
 
 ## Manual configuration
-
-### Project-level (recommended)
-
-Create or edit `.cursor/mcp.json` in your project root:
-
-```json
-{
-  "mcpServers": {
-    "clawops": {
-      "command": "clawops",
-      "args": ["mcp", "serve", "--read-only"]
-    }
-  }
-}
-```
-
-Commit this file to give all project collaborators the same read-only access.
-
-### Global
 
 Edit `~/.cursor/mcp.json`:
 
@@ -48,7 +28,23 @@ Edit `~/.cursor/mcp.json`:
 }
 ```
 
-After saving either file, reload Cursor's MCP servers (Settings → MCP → Reload).
+After saving, reload Cursor's MCP servers (Settings → MCP → Reload).
+
+To share the same config with project collaborators, create `.cursor/mcp.json` in
+your project root manually (Cursor reads both; the project file takes precedence):
+
+```json
+{
+  "mcpServers": {
+    "clawops": {
+      "command": "clawops",
+      "args": ["mcp", "serve", "--read-only"]
+    }
+  }
+}
+```
+
+Commit this file so all collaborators get `--read-only` by default.
 
 ## Choosing a safety mode
 

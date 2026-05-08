@@ -8,29 +8,30 @@ most agent integrations you should restrict the tool set.
 
 ### `--read-only` (recommended for most setups)
 
-Enables **5 tools** — all read-only queries, no writes:
+Enables **8 tools** from the curated `read` toolset — no writes, no infrastructure
+changes:
 
 - `clawops_status`
 - `clawops_logs_tail`
 - `clawops_stacks_list`
 - `clawops_config_get`
 - `clawops_agents_list`
-
-Use this when you want an AI assistant that can answer questions about your
-deployment but cannot change anything.
-
-### `--no-destructive`
-
-Enables **8 tools** — adds plan generation and recovery workflows, still blocks all
-writes and destructive actions:
-
-- All 5 read-only tools above
 - `clawops_plan` — generate a deploy plan (no infra changes)
 - `clawops_task_status` — poll an in-progress task
 - `clawops_workflow_recover` — investigate a stuck deployment (reads logs + status)
 
-Use this in a "plan review" setup where the agent can draft plans but a human
-executes them.
+Use this when you want an AI assistant that can answer questions, generate plans for
+human review, and run recovery diagnostics — but cannot apply any changes.
+
+### `--no-destructive`
+
+Enables the same **8 tools** as `--read-only` when used with default toolsets. The
+difference is the mechanism: `--no-destructive` filters the active toolset by
+removing any tool with `destructiveHint: true`, making it composable with
+`--toolsets` for custom configurations.
+
+Use this when you need fine-grained toolset control alongside the destructive-tool
+block.
 
 ### Default (all tools)
 
