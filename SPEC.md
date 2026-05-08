@@ -965,8 +965,8 @@ Deliverables:
 
 Status:
 - [x] WO-04: Plan/apply semantics docs
-- [ ] WO-05: Plan summary output
-- [ ] WO-06: Apply-time drift warning (design-first — ADR before code)
+- [x] WO-05: Plan summary output
+- [x] WO-06: Apply-time drift warning (design-first — ADR before code)
 
 ### R3 — Security and MCP Safety
 

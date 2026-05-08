@@ -70,7 +70,18 @@ export default defineCommand({
       process.stdout.write(planJson + '\n')
     }
 
-    // Diff summary — always to stderr so it doesn't pollute stdout JSON
+    // Plan summary — always to stderr so it doesn't pollute stdout JSON
+    const { spec, metadata } = plan
+    const sshCidrs = spec.network.allowedSshCidrs.join(', ') || '(none)'
+    const gatewayCidrs = spec.network.allowedGatewayCidrs.join(', ') || '(none)'
+    process.stderr.write(
+      `\nPlan: ${metadata.name}  (${spec.provider}${spec.region ? ` / ${spec.region}` : ''})\n` +
+      `  Instance:  ${spec.instanceType}\n` +
+      `  OpenClaw:  ${spec.openclaw.version}\n` +
+      `  SSH CIDRs: ${sshCidrs}\n` +
+      `  Gateway:   ${gatewayCidrs}\n`,
+    )
+
     if (plan.diff) {
       const { create, update, delete: del, totalChanges } = plan.diff
       process.stderr.write(
@@ -85,7 +96,7 @@ export default defineCommand({
         process.stderr.write(renderTable(['Op', 'Resource Type', 'Name'], rows) + '\n')
       }
     } else {
-      process.stderr.write('(diff unavailable — preview could not run against this stack)\n')
+      process.stderr.write('\n(diff unavailable — preview could not run against this stack)\n')
     }
   },
 })

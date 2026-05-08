@@ -15,6 +15,8 @@ export interface DeployPlan {
     generator?: string
     generatorVersion?: string
     labels?: Record<string, string>
+    /** Pulumi stack version at plan generation time. Used for drift detection at apply. */
+    stackVersion?: number
   }
   spec: {
     provider: 'aws' | 'gcp' | 'azure' | 'local'
@@ -158,6 +160,13 @@ export async function generatePlan(
     }
 
     plan.diff = diff
+
+    // Capture stack version for drift detection at apply time (ADR 0008).
+    // info() returns undefined for new stacks with no history — skip silently.
+    const info = await stack.info()
+    if (info !== undefined) {
+      plan.metadata.stackVersion = info.version
+    }
   } catch (err) {
     // Preview failure is non-fatal — return the structural plan without diff
     process.stderr.write(

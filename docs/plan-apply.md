@@ -3,6 +3,29 @@
 clawops uses a review-before-apply discipline for cloud provider deployments. This document explains
 exactly what each step does, what guarantees it provides, and what it does not.
 
+## Plan output
+
+When you run `clawops plan`, the plan JSON is written to stdout (or `--out <path>`) and a human-readable summary is written to stderr:
+
+```
+Plan: prod-stack  (aws / us-east-1)
+  Instance:  small
+  OpenClaw:  latest
+  SSH CIDRs: 203.0.113.5/32
+  Gateway:   203.0.113.5/32
+
+Changes: 1 to create, 0 to update, 0 to delete (1 total)
+┌────┬──────────────────────────────┬────────┐
+│ Op │ Resource Type                │ Name   │
+├────┼──────────────────────────────┼────────┤
+│ +  │ aws:ec2/instance:Instance    │ server │
+└────┴──────────────────────────────┴────────┘
+
+Plan written to /tmp/plan.json
+```
+
+The summary writes to stderr so that `--out`-less stdout JSON piping (`clawops plan | jq .diff`) remains clean.
+
 ## What `clawops plan` produces
 
 `clawops plan` runs `pulumi preview` against your stack and wraps the result in a JSON artifact
@@ -84,6 +107,30 @@ Drift can happen when:
 **Recommendation:** review and apply in the same session. If you are using plan files as CI
 artifacts (see below), keep the plan-to-apply time short and check the diff table that `apply`
 prints before confirming.
+
+### Drift warning
+
+`clawops plan` records the current Pulumi stack version in `metadata.stackVersion`. When you run
+`clawops apply`, it checks this against the live stack version before executing. If they differ,
+it prints a warning and prompts for confirmation:
+
+```
+Warning: stack "prod-stack" has changed since this plan was generated (plan version: 5, current: 7).
+The diff you reviewed may no longer reflect what will be applied.
+
+Stack has drifted. Continue anyway? (y/N)
+```
+
+To suppress the prompt in automation, pass `--yes`:
+
+```bash
+clawops apply /tmp/plan.json --yes   # skips both the confirmation and the drift prompt
+```
+
+The warning is non-blocking — you can proceed after confirming. It is a signal to re-run
+`clawops plan` and review the new diff before applying if the change is unexpected.
+
+New stacks (no prior deploys) have no version history; the drift check is skipped silently.
 
 ## Inspecting the plan JSON
 
