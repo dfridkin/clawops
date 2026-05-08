@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
-**Version:** 0.7
-**Status:** M7 complete — 356 tests passing
+**Version:** 0.8
+**Status:** M8 complete — 476 unit+e2e tests passing; integration harness ready
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -858,6 +858,22 @@ Per the TDD rule and the Claude Code research findings:
 - [ ] First npm publish with `--provenance`
 - [ ] README + docs site (clawops.dev) live
 - [ ] Demo video / blog post
+
+### M8 — Test Coverage & SSH Hardening (Week 20)
+- [x] GCP Pulumi program unit test (parity with AWS + Azure)
+- [x] Firewall module unit tests (`resolveIngressCidrs`, `detectEgressIp`, all access modes)
+- [x] CLI unit tests: `logs`, `ssh`, `backup`, `mcp serve`
+- [x] MCP tool handler unit tests: `agents`, `status`, `stacks`, `up`, `destroy`, `gateway`, `config`, `logs`, `task`, `recover`
+- [x] Up command cloud provider path unit tests (AWS mock)
+- [x] Plan → apply → status mock e2e (`tests/e2e/deploy.test.ts`)
+- [x] AbortSignal forwarded from `applyPlan` to `stack.up()` (bug fix)
+- [x] SSH integration test harness (`testcontainers` + `linuxserver/openssh-server`)
+- [x] SSH error path integration tests: ECONNREFUSED, auth failure, TOFU, host-key mismatch, mid-exec abort, tunnel EADDRINUSE
+- [x] Local bootstrap integration tests: happy path, non-zero exit, health poll timeout, abort
+- [x] Output module unit tests (`human.ts`, `table.ts`)
+- [ ] `src/config/profiles.ts` + `secrets.ts` — implement stubs fully + tests
+- [ ] `src/pulumi/components/` — implement `Gateway`, `Network`, `Secrets`, `Server` ComponentResources + tests
+- [x] 476 tests passing (unit + e2e); integration suite separate (`pnpm test:integration`, Docker required)
 
 ---
 

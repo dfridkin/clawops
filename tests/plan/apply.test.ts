@@ -146,4 +146,13 @@ describe('applyPlan()', () => {
     const result = await applyPlan(basePlan)
     expect(result.changeSummary).toEqual({})
   })
+
+  it('forwards AbortSignal to stack.up()', async () => {
+    const controller = new AbortController()
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan, { signal: controller.signal })
+
+    const callOpts = mockUp.mock.calls[0]?.[0] as { signal?: AbortSignal }
+    expect(callOpts?.signal).toBe(controller.signal)
+  })
 })
