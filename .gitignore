@@ -129,6 +129,9 @@ dist
 # pnpm
 .pnpm-store
 
+# Local planning/strategy docs (not part of project)
+docs/roadmap-docs/
+
 # yarn v3
 .pnp.*
 .yarn/*
