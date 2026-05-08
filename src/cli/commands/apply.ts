@@ -96,6 +96,17 @@ export default defineCommand({
       const result = await applyPlan(typedPlan, {
         onOutput: (line) => { spin.text = line.trim() || spin.text },
         signal: abortController.signal,
+        confirmDrift: args.yes ? undefined : async () => {
+          spin.stop()
+          const rl = createInterface({ input: process.stdin, output: process.stdout })
+          const answer = await rl.question('Stack has drifted. Continue anyway? (y/N) ')
+          rl.close()
+          if (answer.trim().toLowerCase() !== 'y') {
+            process.stdout.write('Aborted.\n')
+            process.exit(0)
+          }
+          spin.start()
+        },
       })
       spin.succeed(`Stack "${typedPlan.spec.stackName}" applied`)
 

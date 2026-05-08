@@ -22,6 +22,7 @@ vi.mock('../../src/config/store.js', () => ({
 
 const mockUp = vi.fn()
 const mockSetConfig = vi.fn()
+const mockInfo = vi.fn()
 const mockGetStack = vi.fn()
 
 const basePlan = {
@@ -56,9 +57,11 @@ beforeEach(async () => {
     },
   })
   mockSetConfig.mockResolvedValue(undefined)
+  mockInfo.mockResolvedValue(undefined)
   mockGetStack.mockResolvedValue({
     up: mockUp,
     setConfig: mockSetConfig,
+    info: mockInfo,
   })
 
   const { buildContext } = await import('../../src/cli/context.js')
@@ -154,5 +157,44 @@ describe('applyPlan()', () => {
 
     const callOpts = mockUp.mock.calls[0]?.[0] as { signal?: AbortSignal }
     expect(callOpts?.signal).toBe(controller.signal)
+  })
+
+  describe('drift detection', () => {
+    const planWithVersion = {
+      ...basePlan,
+      metadata: { ...basePlan.metadata, stackVersion: 5 },
+    }
+
+    it('calls confirmDrift when stack version has changed', async () => {
+      mockInfo.mockResolvedValue({ version: 7 })
+      const confirmDrift = vi.fn().mockResolvedValue(undefined)
+      const { applyPlan } = await import('../../src/plan/apply.js')
+      await applyPlan(planWithVersion, { confirmDrift })
+      expect(confirmDrift).toHaveBeenCalledOnce()
+    })
+
+    it('does not call confirmDrift when stack version matches', async () => {
+      mockInfo.mockResolvedValue({ version: 5 })
+      const confirmDrift = vi.fn().mockResolvedValue(undefined)
+      const { applyPlan } = await import('../../src/plan/apply.js')
+      await applyPlan(planWithVersion, { confirmDrift })
+      expect(confirmDrift).not.toHaveBeenCalled()
+    })
+
+    it('skips drift check when plan has no stackVersion', async () => {
+      mockInfo.mockResolvedValue({ version: 99 })
+      const confirmDrift = vi.fn().mockResolvedValue(undefined)
+      const { applyPlan } = await import('../../src/plan/apply.js')
+      await applyPlan(basePlan, { confirmDrift })
+      expect(confirmDrift).not.toHaveBeenCalled()
+    })
+
+    it('skips drift check when stack has no history', async () => {
+      mockInfo.mockResolvedValue(undefined)
+      const confirmDrift = vi.fn().mockResolvedValue(undefined)
+      const { applyPlan } = await import('../../src/plan/apply.js')
+      await applyPlan(planWithVersion, { confirmDrift })
+      expect(confirmDrift).not.toHaveBeenCalled()
+    })
   })
 })
