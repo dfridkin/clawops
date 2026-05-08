@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
 **Version:** 0.9
-**Status:** M8 complete (476 unit+e2e tests); Wave 1 complete — WO-01, WO-04, WO-17, WO-22 done
+**Status:** M8 complete (476 unit+e2e tests); Wave 2 complete — WO-01–WO-04, WO-17, WO-22 done
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -941,8 +941,8 @@ Deliverables:
 
 Status:
 - [x] WO-01: README positioning and first-success path
-- [ ] WO-02: Local/VPS quickstart
-- [ ] WO-03: Example OpenClaw model/channel configs
+- [x] WO-02: Local/VPS quickstart
+- [x] WO-03: Example OpenClaw model/channel configs
 
 ### R2 — Plan/Apply Trust Model
 
