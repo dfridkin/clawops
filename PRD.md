@@ -23,7 +23,7 @@
 - **Single install, all providers:** one npm package, no extra binaries required at install time
 - **Full lifecycle ownership:** provision → configure → deploy → monitor → update → destroy
 - **Developer-native UX:** composable commands, `--json` output, stdin/stdout piping, CI-friendly exit codes
-- **Agent-native UX:** MCP server (embedded `clawops mcp serve` + standalone `@clawops/mcp-server`) exposing every operation as a typed tool
+- **Agent-native UX:** MCP server (`clawops mcp serve`) exposing every operation as a typed tool, shipped in `@clawops/cli`
 - **State safety:** Pulumi-managed stacks per deployment, stored in cloud blob; idempotent up/down
 - **Remote management:** log tailing, config CRUD, agent lifecycle, gateway tunneling over SSH
 - **Plan-then-apply discipline:** all destructive operations route through a reviewable Maker plan artifact (borrowed from Clanker's pattern)
@@ -131,9 +131,8 @@ Terraform modules require: writing per-provider modules, managing state per clou
 
 ### 5.4 MCP Server
 
-- **F18.** `clawops mcp serve` — embedded MCP server over stdio (default) or `--http`
-- **F19.** `@clawops/mcp-server` — standalone npm package for production deployment
-- **F20.** `clawops mcp install --claude|--cursor|--vscode|--windsurf|--zed` — one-flag client config writers
+- **F18.** `clawops mcp serve` — MCP server over stdio (default) or `--http`, shipped in `@clawops/cli`
+- **F19.** `clawops mcp install --claude|--cursor|--vscode|--windsurf|--zed` — one-flag client config writers
 - **F21.** All CLI commands exposed as MCP tools (under `clawops_cli_*` toolset)
 - **F22.** Composite agent workflows exposed as `clawops_workflow_*` tools
 - **F23.** `--read-only` and `--no-destructive` flags filter destructive tools at registration
@@ -228,7 +227,7 @@ Working backwards from a usable v1.0. Each milestone is independently shippable 
 | Q2 | SSH key management: generate per-stack vs. user-supplied | **Decided: auto-generate by default**, `--key-path` override flag |
 | Q3 | Pulumi bundle size (~50MB): acceptable for npm install? | **Decided: accept for v1**; revisit if user feedback warrants lazy-load |
 | Q4 | OpenClaw install method on VM: npm global vs. Docker | **Decided: Docker by default** (aligns with official guides); npm flag for local adapter |
-| Q5 | Scoped vs. unscoped npm package | **Decided: unscoped `clawops` for CLI**, scoped `@clawops/mcp-server` for MCP package |
+| Q5 | Scoped vs. unscoped npm package | **Decided: `@clawops/cli`** — CLI and MCP server in one package; no separate MCP package (avoids dep duplication and version drift) |
 | Q6 | Should clawops vendor schmitthub Pulumi components or use as a peer dep? | **Pending license verification** — see ADR 0002 |
 | Q7 | Node 20 vs. 22 minimum | **Decided: Node 20.x minimum** (Node 18 EOL April 2025; Node 20 has stable Web Crypto for MCP auth paths) |
 | Q8 | Plan format: JSON Schema or TypeScript types as ground truth | **Decided: JSON Schema as ground truth**, TS types generated; see DESIGN_RULES R-meta |

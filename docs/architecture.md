@@ -143,14 +143,12 @@ The four toolsets exist because different use cases need different surface areas
 - **`workflow`**: an agent doing high-level deployment wants composite tools
 - **`admin`**: multi-stack management is a sharp tool you don't want enabled by default
 
-### 6.3 Embedded vs. Standalone
+### 6.3 Transport Modes
 
-`clawops mcp serve` (embedded) and `@clawops/mcp-server` (standalone) share 90% of the implementation:
+`clawops mcp serve` ships two transport modes in `@clawops/cli`:
 
-- **Embedded**: stdio default, single-user, shares process with CLI. Good for local dev, Claude Desktop integration.
-- **Standalone**: Streamable HTTP, multi-tenant capable, OAuth 2.1 resource server. Good for team-wide MCP infrastructure.
-
-The standalone package re-exports from the main package; we don't duplicate code.
+- **stdio (default):** single-user, stateful, shares process with the CLI. Used by Claude Desktop, Cursor, VS Code via local config.
+- **HTTP (`--http`):** Streamable HTTP, stateless toggle (`--stateless`), OAuth 2.1 resource server. Used for team-wide or multi-tenant MCP infrastructure.
 
 ## 7. State Management
 
