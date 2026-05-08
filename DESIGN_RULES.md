@@ -153,7 +153,7 @@ No HTTP+SSE (deprecated in MCP 2025-06-18). Stdio mode forbids stdout writes out
 
 ### R16 — Stateful by default, stateless togglable
 
-`clawops mcp serve` is stateful (single user, embedded). `@clawops/mcp-server` (production package) supports `--stateless` for HA / load-balanced deployments.
+`clawops mcp serve` is stateful (single user) by default. Pass `--stateless` for HA / load-balanced deployments. Both modes ship in `@clawops/cli`.
 
 *Rationale:* Embedded use benefits from session continuity; production multi-tenant requires statelessness behind LBs.
 

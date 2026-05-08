@@ -561,8 +561,8 @@ Per R1–R25.
 
 ### 7.1 Server Modes
 
-- **Embedded (`clawops mcp serve`):** stdio default (R15), single-user, stateful (R16). Used by Claude Desktop, Cursor, VS Code via local config.
-- **Standalone (`@clawops/mcp-server`):** Streamable HTTP, stateless toggle (R16), OAuth 2.1 resource server in production (R20). Distributed as a separate npm package with Docker image.
+- **stdio mode (`clawops mcp serve`):** default (R15), single-user, stateful (R16). Used by Claude Desktop, Cursor, VS Code via local config.
+- **HTTP mode (`clawops mcp serve --http`):** Streamable HTTP, stateless toggle (`--stateless`, R16), OAuth 2.1 resource server in production (R20). Both modes ship in `@clawops/cli`.
 
 ### 7.2 Tool Categories
 

@@ -16,6 +16,7 @@
     "type": "git",
     "url": "git+https://github.com/dfridkin/clawops.git"
   },
+  "mcpName": "io.github.dfridkin/clawops",
   "publishConfig": {
     "access": "public",
     "provenance": true

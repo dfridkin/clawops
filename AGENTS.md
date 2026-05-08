@@ -83,7 +83,7 @@ can drive deployments deterministically.
   `auth: "aws-sdk"` in `openclaw.json`. The aws provider must emit both for
   compatibility. Tracked in `spec/openclaw-versions.yaml`.
 - `clawctl.com` is an unrelated managed-hosting SaaS — do not confuse with this
-  project. We are `clawops` (npm: `clawops`, MCP package: `@clawops/mcp-server`).
+  project. We are `clawops` (npm: `@clawops/cli`; MCP server ships in the same package).
 - Pulumi mocks: type tags must match the *exact* Pulumi resource type string
   (e.g., `aws:ec2/instance:Instance` not `aws:ec2:Instance`). Bug magnet.
 
