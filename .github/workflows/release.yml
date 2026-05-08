@@ -3,6 +3,9 @@ name: Release
 on:
   push:
     branches: [main]
+    paths:
+      - '.changeset/**'
+      - 'package.json'
 
 jobs:
   release:
@@ -32,7 +35,9 @@ jobs:
         with:
           publish: pnpm release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT required so the Version Packages PR triggers CI
+          # (GITHUB_TOKEN-created PRs don't trigger other workflows)
+          GITHUB_TOKEN: ${{ secrets.ACTIONS_PAT }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: 'true'
