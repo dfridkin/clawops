@@ -115,7 +115,7 @@ For non-local providers, clawops enforces a review-before-apply discipline:
 # 1. Generate a plan — runs `pulumi preview` internally, produces JSON
 clawops plan --provider aws --region us-east-1 --out /tmp/plan.json
 
-# 2. Review plan.json — it shows exactly which resources will change
+# 2. Review plan.json — the `diff` field shows projected changes at plan-generation time
 cat /tmp/plan.json | jq .diff
 
 # 3. Apply — reads and validates the plan file, then runs `pulumi up`
@@ -125,7 +125,12 @@ clawops apply /tmp/plan.json
 clawops apply /tmp/plan.json --yes    # skip prompt in automation
 ```
 
-The plan JSON conforms to `spec/deploy-plan.schema.json` (AJV-validated). Plans are portable — generated on one machine, applied on another.
+The plan JSON conforms to `spec/deploy-plan.schema.json` (AJV-validated) and captures reviewed
+intent: provider, region, instance type, CIDR ranges, and OpenClaw version. `apply` re-runs
+`pulumi up` using those parameters against the current live state — it does not replay a locked
+execution artifact. Review and apply in the same session to minimize drift risk.
+
+See [`docs/plan-apply.md`](docs/plan-apply.md) for full semantics, drift guidance, and the safe CI pattern.
 
 ---
 
