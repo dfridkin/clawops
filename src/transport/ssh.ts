@@ -188,6 +188,11 @@ export async function connect(opts: SshConnectOpts): Promise<SshSession> {
   }
 
   return new Promise((resolve, reject) => {
+    if (opts.signal?.aborted) {
+      reject(new NetworkError('Connection aborted'))
+      return
+    }
+
     const client = new Client()
 
     const onAbort = () => {

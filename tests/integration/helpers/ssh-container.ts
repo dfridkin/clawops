@@ -32,6 +32,7 @@ export async function startSshContainer(): Promise<SshContainerInfo> {
       PGID: '1000',
       USER_NAME: 'testuser',
       PUBLIC_KEY: pubKey,
+      SUDO_ACCESS: 'true',
     })
     .withExposedPorts(2222)
     .withWaitStrategy(Wait.forListeningPorts())
