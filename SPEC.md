@@ -1054,7 +1054,7 @@ Deliverables:
 Status:
 - [x] WO-17: Provider capability matrix
 - [ ] WO-18: Local VM end-to-end test harness
-- [ ] WO-19: Provider troubleshooting docs
+- [x] WO-19: Provider troubleshooting docs
 
 ### R7 — Developer Experience
 
@@ -1069,8 +1069,8 @@ Deliverables:
 - Generated-file check docs
 
 Status:
-- [ ] WO-20: Contributor workflow docs
-- [ ] WO-21: Generated spec workflow docs
+- [x] WO-20: Contributor workflow docs
+- [x] WO-21: Generated spec workflow docs
 
 ### R8 — Adoption and Launch
 
