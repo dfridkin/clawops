@@ -12,6 +12,7 @@ substrings has its value replaced with `"[REDACTED]"`:
 |---|---|
 | `token` | `gatewayToken`, `botToken`, `token` |
 | `secret` | `secretValue`, `apiSecret` |
+| `key` | `apiKey`, `awsKey`, `key` |
 | `password` | `password`, `adminPassword` |
 | `connectionstring` | `connectionString`, `dbConnectionString` |
 | `authorization` | `authorization` (HTTP header forwarded as arg) |
@@ -30,8 +31,14 @@ if they also match a sensitive pattern:
 
 ## ARN replacement
 
-AWS ARN strings in argument values are replaced with `[ARN]` to reduce log noise.
-The pattern matched is `arn:aws:[a-z0-9:-]+`.
+AWS ARN strings in argument values are replaced with `arn:aws:***:<region>:<account>:***` to reduce
+log noise. The pattern matched is `arn:aws:[a-z0-9\-*]+:[a-z0-9\-]*:[0-9]*:[^\s,'"]+`.
+
+## Array sanitisation
+
+Arguments that are arrays are sanitised recursively: each object element in the array is processed
+the same as a top-level argument object. Scalar elements (strings, numbers) are passed through
+unchanged unless their containing key matches a sensitive pattern.
 
 ## What is logged
 

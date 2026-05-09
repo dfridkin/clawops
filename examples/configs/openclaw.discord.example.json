@@ -1,5 +1,5 @@
 {
-  "version": "2026.4",
+  "meta": { "lastTouchedVersion": "2026.4" },
   "gateway": {
     "port": 18789,
     "auth": {
@@ -8,11 +8,9 @@
     }
   },
   "models": {},
-  "channels": [
-    {
-      "type": "discord",
-      "name": "my-discord-bot",
-      "token": "YOUR_DISCORD_BOT_TOKEN"
+  "channels": {
+    "discord": {
+      "botToken": "YOUR_DISCORD_BOT_TOKEN"
     }
-  ]
+  }
 }

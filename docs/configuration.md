@@ -10,7 +10,7 @@ OpenClaw's config file is written to `/home/clawops/openclaw.json` on the target
 bootstrap. The bootstrap creates a minimal default if the file doesn't already exist:
 
 ```json
-{"version":"2026.4","gateway":{"port":18789,"auth":{"mode":"token"}},"models":{},"channels":[]}
+{"meta":{"lastTouchedVersion":"2026.4"},"gateway":{"port":18789,"auth":{"mode":"token"}},"models":{},"channels":{}}
 ```
 
 clawops never overwrites an existing `openclaw.json` during re-bootstrap (`clawops up`).
@@ -52,9 +52,8 @@ clawops config set gateway.auth.token "newvalue" --dry-run
 Prints the JSON that would be written without applying it. Useful for verifying complex nested
 values.
 
-> **Config validation is planned for a future release (WO-14).** Until then, clawops cannot
-> validate your config before applying it. Syntax errors in `openclaw.json` will cause the gateway
-> to fail to start — check with `clawops logs --tail 30` after a config change.
+> **Tip:** Run `clawops config validate` before restarting the gateway to catch structural errors
+> (wrong types, stale field names) before they cause a startup failure.
 
 ## Config file format
 
@@ -66,19 +65,19 @@ for your version.
 
 ```json
 {
-  "version": "2026.4",
+  "meta": { "lastTouchedVersion": "2026.4" },
   "gateway": { ... },
   "models": { ... },
-  "channels": [ ... ]
+  "channels": { ... }
 }
 ```
 
 | Field | Type | Description |
 |---|---|---|
-| `version` | string | Config schema version — must match your OpenClaw release |
+| `meta.lastTouchedVersion` | string | OpenClaw version that last wrote this file (optional) |
 | `gateway` | object | Gateway server settings (port, auth) |
 | `models` | object | Model provider configurations (keyed by provider name) |
-| `channels` | array | Channel integrations (Telegram, Discord, etc.) |
+| `channels` | object | Channel integrations keyed by provider name (e.g. `{"discord":{...}}`) |
 
 ### Gateway settings
 
@@ -109,8 +108,9 @@ for your version to get exact field names. The `models` object is empty by defau
 
 ### Channels
 
-Channel configuration is provider-specific. Each entry in the `channels` array needs at minimum a
-`type` and provider-specific credentials. Refer to the OpenClaw documentation for exact field names.
+`channels` is an object keyed by provider name. Each key is the channel type (e.g. `"discord"`,
+`"telegram"`) and the value is provider-specific config. Refer to the OpenClaw documentation for
+the exact fields each provider accepts.
 
 ## Example configs
 

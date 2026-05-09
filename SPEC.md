@@ -873,7 +873,7 @@ Per the TDD rule and the Claude Code research findings:
 - [x] Output module unit tests (`human.ts`, `table.ts`)
 - [ ] `src/config/profiles.ts` + `secrets.ts` — implement stubs fully + tests
 - [ ] `src/pulumi/components/` — implement `Gateway`, `Network`, `Secrets`, `Server` ComponentResources + tests
-- [x] 476 tests passing (unit + e2e); integration suite separate (`pnpm test:integration`, Docker required)
+- [x] 493 tests passing (unit + e2e); integration suite separate (`pnpm test:integration`, Docker required)
 
 ---
 
@@ -1017,7 +1017,7 @@ Deliverables:
 Status:
 - [x] WO-10: Operations guide
 - [x] WO-11: Backup/restore validation plan
-- [ ] WO-12: Health check expansion
+- [x] WO-12: Health check expansion
 - [x] WO-13: Upgrade/rollback design
 
 ### R5 — Configuration and Secrets
@@ -1035,8 +1035,8 @@ Deliverables:
 - Redaction test coverage
 
 Status:
-- [ ] WO-14: Config validation design
-- [ ] WO-15: Secret redaction audit
+- [x] WO-14: Config validation design
+- [x] WO-15: Secret redaction audit
 - [ ] WO-16: Model/channel config wizard design
 
 ### R6 — Provider Reliability

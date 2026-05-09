@@ -25,7 +25,7 @@ export function getSessionId(): string {
 }
 
 /** Keys whose VALUES must be redacted (case-insensitive substring match). */
-const SENSITIVE_KEYS = ['token', 'secret', 'password', 'connectionstring', 'authorization']
+const SENSITIVE_KEYS = ['token', 'secret', 'key', 'password', 'connectionstring', 'authorization']
 /** Keys exempt from redaction even if they match a pattern. */
 const EXEMPT_KEYS = ['keyname', 'keypath', 'privateKeyPath', 'knownHostsPath']
 
@@ -43,6 +43,12 @@ export function sanitize(args: Record<string, unknown>): Record<string, unknown>
       result[k] = v.replace(ARN_RE, 'arn:aws:***:<region>:<account>:***')
     } else if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
       result[k] = sanitize(v as Record<string, unknown>)
+    } else if (Array.isArray(v)) {
+      result[k] = v.map((item) =>
+        item !== null && typeof item === 'object' && !Array.isArray(item)
+          ? sanitize(item as Record<string, unknown>)
+          : item,
+      )
     } else {
       result[k] = v
     }

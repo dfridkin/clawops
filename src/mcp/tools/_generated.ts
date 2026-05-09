@@ -61,7 +61,7 @@ export type StacksListInput = z.infer<typeof clawops_stacks_listSchema>
 
 export const clawops_config_getSchema = z.object({
   stackName: z.string().optional(),
-  key: z.string(),
+  key: z.string().optional(),
 })
 
 export const clawops_config_getAnnotations = {
@@ -191,6 +191,42 @@ export const clawops_config_setAnnotations = {
 
 export type ConfigSetInput = z.infer<typeof clawops_config_setSchema>
 
+// ── clawops_config_unset ────────────────────────────────────────────────────
+
+export const clawops_config_unsetSchema = z.object({
+  stackName: z.string().optional(),
+  key: z.string(),
+  restart: z.boolean().default(false),
+})
+
+export const clawops_config_unsetAnnotations = {
+  title: "Unset OpenClaw Config Key",
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: true,
+  openWorldHint: true,
+  toolsets: ["cli"] as const,
+} as const
+
+export type ConfigUnsetInput = z.infer<typeof clawops_config_unsetSchema>
+
+// ── clawops_config_validate ─────────────────────────────────────────────────
+
+export const clawops_config_validateSchema = z.object({
+  stackName: z.string().optional(),
+})
+
+export const clawops_config_validateAnnotations = {
+  title: "Validate OpenClaw Config",
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+  toolsets: ["cli","read"] as const,
+} as const
+
+export type ConfigValidateInput = z.infer<typeof clawops_config_validateSchema>
+
 // ── clawops_agents_restart ──────────────────────────────────────────────────
 
 export const clawops_agents_restartSchema = z.object({
@@ -293,6 +329,8 @@ export const TOOLSETS: Record<Toolset, string[]> = {
     'clawops_apply',
     'clawops_plan',
     'clawops_config_set',
+    'clawops_config_unset',
+    'clawops_config_validate',
     'clawops_agents_restart',
     'clawops_gateway_restart',
     'clawops_task_status',
@@ -308,6 +346,7 @@ export const TOOLSETS: Record<Toolset, string[]> = {
     'clawops_config_get',
     'clawops_agents_list',
     'clawops_plan',
+    'clawops_config_validate',
     'clawops_workflow_recover',
     'clawops_task_status',
   ],

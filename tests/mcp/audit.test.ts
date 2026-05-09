@@ -86,6 +86,41 @@ describe('sanitize', () => {
     expect(result['active']).toBe(true)
     expect(result['tags']).toEqual(['a', 'b'])
   })
+
+  it('redacts key fields (apiKey, awsKey)', async () => {
+    const { sanitize } = await import('../../src/mcp/audit.js')
+    const result = sanitize({ apiKey: 'sk-abc', awsKey: 'AKIA123', region: 'us-east-1' })
+    expect(result['apiKey']).toBe('[REDACTED]')
+    expect(result['awsKey']).toBe('[REDACTED]')
+    expect(result['region']).toBe('us-east-1')
+  })
+
+  it('exempts keyName and keyPath even though they contain "key"', async () => {
+    const { sanitize } = await import('../../src/mcp/audit.js')
+    const result = sanitize({ keyName: 'my-pair', keyPath: '/home/.ssh/id_rsa' })
+    expect(result['keyName']).toBe('my-pair')
+    expect(result['keyPath']).toBe('/home/.ssh/id_rsa')
+  })
+
+  it('sanitizes objects nested inside arrays', async () => {
+    const { sanitize } = await import('../../src/mcp/audit.js')
+    const result = sanitize({
+      channels: [
+        { name: 'discord', botToken: 'tok123' },
+        { name: 'telegram', botToken: 'tok456' },
+      ],
+    })
+    const channels = result['channels'] as Array<Record<string, unknown>>
+    expect(channels[0]?.['name']).toBe('discord')
+    expect(channels[0]?.['botToken']).toBe('[REDACTED]')
+    expect(channels[1]?.['botToken']).toBe('[REDACTED]')
+  })
+
+  it('passes through scalar array elements unchanged', async () => {
+    const { sanitize } = await import('../../src/mcp/audit.js')
+    const result = sanitize({ ids: ['a', 'b', 'c'] })
+    expect(result['ids']).toEqual(['a', 'b', 'c'])
+  })
 })
 
 describe('auditLog', () => {

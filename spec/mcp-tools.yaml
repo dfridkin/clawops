@@ -133,7 +133,7 @@ tools:
       openWorldHint: true
     input:
       stackName: { type: string, optional: true }
-      key: { type: string, description: "Dot-path config key, e.g., gateway.auth.mode" }
+      key: { type: string, optional: true, description: "Dot-path config key, e.g., gateway.auth.mode. Omit to dump the full config." }
     output:
       value: { type: string, description: "Stringified value; complex objects are JSON-encoded" }
 
@@ -312,8 +312,54 @@ tools:
       value: { type: string, description: "Stringified; JSON for complex values" }
       restart: { type: boolean, optional: true, default: false }
     output:
-      previousValue: { type: string, optional: true }
-      restarted: { type: boolean }
+      message: { type: string, description: "Confirmation of the change applied" }
+
+  - name: clawops_config_unset
+    toolset: [cli]
+    description: |
+      Remove a configuration key from the remote OpenClaw gateway config, reverting
+      it to the OpenClaw default.
+
+      Use when: the user wants to delete a config key entirely (e.g., remove a
+      channel, clear an override).
+
+      Do NOT use when: the user wants to set the key to a new value — use
+      clawops_config_set instead.
+    annotations:
+      title: Unset OpenClaw Config Key
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true }
+      key: { type: string, description: "Dot-path config key to remove" }
+      restart: { type: boolean, optional: true, default: false }
+    output:
+      message: { type: string, description: "Confirmation of the key removed" }
+
+  - name: clawops_config_validate
+    toolset: [cli, read]
+    description: |
+      Validate the remote OpenClaw gateway config against the known schema. Checks
+      for structural errors (wrong types, unknown top-level keys) that would cause
+      OpenClaw to fail on startup.
+
+      Use when: the user wants to verify config before restarting the gateway, or
+      after editing openclaw.json manually.
+
+      Do NOT use when: the user wants to change config — use clawops_config_set.
+    annotations:
+      title: Validate OpenClaw Config
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true }
+    output:
+      valid: { type: boolean }
+      issues: { type: array, items: { type: string } }
 
   - name: clawops_agents_restart
     toolset: [cli]
