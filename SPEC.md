@@ -1015,10 +1015,10 @@ Deliverables:
 - Log rotation and disk safety checks
 
 Status:
-- [ ] WO-10: Operations guide
-- [ ] WO-11: Backup/restore validation plan
+- [x] WO-10: Operations guide
+- [x] WO-11: Backup/restore validation plan
 - [ ] WO-12: Health check expansion
-- [ ] WO-13: Upgrade/rollback design
+- [x] WO-13: Upgrade/rollback design
 
 ### R5 — Configuration and Secrets
 
