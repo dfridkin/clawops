@@ -1,5 +1,5 @@
 {
-  "version": "2026.4",
+  "meta": { "lastTouchedVersion": "2026.4" },
   "gateway": {
     "port": 18789,
     "auth": {
@@ -8,11 +8,9 @@
     }
   },
   "models": {},
-  "channels": [
-    {
-      "type": "telegram",
-      "name": "my-telegram-bot",
-      "token": "YOUR_TELEGRAM_BOT_TOKEN"
+  "channels": {
+    "telegram": {
+      "botToken": "YOUR_TELEGRAM_BOT_TOKEN"
     }
-  ]
+  }
 }

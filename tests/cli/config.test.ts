@@ -29,10 +29,10 @@ async function getMocks() {
 }
 
 const SAMPLE_CONFIG = JSON.stringify({
-  version: '2026.4',
+  meta: { lastTouchedVersion: '2026.4' },
   gateway: { port: 18789, auth: { mode: 'token' } },
   models: {},
-  channels: [],
+  channels: {},
 })
 
 function wireSession(session: FakeSshSession) {
@@ -60,7 +60,7 @@ describe('config command', () => {
       await (cmd.run as AnyRunFn)({ args: { _: ['get'], stack: undefined, restart: false, json: false } })
 
       const output = writes.join('')
-      expect(output).toContain('"version"')
+      expect(output).toContain('"meta"')
       expect(output).toContain('2026.4')
     })
 
@@ -97,7 +97,7 @@ describe('config command', () => {
 
       const parsed = JSON.parse(writes.join('')) as { ok: boolean; data: Record<string, unknown> }
       expect(parsed.ok).toBe(true)
-      expect(parsed.data).toHaveProperty('version')
+      expect(parsed.data).toHaveProperty('meta')
     })
   })
 

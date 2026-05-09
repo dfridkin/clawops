@@ -69,11 +69,11 @@ afterEach(() => {
 
 describe('doctor command', () => {
   it('runs successfully when config and credentials are present', async () => {
-    await expect((cmd.run as AnyRunFn)({})).resolves.not.toThrow()
+    await expect((cmd.run as AnyRunFn)({ args: {} })).resolves.not.toThrow()
   })
 
   it('calls validateConfig for each configured provider', async () => {
-    await (cmd.run as AnyRunFn)({})
+    await (cmd.run as AnyRunFn)({ args: {} })
     expect(mockValidateConfig).toHaveBeenCalledOnce()
   })
 
@@ -82,7 +82,7 @@ describe('doctor command', () => {
     const warns: string[] = []
     vi.spyOn(console, 'warn').mockImplementation((...args) => { warns.push(args.join(' ')) })
 
-    await (cmd.run as AnyRunFn)({})
+    await (cmd.run as AnyRunFn)({ args: {} })
 
     expect(warns.join('\n')).toMatch(/No config file/)
   })
@@ -97,7 +97,7 @@ describe('doctor command', () => {
     const errors: string[] = []
     vi.spyOn(console, 'error').mockImplementation((...args) => { errors.push(args.join(' ')) })
 
-    await (cmd.run as AnyRunFn)({})
+    await (cmd.run as AnyRunFn)({ args: {} })
 
     expect(errors.join('\n')).toMatch(/SSH key|not found|not readable/)
   })
@@ -107,7 +107,7 @@ describe('doctor command', () => {
     const errors: string[] = []
     vi.spyOn(console, 'error').mockImplementation((...args) => { errors.push(args.join(' ')) })
 
-    await (cmd.run as AnyRunFn)({})
+    await (cmd.run as AnyRunFn)({ args: {} })
 
     expect(errors.join('\n')).toMatch(/AWS_PROFILE/)
   })
@@ -122,7 +122,7 @@ describe('doctor command', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
 
-    await (cmd.run as AnyRunFn)({})
+    await (cmd.run as AnyRunFn)({ args: {} })
 
     expect(mockValidateConfig).toHaveBeenCalledOnce()
   })
@@ -131,7 +131,32 @@ describe('doctor command', () => {
     vi.spyOn(process, 'version', 'get').mockReturnValue('v18.0.0')
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit') })
 
-    await expect((cmd.run as AnyRunFn)({})).rejects.toThrow('exit')
+    await expect((cmd.run as AnyRunFn)({ args: {} })).rejects.toThrow('exit')
     expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('skips remote health section when --stack is not provided', async () => {
+    const writes: string[] = []
+    vi.spyOn(process.stdout, 'write').mockImplementation((s) => { writes.push(String(s)); return true })
+
+    await (cmd.run as AnyRunFn)({ args: {} })
+
+    expect(writes.join('')).not.toContain('Remote health')
+  })
+
+  it('prints remote health header when --stack is provided but SSH fails', async () => {
+    const { buildContext } = await import('../../src/cli/context.js')
+    vi.mocked(buildContext).mockImplementation(() => { throw new Error('no stack') })
+    vi.mock('../../src/cli/context.js', () => ({ buildContext: vi.fn(() => { throw new Error('no stack') }) }))
+
+    const writes: string[] = []
+    vi.spyOn(process.stdout, 'write').mockImplementation((s) => { writes.push(String(s)); return true })
+    const errors: string[] = []
+    vi.spyOn(console, 'error').mockImplementation((...a) => { errors.push(a.join(' ')) })
+
+    await (cmd.run as AnyRunFn)({ args: { stack: 'prod' } })
+
+    expect(writes.join('')).toContain('Remote health')
+    expect(errors.join(' ')).toMatch(/failed|no stack/i)
   })
 })

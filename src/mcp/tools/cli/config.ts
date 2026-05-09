@@ -1,8 +1,8 @@
-// clawops_config_get + clawops_config_set handlers
+// clawops_config_get + clawops_config_set + clawops_config_unset + clawops_config_validate handlers
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import type { ConfigGetInput, ConfigSetInput } from '../_generated.js'
+import type { ConfigGetInput, ConfigSetInput, ConfigUnsetInput, ConfigValidateInput } from '../_generated.js'
 import { buildContext } from '../../../cli/context.js'
 import { acquireSession, drainPool } from '../../../transport/pool.js'
 import { resolveConn, okText, errText } from '../_conn.js'
@@ -10,12 +10,15 @@ import { resolveConn, okText, errText } from '../_conn.js'
 const OPENCLAW_CONFIG = '/home/clawops/openclaw.json'
 const OPENCLAW_TMP = '/tmp/clawops-config.json.tmp'
 
+const VALID_AUTH_MODES = new Set(['none', 'token', 'password', 'trusted-proxy'])
+
 export async function handleConfigGet(input: ConfigGetInput, _server: McpServer): Promise<CallToolResult> {
+  const ac = new AbortController()
   const ctx = buildContext({ stack: input.stackName })
   const conn = await resolveConn(ctx)
   const { session, release } = await acquireSession(conn)
   try {
-    const result = await session.exec(`cat ${OPENCLAW_CONFIG}`)
+    const result = await session.exec(`cat ${OPENCLAW_CONFIG}`, ac.signal)
     let cfg: Record<string, unknown>
     try {
       cfg = JSON.parse(result.stdout) as Record<string, unknown>
@@ -31,7 +34,6 @@ export async function handleConfigGet(input: ConfigGetInput, _server: McpServer)
 }
 
 export async function handleConfigSet(input: ConfigSetInput, server: McpServer): Promise<CallToolResult> {
-  // R19: always elicit for config changes
   const elicit = await server.server.elicitInput({
     message: `Set ${input.key} = ${input.value} on stack "${input.stackName ?? 'default'}"?`,
     requestedSchema: {
@@ -44,11 +46,12 @@ export async function handleConfigSet(input: ConfigSetInput, server: McpServer):
     return okText('Config change cancelled.')
   }
 
+  const ac = new AbortController()
   const ctx = buildContext({ stack: input.stackName })
   const conn = await resolveConn(ctx)
   const { session, release } = await acquireSession(conn)
   try {
-    const readResult = await session.exec(`cat ${OPENCLAW_CONFIG}`)
+    const readResult = await session.exec(`cat ${OPENCLAW_CONFIG}`, ac.signal)
     let cfg: Record<string, unknown>
     try {
       cfg = JSON.parse(readResult.stdout) as Record<string, unknown>
@@ -60,30 +63,13 @@ export async function handleConfigSet(input: ConfigSetInput, server: McpServer):
     try { parsedValue = JSON.parse(input.value) } catch { /* keep string */ }
     setPath(cfg, input.key, parsedValue)
 
-    const json = JSON.stringify(cfg, null, 2)
-    const b64 = Buffer.from(json, 'utf-8').toString('base64')
-    const writeCmd =
-      `echo '${b64}' | base64 -d > ${OPENCLAW_TMP} && ` +
-      `mv ${OPENCLAW_TMP} ${OPENCLAW_CONFIG} && ` +
-      `chown clawops:clawops ${OPENCLAW_CONFIG}`
-    const writeResult = await session.exec(writeCmd)
-    if (writeResult.code !== 0) {
-      return errText(`Failed to write config: ${writeResult.stderr}`)
-    }
+    const writeErr = await atomicWrite(session, cfg, ac.signal)
+    if (writeErr) return errText(writeErr)
 
     let note = ''
     if (input.restart) {
-      const imgResult = await session.exec(
-        `docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo 'ghcr.io/openclaw/openclaw:stable'`,
-      )
-      const image = imgResult.stdout.trim()
-      const restartCmd = [
-        'docker stop openclaw 2>/dev/null || true',
-        'docker rm openclaw 2>/dev/null || true',
-        `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 ` +
-          `-v ${OPENCLAW_CONFIG}:/app/config.json:ro ${image}`,
-      ].join(' && ')
-      await session.exec(restartCmd)
+      const restartErr = await restartGateway(session, ac.signal)
+      if (restartErr) return errText(restartErr)
       note = ' (gateway restarted)'
     }
     return okText(`Config set: ${input.key}${note}`)
@@ -92,6 +78,73 @@ export async function handleConfigSet(input: ConfigSetInput, server: McpServer):
     drainPool()
   }
 }
+
+export async function handleConfigUnset(input: ConfigUnsetInput, server: McpServer): Promise<CallToolResult> {
+  const elicit = await server.server.elicitInput({
+    message: `Remove config key "${input.key}" on stack "${input.stackName ?? 'default'}"?`,
+    requestedSchema: {
+      type: 'object' as const,
+      properties: { confirmed: { type: 'boolean' as const, title: 'Confirm key removal' } },
+      required: ['confirmed'],
+    },
+  })
+  if (elicit.action !== 'accept' || !elicit.content?.['confirmed']) {
+    return okText('Config unset cancelled.')
+  }
+
+  const ac = new AbortController()
+  const ctx = buildContext({ stack: input.stackName })
+  const conn = await resolveConn(ctx)
+  const { session, release } = await acquireSession(conn)
+  try {
+    const readResult = await session.exec(`cat ${OPENCLAW_CONFIG}`, ac.signal)
+    let cfg: Record<string, unknown>
+    try {
+      cfg = JSON.parse(readResult.stdout) as Record<string, unknown>
+    } catch {
+      return errText(`Cannot parse ${OPENCLAW_CONFIG}: ${readResult.stderr}`)
+    }
+
+    deletePath(cfg, input.key)
+
+    const writeErr = await atomicWrite(session, cfg, ac.signal)
+    if (writeErr) return errText(writeErr)
+
+    let note = ''
+    if (input.restart) {
+      const restartErr = await restartGateway(session, ac.signal)
+      if (restartErr) return errText(restartErr)
+      note = ' (gateway restarted)'
+    }
+    return okText(`Config key removed: ${input.key}${note}`)
+  } finally {
+    release()
+    drainPool()
+  }
+}
+
+export async function handleConfigValidate(input: ConfigValidateInput, _server: McpServer): Promise<CallToolResult> {
+  const ac = new AbortController()
+  const ctx = buildContext({ stack: input.stackName })
+  const conn = await resolveConn(ctx)
+  const { session, release } = await acquireSession(conn)
+  try {
+    const result = await session.exec(`cat ${OPENCLAW_CONFIG}`, ac.signal)
+    let cfg: Record<string, unknown>
+    try {
+      cfg = JSON.parse(result.stdout) as Record<string, unknown>
+    } catch {
+      return okText(JSON.stringify({ valid: false, issues: [`Invalid JSON: ${result.stderr || result.stdout}`] }))
+    }
+    const issues = validateOpenclawConfig(cfg)
+    return okText(JSON.stringify({ valid: issues.length === 0, issues }))
+  } finally {
+    release()
+    drainPool()
+  }
+}
+
+// ── Shared helpers ────────────────────────────────────────────────────────────
 
 function getPath(obj: Record<string, unknown>, dotKey: string): unknown {
   return dotKey.split('.').reduce<unknown>((cur, k) => {
@@ -109,4 +162,92 @@ function setPath(obj: Record<string, unknown>, dotKey: string, value: unknown): 
     cur = cur[k] as Record<string, unknown>
   }
   cur[keys[keys.length - 1]!] = value
+}
+
+function deletePath(obj: Record<string, unknown>, dotKey: string): void {
+  const keys = dotKey.split('.')
+  let cur: Record<string, unknown> = obj
+  for (let i = 0; i < keys.length - 1; i++) {
+    const k = keys[i]!
+    if (typeof cur[k] !== 'object' || cur[k] === null) return
+    cur = cur[k] as Record<string, unknown>
+  }
+  delete cur[keys[keys.length - 1]!]
+}
+
+interface SshSession {
+  exec(cmd: string, signal?: AbortSignal): Promise<{ stdout: string; stderr: string; code: number }>
+}
+
+async function atomicWrite(session: SshSession, cfg: Record<string, unknown>, signal: AbortSignal): Promise<string | null> {
+  const json = JSON.stringify(cfg, null, 2)
+  const b64 = Buffer.from(json, 'utf-8').toString('base64')
+  const cmd =
+    `echo '${b64}' | base64 -d > ${OPENCLAW_TMP} && ` +
+    `mv ${OPENCLAW_TMP} ${OPENCLAW_CONFIG} && ` +
+    `chown clawops:clawops ${OPENCLAW_CONFIG}`
+  const result = await session.exec(cmd, signal)
+  return result.code !== 0 ? `Failed to write config: ${result.stderr}` : null
+}
+
+async function restartGateway(session: SshSession, signal: AbortSignal): Promise<string | null> {
+  const imgResult = await session.exec(
+    `docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo 'ghcr.io/openclaw/openclaw:stable'`,
+    signal,
+  )
+  const image = imgResult.stdout.trim()
+  const cmd = [
+    'docker stop openclaw 2>/dev/null || true',
+    'docker rm openclaw 2>/dev/null || true',
+    `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 ` +
+      `-v ${OPENCLAW_CONFIG}:/app/config.json:ro ${image}`,
+  ].join(' && ')
+  const result = await session.exec(cmd, signal)
+  return result.code !== 0 ? `Gateway restart failed: ${result.stderr}` : null
+}
+
+export function validateOpenclawConfig(cfg: Record<string, unknown>): string[] {
+  const issues: string[] = []
+
+  if ('version' in cfg) {
+    issues.push(
+      "Top-level 'version' is not a valid OpenClaw config key. " +
+      "Use 'meta.lastTouchedVersion' (string) instead.",
+    )
+  }
+
+  if ('channels' in cfg && Array.isArray(cfg['channels'])) {
+    issues.push(
+      "'channels' must be an object keyed by provider name (e.g. {\"discord\":{...}}), not an array.",
+    )
+  }
+
+  const meta = cfg['meta']
+  if (meta !== undefined && (typeof meta !== 'object' || Array.isArray(meta) || meta === null)) {
+    issues.push("'meta' must be an object.")
+  } else if (meta && typeof meta === 'object') {
+    const ltv = (meta as Record<string, unknown>)['lastTouchedVersion']
+    if (ltv !== undefined && typeof ltv !== 'string') {
+      issues.push("'meta.lastTouchedVersion' must be a string.")
+    }
+  }
+
+  const gateway = cfg['gateway']
+  if (gateway !== undefined && typeof gateway === 'object' && !Array.isArray(gateway) && gateway !== null) {
+    const gw = gateway as Record<string, unknown>
+    if ('port' in gw && typeof gw['port'] !== 'number') {
+      issues.push("'gateway.port' must be a number.")
+    }
+    const auth = gw['auth']
+    if (auth !== undefined && typeof auth === 'object' && !Array.isArray(auth) && auth !== null) {
+      const mode = (auth as Record<string, unknown>)['mode']
+      if (mode !== undefined && !VALID_AUTH_MODES.has(mode as string)) {
+        issues.push(
+          `'gateway.auth.mode' must be one of: ${[...VALID_AUTH_MODES].join(', ')}. Got: "${mode}".`,
+        )
+      }
+    }
+  }
+
+  return issues
 }

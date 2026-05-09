@@ -1,18 +1,19 @@
 import { defineCommand } from 'citty'
 import process from 'node:process'
-import { success, failure, info } from '../../output/human.js'
+import { success, failure, warn, info } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
+import { validateOpenclawConfig } from '../../mcp/tools/cli/config.js'
 
 const OPENCLAW_CONFIG = '/home/clawops/openclaw.json'
 const OPENCLAW_TMP = '/tmp/clawops-config.json.tmp'
 
-/** docker stop + rm + run with the given image version and config mount. */
-export function dockerRunCmd(version: string): string {
+/** docker stop + rm + run with the given full image reference and config mount. */
+export function dockerRunCmd(image: string): string {
   return [
     'docker stop openclaw 2>/dev/null || true',
     'docker rm   openclaw 2>/dev/null || true',
     `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 ` +
-      `-v ${OPENCLAW_CONFIG}:/app/config.json:ro ghcr.io/openclaw/openclaw:${version}`,
+      `-v ${OPENCLAW_CONFIG}:/app/config.json:ro ${image}`,
   ].join(' && ')
 }
 
@@ -66,8 +67,8 @@ export default defineCommand({
 
     const [action, key, value] = (args._ ?? []) as string[]
 
-    if (!action || !['get', 'set', 'unset'].includes(action)) {
-      failure('Usage: clawops config <get [key] | set key value | unset key>')
+    if (!action || !['get', 'set', 'unset', 'validate'].includes(action)) {
+      failure('Usage: clawops config <get [key] | set key value | unset key | validate>')
       process.exit(2)
     }
     if (action === 'set' && (!key || value === undefined)) {
@@ -126,6 +127,18 @@ export default defineCommand({
         return
       }
 
+      if (action === 'validate') {
+        const issues = validateOpenclawConfig(cfg)
+        if (issues.length === 0) {
+          success('Config is valid.')
+        } else {
+          for (const issue of issues) warn(issue)
+          failure(`Config has ${issues.length} issue(s).`)
+          process.exit(1)
+        }
+        return
+      }
+
       if (action === 'set') {
         // Try to coerce value to JSON; fall back to raw string
         let parsedValue: unknown = value
@@ -164,8 +177,8 @@ export default defineCommand({
           `docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo 'ghcr.io/openclaw/openclaw:stable'`,
           abortController.signal,
         )
-        const version = (imgResult.stdout.trim().split(':')[1] ?? 'stable')
-        const restartResult = await session.exec(dockerRunCmd(version), abortController.signal)
+        const image = imgResult.stdout.trim()
+        const restartResult = await session.exec(dockerRunCmd(image), abortController.signal)
         if (restartResult.code !== 0) {
           failure(`Restart failed: ${restartResult.stderr}`)
           process.exit(1)

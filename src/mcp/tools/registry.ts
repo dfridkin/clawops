@@ -17,6 +17,8 @@ import {
   clawops_applySchema,           clawops_applyAnnotations,
   clawops_planSchema,            clawops_planAnnotations,
   clawops_config_setSchema,      clawops_config_setAnnotations,
+  clawops_config_unsetSchema,    clawops_config_unsetAnnotations,
+  clawops_config_validateSchema, clawops_config_validateAnnotations,
   clawops_agents_restartSchema,  clawops_agents_restartAnnotations,
   clawops_gateway_restartSchema, clawops_gateway_restartAnnotations,
   clawops_workflow_deploy_appSchema, clawops_workflow_deploy_appAnnotations,
@@ -25,7 +27,8 @@ import {
   type StatusInput, type LogsTailInput, type StacksListInput,
   type ConfigGetInput, type AgentsListInput, type UpInput,
   type DestroyInput, type ApplyInput, type PlanInput,
-  type ConfigSetInput, type AgentsRestartInput, type GatewayRestartInput,
+  type ConfigSetInput, type ConfigUnsetInput, type ConfigValidateInput,
+  type AgentsRestartInput, type GatewayRestartInput,
   type WorkflowDeployAppInput, type WorkflowRecoverInput, type TaskStatusInput,
 } from './_generated.js'
 
@@ -35,7 +38,7 @@ import type { McpServeOpts } from '../server.js'
 import { handleStatus } from './cli/status.js'
 import { handleLogsTail } from './cli/logs.js'
 import { handleStacksList } from './cli/stacks.js'
-import { handleConfigGet, handleConfigSet } from './cli/config.js'
+import { handleConfigGet, handleConfigSet, handleConfigUnset, handleConfigValidate } from './cli/config.js'
 import { handleAgentsList, handleAgentsRestart } from './cli/agents.js'
 import { handleGatewayRestart } from './cli/gateway.js'
 import { handleUp } from './cli/up.js'
@@ -80,6 +83,8 @@ const TOOL_REGISTRY: Record<string, ToolEntry> = {
   clawops_apply:            makeEntry<ApplyInput>(clawops_applySchema, clawops_applyAnnotations, handleApply),
   clawops_plan:             makeEntry<PlanInput>(clawops_planSchema, clawops_planAnnotations, handlePlan),
   clawops_config_set:       makeEntry<ConfigSetInput>(clawops_config_setSchema, clawops_config_setAnnotations, handleConfigSet),
+  clawops_config_unset:     makeEntry<ConfigUnsetInput>(clawops_config_unsetSchema, clawops_config_unsetAnnotations, handleConfigUnset),
+  clawops_config_validate:  makeEntry<ConfigValidateInput>(clawops_config_validateSchema, clawops_config_validateAnnotations, handleConfigValidate),
   clawops_agents_restart:   makeEntry<AgentsRestartInput>(clawops_agents_restartSchema, clawops_agents_restartAnnotations, handleAgentsRestart),
   clawops_gateway_restart:  makeEntry<GatewayRestartInput>(clawops_gateway_restartSchema, clawops_gateway_restartAnnotations, handleGatewayRestart),
   clawops_workflow_deploy_app: makeEntry<WorkflowDeployAppInput>(clawops_workflow_deploy_appSchema, clawops_workflow_deploy_appAnnotations, handleWorkflowDeployApp),

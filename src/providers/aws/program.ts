@@ -241,7 +241,7 @@ docker pull ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION}
 OPENCLAW_CONFIG=/home/clawops/openclaw.json
 if [ ! -f "\${OPENCLAW_CONFIG}" ]; then
   cat > "\${OPENCLAW_CONFIG}" <<'OPENCLAWJSON'
-{"version":"2026.4","gateway":{"port":18789,"auth":{"mode":"token"}},"models":{},"channels":[]}
+{"meta":{"lastTouchedVersion":"2026.4"},"gateway":{"port":18789,"auth":{"mode":"token"}},"models":{},"channels":{}}
 OPENCLAWJSON
   chown clawops:clawops "\${OPENCLAW_CONFIG}"
 fi

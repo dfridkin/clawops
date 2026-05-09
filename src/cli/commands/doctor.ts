@@ -9,7 +9,10 @@ export default defineCommand({
     name: 'doctor',
     description: 'Check system prerequisites, config, SSH keys, and cloud credentials',
   },
-  async run() {
+  args: {
+    stack: { type: 'string', description: 'Stack name to include remote health checks' },
+  },
+  async run({ args }) {
     const { getConfig, getConfigDir } = await import('../../config/store.js')
 
     process.stdout.write('\nclawops doctor\n')
@@ -111,6 +114,112 @@ export default defineCommand({
 
       if (checkedProviders.size === 0) {
         warn('No stacks configured — run `clawops init`')
+      }
+    }
+
+    // ── Remote health (requires --stack) ─────────────────────────────────────
+    if (args.stack) {
+      process.stdout.write('\nRemote health\n')
+
+      if (!config) {
+        info('Remote health skipped — no config')
+      } else {
+        try {
+          const { buildContext } = await import('../context.js')
+          const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
+          const { acquireSession, drainPool } = await import('../../transport/pool.js')
+
+          const ctx = buildContext({ stack: args.stack })
+          const stack = await ctx.getStack()
+          const outputMap = await stack.outputs()
+          const outputs: Record<string, unknown> = Object.fromEntries(
+            Object.entries(outputMap).map(([k, v]) => [k, v.value]),
+          )
+          const base = extractBaseOutputs(outputs)
+          const conn = ctx.adapter.getConnectionInfo({
+            ...base,
+            privateKeyPath: config.ssh.keyPath,
+            knownHostsPath: config.ssh.knownHostsPath,
+          })
+
+          const ac = new AbortController()
+          process.on('SIGINT', () => ac.abort())
+          process.on('SIGTERM', () => ac.abort())
+
+          const { session, release } = await acquireSession({
+            host: conn.host,
+            port: conn.port,
+            user: conn.user,
+            privateKeyPath: conn.privateKeyPath,
+            knownHostsPath: conn.knownHostsPath,
+            signal: ac.signal,
+          })
+
+          try {
+            // Container status
+            const containerResult = await session.exec(
+              `docker inspect openclaw --format '{{.State.Status}}' 2>/dev/null || echo 'not found'`,
+              ac.signal,
+            )
+            const containerStatus = containerResult.stdout.trim()
+            if (containerStatus === 'running') {
+              success(`Container    running`)
+            } else {
+              failure(`Container    ${containerStatus || 'unknown'}`)
+            }
+
+            // Docker healthcheck
+            const healthResult = await session.exec(
+              `docker inspect openclaw --format '{{.State.Health.Status}}' 2>/dev/null || echo 'none'`,
+              ac.signal,
+            )
+            const healthStatus = healthResult.stdout.trim()
+            if (healthStatus === 'healthy') {
+              success(`Healthcheck  healthy`)
+            } else if (healthStatus === 'none' || healthStatus === '<no value>') {
+              info(`Healthcheck  no healthcheck configured`)
+            } else {
+              warn(`Healthcheck  ${healthStatus}`)
+            }
+
+            // Disk usage
+            const diskResult = await session.exec(
+              `df -h /home/clawops 2>/dev/null | awk 'NR==2{print $5" used ("$3" of "$2")"}'`,
+              ac.signal,
+            )
+            const diskUsage = diskResult.stdout.trim()
+            if (diskUsage) {
+              const pctMatch = diskUsage.match(/^(\d+)%/)
+              const pct = pctMatch ? parseInt(pctMatch[1]!, 10) : 0
+              if (pct >= 90) {
+                failure(`Disk         ${diskUsage}`)
+              } else if (pct >= 75) {
+                warn(`Disk         ${diskUsage}`)
+              } else {
+                success(`Disk         ${diskUsage}`)
+              }
+            } else {
+              warn('Disk         unable to determine disk usage')
+            }
+
+            // Log rotation
+            const logrotateResult = await session.exec(
+              `test -f /etc/logrotate.d/openclaw && echo 'configured' || echo 'not configured'`,
+              ac.signal,
+            )
+            const logrotate = logrotateResult.stdout.trim()
+            if (logrotate === 'configured') {
+              success(`Log rotation configured`)
+            } else {
+              warn(`Log rotation not configured — logs may grow unbounded`)
+            }
+          } finally {
+            release()
+            drainPool()
+          }
+        } catch (err) {
+          failure(`Remote health checks failed: ${err instanceof Error ? err.message : String(err)}`)
+        }
       }
     }
 

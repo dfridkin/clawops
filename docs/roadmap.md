@@ -63,7 +63,7 @@ Goal: make single-node deployments credible for ongoing use.
 |---|---|---|
 | WO-10 — Operations guide | ⏳ | `docs/operations.md` |
 | WO-11 — Backup/restore validation | ⏳ | `docs/backup-restore.md` |
-| WO-12 — Health check expansion | ⏳ | Deeper status checks beyond "container running" |
+| WO-12 — Health check expansion | ✅ | Deeper status checks beyond "container running" |
 | WO-13 — Upgrade/rollback design | ⏳ | `docs/upgrade-rollback.md` |
 
 ### R5 — Configuration and Secrets
@@ -72,8 +72,8 @@ Goal: make real OpenClaw configuration safe, inspectable, and less confusing.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-14 — Config validation | ⏳ | `clawops config validate` command |
-| WO-15 — Secret redaction audit | ⏳ | Centralized redaction utility + tests |
+| WO-14 — Config validation | ✅ | `clawops config validate` command |
+| WO-15 — Secret redaction audit | ✅ | Centralized redaction utility + tests |
 | WO-16 — Config wizard design | ⏳ | `docs/config-wizard-design.md` |
 
 ### R6 — Provider Reliability
