@@ -105,15 +105,15 @@ describe('sanitize', () => {
   it('sanitizes objects nested inside arrays', async () => {
     const { sanitize } = await import('../../src/mcp/audit.js')
     const result = sanitize({
-      channels: [
-        { name: 'discord', botToken: 'tok123' },
-        { name: 'telegram', botToken: 'tok456' },
+      bindings: [
+        { name: 'agent-a', botToken: 'tok123' },
+        { name: 'agent-b', botToken: 'tok456' },
       ],
     })
-    const channels = result['channels'] as Array<Record<string, unknown>>
-    expect(channels[0]?.['name']).toBe('discord')
-    expect(channels[0]?.['botToken']).toBe('[REDACTED]')
-    expect(channels[1]?.['botToken']).toBe('[REDACTED]')
+    const bindings = result['bindings'] as Array<Record<string, unknown>>
+    expect(bindings[0]?.['name']).toBe('agent-a')
+    expect(bindings[0]?.['botToken']).toBe('[REDACTED]')
+    expect(bindings[1]?.['botToken']).toBe('[REDACTED]')
   })
 
   it('passes through scalar array elements unchanged', async () => {
