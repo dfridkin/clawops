@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
 **Version:** 0.9
-**Status:** M8 complete (476 unit+e2e tests); Wave 3 complete — WO-01–WO-04, WO-07–WO-09, WO-17, WO-22 done
+**Status:** M8 complete (493 unit+e2e tests); Waves 3–7 complete — WO-01–WO-15, WO-17, WO-19–WO-22 done; WO-16, WO-18, WO-23, WO-24 pending
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").

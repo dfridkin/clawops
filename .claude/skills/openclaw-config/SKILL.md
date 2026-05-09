@@ -30,6 +30,6 @@ Generate or update an `openclaw.json` config for a deployed stack.
     "auth": { "mode": "token" }
   },
   "models": {},
-  "channels": []
+  "channels": {}
 }
 ```

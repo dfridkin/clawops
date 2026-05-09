@@ -1,20 +1,21 @@
 # MCP Safety Modes
 
 clawops exposes its operations as an MCP server. By default the server enables all
-15 tools, including destructive ones like `clawops_destroy` and `clawops_up`. For
+17 tools, including destructive ones like `clawops_destroy` and `clawops_up`. For
 most agent integrations you should restrict the tool set.
 
 ## Three safety modes
 
 ### `--read-only` (recommended for most setups)
 
-Enables **8 tools** from the curated `read` toolset — no writes, no infrastructure
+Enables **9 tools** from the curated `read` toolset — no writes, no infrastructure
 changes:
 
 - `clawops_status`
 - `clawops_logs_tail`
 - `clawops_stacks_list`
 - `clawops_config_get`
+- `clawops_config_validate` — validate the remote openclaw.json (read-only check)
 - `clawops_agents_list`
 - `clawops_plan` — generate a deploy plan (no infra changes)
 - `clawops_task_status` — poll an in-progress task
@@ -25,7 +26,7 @@ human review, and run recovery diagnostics — but cannot apply any changes.
 
 ### `--no-destructive`
 
-Enables the same **8 tools** as `--read-only` when used with default toolsets. The
+Enables the same **9 tools** as `--read-only` when used with default toolsets. The
 difference is the mechanism: `--no-destructive` filters the active toolset by
 removing any tool with `destructiveHint: true`, making it composable with
 `--toolsets` for custom configurations.
@@ -35,9 +36,9 @@ block.
 
 ### Default (all tools)
 
-Enables all **15 tools**, including the 7 destructive ones: `clawops_up`,
-`clawops_destroy`, `clawops_apply`, `clawops_config_set`, `clawops_agents_restart`,
-`clawops_gateway_restart`, `clawops_workflow_deploy_app`.
+Enables all **17 tools**, including the 8 destructive ones: `clawops_up`,
+`clawops_destroy`, `clawops_apply`, `clawops_config_set`, `clawops_config_unset`,
+`clawops_agents_restart`, `clawops_gateway_restart`, `clawops_workflow_deploy_app`.
 
 Destructive tools still require `yes: true` in the tool call — without it, the
 server issues a confirmation prompt. This is a safeguard against accidental

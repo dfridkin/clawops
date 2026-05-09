@@ -79,9 +79,9 @@
               "description": "Overrides applied on top of default openclaw.json. Secrets must use $secret references, never inline values"
             },
             "channels": {
-              "type": "array",
-              "items": { "type": "string" },
-              "description": "Enabled OpenClaw channels (slack, discord, telegram, etc.)"
+              "type": "object",
+              "description": "OpenClaw channel integrations keyed by provider name (e.g. {\"discord\":{\"botToken\":\"...\"}}). Values are provider-specific config objects. Sensitive fields must use $secret references.",
+              "additionalProperties": { "type": "object" }
             }
           }
         },
