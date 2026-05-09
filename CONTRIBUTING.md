@@ -121,11 +121,24 @@ Existing ADRs:
 `/add-provider` skill walks through the full process. High-level:
 
 1. Update `spec/providers.schema.json` if adding a new provider name to the enum
-2. Run `pnpm gen:schemas`
-3. Scaffold `src/providers/<name>/` per the convention in `.claude/rules/providers.md`
-4. Write tests with mocked SDK
-5. Document in `docs/providers/<name>.md` (use `_template.md`)
-6. Add a changeset (minor severity)
+2. Run `pnpm gen:schemas` — updates `src/providers/types.ts` automatically
+3. Copy `src/providers/_adapter-template.ts` to `src/providers/<name>/index.ts`; fill in every `<PLACEHOLDER>`
+4. Write `src/providers/<name>/program.ts` — the inline Pulumi program
+5. Write tests with mocked SDK (see `tests/providers/aws/` as reference)
+6. Document in `docs/providers/<name>.md` (copy `docs/providers/_template.md`)
+7. Update `docs/providers/matrix.md` with the new column
+8. Add a changeset (minor severity)
+
+See `docs/generated-files.md` for how `pnpm gen:schemas` fits into the workflow.
+
+## Adding a CLI Command
+
+1. Copy `src/cli/commands/_command-template.ts` to `src/cli/commands/<verb>.ts`; fill in every `<PLACEHOLDER>`
+2. Register the command in `src/cli/index.ts → subCommands`
+3. Add a matching MCP tool in `spec/mcp-tools.yaml` if the command should be agent-accessible, then run `pnpm gen:schemas`
+4. Write tests in `tests/cli/<verb>.test.ts`
+5. Update `README.md` commands table + relevant docs section
+6. Add a changeset
 
 ## Adding an MCP Tool
 
@@ -133,9 +146,15 @@ Existing ADRs:
 
 1. **Check the budget first.** R1 caps tools at 30. If at the limit, talk through which to deprecate or merge.
 2. Add to `spec/mcp-tools.yaml` with all annotations and descriptions including "Do NOT use" guidance (R3)
-3. Run `pnpm gen:schemas`
+3. Run `pnpm gen:schemas` — see `docs/generated-files.md`
 4. Implement the handler in `src/mcp/tools/<toolset>/<name>.ts`
-5. Tests + changeset
+5. Wire into `src/mcp/tools/registry.ts`
+6. Tests + changeset
+
+## Generated Files
+
+`src/mcp/tools/_generated.ts` and `src/providers/types.ts` are generated from specs in `spec/`.
+Never hand-edit them. See `docs/generated-files.md` for the full workflow.
 
 ## Reporting Bugs
 

@@ -84,7 +84,7 @@ Goal: show which provider paths are supported and prove the most important ones.
 |---|---|---|
 | WO-17 — Provider capability matrix | ✅ | `docs/providers/matrix.md` |
 | WO-18 — Local VM e2e test harness | ⏳ | `tests/e2e/local/` |
-| WO-19 — Provider troubleshooting docs | ⏳ | Per-provider troubleshooting guides |
+| WO-19 — Provider troubleshooting docs | ✅ | Per-provider troubleshooting guides |
 
 ### R7 — Developer Experience
 
@@ -92,8 +92,8 @@ Goal: make external contribution safer and easier.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-20 — Contributor workflow docs | ⏳ | Improved `CONTRIBUTING.md` |
-| WO-21 — Generated spec workflow docs | ⏳ | `docs/development/spec-first-workflow.md` |
+| WO-20 — Contributor workflow docs | ✅ | Improved `CONTRIBUTING.md` |
+| WO-21 — Generated spec workflow docs | ✅ | `docs/generated-files.md` |
 
 ### R8 — Adoption and Launch
 
