@@ -23,7 +23,9 @@ All 15 clawops MCP tools, their risk classification, and which safety mode inclu
 | `clawops_plan` | cli | Low | ❌ | ✅ | ✅ |
 | `clawops_task_status` | cli | Read-only | ❌ | ✅ | ✅ |
 | `clawops_workflow_recover` | workflow | Low | ❌ | ✅ | ✅ |
+| `clawops_config_validate` | cli / read | Read-only | ✅ | ✅ | ✅ |
 | `clawops_config_set` | cli | Medium | ❌ | ❌ | ✅ |
+| `clawops_config_unset` | cli | Medium | ❌ | ❌ | ✅ |
 | `clawops_agents_restart` | cli | Medium | ❌ | ❌ | ✅ |
 | `clawops_gateway_restart` | cli | Medium | ❌ | ❌ | ✅ |
 | `clawops_up` | cli | High | ❌ | ❌ | ✅ |
@@ -31,7 +33,7 @@ All 15 clawops MCP tools, their risk classification, and which safety mode inclu
 | `clawops_apply` | cli | High | ❌ | ❌ | ✅ |
 | `clawops_workflow_deploy_app` | workflow | High | ❌ | ❌ | ✅ |
 
-`--read-only` enables 8 tools (TOOLSETS.read). `--no-destructive` enables 8 tools (same set with default toolsets; filters destructiveHint=true from any active toolset). Default enables all 15.
+`--read-only` enables 9 tools (TOOLSETS.read). `--no-destructive` enables 9 tools (same set with default toolsets; filters destructiveHint=true from any active toolset). Default enables all 17.
 
 ## Annotations
 

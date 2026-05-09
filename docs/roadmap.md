@@ -42,8 +42,8 @@ Goal: make plan/apply behavior accurate, inspectable, and safe.
 | Work order | Status | Deliverable |
 |---|---|---|
 | WO-04 — Plan/apply semantics | ✅ | `docs/plan-apply.md` |
-| WO-05 — Plan summary output | ⏳ | Per-resource summary in human + JSON output |
-| WO-06 — Apply-time drift warning | ⏳ | Warning when state changed since plan (design-first) |
+| WO-05 — Plan summary output | ✅ | Per-resource summary in human + JSON output |
+| WO-06 — Apply-time drift warning | ✅ | Warning when state changed since plan (design-first) |
 
 ### R3 — Security and MCP Safety
 
@@ -51,9 +51,9 @@ Goal: give users a clear safety model for clawops as privileged tooling and MCP 
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-07 — MCP safety docs + risk matrix | ⏳ | `docs/security/mcp-safety.md`, `docs/security/tool-risk-matrix.md` |
-| WO-08 — Read-only / no-destructive docs | ⏳ | `docs/mcp/claude-code.md`, `docs/mcp/read-only.md` |
-| WO-09 — Audit log + redaction docs | ⏳ | `docs/security/audit-logs.md`, `docs/security/redaction.md` |
+| WO-07 — MCP safety docs + risk matrix | ✅ | `docs/security/mcp-safety.md`, `docs/security/tool-risk-matrix.md` |
+| WO-08 — Read-only / no-destructive docs | ✅ | `docs/mcp/claude-code.md`, `docs/mcp/read-only.md` |
+| WO-09 — Audit log + redaction docs | ✅ | `docs/security/audit-logs.md`, `docs/security/redaction.md` |
 
 ### R4 — Production Operations
 
@@ -61,10 +61,10 @@ Goal: make single-node deployments credible for ongoing use.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-10 — Operations guide | ⏳ | `docs/operations.md` |
-| WO-11 — Backup/restore validation | ⏳ | `docs/backup-restore.md` |
+| WO-10 — Operations guide | ✅ | `docs/operations.md` |
+| WO-11 — Backup/restore validation | ✅ | `docs/backup-restore.md` |
 | WO-12 — Health check expansion | ✅ | Deeper status checks beyond "container running" |
-| WO-13 — Upgrade/rollback design | ⏳ | `docs/upgrade-rollback.md` |
+| WO-13 — Upgrade/rollback design | ✅ | `docs/upgrade-rollback.md` |
 
 ### R5 — Configuration and Secrets
 

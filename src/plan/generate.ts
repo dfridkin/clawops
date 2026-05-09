@@ -26,7 +26,7 @@ export interface DeployPlan {
     openclaw: {
       version: string
       config?: Record<string, unknown>
-      channels?: string[]
+      channels?: Record<string, unknown>
     }
     secrets?: Array<{
       name: string
