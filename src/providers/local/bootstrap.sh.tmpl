@@ -1,49 +1,124 @@
 #!/bin/bash
 # clawops bootstrap script — idempotent; safe to re-run.
 # Rendered by clawops and executed via SSH on the target host.
+# Supports: Ubuntu/Debian, RHEL/Fedora/CentOS (dnf/yum), Alpine (apk), macOS.
 set -euo pipefail
 
 OPENCLAW_VERSION="{{OPENCLAW_VERSION}}"
 OPENCLAW_PORT=18789
-OPENCLAW_USER=clawops
-OPENCLAW_CONFIG=/home/${OPENCLAW_USER}/openclaw.json
-SERVICE_FILE=/etc/systemd/system/openclaw.service
 
-# ── Create clawops user ────────────────────────────────────────────────────────
-id -u "${OPENCLAW_USER}" &>/dev/null || useradd -m -s /bin/bash "${OPENCLAW_USER}"
+# ── OS detection ──────────────────────────────────────────────────────────────
+OS="$(uname -s)"
+
+case "$OS" in
+  Linux)
+    if command -v apt-get &>/dev/null; then
+      PKG_MANAGER=apt
+    elif command -v dnf &>/dev/null; then
+      PKG_MANAGER=dnf
+    elif command -v yum &>/dev/null; then
+      PKG_MANAGER=yum
+    elif command -v apk &>/dev/null; then
+      PKG_MANAGER=apk
+    else
+      echo "clawops: unsupported Linux distribution (no apt/dnf/yum/apk found)" >&2
+      exit 1
+    fi
+    OPENCLAW_USER=clawops
+    OPENCLAW_CONFIG=/home/${OPENCLAW_USER}/openclaw.json
+    ;;
+  Darwin)
+    PKG_MANAGER=darwin
+    # On macOS we run as the SSH user — no system user creation needed.
+    OPENCLAW_USER="$(id -un)"
+    OPENCLAW_CONFIG="${HOME}/.config/openclaw/config.json"
+    mkdir -p "${HOME}/.config/openclaw"
+    ;;
+  *)
+    echo "clawops: unsupported OS: $OS" >&2
+    exit 1
+    ;;
+esac
+
+# ── Create clawops user (Linux only) ─────────────────────────────────────────
+if [ "$OS" = "Linux" ]; then
+  id -u "${OPENCLAW_USER}" &>/dev/null || useradd -m -s /bin/bash "${OPENCLAW_USER}"
+fi
 
 # ── Install Docker ─────────────────────────────────────────────────────────────
 if ! command -v docker &>/dev/null; then
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -q
-  apt-get install -y -q ca-certificates curl gnupg lsb-release
-  install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-  chmod a+r /etc/apt/keyrings/docker.gpg
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-    https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
-    > /etc/apt/sources.list.d/docker.list
-  apt-get update -q
-  apt-get install -y -q docker-ce docker-ce-cli containerd.io
-  systemctl enable --now docker
+  case "$PKG_MANAGER" in
+    darwin)
+      echo "clawops: Docker not found on macOS." >&2
+      echo "Install one of:" >&2
+      echo "  Docker Desktop: https://www.docker.com/products/docker-desktop/" >&2
+      echo "  Homebrew:       brew install --cask docker" >&2
+      echo "  Colima (FOSS):  brew install colima docker && colima start" >&2
+      exit 1
+      ;;
+    apt)
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update -q
+      apt-get install -y -q ca-certificates curl gnupg lsb-release
+      install -m 0755 -d /etc/apt/keyrings
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+        | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+      chmod a+r /etc/apt/keyrings/docker.gpg
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+        https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+        > /etc/apt/sources.list.d/docker.list
+      apt-get update -q
+      apt-get install -y -q docker-ce docker-ce-cli containerd.io
+      systemctl enable --now docker
+      ;;
+    dnf|yum)
+      $PKG_MANAGER install -y dnf-plugins-core 2>/dev/null || $PKG_MANAGER install -y yum-utils
+      $PKG_MANAGER config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+      $PKG_MANAGER install -y docker-ce docker-ce-cli containerd.io
+      systemctl enable --now docker
+      ;;
+    apk)
+      apk add --no-cache docker
+      rc-update add docker boot
+      service docker start
+      ;;
+  esac
 fi
 
-usermod -aG docker "${OPENCLAW_USER}" || true
+# ── Verify Docker daemon is reachable ─────────────────────────────────────────
+if ! docker info &>/dev/null; then
+  echo "clawops: Docker is installed but the daemon is not running." >&2
+  if [ "$PKG_MANAGER" = "darwin" ]; then
+    echo "Start Docker Desktop or run: colima start" >&2
+  else
+    echo "Try: systemctl start docker" >&2
+  fi
+  exit 1
+fi
+
+# ── Add clawops user to docker group (Linux only) ────────────────────────────
+if [ "$OS" = "Linux" ]; then
+  usermod -aG docker "${OPENCLAW_USER}" || true
+fi
 
 # ── Pull OpenClaw image ────────────────────────────────────────────────────────
 docker pull "ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}"
 
 # ── Write default openclaw.json if absent ─────────────────────────────────────
+# clawops up --config will overwrite this with the plan config overlay.
 if [ ! -f "${OPENCLAW_CONFIG}" ]; then
   cat > "${OPENCLAW_CONFIG}" <<'OPENCLAWJSON'
 {"meta":{"lastTouchedVersion":"2026.4"},"gateway":{"port":18789,"auth":{"mode":"token"}},"models":{},"channels":{}}
 OPENCLAWJSON
-  chown "${OPENCLAW_USER}:${OPENCLAW_USER}" "${OPENCLAW_CONFIG}"
+  if [ "$OS" = "Linux" ]; then
+    chown "${OPENCLAW_USER}:${OPENCLAW_USER}" "${OPENCLAW_CONFIG}"
+  fi
 fi
 
-# ── Write systemd service unit ─────────────────────────────────────────────────
-cat > "${SERVICE_FILE}" <<UNIT
+# ── Start service ─────────────────────────────────────────────────────────────
+if [ "$OS" = "Linux" ]; then
+  SERVICE_FILE=/etc/systemd/system/openclaw.service
+  cat > "${SERVICE_FILE}" <<UNIT
 [Unit]
 Description=OpenClaw gateway
 After=docker.service
@@ -64,8 +139,21 @@ ExecStop=/usr/bin/docker stop openclaw
 [Install]
 WantedBy=multi-user.target
 UNIT
+  systemctl daemon-reload
+  systemctl enable openclaw
+  systemctl restart openclaw
 
-systemctl daemon-reload
-systemctl enable openclaw
-systemctl restart openclaw
+elif [ "$OS" = "Darwin" ]; then
+  # macOS: no systemd; run as foreground-detached container.
+  # LaunchAgent support is a future enhancement.
+  docker stop openclaw 2>/dev/null || true
+  docker rm openclaw 2>/dev/null || true
+  docker run -d \
+    --name openclaw \
+    --restart unless-stopped \
+    -p "${OPENCLAW_PORT}:${OPENCLAW_PORT}" \
+    -v "${OPENCLAW_CONFIG}":/app/config.json:ro \
+    "ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}"
+fi
+
 echo "clawops: bootstrap complete"

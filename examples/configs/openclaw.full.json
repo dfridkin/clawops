@@ -1,0 +1,25 @@
+{
+  "meta": { "lastTouchedVersion": "2026.4" },
+  "gateway": {
+    "port": 18789,
+    "auth": { "mode": "token", "token": "YOUR_GATEWAY_TOKEN" }
+  },
+  "models": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "apiKey": "$secret:OPENAI_API_KEY"
+  },
+  "channels": {
+    "discord": {
+      "token": "$secret:DISCORD_BOT_TOKEN",
+      "guildId": "YOUR_GUILD_ID"
+    },
+    "telegram": {
+      "token": "$secret:TELEGRAM_BOT_TOKEN"
+    },
+    "slack": {
+      "botToken": "$secret:SLACK_BOT_TOKEN",
+      "appToken": "$secret:SLACK_APP_TOKEN"
+    }
+  }
+}

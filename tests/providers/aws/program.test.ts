@@ -192,7 +192,7 @@ describe('awsProgram — bedrockEnabled', () => {
     await runProgram()
 
     const attachments = created.filter(r => r.type === 'aws:iam/rolePolicyAttachment:RolePolicyAttachment')
-    const bedrock = attachments.find(r => String(r.inputs['policyArn']).includes('BedrockReadOnly'))
+    const bedrock = attachments.find(r => String(r.inputs['policyArn']).includes('BedrockFullAccess'))
     expect(bedrock).toBeDefined()
   })
 
@@ -202,7 +202,7 @@ describe('awsProgram — bedrockEnabled', () => {
     await runProgram()
 
     const attachments = created.filter(r => r.type === 'aws:iam/rolePolicyAttachment:RolePolicyAttachment')
-    const bedrock = attachments.find(r => String(r.inputs['policyArn']).includes('BedrockReadOnly'))
+    const bedrock = attachments.find(r => String(r.inputs['policyArn']).includes('BedrockFullAccess'))
     expect(bedrock).toBeUndefined()
   })
 })

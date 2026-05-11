@@ -6,9 +6,7 @@ import type { ConfigGetInput, ConfigSetInput, ConfigUnsetInput, ConfigValidateIn
 import { buildContext } from '../../../cli/context.js'
 import { acquireSession, drainPool } from '../../../transport/pool.js'
 import { resolveConn, okText, errText } from '../_conn.js'
-
-const OPENCLAW_CONFIG = '/home/clawops/openclaw.json'
-const OPENCLAW_TMP = '/tmp/clawops-config.json.tmp'
+import { OPENCLAW_CONFIG, atomicWriteConfig, restartGateway as restartGatewayShared } from '../../../plan/remote-config.js'
 
 const VALID_AUTH_MODES = new Set(['none', 'token', 'password', 'trusted-proxy'])
 
@@ -63,14 +61,20 @@ export async function handleConfigSet(input: ConfigSetInput, server: McpServer):
     try { parsedValue = JSON.parse(input.value) } catch { /* keep string */ }
     setPath(cfg, input.key, parsedValue)
 
-    const writeErr = await atomicWrite(session, cfg, ac.signal)
-    if (writeErr) return errText(writeErr)
+    try {
+      await atomicWriteConfig(session, cfg, ac.signal)
+    } catch (err) {
+      return errText(`Failed to write config: ${(err as Error).message}`)
+    }
 
     let note = ''
     if (input.restart) {
-      const restartErr = await restartGateway(session, ac.signal)
-      if (restartErr) return errText(restartErr)
-      note = ' (gateway restarted)'
+      try {
+        await restartGatewayShared(session, ac.signal)
+        note = ' (gateway restarted)'
+      } catch (err) {
+        return errText(`Gateway restart failed: ${(err as Error).message}`)
+      }
     }
     return okText(`Config set: ${input.key}${note}`)
   } finally {
@@ -107,14 +111,20 @@ export async function handleConfigUnset(input: ConfigUnsetInput, server: McpServ
 
     deletePath(cfg, input.key)
 
-    const writeErr = await atomicWrite(session, cfg, ac.signal)
-    if (writeErr) return errText(writeErr)
+    try {
+      await atomicWriteConfig(session, cfg, ac.signal)
+    } catch (err) {
+      return errText(`Failed to write config: ${(err as Error).message}`)
+    }
 
     let note = ''
     if (input.restart) {
-      const restartErr = await restartGateway(session, ac.signal)
-      if (restartErr) return errText(restartErr)
-      note = ' (gateway restarted)'
+      try {
+        await restartGatewayShared(session, ac.signal)
+        note = ' (gateway restarted)'
+      } catch (err) {
+        return errText(`Gateway restart failed: ${(err as Error).message}`)
+      }
     }
     return okText(`Config key removed: ${input.key}${note}`)
   } finally {
@@ -144,7 +154,7 @@ export async function handleConfigValidate(input: ConfigValidateInput, _server: 
   }
 }
 
-// ── Shared helpers ────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getPath(obj: Record<string, unknown>, dotKey: string): unknown {
   return dotKey.split('.').reduce<unknown>((cur, k) => {
@@ -173,37 +183,6 @@ function deletePath(obj: Record<string, unknown>, dotKey: string): void {
     cur = cur[k] as Record<string, unknown>
   }
   delete cur[keys[keys.length - 1]!]
-}
-
-interface SshSession {
-  exec(cmd: string, signal?: AbortSignal): Promise<{ stdout: string; stderr: string; code: number }>
-}
-
-async function atomicWrite(session: SshSession, cfg: Record<string, unknown>, signal: AbortSignal): Promise<string | null> {
-  const json = JSON.stringify(cfg, null, 2)
-  const b64 = Buffer.from(json, 'utf-8').toString('base64')
-  const cmd =
-    `echo '${b64}' | base64 -d > ${OPENCLAW_TMP} && ` +
-    `mv ${OPENCLAW_TMP} ${OPENCLAW_CONFIG} && ` +
-    `chown clawops:clawops ${OPENCLAW_CONFIG}`
-  const result = await session.exec(cmd, signal)
-  return result.code !== 0 ? `Failed to write config: ${result.stderr}` : null
-}
-
-async function restartGateway(session: SshSession, signal: AbortSignal): Promise<string | null> {
-  const imgResult = await session.exec(
-    `docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo 'ghcr.io/openclaw/openclaw:stable'`,
-    signal,
-  )
-  const image = imgResult.stdout.trim()
-  const cmd = [
-    'docker stop openclaw 2>/dev/null || true',
-    'docker rm openclaw 2>/dev/null || true',
-    `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 ` +
-      `-v ${OPENCLAW_CONFIG}:/app/config.json:ro ${image}`,
-  ].join(' && ')
-  const result = await session.exec(cmd, signal)
-  return result.code !== 0 ? `Gateway restart failed: ${result.stderr}` : null
 }
 
 export function validateOpenclawConfig(cfg: Record<string, unknown>): string[] {

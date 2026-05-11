@@ -1,0 +1,97 @@
+# spec/integrations.yaml — OpenClaw channel integration catalog for the setup wizard.
+# Read at runtime by src/cli/commands/setup.ts — not compiled or code-generated.
+#
+# Each integration maps to a key in openclaw.json's `channels` object.
+# infraRequired: true means a publicly reachable webhook URL must be registered
+# with the provider after the stack is deployed.
+
+integrations:
+  - id: discord
+    channelKey: discord
+    displayName: Discord
+    description: Connect OpenClaw agents to a Discord server via bot
+    infraRequired: false
+    fields:
+      - name: botToken
+        label: Bot token
+        description: Bot token from the Discord Developer Portal (Bot → Token)
+        sensitive: true
+        envDefault: OPENCLAW_DISCORD_TOKEN
+    setupUrl: https://discord.com/developers/applications
+
+  - id: telegram
+    channelKey: telegram
+    displayName: Telegram
+    description: Connect OpenClaw agents to a Telegram bot
+    infraRequired: false
+    fields:
+      - name: botToken
+        label: Bot token
+        description: Token from @BotFather (/newbot)
+        sensitive: true
+        envDefault: OPENCLAW_TELEGRAM_TOKEN
+    setupUrl: https://t.me/BotFather
+
+  - id: slack
+    channelKey: slack
+    displayName: Slack
+    description: Connect OpenClaw agents to a Slack workspace via app
+    infraRequired: true
+    infraNote: >
+      After deployment, register the gateway webhook URL in your Slack app
+      configuration at api.slack.com (Event Subscriptions → Request URL).
+    fields:
+      - name: botToken
+        label: Bot OAuth token
+        description: "Bot User OAuth Token (starts with xoxb-)"
+        sensitive: true
+        envDefault: OPENCLAW_SLACK_TOKEN
+      - name: signingSecret
+        label: Signing secret
+        description: App signing secret from Basic Information → App Credentials
+        sensitive: true
+        envDefault: OPENCLAW_SLACK_SIGNING_SECRET
+    setupUrl: https://api.slack.com/apps
+
+  - id: whatsapp
+    channelKey: whatsapp
+    displayName: WhatsApp (via WABA)
+    description: Connect OpenClaw agents to WhatsApp via the Meta Business API
+    infraRequired: true
+    infraNote: >
+      After deployment, register the gateway webhook URL in the Meta Developer
+      Console (WhatsApp → Configuration → Webhook). The gateway URL is printed
+      at the end of setup.
+    fields:
+      - name: phoneNumberId
+        label: Phone number ID
+        description: Phone Number ID from Meta Developer Console → WhatsApp → API Setup
+        sensitive: false
+        envDefault: ""
+      - name: accessToken
+        label: Access token
+        description: Permanent system user access token from Meta Business Suite
+        sensitive: true
+        envDefault: OPENCLAW_WHATSAPP_TOKEN
+    setupUrl: https://developers.facebook.com/apps
+
+  - id: teams
+    channelKey: teams
+    displayName: Microsoft Teams
+    description: Connect OpenClaw agents to a Microsoft Teams channel via bot
+    infraRequired: true
+    infraNote: >
+      After deployment, update the bot's messaging endpoint in Azure Bot Service
+      to the gateway webhook URL.
+    fields:
+      - name: appId
+        label: App (client) ID
+        description: Application ID from Azure Active Directory app registration
+        sensitive: false
+        envDefault: ""
+      - name: appPassword
+        label: App password
+        description: Client secret from the Azure app registration
+        sensitive: true
+        envDefault: OPENCLAW_TEAMS_APP_PASSWORD
+    setupUrl: https://portal.azure.com/

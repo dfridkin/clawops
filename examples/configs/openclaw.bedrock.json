@@ -1,0 +1,12 @@
+{
+  "meta": { "lastTouchedVersion": "2026.4" },
+  "gateway": {
+    "port": 18789,
+    "auth": { "mode": "token", "token": "YOUR_GATEWAY_TOKEN" }
+  },
+  "models": {
+    "provider": "bedrock",
+    "modelId": "anthropic.claude-sonnet-4-6"
+  },
+  "channels": {}
+}

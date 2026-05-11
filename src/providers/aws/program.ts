@@ -142,7 +142,8 @@ export const awsProgram: PulumiFn = async () => {
   if (bedrockEnabled) {
     new aws.iam.RolePolicyAttachment('clawops-bedrock', {
       role: role.name,
-      policyArn: 'arn:aws:iam::aws:policy/AmazonBedrockReadOnly',
+      // FullAccess required for bedrock:InvokeModel — ReadOnly only covers describe/list.
+      policyArn: 'arn:aws:iam::aws:policy/AmazonBedrockFullAccess',
     })
   }
 
@@ -202,9 +203,10 @@ export const awsProgram: PulumiFn = async () => {
 }
 
 function makeStartupScript(openclawVersion: string, bedrockEnabled: boolean): string {
-  const bedrockEnvFile = bedrockEnabled
-    ? `\n# Write AWS_PROFILE for Bedrock\necho "AWS_PROFILE=default" > /etc/openclaw.env\n`
+  const bedrockEnvSetup = bedrockEnabled
+    ? '\n# Write AWS_PROFILE so the container can use the instance role for Bedrock\necho "AWS_PROFILE=default" > /etc/openclaw.env\n'
     : ''
+  const bedrockEnvFlag = bedrockEnabled ? '  --env-file /etc/openclaw.env \\\\\n' : ''
 
   return `#!/bin/bash
 set -euo pipefail
@@ -215,8 +217,9 @@ mkdir -p /home/clawops/.ssh
 chmod 700 /home/clawops/.ssh
 chown clawops:clawops /home/clawops/.ssh
 
-# Install Docker if not present
+# Install Docker if not present (Ubuntu/Debian only; AWS AMI is ubuntu-22.04)
 if ! command -v docker &>/dev/null; then
+  export DEBIAN_FRONTEND=noninteractive
   apt-get update -q
   apt-get install -y -q ca-certificates curl gnupg lsb-release
   install -m 0755 -d /etc/apt/keyrings
@@ -232,12 +235,13 @@ if ! command -v docker &>/dev/null; then
 fi
 
 usermod -aG docker clawops
-${bedrockEnvFile}
+${bedrockEnvSetup}
 # Pull OpenClaw image
 OPENCLAW_VERSION="${openclawVersion}"
 docker pull ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION}
 
 # Create default openclaw.json if not present
+# apply.ts will overwrite this with the plan's config overlay post-provisioning.
 OPENCLAW_CONFIG=/home/clawops/openclaw.json
 if [ ! -f "\${OPENCLAW_CONFIG}" ]; then
   cat > "\${OPENCLAW_CONFIG}" <<'OPENCLAWJSON'
@@ -254,6 +258,6 @@ docker run -d \\
   --restart unless-stopped \\
   -p ${GATEWAY_PORT}:${GATEWAY_PORT} \\
   -v "\${OPENCLAW_CONFIG}":/app/config.json:ro \\
-  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION}
+${bedrockEnvFlag}  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION}
 `
 }

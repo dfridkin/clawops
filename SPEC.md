@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
 **Version:** 0.9
-**Status:** M8 complete (493 unit+e2e tests); Waves 3–7 complete — WO-01–WO-15, WO-17, WO-19–WO-22 done; WO-16, WO-18, WO-23, WO-24 pending
+**Status:** M8 complete (493 unit+e2e tests); Waves 3–8B complete — WO-01–WO-17, WO-19–WO-22 done; WO-18, WO-23, WO-24 pending
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -1037,7 +1037,7 @@ Deliverables:
 Status:
 - [x] WO-14: Config validation design
 - [x] WO-15: Secret redaction audit
-- [ ] WO-16: Model/channel config wizard design
+- [x] WO-16: Model/channel config wizard design + implementation (`clawops setup`)
 
 ### R6 — Provider Reliability
 

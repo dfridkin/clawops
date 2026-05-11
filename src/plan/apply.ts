@@ -3,7 +3,10 @@
 import { buildContext } from '../cli/context.js'
 import { UsageError } from '../errors/index.js'
 import { validatePlan } from './validate.js'
+import { resolveSecrets } from './secrets.js'
+import { readRemoteConfig, atomicWriteConfig, restartGateway, deepMerge } from './remote-config.js'
 import type { DeployPlan } from './generate.js'
+import type { StackOutputs } from '../providers/types.js'
 
 export interface ApplyPlanOpts {
   onOutput?: (line: string) => void
@@ -48,6 +51,12 @@ export async function applyPlan(
   }
   await stack.setConfig('openclawVersion', { value: plan.spec.openclaw.version })
 
+  // Enable Bedrock IAM attachment when the plan selects the bedrock provider.
+  const modelProvider = (plan.spec.openclaw.config?.['models'] as Record<string, unknown> | undefined)?.['provider']
+  if (modelProvider === 'bedrock') {
+    await stack.setConfig('bedrockEnabled', { value: 'true' })
+  }
+
   // Drift detection (ADR 0008): warn if stack was updated after the plan was generated.
   if (plan.metadata.stackVersion !== undefined) {
     const currentInfo = await stack.info()
@@ -77,9 +86,58 @@ export async function applyPlan(
     }
   }
 
+  // Post-provisioning: write config overlay + channels to the remote openclaw.json.
+  const hasOverlay = plan.spec.openclaw.config !== undefined || plan.spec.openclaw.channels !== undefined
+  if (hasOverlay) {
+    await applyConfigOverlay(plan, outputs, ctx, opts?.signal)
+  }
+
   return {
     outputs,
     changeSummary,
     durationMs: Date.now() - start,
+  }
+}
+
+async function applyConfigOverlay(
+  plan: DeployPlan,
+  outputs: Record<string, unknown>,
+  ctx: Awaited<ReturnType<typeof buildContext>>,
+  signal?: AbortSignal,
+): Promise<void> {
+  const { connect } = await import('../transport/ssh.js')
+
+  const connInfo = ctx.adapter.getConnectionInfo(outputs as StackOutputs)
+  const session = await connect({
+    host: connInfo.host,
+    port: connInfo.port,
+    user: connInfo.user,
+    privateKeyPath: connInfo.privateKeyPath,
+    knownHostsPath: connInfo.knownHostsPath,
+    signal,
+  })
+
+  try {
+    const remote = await readRemoteConfig(session, signal)
+
+    // Resolve $secret: references in the config overlay.
+    const configOverlay = plan.spec.openclaw.config ?? {}
+    const resolvedOverlay = resolveSecrets(
+      configOverlay as Record<string, unknown>,
+      (plan.spec.secrets ?? []) as Array<{ name: string; source: 'env' | 'aws-sm' | 'aws-ssm' | 'gcp-sm' | 'azure-kv' | 'file'; ref?: string }>,
+    )
+
+    // Merge channels separately so they replace rather than deep-merge.
+    const merged = deepMerge(remote, {
+      ...resolvedOverlay,
+      ...(plan.spec.openclaw.channels !== undefined
+        ? { channels: plan.spec.openclaw.channels }
+        : {}),
+    })
+
+    await atomicWriteConfig(session, merged, signal)
+    await restartGateway(session, signal)
+  } finally {
+    session.close()
   }
 }

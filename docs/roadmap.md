@@ -32,8 +32,8 @@ Goal: let someone understand, install, deploy, and validate clawops quickly.
 | Work order | Status | Deliverable |
 |---|---|---|
 | WO-01 — README rewrite | ✅ | Clear positioning, local VM quickstart, Claude Code connect |
-| WO-02 — Local/VPS quickstart | ⏳ | `docs/examples/local-vm.md` |
-| WO-03 — Example OpenClaw configs | ⏳ | `examples/configs/` with model and channel examples |
+| WO-02 — Local/VPS quickstart | ✅ | `examples/local-vm.md` |
+| WO-03 — Example OpenClaw configs | ✅ | `examples/configs/` with model and channel examples |
 
 ### R2 — Plan/Apply Trust Model
 
@@ -74,7 +74,7 @@ Goal: make real OpenClaw configuration safe, inspectable, and less confusing.
 |---|---|---|
 | WO-14 — Config validation | ✅ | `clawops config validate` command |
 | WO-15 — Secret redaction audit | ✅ | Centralized redaction utility + tests |
-| WO-16 — Config wizard design | ⏳ | `docs/config-wizard-design.md` |
+| WO-16 — Config wizard design + implementation | ✅ | `clawops setup` — interactive first-run wizard |
 
 ### R6 — Provider Reliability
 
