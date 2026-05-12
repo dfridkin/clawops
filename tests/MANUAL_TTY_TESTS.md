@@ -52,11 +52,15 @@ pnpm dev setup
 | Model | **GPT-4o** |
 | API key storage | **Environment variable** |
 | Env var name | `OPENAI_API_KEY` |
-| Set up integrations? | **Yes** |
-| Select integrations | **Discord** + **Telegram** (Space to select each, Enter to confirm) |
+| Connect to a chat app? | **Yes** |
+| Connect Discord? | **Yes** |
 | Discord token storage | **Environment variable** → `DISCORD_BOT_TOKEN` |
 | Discord guild ID | `123456789` |
+| Connect Telegram? | **Yes** |
 | Telegram token storage | **Environment variable** → `TELEGRAM_BOT_TOKEN` |
+| Connect Slack? | **No** |
+| Connect WhatsApp? | **No** |
+| Connect Teams? | **No** |
 | Directory to save generated files | `/tmp` |
 | Write MCP config to Claude config file? | **Yes** |
 | Run init and deploy now? | **No** (first pass — verify file output only) |
@@ -71,7 +75,7 @@ cat /tmp/openclaw-local-test.json
 - [ ] `models.apiKey` = `"$secret:OPENAI_API_KEY"` (not the actual key value)
 - [ ] `channels` is an **object**, not an array: `{ "discord": {...}, "telegram": {...} }`
 - [ ] `channels.discord.token` = `"$secret:DISCORD_BOT_TOKEN"`
-- [ ] Both Discord AND Telegram present (multi-select worked)
+- [ ] Both Discord AND Telegram present (each confirmed via individual y/n prompt)
 - [ ] MCP config written: `cat ~/Library/Application\ Support/Claude/claude_desktop_config.json | python3 -m json.tool`
   - should contain `"clawops": { "command": "clawops", "args": ["mcp", "serve", "--read-only"] }`
 

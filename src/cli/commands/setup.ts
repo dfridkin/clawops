@@ -30,10 +30,10 @@ interface InquirerInstance {
 interface ModelEntry {
   id: string
   displayName: string
-  modelId?: string   // Bedrock-specific API model ID
+  modelId?: string
   family?: string
   recommended?: boolean
-  pullSuffix?: string  // Ollama tag hint
+  pullSuffix?: string
 }
 
 interface ModelProvider {
@@ -94,18 +94,21 @@ export default defineCommand({
     process.on('SIGINT', () => { ac.abort(); process.exit(130) })
     process.on('SIGTERM', () => { ac.abort(); process.exit(143) })
 
+    process.stdout.write('\nWelcome to clawops setup. This wizard will help you deploy OpenClaw\n')
+    process.stdout.write('and connect it to your AI tools. It takes about 2 minutes.\n\n')
+
     // ── Step 1: Deployment type ────────────────────────────────────────────────
     const { deploymentType } = await inquirer.prompt<{ deploymentType: 'cloud' | 'local' }>([{
       type: 'list',
       name: 'deploymentType',
-      message: 'What type of deployment?',
+      message: 'Where would you like to run OpenClaw?',
       choices: [
-        { name: 'Cloud  (AWS, GCP, or Azure)', value: 'cloud' },
-        { name: 'Local  (SSH to an existing Linux or macOS machine)', value: 'local' },
+        { name: 'On a cloud server — rent a new server automatically (AWS, GCP, or Azure)', value: 'cloud' },
+        { name: 'On a server I already have — connect over SSH (Linux or macOS)', value: 'local' },
       ],
     }])
 
-    // ── Step 2: Provider ───────────────────────────────────────────────────────
+    // ── Step 2: Provider / connection details ──────────────────────────────────
     let provider: 'aws' | 'gcp' | 'azure' | 'local'
     let localHost = ''
     let localUser = 'ubuntu'
@@ -116,23 +119,44 @@ export default defineCommand({
       const answer = await inquirer.prompt<{ provider: 'aws' | 'gcp' | 'azure' }>([{
         type: 'list',
         name: 'provider',
-        message: 'Which cloud provider?',
+        message: 'Which cloud service would you like to use?',
         choices: [
-          { name: 'AWS   (EC2 + Elastic IP)', value: 'aws' },
-          { name: 'GCP   (Compute Engine + static IP)', value: 'gcp' },
-          { name: 'Azure (VM + public IP)', value: 'azure' },
+          { name: 'Amazon Web Services (AWS)  — most popular, widest region coverage', value: 'aws' },
+          { name: 'Google Cloud (GCP)         — good pricing, strong in AI workloads', value: 'gcp' },
+          { name: 'Microsoft Azure            — best if your team already uses Microsoft', value: 'azure' },
         ],
       }])
       provider = answer.provider
     } else {
       provider = 'local'
+      info('We\'ll connect to your server over SSH to install and configure OpenClaw.\n')
       const localAnswers = await inquirer.prompt<{
         host: string; port: number; user: string; keyPath: string
       }>([
-        { type: 'input', name: 'host', message: 'SSH host (IP or hostname):', validate: (v: string) => v.trim() !== '' || 'Required' },
-        { type: 'number', name: 'port', message: 'SSH port:', default: 22 },
-        { type: 'input', name: 'user', message: 'SSH user:', default: localUser },
-        { type: 'input', name: 'keyPath', message: 'SSH private key path:', default: localKeyPath },
+        {
+          type: 'input',
+          name: 'host',
+          message: 'Server address: (IP address or hostname, e.g. 192.168.1.100 or myserver.example.com)',
+          validate: (v: string) => v.trim() !== '' || 'Please enter a server address',
+        },
+        {
+          type: 'number',
+          name: 'port',
+          message: 'SSH port: (almost always 22 — press Enter to accept)',
+          default: 22,
+        },
+        {
+          type: 'input',
+          name: 'user',
+          message: 'SSH username: (the account you log in with — usually "ubuntu" on Linux servers)',
+          default: localUser,
+        },
+        {
+          type: 'input',
+          name: 'keyPath',
+          message: `SSH private key file: (the key file on your computer used to log in — usually ~/.ssh/id_rsa)`,
+          default: localKeyPath,
+        },
       ])
       localHost = localAnswers.host
       localPort = localAnswers.port
@@ -141,6 +165,7 @@ export default defineCommand({
     }
 
     // ── Step 3: Stack basics ───────────────────────────────────────────────────
+    process.stdout.write('\n')
     const stackAnswers = await inquirer.prompt<{
       stackName: string; region: string; instanceSize: string;
       stateBucket: string; sshKeyPath: string; sshCidr: string; openclawVersion: string
@@ -148,55 +173,59 @@ export default defineCommand({
       {
         type: 'input',
         name: 'stackName',
-        message: 'Stack name:',
+        message: 'Deployment name: (a short label for this install, e.g. "prod", "home", "team-dev")',
         default: 'prod',
-        validate: (v: string) => /^[a-z][a-z0-9-]{0,62}$/.test(v) || 'Lowercase letters, numbers, hyphens only',
+        validate: (v: string) => /^[a-z][a-z0-9-]{0,62}$/.test(v) || 'Use lowercase letters, numbers, and hyphens only',
       },
       ...(provider !== 'local' ? [
         {
           type: 'input',
           name: 'region',
-          message: `Region (default: ${defaultRegion(provider)}):`,
+          message: `Server region: (the geographic area where your server will live — pick closest to your users)`,
           default: defaultRegion(provider),
         },
         {
           type: 'list',
           name: 'instanceSize',
-          message: 'Instance size:',
+          message: 'Server size: (bigger = faster, but costs more per month)',
           choices: instanceChoices(provider),
         },
         {
           type: 'input',
           name: 'stateBucket',
-          message: `${stateLabel(provider)} bucket name for Pulumi state:`,
-          validate: (v: string) => v.trim() !== '' || 'Required',
+          message: `${stateLabel(provider)} bucket name: (a storage bucket that tracks what's deployed — create one first if you haven't)`,
+          validate: (v: string) => v.trim() !== '' || 'Required — create a bucket in your cloud console first',
         },
         {
           type: 'input',
           name: 'sshKeyPath',
-          message: 'SSH public key path:',
+          message: 'SSH public key file: (the .pub file that goes with your private key — used to access the new server)',
           default: `${os.homedir()}/.ssh/id_rsa.pub`,
         },
         {
           type: 'input',
           name: 'sshCidr',
-          message: 'Allowed SSH CIDR (your public IP/32 or 0.0.0.0/0 for open):',
+          message: 'Restrict SSH access to: (your IP address for security, or 0.0.0.0/0 to allow access from anywhere)',
           default: '0.0.0.0/0',
         },
       ] as InquirerQuestion[] : []),
       {
         type: 'input',
         name: 'openclawVersion',
-        message: 'OpenClaw version:',
+        message: 'OpenClaw version: ("stable" for the latest release, or a specific version like "2026.4")',
         default: 'stable',
       },
     ])
 
     // ── Step 4: LLM provider ───────────────────────────────────────────────────
+    process.stdout.write('\n')
+    info('Now let\'s pick the AI model that OpenClaw will use to answer questions.')
+    info('You\'ll need an API key from your chosen provider (except Bedrock and Ollama).\n')
+
     const { modelProviderId } = await inquirer.prompt<{ modelProviderId: string }>([{
       type: 'list',
       name: 'modelProviderId',
-      message: 'Which LLM provider should OpenClaw use?',
+      message: 'Which AI provider do you want to use?',
       choices: catalogs.models.map((p) => ({ name: p.displayName, value: p.id })),
     }])
 
@@ -207,7 +236,7 @@ export default defineCommand({
     const { selectedModelId } = await inquirer.prompt<{ selectedModelId: string }>([{
       type: 'list',
       name: 'selectedModelId',
-      message: `Which ${modelProvider.displayName} model?`,
+      message: `Which ${modelProvider.displayName} model should OpenClaw use?`,
       choices: modelProvider.models.map((m) => ({
         name: m.family ? `[${m.family}] ${m.displayName}` : m.displayName,
         value: m.id,
@@ -218,13 +247,14 @@ export default defineCommand({
     const selectedModel = modelProvider.models.find((m) => m.id === selectedModelId)!
 
     if (modelProvider.credentialSource === 'api-key') {
+      const keyLabel = `${modelProvider.displayName} API key`
       const { secretSource } = await inquirer.prompt<{ secretSource: 'env' | 'file' }>([{
         type: 'list',
         name: 'secretSource',
-        message: `How is your ${modelProvider.displayName} API key stored?`,
+        message: `Where is your ${keyLabel}?`,
         choices: [
-          { name: `Environment variable (${modelProvider.envDefault ?? 'API_KEY'})`, value: 'env' },
-          { name: 'File path (e.g. ~/.secrets/api-key)', value: 'file' },
+          { name: `In an environment variable — already set in my terminal  (e.g. ${modelProvider.envDefault ?? 'API_KEY'})`, value: 'env' },
+          { name: 'In a file on this computer  (e.g. ~/.secrets/api-key)', value: 'file' },
         ],
       }])
 
@@ -232,7 +262,7 @@ export default defineCommand({
         const { envVar } = await inquirer.prompt<{ envVar: string }>([{
           type: 'input',
           name: 'envVar',
-          message: 'Environment variable name:',
+          message: 'Environment variable name: (the variable that holds your API key)',
           default: modelProvider.envDefault ?? 'API_KEY',
         }])
         secrets.push({ name: `${modelProviderId.toUpperCase()}_API_KEY`, source: 'env', ref: envVar })
@@ -241,18 +271,20 @@ export default defineCommand({
         const { filePath } = await inquirer.prompt<{ filePath: string }>([{
           type: 'input',
           name: 'filePath',
-          message: 'File path to API key:',
+          message: 'File path: (full path to the file containing your API key)',
         }])
         secrets.push({ name: `${modelProviderId.toUpperCase()}_API_KEY`, source: 'file', ref: filePath })
         modelConfig['apiKey'] = `$secret:${modelProviderId.toUpperCase()}_API_KEY`
       }
     } else if (modelProvider.credentialSource === 'aws-profile') {
-      info(`\n${modelProvider.iamNote ?? 'Using AWS instance role for credentials.'}`)
+      process.stdout.write('\n')
+      info(modelProvider.iamNote ?? 'Bedrock uses your AWS server\'s IAM role — no API key needed.')
+      info('Make sure your EC2 instance has the AmazonBedrockFullAccess IAM policy attached.\n')
     } else if (modelProvider.id === 'ollama') {
       const { baseUrl } = await inquirer.prompt<{ baseUrl: string }>([{
         type: 'input',
         name: 'baseUrl',
-        message: 'Ollama base URL:',
+        message: 'Ollama address: (the URL where Ollama is running — usually http://localhost:11434)',
         default: modelProvider.baseUrlDefault ?? 'http://localhost:11434',
       }])
       modelConfig['baseUrl'] = baseUrl
@@ -265,10 +297,11 @@ export default defineCommand({
     }
 
     // ── Step 5: Integrations ───────────────────────────────────────────────────
+    process.stdout.write('\n')
     const { wantsIntegrations } = await inquirer.prompt<{ wantsIntegrations: boolean }>([{
       type: 'confirm',
       name: 'wantsIntegrations',
-      message: 'Set up channel integrations (Discord, Telegram, Slack, etc.)?',
+      message: 'Would you like to connect OpenClaw to a chat app? (Discord, Telegram, Slack, WhatsApp, or Teams)',
       default: false,
     }])
 
@@ -276,16 +309,18 @@ export default defineCommand({
     const infraRequired: Integration[] = []
 
     if (wantsIntegrations) {
-      const { selectedIntegrations } = await inquirer.prompt<{ selectedIntegrations: string[] }>([{
-        type: 'checkbox',
-        name: 'selectedIntegrations',
-        message: 'Select integrations to enable (Space to select, Enter to confirm):',
-        choices: catalogs.integrations.map((i) => ({ name: `${i.displayName} — ${i.description}`, value: i.id })),
-        pageSize: 10,
-      }])
+      info('\nAnswer yes/no for each chat app you want to connect:\n')
 
-      for (const integId of selectedIntegrations) {
-        const integ = catalogs.integrations.find((i) => i.id === integId)!
+      for (const integ of catalogs.integrations) {
+        const { enabled } = await inquirer.prompt<{ enabled: boolean }>([{
+          type: 'confirm',
+          name: 'enabled',
+          message: `Connect ${integ.displayName}? — ${integ.description}`,
+          default: false,
+        }])
+
+        if (!enabled) continue
+
         const channelConfig: Record<string, unknown> = {}
 
         for (const field of integ.fields) {
@@ -293,22 +328,28 @@ export default defineCommand({
             const { secretSource } = await inquirer.prompt<{ secretSource: 'env' | 'file' }>([{
               type: 'list',
               name: 'secretSource',
-              message: `${integ.displayName} — ${field.label}: how is this stored?`,
+              message: `${integ.displayName} — ${field.label}: where is this credential stored?`,
               choices: [
-                { name: `Environment variable (${field.envDefault})`, value: 'env' },
-                { name: 'File path', value: 'file' },
+                { name: `In an environment variable  (e.g. ${field.envDefault})`, value: 'env' },
+                { name: 'In a file on this computer', value: 'file' },
               ],
             }])
 
             const secretName = field.envDefault
             if (secretSource === 'env') {
               const { envVar } = await inquirer.prompt<{ envVar: string }>([{
-                type: 'input', name: 'envVar', message: 'Environment variable name:', default: field.envDefault,
+                type: 'input',
+                name: 'envVar',
+                message: `Environment variable name: (holds your ${field.label})`,
+                default: field.envDefault,
               }])
               secrets.push({ name: secretName, source: 'env', ref: envVar })
             } else {
               const { filePath } = await inquirer.prompt<{ filePath: string }>([{
-                type: 'input', name: 'filePath', message: 'File path:', default: '',
+                type: 'input',
+                name: 'filePath',
+                message: `File path: (full path to the file containing your ${field.label})`,
+                default: '',
               }])
               secrets.push({ name: secretName, source: 'file', ref: filePath })
             }
@@ -317,7 +358,7 @@ export default defineCommand({
             const { value } = await inquirer.prompt<{ value: string }>([{
               type: 'input',
               name: 'value',
-              message: `${integ.displayName} — ${field.label}:`,
+              message: `${integ.displayName} — ${field.label}: ${field.description}`,
               default: '',
             }])
             channelConfig[field.name] = value
@@ -335,7 +376,7 @@ export default defineCommand({
       const { outputDir } = await inquirer.prompt<{ outputDir: string }>([{
         type: 'input',
         name: 'outputDir',
-        message: 'Directory to save generated files:',
+        message: 'Where should the config file be saved? (press Enter to save in the current folder)',
         default: '.',
       }])
       outDir = outputDir
@@ -355,7 +396,7 @@ export default defineCommand({
       outputPath = path.join(outDir, `openclaw-${stackAnswers.stackName}.json`)
       writeFileSync(outputPath, JSON.stringify(openclawConfigOverlay, null, 2), 'utf-8')
       process.stdout.write('\n')
-      success(`Config overlay written to ${outputPath}`)
+      success(`Config file saved to ${outputPath}`)
     } else {
       let sshPublicKey = ''
       try {
@@ -396,15 +437,15 @@ export default defineCommand({
       outputPath = path.join(outDir, `clawops-${stackAnswers.stackName}-plan.json`)
       writeFileSync(outputPath, JSON.stringify(plan, null, 2), 'utf-8')
       process.stdout.write('\n')
-      success(`Deploy plan written to ${outputPath}`)
+      success(`Deployment plan saved to ${outputPath}`)
     }
 
-    // ── Step 8: MCP server setup ───────────────────────────────────────────────
+    // ── Step 8: Claude / MCP setup ─────────────────────────────────────────────
     process.stdout.write('\n')
     const { writeMcp } = await inquirer.prompt<{ writeMcp: boolean }>([{
       type: 'confirm',
       name: 'writeMcp',
-      message: 'Write MCP server config to Claude config file?',
+      message: 'Add clawops to Claude? (Lets Claude Desktop and Claude Code manage your deployment)',
       default: true,
     }])
 
@@ -420,29 +461,37 @@ export default defineCommand({
         existing['mcpServers'] = mcpServers
         mkdirSync(path.dirname(mcpConfigPath), { recursive: true })
         writeFileSync(mcpConfigPath, JSON.stringify(existing, null, 2), 'utf-8')
-        success(`MCP config written to ${mcpConfigPath}`)
+        success(`Claude config updated  (${mcpConfigPath})`)
+        info('Restart Claude Desktop or Claude Code to load the new tool.')
       } catch (err) {
-        failure(`Could not write MCP config: ${(err as Error).message}`)
+        failure(`Could not write Claude config: ${(err as Error).message}`)
+        info('Add the following to your Claude config file manually:')
         printMcpSnippet()
       }
     } else {
+      info('To connect clawops to Claude later, add this to your Claude config file:')
       printMcpSnippet()
+      info('Config file locations:')
+      info('  macOS:  ~/Library/Application Support/Claude/claude_desktop_config.json')
+      info('  Linux:  ~/.config/Claude/claude_desktop_config.json')
     }
 
     // ── Step 9: Post-setup notes ───────────────────────────────────────────────
     if (infraRequired.length > 0) {
       process.stdout.write('\n')
-      info('── Webhook registration required ────────────────────────────────────')
+      info('── Action required: webhook registration ────────────────────────────')
+      info('These integrations need a webhook URL set up in their developer portal:')
       for (const integ of infraRequired) {
-        info(`  ${integ.displayName}: ${integ.infraNote?.trim() ?? ''}`)
-        if (integ.setupUrl) info(`  Setup: ${integ.setupUrl}`)
+        info(`\n  ${integ.displayName}`)
+        if (integ.infraNote) info(`  ${integ.infraNote.trim()}`)
+        if (integ.setupUrl) info(`  Guide: ${integ.setupUrl}`)
       }
     }
 
     if (modelProvider.id === 'ollama' && selectedModel.pullSuffix !== undefined) {
       process.stdout.write('\n')
-      info('── Ollama model pull required ────────────────────────────────────────')
-      info('After deployment, SSH into the host and run:')
+      info('── Action required: download the Ollama model ───────────────────────')
+      info('After deployment, run this command on the server (or locally if Ollama is local):')
       info(`  ollama pull ${selectedModel.id}${selectedModel.pullSuffix}`)
     }
 
@@ -453,7 +502,7 @@ export default defineCommand({
       const { deployNow } = await inquirer.prompt<{ deployNow: boolean }>([{
         type: 'confirm',
         name: 'deployNow',
-        message: 'Run init and deploy now?',
+        message: 'Set up the server now? (connects over SSH and installs everything automatically — takes 2–5 min)',
         default: true,
       }])
 
@@ -472,16 +521,16 @@ export default defineCommand({
         const { getConfigDir } = await import('../../config/store.js')
         const knownHostsPath = path.join(getConfigDir(), 'known_hosts')
         process.stdout.write('\n')
-        info('When ready, run:')
+        info('To deploy later, run these two commands:')
         info(`  clawops init --provider local --host ${localHost} --port ${localPort} --user ${localUser} --key ${localKeyPath} --stack ${stackAnswers.stackName}`)
         info(`  clawops up --stack ${stackAnswers.stackName} --config ${outputPath}`)
-        info(`\nSSH known_hosts will be written to: ${knownHostsPath}`)
+        info(`\n(SSH host verification will be saved to ${knownHostsPath})`)
       }
     } else {
       const { applyNow } = await inquirer.prompt<{ applyNow: boolean }>([{
         type: 'confirm',
         name: 'applyNow',
-        message: `Apply the plan now? (runs: clawops apply ${outputPath})`,
+        message: 'Provision the cloud server now? (creates the server and installs OpenClaw — takes 3–5 minutes)',
         default: false,
       }])
 
@@ -493,14 +542,14 @@ export default defineCommand({
             onOutput: (line) => process.stdout.write(line),
             signal: ac.signal,
           })
-          success('Stack deployed successfully.')
-          info(`Run: clawops doctor --stack ${stackAnswers.stackName} to verify`)
+          success('Server provisioned and OpenClaw installed.')
+          info(`Run: clawops doctor --stack ${stackAnswers.stackName}  to verify everything is healthy`)
         } catch (err) {
           failure(err instanceof Error ? err.message : String(err))
           process.exit(1)
         }
       } else {
-        info(`\nWhen ready: clawops apply ${outputPath}`)
+        info(`\nTo deploy later:  clawops apply ${outputPath}`)
       }
     }
   },
@@ -520,7 +569,7 @@ interface LocalDeployOpts {
 }
 
 async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
-  const { setConfig: writeConfig, getConfig: readConfig, getConfigDir } = await import('../../config/store.js')
+  const { setConfig, getConfig, getConfigDir } = await import('../../config/store.js')
   const { localBootstrap } = await import('../../providers/local/bootstrap.js')
   const { connect } = await import('../../transport/ssh.js')
   const { readRemoteConfig, atomicWriteConfig, restartGateway, deepMerge } = await import('../../plan/remote-config.js')
@@ -528,8 +577,8 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
 
   const knownHostsPath = path.join(getConfigDir(), 'known_hosts')
 
-  // Register stack in ~/.clawops/config.json (merge with existing if present)
-  const existing = readConfig()
+  // Register stack in ~/.clawops/config.json
+  const existing = getConfig()
   const stackEntry = {
     provider: 'local' as const,
     stateUrl: 'file://~/.clawops/state',
@@ -544,11 +593,11 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
         stacks: { [opts.stackName]: stackEntry },
         ssh: { keyPath: opts.keyPath, knownHostsPath },
       }
-  writeConfig(newConfig)
-  success(`Stack "${opts.stackName}" registered in ${path.join(getConfigDir(), 'config.json')}`)
+  setConfig(newConfig)
+  success(`Deployment "${opts.stackName}" registered  (~/.clawops/config.json)`)
 
   // Bootstrap the host
-  const spin = spinner(`Bootstrapping host "${opts.host}"...`)
+  const spin = spinner(`Connecting to ${opts.host} and installing OpenClaw...`)
   let state: { gatewayUrl: string; sshUser: string; sshHost: string; sshPort: number }
   try {
     state = await localBootstrap({
@@ -562,14 +611,14 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
       noWait: false,
       signal: opts.signal,
     })
-    spin.succeed(`Host "${opts.host}" bootstrapped`)
+    spin.succeed(`OpenClaw installed on ${opts.host}`)
   } catch (err) {
-    spin.fail('Bootstrap failed')
+    spin.fail('Installation failed')
     throw err
   }
 
   // Apply config overlay
-  const spin2 = spinner('Applying config overlay...')
+  const spin2 = spinner('Applying your configuration...')
   try {
     const session = await connect({
       host: opts.host,
@@ -588,17 +637,17 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
     } finally {
       session.close()
     }
-    spin2.succeed('Config overlay applied')
+    spin2.succeed('Configuration applied')
   } catch (err) {
-    spin2.fail('Config overlay failed')
+    spin2.fail('Configuration failed')
     throw err
   }
 
   process.stdout.write('\n')
-  success('Deployment complete')
+  success('All done! OpenClaw is running.')
   info(`Gateway URL: ${state.gatewayUrl}`)
-  info(`SSH:         ${state.sshUser}@${state.sshHost}:${state.sshPort}`)
-  info(`\nRun: clawops doctor --stack ${opts.stackName} to verify`)
+  info(`SSH access:  ${state.sshUser}@${state.sshHost}:${state.sshPort}`)
+  info(`\nRun  clawops doctor --stack ${opts.stackName}  to check everything is healthy`)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -611,15 +660,12 @@ function getMcpConfigPath(): string {
 }
 
 function printMcpSnippet(): void {
-  info('Add this to your Claude Desktop / Claude Code MCP config:\n')
+  process.stdout.write('\n')
   process.stdout.write(JSON.stringify({
     mcpServers: {
       clawops: { command: 'clawops', args: ['mcp', 'serve', '--read-only'] },
     },
-  }, null, 2) + '\n')
-  info('\nConfig file locations:')
-  info('  macOS:  ~/Library/Application Support/Claude/claude_desktop_config.json')
-  info('  Linux:  ~/.config/Claude/claude_desktop_config.json')
+  }, null, 2) + '\n\n')
 }
 
 function loadCatalogs(yaml: typeof import('js-yaml')): Catalogs {
@@ -653,22 +699,22 @@ function stateLabel(provider: string): string {
 function instanceChoices(provider: string): Array<{ name: string; value: string }> {
   const table: Record<string, Array<{ name: string; value: string }>> = {
     aws: [
-      { name: 'micro  — t3.micro   (~$8/mo)',   value: 'micro' },
-      { name: 'small  — t3.small   (~$17/mo)',  value: 'small' },
-      { name: 'medium — t3.medium  (~$33/mo)',  value: 'medium' },
-      { name: 'large  — t3.large   (~$67/mo)',  value: 'large' },
+      { name: 'micro  — 1 CPU, 1 GB RAM  (~$8/mo)   — light personal use', value: 'micro' },
+      { name: 'small  — 2 CPU, 2 GB RAM  (~$17/mo)  — recommended for most users', value: 'small' },
+      { name: 'medium — 2 CPU, 4 GB RAM  (~$33/mo)  — teams or heavy usage', value: 'medium' },
+      { name: 'large  — 2 CPU, 8 GB RAM  (~$67/mo)  — high traffic or multiple agents', value: 'large' },
     ],
     gcp: [
-      { name: 'micro  — e2-micro          (~$7/mo)',   value: 'micro' },
-      { name: 'small  — e2-standard-2     (~$49/mo)',  value: 'small' },
-      { name: 'medium — e2-standard-4     (~$97/mo)',  value: 'medium' },
-      { name: 'large  — e2-standard-8     (~$194/mo)', value: 'large' },
+      { name: 'micro  — 2 CPU, 1 GB RAM  (~$7/mo)   — light personal use', value: 'micro' },
+      { name: 'small  — 2 CPU, 8 GB RAM  (~$49/mo)  — recommended for most users', value: 'small' },
+      { name: 'medium — 4 CPU, 16 GB RAM (~$97/mo)  — teams or heavy usage', value: 'medium' },
+      { name: 'large  — 8 CPU, 32 GB RAM (~$194/mo) — high traffic or multiple agents', value: 'large' },
     ],
     azure: [
-      { name: 'micro  — Standard_B1s  (~$8/mo)',   value: 'micro' },
-      { name: 'small  — Standard_B2s  (~$35/mo)',  value: 'small' },
-      { name: 'medium — Standard_B4ms (~$70/mo)',  value: 'medium' },
-      { name: 'large  — Standard_B8ms (~$140/mo)', value: 'large' },
+      { name: 'micro  — 1 CPU, 1 GB RAM  (~$8/mo)   — light personal use', value: 'micro' },
+      { name: 'small  — 2 CPU, 4 GB RAM  (~$35/mo)  — recommended for most users', value: 'small' },
+      { name: 'medium — 4 CPU, 8 GB RAM  (~$70/mo)  — teams or heavy usage', value: 'medium' },
+      { name: 'large  — 8 CPU, 16 GB RAM (~$140/mo) — high traffic or multiple agents', value: 'large' },
     ],
   }
   return table[provider] ?? []
