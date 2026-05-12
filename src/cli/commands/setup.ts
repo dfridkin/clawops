@@ -5,19 +5,22 @@
 
 import { defineCommand } from 'citty'
 import process from 'node:process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import os from 'node:os'
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { success, failure, info } from '../../output/human.js'
+import { success, failure, info, spinner } from '../../output/human.js'
+import type { ClawopsConfig } from '../../config/store.js'
 
 // Minimal typing shim for inquirer v9 (ships no bundled .d.ts).
 interface InquirerQuestion {
   type: string
   name: string
   message: string
-  choices?: Array<{ name: string; value: unknown }>
+  choices?: Array<{ name: string; value: unknown }> | Array<string>
   default?: unknown
-  validate?: (v: string) => boolean | string
+  validate?: (v: string) => boolean | string | Promise<boolean | string>
+  pageSize?: number
 }
 interface InquirerInstance {
   prompt<T>(questions: InquirerQuestion[]): Promise<T>
@@ -78,14 +81,13 @@ export default defineCommand({
   },
   args: {
     'dry-run': { type: 'boolean', description: 'Generate plan/config without applying' },
-    'output-dir': { type: 'string', description: 'Directory to write generated files (default: .)' },
+    'output-dir': { type: 'string', description: 'Directory to write generated files (skips prompt)' },
   },
   async run({ args }) {
     const inquirer = (await import('inquirer')).default as unknown as InquirerInstance
     const yaml = await import('js-yaml')
 
     const catalogs = loadCatalogs(yaml)
-    const outDir = typeof args['output-dir'] === 'string' ? args['output-dir'] : '.'
     const dryRun = Boolean(args['dry-run'])
 
     const ac = new AbortController()
@@ -107,7 +109,7 @@ export default defineCommand({
     let provider: 'aws' | 'gcp' | 'azure' | 'local'
     let localHost = ''
     let localUser = 'ubuntu'
-    let localKeyPath = `${process.env['HOME'] ?? '~'}/.ssh/id_rsa`
+    let localKeyPath = `${os.homedir()}/.ssh/id_rsa`
     let localPort = 22
 
     if (deploymentType === 'cloud') {
@@ -173,7 +175,7 @@ export default defineCommand({
           type: 'input',
           name: 'sshKeyPath',
           message: 'SSH public key path:',
-          default: `${process.env['HOME'] ?? '~'}/.ssh/id_rsa.pub`,
+          default: `${os.homedir()}/.ssh/id_rsa.pub`,
         },
         {
           type: 'input',
@@ -202,7 +204,6 @@ export default defineCommand({
     const modelConfig: Record<string, unknown> = {}
     const secrets: Array<{ name: string; source: 'env' | 'file'; ref: string }> = []
 
-    // Model selection within provider
     const { selectedModelId } = await inquirer.prompt<{ selectedModelId: string }>([{
       type: 'list',
       name: 'selectedModelId',
@@ -217,7 +218,6 @@ export default defineCommand({
     const selectedModel = modelProvider.models.find((m) => m.id === selectedModelId)!
 
     if (modelProvider.credentialSource === 'api-key') {
-      // Ask how the key is stored
       const { secretSource } = await inquirer.prompt<{ secretSource: 'env' | 'file' }>([{
         type: 'list',
         name: 'secretSource',
@@ -258,7 +258,6 @@ export default defineCommand({
       modelConfig['baseUrl'] = baseUrl
     }
 
-    // Build the model config block
     const builtModelConfig: Record<string, unknown> = {
       provider: modelProviderId,
       ...(selectedModel.modelId ? { modelId: selectedModel.modelId } : { model: selectedModel.id }),
@@ -280,8 +279,9 @@ export default defineCommand({
       const { selectedIntegrations } = await inquirer.prompt<{ selectedIntegrations: string[] }>([{
         type: 'checkbox',
         name: 'selectedIntegrations',
-        message: 'Select integrations to enable:',
+        message: 'Select integrations to enable (Space to select, Enter to confirm):',
         choices: catalogs.integrations.map((i) => ({ name: `${i.displayName} — ${i.description}`, value: i.id })),
+        pageSize: 10,
       }])
 
       for (const integId of selectedIntegrations) {
@@ -329,29 +329,34 @@ export default defineCommand({
       }
     }
 
-    // ── Step 6: Build output ───────────────────────────────────────────────────
+    // ── Step 6: Output directory ───────────────────────────────────────────────
+    let outDir = typeof args['output-dir'] === 'string' ? args['output-dir'] : null
+    if (outDir === null) {
+      const { outputDir } = await inquirer.prompt<{ outputDir: string }>([{
+        type: 'input',
+        name: 'outputDir',
+        message: 'Directory to save generated files:',
+        default: '.',
+      }])
+      outDir = outputDir
+    }
+
+    // ── Step 7: Build and write output ─────────────────────────────────────────
     const openclawConfigOverlay: Record<string, unknown> = {
       models: { provider: modelProviderId, ...builtModelConfig },
+    }
+    if (Object.keys(channelsConfig).length > 0) {
+      openclawConfigOverlay['channels'] = channelsConfig
     }
 
     let outputPath: string
 
     if (provider === 'local') {
-      // Local: generate a config overlay JSON (no deploy plan)
-      if (Object.keys(channelsConfig).length > 0) {
-        openclawConfigOverlay['channels'] = channelsConfig
-      }
-
       outputPath = path.join(outDir, `openclaw-${stackAnswers.stackName}.json`)
       writeFileSync(outputPath, JSON.stringify(openclawConfigOverlay, null, 2), 'utf-8')
-
       process.stdout.write('\n')
       success(`Config overlay written to ${outputPath}`)
-      info(`\nNext steps:`)
-      info(`  1. Run: clawops init --provider local --host ${localHost} --port ${localPort} --user ${localUser} --key ${localKeyPath} --stack ${stackAnswers.stackName}`)
-      info(`  2. Run: clawops up --stack ${stackAnswers.stackName} --config ${outputPath}`)
     } else {
-      // Cloud: generate a full deploy plan
       let sshPublicKey = ''
       try {
         sshPublicKey = readFileSync(stackAnswers.sshKeyPath ?? '', 'utf-8').trim()
@@ -390,26 +395,41 @@ export default defineCommand({
 
       outputPath = path.join(outDir, `clawops-${stackAnswers.stackName}-plan.json`)
       writeFileSync(outputPath, JSON.stringify(plan, null, 2), 'utf-8')
-
       process.stdout.write('\n')
       success(`Deploy plan written to ${outputPath}`)
     }
 
-    // ── Step 7: MCP setup snippet ──────────────────────────────────────────────
+    // ── Step 8: MCP server setup ───────────────────────────────────────────────
     process.stdout.write('\n')
-    info('── MCP server setup ─────────────────────────────────────────────────')
-    info('Add this to your Claude Desktop / Claude Code MCP config:\n')
-    process.stdout.write(JSON.stringify({
-      mcpServers: {
-        clawops: { command: 'clawops', args: ['mcp', 'serve', '--read-only'] },
-      },
-    }, null, 2) + '\n')
-    info('\nConfig file locations:')
-    info('  macOS:  ~/Library/Application Support/Claude/claude_desktop_config.json')
-    info('  Linux:  ~/.config/Claude/claude_desktop_config.json')
-    info('  Claude Code: ~/.claude/claude_desktop_config.json')
+    const { writeMcp } = await inquirer.prompt<{ writeMcp: boolean }>([{
+      type: 'confirm',
+      name: 'writeMcp',
+      message: 'Write MCP server config to Claude config file?',
+      default: true,
+    }])
 
-    // ── Step 8: Post-setup notes ───────────────────────────────────────────────
+    if (writeMcp) {
+      const mcpConfigPath = getMcpConfigPath()
+      try {
+        let existing: Record<string, unknown> = {}
+        if (existsSync(mcpConfigPath)) {
+          existing = JSON.parse(readFileSync(mcpConfigPath, 'utf-8')) as Record<string, unknown>
+        }
+        const mcpServers = (existing['mcpServers'] ?? {}) as Record<string, unknown>
+        mcpServers['clawops'] = { command: 'clawops', args: ['mcp', 'serve', '--read-only'] }
+        existing['mcpServers'] = mcpServers
+        mkdirSync(path.dirname(mcpConfigPath), { recursive: true })
+        writeFileSync(mcpConfigPath, JSON.stringify(existing, null, 2), 'utf-8')
+        success(`MCP config written to ${mcpConfigPath}`)
+      } catch (err) {
+        failure(`Could not write MCP config: ${(err as Error).message}`)
+        printMcpSnippet()
+      }
+    } else {
+      printMcpSnippet()
+    }
+
+    // ── Step 9: Post-setup notes ───────────────────────────────────────────────
     if (infraRequired.length > 0) {
       process.stdout.write('\n')
       info('── Webhook registration required ────────────────────────────────────')
@@ -422,12 +442,42 @@ export default defineCommand({
     if (modelProvider.id === 'ollama' && selectedModel.pullSuffix !== undefined) {
       process.stdout.write('\n')
       info('── Ollama model pull required ────────────────────────────────────────')
-      info(`After deployment, SSH into the host and run:`)
+      info('After deployment, SSH into the host and run:')
       info(`  ollama pull ${selectedModel.id}${selectedModel.pullSuffix}`)
     }
 
-    // ── Step 9: Apply now? ─────────────────────────────────────────────────────
-    if (!dryRun && provider !== 'local') {
+    // ── Step 10: Deploy ────────────────────────────────────────────────────────
+    if (dryRun) return
+
+    if (provider === 'local') {
+      const { deployNow } = await inquirer.prompt<{ deployNow: boolean }>([{
+        type: 'confirm',
+        name: 'deployNow',
+        message: 'Run init and deploy now?',
+        default: true,
+      }])
+
+      if (deployNow) {
+        await runLocalDeploy({
+          stackName: stackAnswers.stackName,
+          host: localHost,
+          port: localPort,
+          user: localUser,
+          keyPath: localKeyPath,
+          openclawVersion: stackAnswers.openclawVersion,
+          overlay: openclawConfigOverlay,
+          signal: ac.signal,
+        })
+      } else {
+        const { getConfigDir } = await import('../../config/store.js')
+        const knownHostsPath = path.join(getConfigDir(), 'known_hosts')
+        process.stdout.write('\n')
+        info('When ready, run:')
+        info(`  clawops init --provider local --host ${localHost} --port ${localPort} --user ${localUser} --key ${localKeyPath} --stack ${stackAnswers.stackName}`)
+        info(`  clawops up --stack ${stackAnswers.stackName} --config ${outputPath}`)
+        info(`\nSSH known_hosts will be written to: ${knownHostsPath}`)
+      }
+    } else {
       const { applyNow } = await inquirer.prompt<{ applyNow: boolean }>([{
         type: 'confirm',
         name: 'applyNow',
@@ -456,7 +506,121 @@ export default defineCommand({
   },
 })
 
+// ── Local deploy ──────────────────────────────────────────────────────────────
+
+interface LocalDeployOpts {
+  stackName: string
+  host: string
+  port: number
+  user: string
+  keyPath: string
+  openclawVersion: string
+  overlay: Record<string, unknown>
+  signal?: AbortSignal
+}
+
+async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
+  const { setConfig: writeConfig, getConfig: readConfig, getConfigDir } = await import('../../config/store.js')
+  const { localBootstrap } = await import('../../providers/local/bootstrap.js')
+  const { connect } = await import('../../transport/ssh.js')
+  const { readRemoteConfig, atomicWriteConfig, restartGateway, deepMerge } = await import('../../plan/remote-config.js')
+  const { resolveSecrets } = await import('../../plan/secrets.js')
+
+  const knownHostsPath = path.join(getConfigDir(), 'known_hosts')
+
+  // Register stack in ~/.clawops/config.json (merge with existing if present)
+  const existing = readConfig()
+  const stackEntry = {
+    provider: 'local' as const,
+    stateUrl: 'file://~/.clawops/state',
+    credentialsRef: { source: 'file' as const, envVars: [] as string[] },
+    localOpts: { host: opts.host, sshUser: opts.user, sshPort: opts.port, sshKeyPath: opts.keyPath },
+  }
+  const newConfig: ClawopsConfig = existing
+    ? { ...existing, defaults: { stack: opts.stackName, provider: 'local' }, stacks: { ...existing.stacks, [opts.stackName]: stackEntry } }
+    : {
+        version: 1,
+        defaults: { stack: opts.stackName, provider: 'local' },
+        stacks: { [opts.stackName]: stackEntry },
+        ssh: { keyPath: opts.keyPath, knownHostsPath },
+      }
+  writeConfig(newConfig)
+  success(`Stack "${opts.stackName}" registered in ${path.join(getConfigDir(), 'config.json')}`)
+
+  // Bootstrap the host
+  const spin = spinner(`Bootstrapping host "${opts.host}"...`)
+  let state: { gatewayUrl: string; sshUser: string; sshHost: string; sshPort: number }
+  try {
+    state = await localBootstrap({
+      host: opts.host,
+      port: opts.port,
+      user: opts.user,
+      privateKeyPath: opts.keyPath,
+      knownHostsPath,
+      openclawVersion: opts.openclawVersion,
+      stackName: opts.stackName,
+      noWait: false,
+      signal: opts.signal,
+    })
+    spin.succeed(`Host "${opts.host}" bootstrapped`)
+  } catch (err) {
+    spin.fail('Bootstrap failed')
+    throw err
+  }
+
+  // Apply config overlay
+  const spin2 = spinner('Applying config overlay...')
+  try {
+    const session = await connect({
+      host: opts.host,
+      port: opts.port,
+      user: opts.user,
+      privateKeyPath: opts.keyPath,
+      knownHostsPath,
+      signal: opts.signal,
+    })
+    try {
+      const remote = await readRemoteConfig(session, opts.signal)
+      const resolved = resolveSecrets(opts.overlay, []) as Record<string, unknown>
+      const merged = deepMerge(remote, resolved)
+      await atomicWriteConfig(session, merged, opts.signal)
+      await restartGateway(session, opts.signal)
+    } finally {
+      session.close()
+    }
+    spin2.succeed('Config overlay applied')
+  } catch (err) {
+    spin2.fail('Config overlay failed')
+    throw err
+  }
+
+  process.stdout.write('\n')
+  success('Deployment complete')
+  info(`Gateway URL: ${state.gatewayUrl}`)
+  info(`SSH:         ${state.sshUser}@${state.sshHost}:${state.sshPort}`)
+  info(`\nRun: clawops doctor --stack ${opts.stackName} to verify`)
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getMcpConfigPath(): string {
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
+  }
+  return path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json')
+}
+
+function printMcpSnippet(): void {
+  info('Add this to your Claude Desktop / Claude Code MCP config:\n')
+  process.stdout.write(JSON.stringify({
+    mcpServers: {
+      clawops: { command: 'clawops', args: ['mcp', 'serve', '--read-only'] },
+    },
+  }, null, 2) + '\n')
+  info('\nConfig file locations:')
+  info('  macOS:  ~/Library/Application Support/Claude/claude_desktop_config.json')
+  info('  Linux:  ~/.config/Claude/claude_desktop_config.json')
+}
 
 function loadCatalogs(yaml: typeof import('js-yaml')): Catalogs {
   const specDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../spec')
@@ -489,21 +653,21 @@ function stateLabel(provider: string): string {
 function instanceChoices(provider: string): Array<{ name: string; value: string }> {
   const table: Record<string, Array<{ name: string; value: string }>> = {
     aws: [
-      { name: 'micro  — t3.micro   (~$8/mo)',  value: 'micro' },
-      { name: 'small  — t3.small   (~$17/mo)', value: 'small' },
-      { name: 'medium — t3.medium  (~$33/mo)', value: 'medium' },
-      { name: 'large  — t3.large   (~$67/mo)', value: 'large' },
+      { name: 'micro  — t3.micro   (~$8/mo)',   value: 'micro' },
+      { name: 'small  — t3.small   (~$17/mo)',  value: 'small' },
+      { name: 'medium — t3.medium  (~$33/mo)',  value: 'medium' },
+      { name: 'large  — t3.large   (~$67/mo)',  value: 'large' },
     ],
     gcp: [
-      { name: 'micro  — e2-micro          (~$7/mo)',  value: 'micro' },
-      { name: 'small  — e2-standard-2     (~$49/mo)', value: 'small' },
-      { name: 'medium — e2-standard-4     (~$97/mo)', value: 'medium' },
+      { name: 'micro  — e2-micro          (~$7/mo)',   value: 'micro' },
+      { name: 'small  — e2-standard-2     (~$49/mo)',  value: 'small' },
+      { name: 'medium — e2-standard-4     (~$97/mo)',  value: 'medium' },
       { name: 'large  — e2-standard-8     (~$194/mo)', value: 'large' },
     ],
     azure: [
-      { name: 'micro  — Standard_B1s  (~$8/mo)',  value: 'micro' },
-      { name: 'small  — Standard_B2s  (~$35/mo)', value: 'small' },
-      { name: 'medium — Standard_B4ms (~$70/mo)', value: 'medium' },
+      { name: 'micro  — Standard_B1s  (~$8/mo)',   value: 'micro' },
+      { name: 'small  — Standard_B2s  (~$35/mo)',  value: 'small' },
+      { name: 'medium — Standard_B4ms (~$70/mo)',  value: 'medium' },
       { name: 'large  — Standard_B8ms (~$140/mo)', value: 'large' },
     ],
   }
