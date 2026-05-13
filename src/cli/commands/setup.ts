@@ -103,7 +103,7 @@ export default defineCommand({
       name: 'deploymentType',
       message: 'Where would you like to run OpenClaw?',
       choices: [
-        { name: 'On a cloud server — rent a new server automatically (AWS, GCP, or Azure)', value: 'cloud' },
+        { name: 'Cloud (AWS, GCP, or Azure) — rent a new server automatically', value: 'cloud' },
         { name: 'On a server I already have — connect over SSH (Linux or macOS)', value: 'local' },
       ],
     }])
@@ -301,7 +301,7 @@ export default defineCommand({
     const { wantsIntegrations } = await inquirer.prompt<{ wantsIntegrations: boolean }>([{
       type: 'confirm',
       name: 'wantsIntegrations',
-      message: 'Would you like to connect OpenClaw to a chat app? (Discord, Telegram, Slack, WhatsApp, or Teams)',
+      message: 'Which OpenClaw integrations would you like enabled?',
       default: false,
     }])
 
@@ -445,7 +445,7 @@ export default defineCommand({
     const { writeMcp } = await inquirer.prompt<{ writeMcp: boolean }>([{
       type: 'confirm',
       name: 'writeMcp',
-      message: 'Add clawops to Claude? (Lets Claude Desktop and Claude Code manage your deployment)',
+      message: 'Enable MCP server? (Allow connection to an AI agent)',
       default: true,
     }])
 
@@ -502,7 +502,7 @@ export default defineCommand({
       const { deployNow } = await inquirer.prompt<{ deployNow: boolean }>([{
         type: 'confirm',
         name: 'deployNow',
-        message: 'Set up the server now? (connects over SSH and installs everything automatically — takes 2–5 min)',
+        message: 'Initialize and deploy the server now? (connects over SSH — takes 2–5 min)',
         default: true,
       }])
 
@@ -596,8 +596,17 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
   setConfig(newConfig)
   success(`Deployment "${opts.stackName}" registered  (~/.clawops/config.json)`)
 
-  // Bootstrap the host
-  const spin = spinner(`Connecting to ${opts.host} and installing OpenClaw...`)
+  // Bootstrap the host — stream output to drive spinner text
+  const STAGES: Array<[RegExp, string]> = [
+    [/apt-get update|dnf|yum|apk update/i,                     'Updating package lists...'],
+    [/apt-get install|dnf install|yum install|apk add/i,        'Installing dependencies...'],
+    [/docker-ce|containerd|docker\.io|Install Docker/i,         'Installing Docker...'],
+    [/Pulling from|docker pull|Pull complete|Already exists/i,  'Pulling OpenClaw image...'],
+    [/systemctl|rc-update|docker run|ExecStart/i,               'Starting OpenClaw service...'],
+    [/bootstrap complete/i,                                      'Waiting for OpenClaw to start...'],
+  ]
+
+  const spin = spinner(`Connecting to ${opts.host}...`)
   let state: { gatewayUrl: string; sshUser: string; sshHost: string; sshPort: number }
   try {
     state = await localBootstrap({
@@ -609,6 +618,11 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
       openclawVersion: opts.openclawVersion,
       stackName: opts.stackName,
       noWait: false,
+      onOutput: (line) => {
+        for (const [pattern, label] of STAGES) {
+          if (pattern.test(line)) { spin.text = label; break }
+        }
+      },
       signal: opts.signal,
     })
     spin.succeed(`OpenClaw installed on ${opts.host}`)

@@ -21,6 +21,8 @@ export interface BootstrapOpts {
   openclawVersion: string
   stackName: string
   noWait?: boolean
+  /** Called with each stdout line as the bootstrap script runs. */
+  onOutput?: (line: string) => void
   signal?: AbortSignal
 }
 
@@ -54,11 +56,15 @@ export async function localBootstrap(opts: BootstrapOpts): Promise<LocalState> {
   })
 
   try {
-    const result = await session.exec(command, opts.signal)
-    if (result.code !== 0) {
-      throw new ProviderError(
-        `Bootstrap script failed (exit ${result.code}):\n${result.stderr || result.stdout}`,
-      )
+    if (opts.onOutput) {
+      await execStreaming(session, command, opts.onOutput, opts.signal)
+    } else {
+      const result = await session.exec(command, opts.signal)
+      if (result.code !== 0) {
+        throw new ProviderError(
+          `Bootstrap script failed (exit ${result.code}):\n${result.stderr || result.stdout}`,
+        )
+      }
     }
   } finally {
     release()
@@ -114,4 +120,51 @@ async function waitForGateway(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// The ssh2 ClientChannel is a Duplex stream with .stderr and a 'close' event
+// that carries the exit code. session.stream() returns it typed as ReadableStream
+// so we cast to access those properties.
+type SshChannel = NodeJS.ReadableStream & {
+  stderr: NodeJS.ReadableStream
+  on(event: 'close', listener: (code: number) => void): SshChannel
+  on(event: 'error', listener: (err: Error) => void): SshChannel
+  on(event: 'data', listener: (chunk: Buffer) => void): SshChannel
+}
+
+async function execStreaming(
+  session: { stream(cmd: string, signal?: AbortSignal): Promise<NodeJS.ReadableStream> },
+  command: string,
+  onOutput: (line: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const ch = (await session.stream(command, signal)) as unknown as SshChannel
+
+  let leftover = ''
+  let stderr = ''
+
+  ch.on('data', (chunk: Buffer) => {
+    const text = leftover + chunk.toString('utf-8')
+    const lines = text.split('\n')
+    leftover = lines.pop() ?? ''
+    for (const line of lines) {
+      if (line.trim()) onOutput(line)
+    }
+  })
+
+  ch.stderr.on('data', (chunk: Buffer) => {
+    stderr += chunk.toString('utf-8')
+  })
+
+  const exitCode = await new Promise<number>((resolve, reject) => {
+    ch.on('close', (code) => {
+      if (leftover.trim()) onOutput(leftover)
+      resolve(code ?? 0)
+    })
+    ch.on('error', reject)
+  })
+
+  if (exitCode !== 0) {
+    throw new ProviderError(`Bootstrap script failed (exit ${exitCode}):\n${stderr}`)
+  }
 }

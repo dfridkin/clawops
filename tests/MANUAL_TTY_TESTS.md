@@ -178,11 +178,13 @@ python3 -m json.tool /tmp/clawops-cloud-test-plan.json
 
 ## Test 1b — Local provider, run init and deploy now
 
-Re-run Test 1 with the same answers but answer **Yes** to "Run init and deploy now?".
+Re-run Test 1 with the same answers but answer **Yes** to "Initialize and deploy the server now?".
 
 **Verify:**
 
-- [ ] Spinner shows "Bootstrapping host..." and completes
+- [ ] Spinner starts as "Connecting to 127.0.0.1..." then advances through stage labels as the script runs:
+  - "Updating package lists..." → "Installing dependencies..." → "Installing Docker..." → "Pulling OpenClaw image..." → "Starting OpenClaw service..." → "Waiting for OpenClaw to start..."
+- [ ] Spinner completes (no error exit)
 - [ ] Stack registered in `~/.clawops/config.json` automatically (no manual `clawops init` needed)
 - [ ] Spinner shows "Applying config overlay..." and completes
 - [ ] Gateway URL printed at end
