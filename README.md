@@ -1,6 +1,6 @@
 # clawops
 
-Deploy OpenClaw once. Operate it from your terminal or Claude Code.
+MCP-native infrastructure ops for OpenClaw — with read-only mode, destructive-action confirmation, and audit logs built in.
 
 **clawops** is a CLI and [MCP](https://modelcontextprotocol.io/) server for deploying and operating
 self-hosted [OpenClaw](https://github.com/openclaw/openclaw) instances. Provision on AWS, GCP,
