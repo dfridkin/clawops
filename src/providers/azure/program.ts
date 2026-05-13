@@ -266,6 +266,7 @@ docker run -d \\
   --restart unless-stopped \\
   -p 18789:18789 \\
   -v "\${OPENCLAW_CONFIG}":/app/config.json:ro \\
-  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION}
+  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION} \\
+  node openclaw.mjs gateway run --allow-unconfigured
 `
 }

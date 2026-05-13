@@ -99,13 +99,27 @@ export async function restartGateway(
     : await execWithFallbackSudo(session, imgCmd, signal)
   const image = imgResult.stdout.trim()
 
+  // Read the auth token from the config that was just written so we can pass it
+  // explicitly to `gateway run --token`. This ensures the gateway enforces the
+  // specific token rather than relying on --allow-unconfigured defaults.
+  const cfgResult = await session.exec(`cat ${configPath}`, signal)
+  let gatewayCmd = 'node openclaw.mjs gateway run --allow-unconfigured'
+  try {
+    const cfg = JSON.parse(cfgResult.stdout) as Record<string, unknown>
+    const token = (cfg?.['gateway'] as Record<string, unknown>)?.['auth'] as Record<string, unknown>
+    const tokenVal = token?.['token'] as string | undefined
+    if (tokenVal) {
+      gatewayCmd = `node openclaw.mjs gateway run --token '${tokenVal}'`
+    }
+  } catch { /* keep allow-unconfigured fallback */ }
+
   const restartCmd =
     pathPrefix +
     [
       'docker stop openclaw 2>/dev/null || true',
       'docker rm openclaw 2>/dev/null || true',
       `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 ` +
-        `-v ${configPath}:/app/config.json:ro ${image}`,
+        `-v ${configPath}:/app/config.json:ro ${image} ${gatewayCmd}`,
     ].join(' && ')
 
   const result = os === 'Darwin'
