@@ -871,9 +871,11 @@ async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
     name: 'choice',
     message: 'How would you like to start Docker?',
     choices: [
-      { name: 'Start daemon directly  (sudo dockerd — works with any Docker install)', value: 'dockerd' },
+      // dockerd is a real standalone binary on Linux; on macOS it is bundled inside
+      // Docker Desktop and cannot be launched independently
+      ...(isLinux ? [{ name: 'Start daemon directly  (sudo dockerd)', value: 'dockerd' as const }] : []),
       ...(isLinux ? [{ name: 'systemctl             (sudo systemctl start docker)', value: 'systemctl' as const }] : []),
-      ...(!isLinux ? [{ name: 'Docker Desktop        (open the app)', value: 'desktop' as const }] : []),
+      ...(!isLinux ? [{ name: 'Docker Desktop        (open -a Docker)', value: 'desktop' as const }] : []),
       { name: 'Colima               (colima start)', value: 'colima' as const },
       { name: 'Skip — I\'ll start it myself and re-run clawops setup', value: 'skip' as const },
     ],
@@ -885,7 +887,6 @@ async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
   }
 
   if (choice === 'dockerd') {
-    // Spawn dockerd detached so it outlives this process; sudo required on most systems
     info('Starting dockerd in the background (you may be prompted for your password)...')
     const child = spawn('sudo', ['dockerd'], { detached: true, stdio: 'ignore' })
     child.unref()
