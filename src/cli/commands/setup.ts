@@ -897,21 +897,26 @@ async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
       throw new Error('systemctl start docker failed')
     }
   } else if (choice === 'desktop') {
-    // If the Docker Desktop backend is already running, open -a just focuses the
-    // window without restarting the engine. Guide the user to start it from the UI.
+    // If the backend is already running but the engine is stopped, the process is likely
+    // stuck — open -a just focuses the window without restarting it. Force-kill all
+    // Docker Desktop processes and do a clean relaunch.
     const backendRunning = spawnSync('pgrep', ['-f', 'com.docker.backend'], { stdio: 'ignore' }).status === 0
     if (backendRunning) {
-      info('Docker Desktop is already open but the engine is not running.')
-      info('In the Docker Desktop menu bar icon → click "Start" or quit and relaunch the app.')
-    } else {
-      let opened = spawnSync('open', ['-a', 'Docker'], { stdio: 'ignore' })
-      if (opened.status !== 0) opened = spawnSync('open', ['/Applications/Docker.app'], { stdio: 'ignore' })
-      if (opened.status !== 0) {
-        failure('Could not open Docker Desktop — is it installed in /Applications?')
-        throw new Error('Failed to open Docker Desktop')
+      info('Docker Desktop appears stuck — force-restarting it...')
+      // SIGKILL only Docker Desktop processes; leave com.docker.vmnetd (root networking helper) alone
+      for (const pat of ['com.docker.backend', 'com.docker.virtualization', 'com.docker.build', 'Docker Desktop']) {
+        spawnSync('pkill', ['-9', '-f', pat], { stdio: 'ignore' })
       }
-      info('Docker Desktop is opening — wait for the menu bar icon to show "Engine running".')
+      await new Promise((r) => setTimeout(r, 2_000)) // let processes exit
     }
+
+    let opened = spawnSync('open', ['-a', 'Docker'], { stdio: 'ignore' })
+    if (opened.status !== 0) opened = spawnSync('open', ['/Applications/Docker.app'], { stdio: 'ignore' })
+    if (opened.status !== 0) {
+      failure('Could not open Docker Desktop — is it installed in /Applications?')
+      throw new Error('Failed to open Docker Desktop')
+    }
+    info('Docker Desktop is starting — wait for the whale icon in the menu bar to stop animating.')
   } else if (choice === 'colima') {
     const res = spawnSync('colima', ['start'], { stdio: 'inherit' })
     if (res.status !== 0) {
