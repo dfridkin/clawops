@@ -790,12 +790,16 @@ async function promptSecret(
 
 // Docker preflight check — runs before bootstrap so the user gets a clear message
 // instead of a cryptic bootstrap failure mid-way through.
+// `docker info` can hang indefinitely waiting for the daemon socket.
+// Use `docker version` instead (faster API call) and cap the whole check at 10s.
+// If the check times out we warn and proceed — the bootstrap script will give
+// a clearer error if Docker truly isn't usable.
+const DOCKER_PREFLIGHT_TIMEOUT_MS = 10_000
+
 const DOCKER_CHECK_CMD = [
-  // Augment PATH the same way the bootstrap script does on macOS
   'export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"',
-  'if ! command -v docker >/dev/null 2>&1; then echo NOT_INSTALLED',
-  'elif ! docker info >/dev/null 2>&1; then echo NOT_RUNNING',
-  'else echo OK; fi',
+  'if ! command -v docker >/dev/null 2>&1; then echo NOT_INSTALLED; exit 0; fi',
+  'docker version >/dev/null 2>&1 && echo OK || echo NOT_RUNNING',
 ].join('; ')
 
 async function checkDockerPreflight(opts: {
@@ -805,18 +809,29 @@ async function checkDockerPreflight(opts: {
   const { ProviderError } = await import('../../errors/index.js')
 
   const spin = spinner('Checking Docker on target host...')
+
+  // Combine the caller's signal with a hard 10-second timeout
+  const timeoutSignal = AbortSignal.timeout(DOCKER_PREFLIGHT_TIMEOUT_MS)
+  const execSignal = opts.signal
+    ? AbortSignal.any([opts.signal, timeoutSignal])
+    : timeoutSignal
+
   const { session, release } = await acquireSession({
     host: opts.host, port: opts.port, user: opts.user,
     privateKeyPath: opts.keyPath, knownHostsPath: opts.knownHostsPath, signal: opts.signal,
   })
-  let result: { code: number | null; stdout: string }
+
+  let out = ''
   try {
-    result = await session.exec(DOCKER_CHECK_CMD, opts.signal)
+    const result = await session.exec(DOCKER_CHECK_CMD, execSignal)
+    out = result.stdout.trim()
+  } catch {
+    // Timed out or aborted — don't block the deploy; let bootstrap handle it
+    spin.warn('Docker check timed out — proceeding anyway. Bootstrap will verify.')
+    return
   } finally {
     release()
   }
-
-  const out = result.stdout.trim()
 
   if (out === 'OK') {
     spin.succeed('Docker is installed and running.')
@@ -832,7 +847,7 @@ async function checkDockerPreflight(opts: {
     throw new ProviderError('Docker daemon is not running on the target host.')
   }
 
-  // NOT_INSTALLED or unexpected output
+  // NOT_INSTALLED or empty output
   spin.fail('Docker not found on the target host.')
   info('Install Docker with one of:')
   info('  Docker Desktop (GUI):  https://www.docker.com/products/docker-desktop/')
