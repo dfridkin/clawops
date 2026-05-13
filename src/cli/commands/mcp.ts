@@ -1,12 +1,13 @@
 import { defineCommand } from 'citty'
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
-import path from 'node:path'
-import os from 'node:os'
+import process from 'node:process'
+import { success, failure, info } from '../../output/human.js'
 
-export default defineCommand({
+// ── mcp serve ──────────────────────────────────────────────────────────────
+
+const serveCmd = defineCommand({
   meta: {
-    name: 'mcp',
-    description: 'MCP server operations (serve | install)',
+    name: 'serve',
+    description: 'Start the clawops MCP server',
   },
   args: {
     http: { type: 'string', description: 'HTTP port for standalone mode' },
@@ -15,25 +16,8 @@ export default defineCommand({
     'no-destructive': { type: 'boolean', description: 'Filter out destructive tools' },
     toolsets: { type: 'string', description: 'Comma-separated toolsets to enable' },
     inspector: { type: 'boolean', description: 'Enable MCP inspector' },
-    claude: { type: 'boolean', description: 'Install for Claude Desktop' },
-    cursor: { type: 'boolean', description: 'Install for Cursor' },
-    vscode: { type: 'boolean', description: 'Install for VS Code' },
-    windsurf: { type: 'boolean', description: 'Install for Windsurf' },
-    zed: { type: 'boolean', description: 'Install for Zed' },
   },
   async run({ args }) {
-    const installFlags = ['claude', 'cursor', 'vscode', 'windsurf', 'zed'] as const
-    const requestedClients = installFlags.filter((f) => Boolean(args[f]))
-
-    if (requestedClients.length > 0) {
-      for (const client of requestedClients) {
-        installMcp(client)
-        process.stderr.write(`Installed MCP config for: ${client}\n`)
-      }
-      return
-    }
-
-    // Serve mode
     const { serveMcp } = await import('../../mcp/server.js')
     await serveMcp({
       port: args.http ? Number(args.http) : undefined,
@@ -46,62 +30,91 @@ export default defineCommand({
   },
 })
 
-type McpClient = 'claude' | 'cursor' | 'vscode' | 'windsurf' | 'zed'
+// ── mcp install ────────────────────────────────────────────────────────────
 
-const CLAWOPS_ENTRY = {
-  command: 'clawops',
-  args: ['mcp', 'serve'],
-  type: 'stdio',
-}
+const installCmd = defineCommand({
+  meta: {
+    name: 'install',
+    description: 'Interactively wire clawops into AI editors (Claude Desktop, Claude Code, Cursor, …)',
+  },
+  args: {},
+  async run() {
+    const inquirer = (await import('inquirer')).default
+    const { MCP_APPS, buildMcpEntry, writeAppConfigs } = await import('../mcp-apps.js')
 
-function getConfigPath(client: McpClient): string {
-  const home = os.homedir()
-  const isLinux = process.platform === 'linux'
-  switch (client) {
-    case 'claude':
-      return isLinux
-        ? path.join(home, '.config', 'Claude', 'claude_desktop_config.json')
-        : path.join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
-    case 'cursor':
-      return path.join(home, '.cursor', 'mcp.json')
-    case 'vscode':
-      return isLinux
-        ? path.join(home, '.config', 'Code', 'User', 'mcp.json')
-        : path.join(home, 'Library', 'Application Support', 'Code', 'User', 'mcp.json')
-    case 'windsurf':
-      return path.join(home, '.codeium', 'windsurf', 'mcp_config.json')
-    case 'zed':
-      return path.join(home, '.config', 'zed', 'settings.json')
-  }
-}
+    const mcpEntry = buildMcpEntry()
 
-function installMcp(client: McpClient): void {
-  const configPath = getConfigPath(client)
-  const dir = path.dirname(configPath)
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true })
-  }
-
-  let config: Record<string, unknown> = {}
-  if (existsSync(configPath)) {
-    try {
-      config = JSON.parse(readFileSync(configPath, 'utf-8')) as Record<string, unknown>
-    } catch {
-      // corrupt/empty file — start fresh
+    if (!mcpEntry.resolved) {
+      info('clawops is not installed globally — AI apps may not be able to start the MCP server.')
+      info('Install it first:  npm install -g @clawops/cli')
+      info('The config will still be written now using "clawops" as the command name.\n')
     }
-  }
 
-  if (client === 'zed') {
-    // Zed nests MCP under context_servers
-    const contextServers = (config['context_servers'] ?? {}) as Record<string, unknown>
-    contextServers['clawops'] = CLAWOPS_ENTRY
-    config['context_servers'] = contextServers
-  } else {
-    // Claude, Cursor, VS Code, Windsurf all use mcpServers top-level
-    const mcpServers = (config['mcpServers'] ?? {}) as Record<string, unknown>
-    mcpServers['clawops'] = CLAWOPS_ENTRY
-    config['mcpServers'] = mcpServers
-  }
+    info('Use ↑↓ to move, Space to select/deselect, Enter to confirm.')
 
-  writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
-}
+    const choices = MCP_APPS.map((app) => ({
+      name: app.isInstalled()
+        ? app.name
+        : `${app.name}  (not detected — config will be written anyway)`,
+      value: app.id,
+      checked: app.isInstalled(),
+    }))
+
+    const { selectedIds } = await inquirer.prompt<{ selectedIds: string[] }>([{
+      type: 'checkbox',
+      name: 'selectedIds',
+      message: 'Which AI editors should have access to clawops?',
+      choices,
+      pageSize: MCP_APPS.length + 1,
+    }])
+
+    const selected = MCP_APPS.filter((app) => selectedIds.includes(app.id))
+
+    if (selected.length === 0) {
+      info('No apps selected. Add this to an app\'s MCP config manually:')
+      process.stdout.write(JSON.stringify({
+        mcpServers: { clawops: { command: mcpEntry.command, args: mcpEntry.args } },
+      }, null, 2) + '\n\n')
+      info('Config file locations:')
+      for (const app of MCP_APPS) {
+        info(`  ${app.name.padEnd(18)} ${app.configPath()}`)
+      }
+      return
+    }
+
+    const results = writeAppConfigs(selected, { command: mcpEntry.command, args: mcpEntry.args })
+
+    for (const r of results) {
+      if (r.ok) {
+        success(`${r.app.name} configured  (${r.configPath})`)
+      } else {
+        failure(`Could not configure ${r.app.name}: ${r.error ?? 'unknown error'}`)
+      }
+    }
+
+    const needsRestart = selected.filter((app) => app.id !== 'claude-code')
+    if (needsRestart.length > 0) {
+      info(`Restart ${needsRestart.map((a) => a.name).join(', ')} to load the clawops tool.`)
+    }
+  },
+})
+
+// ── mcp (root) ─────────────────────────────────────────────────────────────
+
+export default defineCommand({
+  meta: {
+    name: 'mcp',
+    description: 'MCP server operations',
+  },
+  args: {},
+  subCommands: {
+    serve: serveCmd,
+    install: installCmd,
+  },
+  run() {
+    process.stdout.write('Usage: clawops mcp <serve | install>\n\n')
+    process.stdout.write('  serve    Start the MCP server (stdio or HTTP)\n')
+    process.stdout.write('  install  Wire clawops into AI editors interactively\n\n')
+    process.stdout.write('Run `clawops mcp <command> --help` for flags.\n')
+  },
+})
