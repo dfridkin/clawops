@@ -32,6 +32,8 @@ async function getCmd() {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRunFn = (ctx: any) => Promise<void> | void
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SubCmds = Record<string, { run: AnyRunFn }>
 
 beforeEach(() => {
   vi.resetModules()
@@ -57,7 +59,7 @@ describe('mcp command — root', () => {
 describe('mcp serve subcommand', () => {
   it('calls serveMcp with default options', async () => {
     const cmd = await getCmd()
-    const serve = cmd.subCommands!['serve'] as { run: AnyRunFn }
+    const serve = (cmd.subCommands as SubCmds)['serve'] as { run: AnyRunFn }
     const { serveMcp } = await import('../../src/mcp/server.js')
     await serve.run({ args: {} })
     expect(vi.mocked(serveMcp)).toHaveBeenCalledOnce()
@@ -65,7 +67,7 @@ describe('mcp serve subcommand', () => {
 
   it('passes port to serveMcp when --http is specified', async () => {
     const cmd = await getCmd()
-    const serve = cmd.subCommands!['serve'] as { run: AnyRunFn }
+    const serve = (cmd.subCommands as SubCmds)['serve'] as { run: AnyRunFn }
     const { serveMcp } = await import('../../src/mcp/server.js')
     await serve.run({ args: { http: '3333' } })
     expect(vi.mocked(serveMcp)).toHaveBeenCalledWith(
@@ -75,7 +77,7 @@ describe('mcp serve subcommand', () => {
 
   it('passes readOnly when --read-only is specified', async () => {
     const cmd = await getCmd()
-    const serve = cmd.subCommands!['serve'] as { run: AnyRunFn }
+    const serve = (cmd.subCommands as SubCmds)['serve'] as { run: AnyRunFn }
     const { serveMcp } = await import('../../src/mcp/server.js')
     await serve.run({ args: { 'read-only': true } })
     expect(vi.mocked(serveMcp)).toHaveBeenCalledWith(
@@ -87,7 +89,7 @@ describe('mcp serve subcommand', () => {
 describe('mcp install subcommand', () => {
   it('runs without throwing when no apps are selected', async () => {
     const cmd = await getCmd()
-    const install = cmd.subCommands!['install'] as { run: AnyRunFn }
+    const install = (cmd.subCommands as SubCmds)['install'] as { run: AnyRunFn }
     await expect(install.run({ args: {} })).resolves.not.toThrow()
   })
 
@@ -96,7 +98,7 @@ describe('mcp install subcommand', () => {
     vi.mocked(inquirer.prompt).mockResolvedValueOnce({ selectedIds: ['claude-desktop'] })
     const { writeFileSync } = await import('node:fs')
     const cmd = await getCmd()
-    const install = cmd.subCommands!['install'] as { run: AnyRunFn }
+    const install = (cmd.subCommands as SubCmds)['install'] as { run: AnyRunFn }
     await install.run({ args: {} })
     expect(vi.mocked(writeFileSync)).toHaveBeenCalledOnce()
   })
