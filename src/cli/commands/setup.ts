@@ -16,10 +16,10 @@ import type { ClawopsConfig } from '../../config/store.js'
 
 // Minimal typing shim for inquirer v9 (ships no bundled .d.ts).
 interface InquirerQuestion {
-  type: 'input' | 'number' | 'confirm' | 'list' | 'password'
+  type: 'input' | 'number' | 'confirm' | 'list' | 'password' | 'checkbox'
   name: string
   message: string
-  choices?: Array<{ name: string; value: unknown }> | Array<string>
+  choices?: Array<{ name: string; value: unknown; checked?: boolean }> | Array<string>
   default?: unknown
   validate?: (v: string) => boolean | string | Promise<boolean | string>
   pageSize?: number
@@ -437,40 +437,56 @@ export default defineCommand({
       success(`Deployment plan saved to ${outputPath}`)
     }
 
-    // ── Step 8: Claude / MCP setup ─────────────────────────────────────────────
+    // ── Step 8: AI app integration ─────────────────────────────────────────────
     process.stdout.write('\n')
-    const { writeMcp } = await inquirer.prompt<{ writeMcp: boolean }>([{
-      type: 'confirm',
-      name: 'writeMcp',
-      message: 'Enable MCP server? (Allow connection to an AI agent)',
-      default: true,
+
+    const appChoices = MCP_APPS.map((app) => ({
+      name: app.isInstalled() ? app.name : `${app.name}  (not detected — config will be written anyway)`,
+      value: app.id,
+      checked: app.isInstalled(),
+    }))
+
+    const { selectedAppIds } = await inquirer.prompt<{ selectedAppIds: string[] }>([{
+      type: 'checkbox',
+      name: 'selectedAppIds',
+      message: 'Connect clawops to your AI apps? (space to toggle, enter to skip)',
+      choices: appChoices,
+      pageSize: MCP_APPS.length + 1,
     }])
 
-    if (writeMcp) {
-      const mcpConfigPath = getMcpConfigPath()
-      try {
-        let existing: Record<string, unknown> = {}
-        if (existsSync(mcpConfigPath)) {
-          existing = JSON.parse(readFileSync(mcpConfigPath, 'utf-8')) as Record<string, unknown>
+    const selectedApps = MCP_APPS.filter((app) => selectedAppIds.includes(app.id))
+
+    if (selectedApps.length > 0) {
+      for (const app of selectedApps) {
+        const cfgPath = app.configPath()
+        try {
+          let existing: Record<string, unknown> = {}
+          if (existsSync(cfgPath)) {
+            existing = JSON.parse(readFileSync(cfgPath, 'utf-8')) as Record<string, unknown>
+          }
+          const mcpServers = (existing['mcpServers'] ?? {}) as Record<string, unknown>
+          mcpServers['clawops'] = MCP_ENTRY
+          existing['mcpServers'] = mcpServers
+          mkdirSync(path.dirname(cfgPath), { recursive: true })
+          writeFileSync(cfgPath, JSON.stringify(existing, null, 2), 'utf-8')
+          success(`${app.name} configured  (${cfgPath})`)
+        } catch (err) {
+          failure(`Could not configure ${app.name}: ${(err as Error).message}`)
+          info('Add this to its MCP config manually:')
+          printMcpSnippet()
         }
-        const mcpServers = (existing['mcpServers'] ?? {}) as Record<string, unknown>
-        mcpServers['clawops'] = { command: 'clawops', args: ['mcp', 'serve', '--read-only'] }
-        existing['mcpServers'] = mcpServers
-        mkdirSync(path.dirname(mcpConfigPath), { recursive: true })
-        writeFileSync(mcpConfigPath, JSON.stringify(existing, null, 2), 'utf-8')
-        success(`Claude config updated  (${mcpConfigPath})`)
-        info('Restart Claude Desktop or Claude Code to load the new tool.')
-      } catch (err) {
-        failure(`Could not write Claude config: ${(err as Error).message}`)
-        info('Add the following to your Claude config file manually:')
-        printMcpSnippet()
+      }
+      const needsRestart = selectedApps.filter((app) => app.id !== 'claude-code')
+      if (needsRestart.length > 0) {
+        info(`Restart ${needsRestart.map((a) => a.name).join(', ')} to load the clawops tool.`)
       }
     } else {
-      info('To connect clawops to Claude later, add this to your Claude config file:')
+      info('To connect clawops to an AI app later, add this to its MCP config:')
       printMcpSnippet()
-      info('Config file locations:')
-      info('  macOS:  ~/Library/Application Support/Claude/claude_desktop_config.json')
-      info('  Linux:  ~/.config/Claude/claude_desktop_config.json')
+      info('Config paths:')
+      for (const app of MCP_APPS) {
+        info(`  ${app.name.padEnd(18)} ${app.configPath()}`)
+      }
     }
 
     // ── Step 9: Post-setup notes ───────────────────────────────────────────────
@@ -1127,12 +1143,50 @@ function detectSshKey(): string {
   return path.join(os.homedir(), '.ssh', 'id_ed25519')
 }
 
-function getMcpConfigPath(): string {
-  if (process.platform === 'darwin') {
-    return path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
-  }
-  return path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json')
+const MCP_ENTRY = { command: 'clawops', args: ['mcp', 'serve', '--read-only'] }
+
+interface McpApp {
+  id: string
+  name: string
+  configPath: () => string
+  isInstalled: () => boolean
 }
+
+const MCP_APPS: McpApp[] = [
+  {
+    id: 'claude-desktop',
+    name: 'Claude Desktop',
+    configPath: () => process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
+      : path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json'),
+    isInstalled: () => existsSync(
+      process.platform === 'darwin'
+        ? path.join(os.homedir(), 'Library', 'Application Support', 'Claude')
+        : path.join(os.homedir(), '.config', 'Claude'),
+    ),
+  },
+  {
+    id: 'claude-code',
+    name: 'Claude Code',
+    configPath: () => path.join(os.homedir(), '.claude.json'),
+    isInstalled: () => {
+      if (existsSync(path.join(os.homedir(), '.claude.json'))) return true
+      try { execSync('claude --version', { stdio: 'ignore' }); return true } catch { return false }
+    },
+  },
+  {
+    id: 'cursor',
+    name: 'Cursor',
+    configPath: () => path.join(os.homedir(), '.cursor', 'mcp.json'),
+    isInstalled: () => existsSync(path.join(os.homedir(), '.cursor')),
+  },
+  {
+    id: 'windsurf',
+    name: 'Windsurf',
+    configPath: () => path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json'),
+    isInstalled: () => existsSync(path.join(os.homedir(), '.codeium', 'windsurf')),
+  },
+]
 
 function printMcpSnippet(): void {
   process.stdout.write('\n')

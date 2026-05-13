@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
 **Version:** 0.9
-**Status:** M8 complete (493 unit+e2e tests); Waves 3–8B complete — WO-01–WO-17, WO-19–WO-22 done; WO-18, WO-23, WO-24, WO-26, WO-27 pending
+**Status:** M8 complete (493 unit+e2e tests); Waves 3–8B complete — WO-01–WO-17, WO-19–WO-22 done; WO-18, WO-23, WO-24, WO-26, WO-27, WO-28 pending
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -907,8 +907,8 @@ This section tracks the eight adoption milestones defined in `docs/roadmap-docs/
 **distinct from the M0–M8 development milestones in §12**. Development milestones track *what is
 built*; adoption milestones track *whether the repo is understandable, trustworthy, and launchable*.
 
-Milestone labels use `R1–R10` to avoid collision. Each milestone maps to one or more work orders
-(WO-01 through WO-27) in `docs/roadmap-docs/docs/implementation/work-orders.md`.
+Milestone labels use `R1–R11` to avoid collision. Each milestone maps to one or more work orders
+(WO-01 through WO-28) in `docs/roadmap-docs/docs/implementation/work-orders.md`.
 
 Execution is organized into waves (see `docs/roadmap-docs/docs/implementation/milestones.md`).
 WO-04 must be completed before WO-01 to avoid perpetuating inaccurate plan/apply language in the README.
@@ -927,6 +927,7 @@ WO-04 must be completed before WO-01 to avoid perpetuating inaccurate plan/apply
 | 8 | WO-23, WO-24 | R8 | Launch execution |
 | 9 | WO-25 | R9 | Secret lifecycle management |
 | 10 | WO-26, WO-27 | R10 | Stack monitoring wizard |
+| 11 | WO-28 | R11 | Gateway-agent MCP wiring |
 
 ### R1 — First-Run Experience
 
@@ -1156,6 +1157,44 @@ Deliverables:
 
 Status:
 - [ ] WO-25: Secret lifecycle CLI and docs
+
+### R11 — Gateway-Agent MCP Wiring
+
+Goal: let the AI agent running *inside* an OpenClaw gateway control clawops management commands (doctor, status, config, logs) via MCP — without the user leaving the chat interface.
+
+Work orders: WO-28 (gateway-side MCP client config).
+
+Background: the `clawops setup` wizard already wires local AI editors (Claude Desktop, Cursor, etc.) to clawops via an MCP server entry in the editor's config. This wave adds the complementary wiring: the OpenClaw gateway's own AI agent becomes an MCP *client* of clawops, so in-conversation commands like "check if my stack is healthy" or "show me the last 20 log lines" invoke the real `clawops` CLI rather than hallucinating output.
+
+Deliverables:
+
+**WO-28 — Gateway-agent MCP client config**
+
+New optional wizard step in `clawops setup` (and as a standalone `clawops mcp wire --stack <name>`):
+
+1. Detect whether the deployed gateway's OpenClaw version supports MCP client connections (read `meta.lastTouchedVersion` from remote config; require ≥ 2026.4).
+2. Prompt: *"Should the OpenClaw gateway's AI also be able to manage this stack?"* (default: no — opt-in only).
+3. If yes, write an MCP client entry into the remote `openclaw.json` under `gateway.mcpClients`:
+   ```json
+   "mcpClients": {
+     "clawops": {
+       "command": "clawops",
+       "args": ["mcp", "serve"],
+       "transport": "stdio"
+     }
+   }
+   ```
+4. Call `restartGateway` to apply the change.
+5. Show a confirmation: *"The gateway's AI can now run clawops commands. Try: 'check if my stack is healthy'"*.
+
+Implementation notes:
+- Use `atomicWriteConfig` + `restartGateway` (existing helpers) — no new SSH primitives needed.
+- The MCP server for gateway use runs **without** `--read-only` (the gateway agent needs write access for config updates and gateway restarts).
+- If the gateway's OpenClaw version does not support `mcpClients`, surface a clear version-upgrade message rather than silently failing.
+- Add a `clawops mcp wire --stack <name>` command as a standalone entry point (not just via setup wizard) so operators can add this to existing deployments without re-running full setup.
+
+Status:
+- [ ] WO-28: Gateway-agent MCP client config (wizard step + standalone command)
 
 ---
 
