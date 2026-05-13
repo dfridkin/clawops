@@ -45,78 +45,126 @@ and Cursor drive them through typed MCP tools with explicit safety controls.
 
 ---
 
-## Quick Start — local VM (fastest path)
-
-The local provider needs only a Linux host reachable over SSH — no cloud account required.
-
-**Prerequisites:** Node.js ≥ 22, an SSH key, a Linux host (Ubuntu/Debian/RHEL) you can reach.
+## Quick Start
 
 ```bash
 npm install -g @clawops/cli
-
-# Check your environment
-clawops doctor
-
-# Configure clawops for a local host
-clawops init --provider local --host 192.168.1.50 --user ubuntu --key-path ~/.ssh/id_ed25519
-
-# Bootstrap OpenClaw on the host (installs Docker + OpenClaw over SSH)
-clawops up
-
-# Verify it's running
-clawops status
-
-# Start the MCP server for Claude Code
-clawops mcp serve
+clawops setup
 ```
 
-See [`docs/examples/local-vm.md`](docs/examples/local-vm.md) for the full walkthrough including
-SSH prerequisites, firewall setup, and troubleshooting.
+`clawops setup` is an interactive wizard that gets OpenClaw running in about 2 minutes. It
+handles everything in one flow — no config files to write by hand, no commands to memorize.
 
-## Quick Start — cloud (AWS)
+### What the wizard does
+
+**Step 1 — Choose a deployment target**
+
+Pick an existing server you can SSH into (Linux or macOS), or a new cloud VM on AWS, GCP, or
+Azure. Cloud deployments walk you through authenticating with the provider CLI if you aren't
+already signed in.
+
+**Step 2 — Pick an LLM provider**
+
+Choose from Anthropic, OpenAI, Amazon Bedrock, Ollama, or others. The wizard prompts for your
+API key and saves it locally (in `~/.clawops/secrets/`, chmod 600) — it is never sent anywhere
+except to OpenClaw on the target host when the config is applied.
+
+**Step 3 — Add chat integrations (optional)**
+
+Select any combination of Discord, Telegram, Slack, WhatsApp, or Teams. The wizard collects each
+integration's bot token the same way as the API key — paste it in, reference an env var, or point
+to a file.
+
+**Step 4 — Wire your AI editor**
+
+Select which AI apps should have access to clawops — Claude Desktop, Claude Code, Cursor, and
+Windsurf are all supported. The wizard writes an MCP server entry into each app's config file
+using the absolute binary path so the app can launch it independently.
+
+**Step 5 — Deploy**
+
+The wizard bootstraps OpenClaw on the target host over SSH (installs Docker, pulls the image,
+starts the container), applies your LLM and integration config, generates a gateway auth token,
+and prints a direct dashboard URL:
+
+```
+✔ All done! OpenClaw is running.
+ℹ Open dashboard: http://192.168.1.50:18789?token=<your-token>
+ℹ Token saved to ~/.clawops/secrets/GATEWAY_TOKEN_my-stack
+```
+
+**Prerequisites:** Node.js ≥ 22, an SSH key, and either an SSH-reachable Linux/macOS host or a
+cloud account with CLI credentials configured (`aws configure`, `gcloud auth login`, or `az login`).
+
+---
+
+### Manual setup — existing server
+
+If you prefer step-by-step control, or are adding clawops to an already-running deployment:
 
 ```bash
 npm install -g @clawops/cli
-# or: npx @clawops/cli
+
+clawops doctor   # verify environment
+
+clawops init --provider local --host 192.168.1.50 --user ubuntu --key-path ~/.ssh/id_ed25519
+clawops up       # installs Docker + OpenClaw over SSH
+clawops status
+```
+
+See [`docs/examples/local-vm.md`](docs/examples/local-vm.md) for SSH prerequisites, firewall
+setup, and troubleshooting.
+
+### Manual setup — cloud (AWS)
+
+```bash
+npm install -g @clawops/cli
 
 # Requires AWS credentials in your environment (AWS_PROFILE or ~/.aws/credentials)
 clawops init --provider aws
 
-# Edit ~/.clawops/config.json — set stateUrl to your S3 bucket:
-#   "stateUrl": "s3://my-clawops-state"
+# Edit ~/.clawops/config.json — set stateUrl to your S3 bucket
 
-# Generate a deploy plan (runs pulumi preview internally)
 clawops plan --provider aws --stack default --out /tmp/plan.json
-
-# Review the plan, then apply
 clawops apply /tmp/plan.json
 ```
 
 ---
 
-## Connect Claude Code
+## Connect an AI editor manually
 
-Add to your Claude Code MCP config (`~/.claude.json` or project `.mcp.json`):
+The `setup` wizard handles this automatically. If you need to add or update the MCP entry by
+hand, add the following to your editor's MCP config:
 
 ```json
 {
   "mcpServers": {
     "clawops": {
-      "command": "clawops",
+      "command": "/path/to/clawops",
       "args": ["mcp", "serve", "--read-only"]
     }
   }
 }
 ```
 
+Config file locations:
+
+| App | Path |
+|---|---|
+| Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Claude Desktop (Linux) | `~/.config/Claude/claude_desktop_config.json` |
+| Claude Code | `~/.claude.json` |
+| Cursor | `~/.cursor/mcp.json` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+
 **Start with `--read-only`** — it enables status, logs, config reads, and diagnostics while
-blocking any operation that mutates infrastructure. Remove `--read-only` only once you understand
-which tools are destructive and have reviewed [`docs/security/mcp-safety.md`](docs/security/mcp-safety.md).
+blocking mutations. Remove it only after reviewing
+[`docs/security/mcp-safety.md`](docs/security/mcp-safety.md).
 
 Destructive tools (`clawops_destroy`, `clawops_up`, `clawops_config_set`, etc.) require explicit
-confirmation from the agent before executing — they will never run silently.
+confirmation before executing — they will never run silently.
 
-For Cursor, VS Code, or HTTP mode setup see [`docs/mcp/`](docs/mcp/).
+For HTTP mode setup see [`docs/mcp/`](docs/mcp/).
 
 ---
 
