@@ -151,15 +151,13 @@ afterEach(() => {
 // ── root ───────────────────────────────────────────────────────────────────
 
 describe('secret root', () => {
-  it('prints usage listing all subcommands', async () => {
+  it('exposes all five subcommands', async () => {
     const cmd = await getCmd()
-    ;(cmd.run as AnyRunFn)({ args: {} })
-    const out = vi.mocked(process.stdout.write).mock.calls.map(c => String(c[0])).join('')
-    expect(out).toContain('list')
-    expect(out).toContain('set')
-    expect(out).toContain('delete')
-    expect(out).toContain('rotate')
-    expect(out).toContain('audit')
+    expect(cmd.subCommands).toHaveProperty('list')
+    expect(cmd.subCommands).toHaveProperty('set')
+    expect(cmd.subCommands).toHaveProperty('delete')
+    expect(cmd.subCommands).toHaveProperty('rotate')
+    expect(cmd.subCommands).toHaveProperty('audit')
   })
 })
 

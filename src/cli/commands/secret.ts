@@ -329,13 +329,4 @@ export default defineCommand({
     rotate: rotateCmd,
     audit: auditCmd,
   },
-  run() {
-    process.stdout.write('Usage: clawops secret <list | set | delete | rotate | audit>\n\n')
-    process.stdout.write('  list     Show all stored secrets and their status\n')
-    process.stdout.write('  set      Create or update a secret\n')
-    process.stdout.write('  delete   Remove a stored secret\n')
-    process.stdout.write('  rotate   Update a secret and re-apply config to a running stack\n')
-    process.stdout.write('  audit    Report missing secrets and unresolvable refs\n\n')
-    process.stdout.write('Run `clawops secret <command> --help` for flags.\n')
-  },
 })

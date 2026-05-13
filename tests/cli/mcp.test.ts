@@ -46,12 +46,10 @@ afterEach(() => {
 })
 
 describe('mcp command — root', () => {
-  it('prints usage when called with no subcommand', async () => {
+  it('exposes serve and install subcommands', async () => {
     const cmd = await getCmd()
-    ;(cmd.run as AnyRunFn)({ args: {} })
-    const out = vi.mocked(process.stdout.write).mock.calls.map(c => String(c[0])).join('')
-    expect(out).toContain('serve')
-    expect(out).toContain('install')
+    expect(cmd.subCommands).toHaveProperty('serve')
+    expect(cmd.subCommands).toHaveProperty('install')
   })
 })
 

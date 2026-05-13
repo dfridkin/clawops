@@ -49,7 +49,8 @@ describe('command registry', () => {
       // meta is Resolvable<CommandMeta>; our commands always use plain objects
       const meta = cmd.meta as { name: string }
       expect(meta.name).toBe(name)
-      expect(typeof cmd.run).toBe('function')
+      // Commands with subCommands may omit run(); citty handles the no-subcommand case
+      expect(typeof cmd.run === 'function' || cmd.subCommands != null).toBe(true)
     })
   }
 })
