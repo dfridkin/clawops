@@ -181,6 +181,8 @@ export default defineCommand({
       localPort = localAnswers.port
       localUser = localAnswers.user
       localKeyPath = localAnswers.keyPath
+
+      await ensureAuthorizedKey(localKeyPath, localHost, inquirer)
     }
 
     // ── Step 3: Stack basics ───────────────────────────────────────────────────
@@ -769,6 +771,57 @@ function cliInstallUrl(provider: 'aws' | 'gcp' | 'azure'): string {
   if (provider === 'aws') return 'https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html'
   if (provider === 'gcp') return 'https://cloud.google.com/sdk/docs/install'
   return 'https://learn.microsoft.com/en-us/cli/azure/install-azure-cli'
+}
+
+const LOCALHOST_ALIASES = new Set(['localhost', '127.0.0.1', '::1'])
+
+async function ensureAuthorizedKey(
+  keyPath: string,
+  host: string,
+  inquirer: InquirerInstance,
+): Promise<void> {
+  const pubKeyPath = `${keyPath}.pub`
+  if (!existsSync(pubKeyPath)) return
+
+  const pubKey = readFileSync(pubKeyPath, 'utf-8').trim()
+  const isLocal = LOCALHOST_ALIASES.has(host.toLowerCase())
+  const authorizedKeysPath = path.join(os.homedir(), '.ssh', 'authorized_keys')
+
+  if (isLocal) {
+    // Check if the key is already authorised
+    const existing = existsSync(authorizedKeysPath)
+      ? readFileSync(authorizedKeysPath, 'utf-8')
+      : ''
+    if (existing.includes(pubKey)) {
+      success('SSH public key is already in authorized_keys.')
+      return
+    }
+
+    info('\nConnecting to localhost requires your public key to be in ~/.ssh/authorized_keys.')
+    const { addKey } = await inquirer.prompt<{ addKey: boolean }>([{
+      type: 'confirm',
+      name: 'addKey',
+      message: 'Add your public key to ~/.ssh/authorized_keys now? (required for SSH to work)',
+      default: true,
+    }])
+
+    if (addKey) {
+      mkdirSync(path.join(os.homedir(), '.ssh'), { recursive: true })
+      const entry = existing.endsWith('\n') || existing === '' ? pubKey + '\n' : '\n' + pubKey + '\n'
+      writeFileSync(authorizedKeysPath, existing + entry, { encoding: 'utf-8', flag: 'a' })
+      spawnSync('chmod', ['600', authorizedKeysPath], { stdio: 'ignore' })
+      success('Public key added to ~/.ssh/authorized_keys.')
+    } else {
+      info('SSH will likely fail. Add this line to ~/.ssh/authorized_keys manually:')
+      info(`  ${pubKey}`)
+    }
+  } else {
+    // Remote server — just show the key so the user can add it themselves
+    process.stdout.write('\n')
+    info('Make sure this public key is in ~/.ssh/authorized_keys on your server:')
+    info(`  ${pubKey}`)
+    info('(If you just created the server, paste the line above into the server\'s ~/.ssh/authorized_keys file.)\n')
+  }
 }
 
 async function generateSshKey(): Promise<string> {
