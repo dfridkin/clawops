@@ -200,7 +200,8 @@ describe('handleConfigSet', () => {
   it('writes updated config and returns success', async () => {
     const session = new FakeSshSession()
     session.onExec(() => ({ stdout: FAKE_CONFIG_JSON, stderr: '', code: 0 })) // read
-    session.onExec(() => ({ stdout: '', stderr: '', code: 0 })) // write
+    session.onExec(() => ({ stdout: 'Linux', stderr: '', code: 0 }))          // uname -s (detectOS)
+    session.onExec(() => ({ stdout: '', stderr: '', code: 0 }))               // write
     const { acquireSession } = await getMocks()
     acquireSession.mockResolvedValue({ session, release: vi.fn() })
 
@@ -213,7 +214,8 @@ describe('handleConfigSet', () => {
 
   it('returns errText when write command fails', async () => {
     const session = new FakeSshSession()
-    session.onExec(() => ({ stdout: FAKE_CONFIG_JSON, stderr: '', code: 0 }))
+    session.onExec(() => ({ stdout: FAKE_CONFIG_JSON, stderr: '', code: 0 }))      // read
+    session.onExec(() => ({ stdout: 'Linux', stderr: '', code: 0 }))               // uname -s (detectOS)
     session.onExec(() => ({ stdout: '', stderr: 'permission denied', code: 1 }))
     const { acquireSession } = await getMocks()
     acquireSession.mockResolvedValue({ session, release: vi.fn() })
