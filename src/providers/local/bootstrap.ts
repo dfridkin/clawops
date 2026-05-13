@@ -21,6 +21,8 @@ export interface BootstrapOpts {
   openclawVersion: string
   stackName: string
   noWait?: boolean
+  /** Sudo password for hosts that require one. When set, sudo -S is used so no TTY is needed. */
+  sudoPassword?: string
   /** Called with each stdout line as the bootstrap script runs. */
   onOutput?: (line: string) => void
   signal?: AbortSignal
@@ -43,8 +45,11 @@ function renderScript(openclawVersion: string): string {
 export async function localBootstrap(opts: BootstrapOpts): Promise<LocalState> {
   const script = renderScript(opts.openclawVersion)
   const b64 = Buffer.from(script, 'utf-8').toString('base64')
-  // Pipe through base64 -d to reconstruct the script, then run as root via sudo
-  const command = `echo '${b64}' | base64 -d | sudo bash`
+  // When a sudo password is provided, use `sudo -S` (reads password from stdin).
+  // The password is fed via printf so stdin remains free for the inline -c command.
+  const command = opts.sudoPassword
+    ? `printf '%s\n' ${shellQuote(opts.sudoPassword)} | sudo -S bash -c "echo '${b64}' | base64 -d | bash"`
+    : `echo '${b64}' | base64 -d | sudo bash`
 
   const { session, release } = await acquireSession({
     host: opts.host,
@@ -120,6 +125,11 @@ async function waitForGateway(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// Wrap a string in single quotes, escaping any single quotes inside it.
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`
 }
 
 // The ssh2 ClientChannel is a Duplex stream with .stderr and a 'close' event

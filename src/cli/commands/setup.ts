@@ -15,7 +15,7 @@ import type { ClawopsConfig } from '../../config/store.js'
 
 // Minimal typing shim for inquirer v9 (ships no bundled .d.ts).
 interface InquirerQuestion {
-  type: string
+  type: 'input' | 'number' | 'confirm' | 'list' | 'password'
   name: string
   message: string
   choices?: Array<{ name: string; value: unknown }> | Array<string>
@@ -115,6 +115,7 @@ export default defineCommand({
     let localUser = 'ubuntu'
     let localKeyPath = detectSshKey()
     let localPort = 22
+    let localSudoPassword = ''
 
     if (deploymentType === 'cloud') {
       const answer = await inquirer.prompt<{ provider: 'aws' | 'gcp' | 'azure' }>([{
@@ -183,6 +184,13 @@ export default defineCommand({
       localKeyPath = localAnswers.keyPath
 
       await ensureAuthorizedKey(localKeyPath, localHost, inquirer)
+
+      const { sudoPass } = await inquirer.prompt<{ sudoPass: string }>([{
+        type: 'password',
+        name: 'sudoPass',
+        message: `Sudo password for ${localUser}@${localHost}: (press Enter to skip if passwordless sudo is configured)`,
+      }])
+      localSudoPassword = sudoPass
     }
 
     // ── Step 3: Stack basics ───────────────────────────────────────────────────
@@ -534,6 +542,7 @@ export default defineCommand({
           port: localPort,
           user: localUser,
           keyPath: localKeyPath,
+          sudoPassword: localSudoPassword || undefined,
           openclawVersion: stackAnswers.openclawVersion,
           overlay: openclawConfigOverlay,
           signal: ac.signal,
@@ -584,6 +593,7 @@ interface LocalDeployOpts {
   port: number
   user: string
   keyPath: string
+  sudoPassword?: string
   openclawVersion: string
   overlay: Record<string, unknown>
   signal?: AbortSignal
@@ -638,6 +648,7 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
       knownHostsPath,
       openclawVersion: opts.openclawVersion,
       stackName: opts.stackName,
+      sudoPassword: opts.sudoPassword,
       noWait: false,
       onOutput: (line) => {
         for (const [pattern, label] of STAGES) {
