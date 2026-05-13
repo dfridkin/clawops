@@ -6,6 +6,7 @@
 import { defineCommand } from 'citty'
 import process from 'node:process'
 import os from 'node:os'
+import { randomBytes } from 'node:crypto'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { execSync, spawnSync, spawn } from 'node:child_process'
 import path from 'node:path'
@@ -361,8 +362,19 @@ export default defineCommand({
     }
 
     // ── Step 7: Build and write output ─────────────────────────────────────────
+
+    // Generate a gateway auth token and persist it locally so the user can
+    // retrieve it later from ~/.clawops/secrets/GATEWAY_TOKEN.
+    const gatewayToken = randomBytes(24).toString('hex')
+    const secretsDir = path.join(os.homedir(), '.clawops', 'secrets')
+    mkdirSync(secretsDir, { recursive: true })
+    spawnSync('chmod', ['700', secretsDir], { stdio: 'ignore' })
+    const tokenPath = path.join(secretsDir, 'GATEWAY_TOKEN')
+    writeFileSync(tokenPath, gatewayToken, { encoding: 'utf-8', mode: 0o600 })
+
     const openclawConfigOverlay: Record<string, unknown> = {
       models: { provider: modelProviderId, ...builtModelConfig },
+      gateway: { auth: { mode: 'token', token: gatewayToken } },
     }
     if (Object.keys(channelsConfig).length > 0) {
       openclawConfigOverlay['channels'] = channelsConfig
@@ -494,6 +506,7 @@ export default defineCommand({
           sudoPassword: localSudoPassword || undefined,
           openclawVersion: stackAnswers.openclawVersion,
           overlay: openclawConfigOverlay,
+          gatewayToken,
           signal: ac.signal,
           inquirer,
         })
@@ -546,6 +559,7 @@ interface LocalDeployOpts {
   sudoPassword?: string
   openclawVersion: string
   overlay: Record<string, unknown>
+  gatewayToken: string
   signal?: AbortSignal
   inquirer: InquirerInstance
 }
@@ -645,9 +659,11 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
 
   process.stdout.write('\n')
   success('All done! OpenClaw is running.')
-  info(`Gateway URL: ${state.gatewayUrl}`)
-  info(`SSH access:  ${state.sshUser}@${state.sshHost}:${state.sshPort}`)
-  info(`\nRun  clawops doctor --stack ${opts.stackName}  to check everything is healthy`)
+  info(`Gateway URL:   ${state.gatewayUrl}`)
+  info(`Gateway token: ${opts.gatewayToken}`)
+  info(`SSH access:    ${state.sshUser}@${state.sshHost}:${state.sshPort}`)
+  info(`\nToken saved to ~/.clawops/secrets/GATEWAY_TOKEN`)
+  info(`Run  clawops doctor --stack ${opts.stackName}  to check everything is healthy`)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
