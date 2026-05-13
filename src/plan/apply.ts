@@ -4,6 +4,7 @@ import { buildContext } from '../cli/context.js'
 import { UsageError } from '../errors/index.js'
 import { validatePlan } from './validate.js'
 import { resolveSecrets } from './secrets.js'
+import { saveOverlay } from './overlay-store.js'
 import { readRemoteConfig, atomicWriteConfig, restartGateway, deepMerge } from './remote-config.js'
 import type { DeployPlan } from './generate.js'
 import type { StackOutputs } from '../providers/types.js'
@@ -137,6 +138,7 @@ async function applyConfigOverlay(
 
     await atomicWriteConfig(session, merged, signal)
     await restartGateway(session, signal)
+    saveOverlay(plan.spec.stackName, configOverlay as Record<string, unknown>, plan.spec.secrets ?? [])
   } finally {
     session.close()
   }
