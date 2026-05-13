@@ -96,6 +96,8 @@ and prints a direct dashboard URL:
 **Prerequisites:** Node.js ≥ 22, an SSH key, and either an SSH-reachable Linux/macOS host or a
 cloud account with CLI credentials configured (`aws configure`, `gcloud auth login`, or `az login`).
 
+For a full narrated walkthrough with example output, see [`docs/demo-script.md`](docs/demo-script.md).
+
 ---
 
 ### Manual setup — existing server
