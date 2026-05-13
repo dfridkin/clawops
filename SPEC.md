@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
 **Version:** 0.9
-**Status:** M8 complete (493 unit+e2e tests); Waves 3–8B complete — WO-01–WO-17, WO-19–WO-22 done; WO-18, WO-23, WO-24 pending
+**Status:** M8 complete (493 unit+e2e tests); Waves 3–8B complete — WO-01–WO-17, WO-19–WO-22 done; WO-18, WO-23, WO-24, WO-26, WO-27 pending
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -907,8 +907,8 @@ This section tracks the eight adoption milestones defined in `docs/roadmap-docs/
 **distinct from the M0–M8 development milestones in §12**. Development milestones track *what is
 built*; adoption milestones track *whether the repo is understandable, trustworthy, and launchable*.
 
-Milestone labels use `R1–R8` to avoid collision. Each milestone maps to one or more work orders
-(WO-01 through WO-24) in `docs/roadmap-docs/docs/implementation/work-orders.md`.
+Milestone labels use `R1–R10` to avoid collision. Each milestone maps to one or more work orders
+(WO-01 through WO-27) in `docs/roadmap-docs/docs/implementation/work-orders.md`.
 
 Execution is organized into waves (see `docs/roadmap-docs/docs/implementation/milestones.md`).
 WO-04 must be completed before WO-01 to avoid perpetuating inaccurate plan/apply language in the README.
@@ -926,6 +926,7 @@ WO-04 must be completed before WO-01 to avoid perpetuating inaccurate plan/apply
 | 7 | WO-19, WO-20, WO-21 | R6, R7 | Contributor + provider docs |
 | 8 | WO-23, WO-24 | R8 | Launch execution |
 | 9 | WO-25 | R9 | Secret lifecycle management |
+| 10 | WO-26, WO-27 | R10 | Stack monitoring wizard |
 
 ### R1 — First-Run Experience
 
@@ -1094,6 +1095,48 @@ Status:
 - [x] WO-22: Public roadmap and limitations
 - [ ] WO-23: Demo script
 - [ ] WO-24: Launch issue set
+
+### R10 — Stack Monitoring
+
+Goal: give operators a live, interactive view of a running OpenClaw stack's health, resource usage, and recent activity — without leaving the terminal.
+
+Work orders: WO-26 (`clawops monitor` command), WO-27 (MCP monitor tool).
+
+Background: `clawops doctor` and `clawops status` provide point-in-time snapshots. Operators running production stacks need continuous visibility — gateway reachability, model latency, active agent sessions, and log streams — surfaced in a single interactive command.
+
+Deliverables:
+
+**WO-26 — `clawops monitor` interactive wizard**
+
+`clawops monitor [--stack <name>] [--interval <seconds>]`
+
+A refreshing terminal dashboard that shows:
+- **Gateway health**: reachability, uptime, port, auth mode
+- **Active sessions**: connected agent count, session IDs, duration
+- **Model usage**: requests/min, error rate, per-provider latency (last 5 min)
+- **Container status**: image tag, restart count, memory/CPU (via `docker stats`)
+- **Recent log tail**: last N lines from the OpenClaw container, auto-scrolling
+- **Alerts**: surfaces config issues found by `clawops doctor` inline
+
+Interaction model:
+- Polls on a configurable interval (default 10s); renders via ANSI terminal output
+- `q` / `Ctrl-C` exits cleanly (no process hang — calls `drainPool()`)
+- `r` forces an immediate refresh
+- `l` toggles the log tail panel on/off
+- `d` runs a full `clawops doctor` check and displays results inline
+
+Implementation notes:
+- Reuses the SSH pool (`acquireSession`) for all remote execs; single session per refresh cycle
+- Uses existing `readRemoteConfig`, `doctor` check helpers, and `clawops logs` infrastructure
+- Renders with ANSI escape codes (no heavy TUI dependency); falls back to plain-text if `--no-color`
+
+**WO-27 — MCP monitor tool**
+
+`clawops_monitor` MCP tool: returns a structured JSON snapshot (gateway health, session count, model usage, last 5 log lines) that an agent can poll or summarise. Complements the interactive CLI by giving agents a machine-readable health signal.
+
+Status:
+- [ ] WO-26: `clawops monitor` interactive dashboard
+- [ ] WO-27: `clawops_monitor` MCP tool
 
 ### R9 — Secret Lifecycle Management
 
