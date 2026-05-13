@@ -103,15 +103,18 @@ export async function restartGateway(
   // explicitly to `gateway run --token`. This ensures the gateway enforces the
   // specific token rather than relying on --allow-unconfigured defaults.
   const cfgResult = await session.exec(`cat ${configPath}`, signal)
+  // --allow-unconfigured is always passed: it lets the gateway start without
+  // requiring a fully-validated model config in /app/config.json.
+  // --token TOKEN overlays the auth token so the session requires the correct secret.
   let gatewayCmd = 'node openclaw.mjs gateway run --allow-unconfigured'
   try {
     const cfg = JSON.parse(cfgResult.stdout) as Record<string, unknown>
     const token = (cfg?.['gateway'] as Record<string, unknown>)?.['auth'] as Record<string, unknown>
     const tokenVal = token?.['token'] as string | undefined
     if (tokenVal) {
-      gatewayCmd = `node openclaw.mjs gateway run --token '${tokenVal}'`
+      gatewayCmd = `node openclaw.mjs gateway run --allow-unconfigured --token '${tokenVal}'`
     }
-  } catch { /* keep allow-unconfigured fallback */ }
+  } catch { /* keep allow-unconfigured-only fallback */ }
 
   const restartCmd =
     pathPrefix +
