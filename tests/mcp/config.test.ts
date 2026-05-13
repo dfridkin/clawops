@@ -216,7 +216,8 @@ describe('handleConfigSet', () => {
     const session = new FakeSshSession()
     session.onExec(() => ({ stdout: FAKE_CONFIG_JSON, stderr: '', code: 0 }))      // read
     session.onExec(() => ({ stdout: 'Linux', stderr: '', code: 0 }))               // uname -s (detectOS)
-    session.onExec(() => ({ stdout: '', stderr: 'permission denied', code: 1 }))
+    session.onExec(() => ({ stdout: '', stderr: 'permission denied', code: 1 }))   // write (direct)
+    session.onExec(() => ({ stdout: '', stderr: 'permission denied', code: 1 }))   // write (sudo -n retry)
     const { acquireSession } = await getMocks()
     acquireSession.mockResolvedValue({ session, release: vi.fn() })
 

@@ -2,7 +2,7 @@
 // Used by apply.ts (cloud post-provisioning) and up.ts (local --config).
 // Extracted so the MCP config handler and plan layer share one implementation.
 
-import type { SshSession } from '../transport/ssh.js'
+import type { SshSession, SshExecResult } from '../transport/ssh.js'
 
 export const OPENCLAW_CONFIG_LINUX = '/home/clawops/openclaw.json'
 export const OPENCLAW_CONFIG_MACOS = '~/.config/openclaw/config.json'
@@ -16,6 +16,24 @@ async function detectOS(session: SshSession, signal?: AbortSignal): Promise<'Lin
 
 function configPathForOS(os: 'Linux' | 'Darwin'): string {
   return os === 'Darwin' ? OPENCLAW_CONFIG_MACOS : OPENCLAW_CONFIG_LINUX
+}
+
+/**
+ * Run cmd directly; if it fails, retry under `sudo -n` (non-interactive).
+ * This handles cloud VMs where the SSH user (e.g. AWS "ubuntu") is not the
+ * "clawops" service user but has passwordless sudo configured.
+ * On GCP/Azure where SSH connects as "clawops", the direct attempt succeeds.
+ */
+async function execWithFallbackSudo(
+  session: SshSession,
+  cmd: string,
+  signal?: AbortSignal,
+): Promise<SshExecResult> {
+  const result = await session.exec(cmd, signal)
+  if (result.code === 0) return result
+  // Wrap in double-quotes: base64 alphabet and our path strings contain no
+  // double-quote or $ characters, and inner single-quotes are literal inside "".
+  return session.exec(`sudo -n bash -c "${cmd}"`, signal)
 }
 
 /** Read and parse openclaw.json from the remote host. */
@@ -51,7 +69,11 @@ export async function atomicWriteConfig(
     `echo '${b64}' | base64 -d > ${OPENCLAW_TMP} && ` +
     `mv ${OPENCLAW_TMP} ${configPath}` +
     chown
-  const result = await session.exec(cmd, signal)
+  // On macOS the SSH user owns the config; on Linux the SSH user may differ
+  // from "clawops" (e.g. AWS "ubuntu"), so fall back to sudo -n.
+  const result = os === 'Darwin'
+    ? await session.exec(cmd, signal)
+    : await execWithFallbackSudo(session, cmd, signal)
   if (result.code !== 0) {
     throw new Error(`Failed to write config: ${result.stderr}`)
   }
@@ -64,16 +86,20 @@ export async function restartGateway(
 ): Promise<void> {
   const os = await detectOS(session, signal)
   const configPath = configPathForOS(os)
-  // Non-interactive SSH sessions get a minimal PATH; prepend common Docker locations on macOS.
+
+  // Non-interactive SSH sessions get a minimal PATH on macOS (Docker Desktop /
+  // Homebrew install outside /usr/bin). Linux always has /usr/bin/docker in PATH.
   const pathPrefix = os === 'Darwin'
     ? 'export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH" && '
     : ''
-  const imgResult = await session.exec(
-    `${pathPrefix}docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo 'ghcr.io/openclaw/openclaw:latest'`,
-    signal,
-  )
+
+  const imgCmd = `${pathPrefix}docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo 'ghcr.io/openclaw/openclaw:latest'`
+  const imgResult = os === 'Darwin'
+    ? await session.exec(imgCmd, signal)
+    : await execWithFallbackSudo(session, imgCmd, signal)
   const image = imgResult.stdout.trim()
-  const cmd =
+
+  const restartCmd =
     pathPrefix +
     [
       'docker stop openclaw 2>/dev/null || true',
@@ -81,7 +107,10 @@ export async function restartGateway(
       `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 ` +
         `-v ${configPath}:/app/config.json:ro ${image}`,
     ].join(' && ')
-  const result = await session.exec(cmd, signal)
+
+  const result = os === 'Darwin'
+    ? await session.exec(restartCmd, signal)
+    : await execWithFallbackSudo(session, restartCmd, signal)
   if (result.code !== 0) {
     throw new Error(`Gateway restart failed: ${result.stderr}`)
   }
