@@ -879,9 +879,9 @@ async function checkDockerPreflight(opts: {
 
   if (out === 'NOT_RUNNING') {
     if (!LOCALHOST_ALIASES.has(opts.host.toLowerCase())) {
-      spin.fail('Docker is installed but not running on the target host.')
-      info('Start Docker on the server (e.g. sudo systemctl start docker), then re-run: clawops setup')
-      throw new ProviderError('Docker is not running on the target host.')
+      // Remote server: start Docker via SSH instead of locally.
+      await startRemoteDocker(opts, spin)
+      return
     }
     spin.warn('Docker is installed but not running.')
     await startDockerAndWait(opts.inquirer)
@@ -900,6 +900,55 @@ async function checkDockerPreflight(opts: {
 
 const DOCKER_POLL_MS = 3_000
 const DOCKER_TIMEOUT_MS = 90_000
+
+async function startRemoteDocker(
+  opts: { host: string; port: number; user: string; keyPath: string; knownHostsPath: string; signal?: AbortSignal },
+  spin: ReturnType<typeof spinner>,
+): Promise<void> {
+  const { acquireSession } = await import('../../transport/pool.js')
+  const { ProviderError } = await import('../../errors/index.js')
+
+  spin.text = 'Starting Docker on the remote server...'
+
+  const { session, release } = await acquireSession({
+    host: opts.host, port: opts.port, user: opts.user,
+    privateKeyPath: opts.keyPath, knownHostsPath: opts.knownHostsPath, signal: opts.signal,
+  })
+
+  try {
+    const startResult = await session.exec(
+      'sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null',
+      opts.signal,
+    )
+    if (startResult.code !== 0) {
+      spin.fail('Could not start Docker on the remote server.')
+      throw new ProviderError(
+        'Start Docker manually (sudo systemctl start docker) and re-run: clawops setup',
+      )
+    }
+
+    const deadline = Date.now() + DOCKER_TIMEOUT_MS
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, DOCKER_POLL_MS))
+      spin.text = `Waiting for Docker to start on ${opts.host}...`
+      const check = await session.exec(
+        'docker version >/dev/null 2>&1 && echo OK || echo NOT_RUNNING',
+        opts.signal,
+      )
+      if (check.stdout.trim() === 'OK') {
+        spin.succeed('Docker started on the remote server.')
+        return
+      }
+    }
+
+    spin.fail('Docker did not start within 90s on the remote server.')
+    throw new ProviderError(
+      'Docker did not become ready. Start it manually and re-run: clawops setup',
+    )
+  } finally {
+    release()
+  }
+}
 
 function dockerIsReachable(): boolean {
   try {
