@@ -105,7 +105,7 @@ export default defineCommand({
       message: 'Where would you like to run OpenClaw?',
       choices: [
         { name: 'Cloud (AWS, GCP, or Azure) — deploy to paid cloud hosting', value: 'cloud' },
-        { name: 'On a server I already have — connect over SSH (Linux or macOS)', value: 'local' },
+        { name: 'Deploy to a local or existing server — connect over SSH (Linux or macOS)', value: 'local' },
       ],
     }])
 
