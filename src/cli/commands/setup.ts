@@ -112,7 +112,7 @@ export default defineCommand({
     let provider: 'aws' | 'gcp' | 'azure' | 'local'
     let localHost = ''
     let localUser = 'ubuntu'
-    let localKeyPath = `${os.homedir()}/.ssh/id_rsa`
+    let localKeyPath = detectSshKey()
     let localPort = 22
 
     if (deploymentType === 'cloud') {
@@ -154,7 +154,7 @@ export default defineCommand({
         {
           type: 'input',
           name: 'keyPath',
-          message: `SSH private key file: (the key file on your computer used to log in — usually ~/.ssh/id_rsa)`,
+          message: `SSH private key file: (the key file on your computer used to log in — e.g. ~/.ssh/id_ed25519)`,
           default: localKeyPath,
         },
       ])
@@ -200,7 +200,7 @@ export default defineCommand({
           type: 'input',
           name: 'sshKeyPath',
           message: 'SSH public key file: (the .pub file that goes with your private key — used to access the new server)',
-          default: `${os.homedir()}/.ssh/id_rsa.pub`,
+          default: `${detectSshKey()}.pub`,
         },
         {
           type: 'input',
@@ -665,6 +665,15 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function detectSshKey(): string {
+  const candidates = ['id_ed25519', 'id_ecdsa', 'id_rsa', 'id_dsa']
+  for (const name of candidates) {
+    const p = path.join(os.homedir(), '.ssh', name)
+    if (existsSync(p)) return p
+  }
+  return path.join(os.homedir(), '.ssh', 'id_ed25519')
+}
 
 function getMcpConfigPath(): string {
   if (process.platform === 'darwin') {
