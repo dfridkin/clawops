@@ -113,7 +113,7 @@ export default defineCommand({
     // ── Step 2: Provider / connection details ──────────────────────────────────
     let provider: 'aws' | 'gcp' | 'azure' | 'local'
     let localHost = ''
-    let localUser = 'ubuntu'
+    let localUser = os.userInfo().username
     let localKeyPath = detectSshKey()
     let localPort = 22
     let localSudoPassword = ''
@@ -168,7 +168,7 @@ export default defineCommand({
         {
           type: 'input',
           name: 'user',
-          message: 'SSH username: (the account you log in with — usually "ubuntu" on Linux servers)',
+          message: 'SSH username: (e.g. "ubuntu" on AWS, "ec2-user" on Amazon Linux, or your local username for localhost)',
           default: localUser,
         },
         {
@@ -350,15 +350,21 @@ export default defineCommand({
     }
 
     // ── Step 6: Output directory ───────────────────────────────────────────────
+    // Local provider: skip the prompt — always write alongside the cwd; the file
+    // is a useful record but the deploy-now path doesn't need the user to pick a dir.
     let outDir = typeof args['output-dir'] === 'string' ? args['output-dir'] : null
     if (outDir === null) {
-      const { outputDir } = await inquirer.prompt<{ outputDir: string }>([{
-        type: 'input',
-        name: 'outputDir',
-        message: 'Where should the config file be saved? (press Enter to save in the current folder)',
-        default: '.',
-      }])
-      outDir = outputDir
+      if (provider !== 'local') {
+        const { outputDir } = await inquirer.prompt<{ outputDir: string }>([{
+          type: 'input',
+          name: 'outputDir',
+          message: 'Where should the plan file be saved? (press Enter to save in the current folder)',
+          default: '.',
+        }])
+        outDir = outputDir
+      } else {
+        outDir = '.'
+      }
     }
 
     // ── Step 7: Build and write output ─────────────────────────────────────────
@@ -369,11 +375,12 @@ export default defineCommand({
     const secretsDir = path.join(os.homedir(), '.clawops', 'secrets')
     mkdirSync(secretsDir, { recursive: true })
     spawnSync('chmod', ['700', secretsDir], { stdio: 'ignore' })
-    const tokenPath = path.join(secretsDir, 'GATEWAY_TOKEN')
+    // Per-stack token file: running setup for a second stack won't clobber the first.
+    const tokenPath = path.join(secretsDir, `GATEWAY_TOKEN_${stackAnswers.stackName}`)
     writeFileSync(tokenPath, gatewayToken, { encoding: 'utf-8', mode: 0o600 })
 
     const openclawConfigOverlay: Record<string, unknown> = {
-      models: { provider: modelProviderId, ...builtModelConfig },
+      models: builtModelConfig,
       gateway: { auth: { mode: 'token', token: gatewayToken } },
     }
     if (Object.keys(channelsConfig).length > 0) {
@@ -506,6 +513,7 @@ export default defineCommand({
           sudoPassword: localSudoPassword || undefined,
           openclawVersion: stackAnswers.openclawVersion,
           overlay: openclawConfigOverlay,
+          secrets,
           gatewayToken,
           signal: ac.signal,
           inquirer,
@@ -559,6 +567,7 @@ interface LocalDeployOpts {
   sudoPassword?: string
   openclawVersion: string
   overlay: Record<string, unknown>
+  secrets: Array<{ name: string; source: 'env' | 'file'; ref: string }>
   gatewayToken: string
   signal?: AbortSignal
   inquirer: InquirerInstance
@@ -644,7 +653,7 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
     })
     try {
       const remote = await readRemoteConfig(session, opts.signal)
-      const resolved = resolveSecrets(opts.overlay, []) as Record<string, unknown>
+      const resolved = resolveSecrets(opts.overlay, opts.secrets) as Record<string, unknown>
       const merged = deepMerge(remote, resolved)
       await atomicWriteConfig(session, merged, opts.signal)
       await restartGateway(session, opts.signal)
@@ -660,13 +669,16 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
   const { drainPool } = await import('../../transport/pool.js')
   drainPool()
 
+  const tokenPath = path.join(os.homedir(), '.clawops', 'secrets', `GATEWAY_TOKEN_${opts.stackName}`)
+  const dashboardUrl = `${state.gatewayUrl}?token=${opts.gatewayToken}`
+
   process.stdout.write('\n')
   success('All done! OpenClaw is running.')
-  info(`Gateway URL:   ${state.gatewayUrl}`)
-  info(`Gateway token: ${opts.gatewayToken}`)
-  info(`SSH access:    ${state.sshUser}@${state.sshHost}:${state.sshPort}`)
-  info(`\nToken saved to ~/.clawops/secrets/GATEWAY_TOKEN`)
-  info(`Run  clawops doctor --stack ${opts.stackName}  to check everything is healthy`)
+  info(`Open dashboard: ${dashboardUrl}`)
+  info(`  (or enter the token manually in the "Gateway Token" field: ${opts.gatewayToken})`)
+  info(`SSH access:     ${state.sshUser}@${state.sshHost}:${state.sshPort}`)
+  info(`Token saved to  ${tokenPath}`)
+  info(`\nRun  clawops doctor --stack ${opts.stackName}  to check everything is healthy`)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -866,6 +878,11 @@ async function checkDockerPreflight(opts: {
   }
 
   if (out === 'NOT_RUNNING') {
+    if (!LOCALHOST_ALIASES.has(opts.host.toLowerCase())) {
+      spin.fail('Docker is installed but not running on the target host.')
+      info('Start Docker on the server (e.g. sudo systemctl start docker), then re-run: clawops setup')
+      throw new ProviderError('Docker is not running on the target host.')
+    }
     spin.warn('Docker is installed but not running.')
     await startDockerAndWait(opts.inquirer)
     return
