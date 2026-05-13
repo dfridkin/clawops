@@ -29,10 +29,13 @@ case "$OS" in
     ;;
   Darwin)
     PKG_MANAGER=darwin
-    # On macOS we run as the SSH user — no system user creation needed.
-    OPENCLAW_USER="$(id -un)"
+    # When invoked via sudo the script runs as root but SUDO_USER is the real caller.
+    # Fall back to id -un for passwordless (non-sudo) invocations.
+    OPENCLAW_USER="${SUDO_USER:-$(id -un)}"
     OPENCLAW_CONFIG="${HOME}/.config/openclaw/config.json"
     mkdir -p "${HOME}/.config/openclaw"
+    # Fix ownership so subsequent non-sudo SSH writes (atomicWriteConfig) can overwrite.
+    chown "${OPENCLAW_USER}" "${HOME}/.config/openclaw" 2>/dev/null || true
     # sudo resets PATH; add common Docker install locations so `command -v docker` works.
     # Covers: Docker Desktop (Intel + AS), Homebrew (AS), Colima.
     export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"
@@ -125,6 +128,8 @@ if [ ! -f "${OPENCLAW_CONFIG}" ]; then
 OPENCLAWJSON
   if [ "$OS" = "Linux" ]; then
     chown "${OPENCLAW_USER}:${OPENCLAW_USER}" "${OPENCLAW_CONFIG}"
+  else
+    chown "${OPENCLAW_USER}" "${OPENCLAW_CONFIG}" 2>/dev/null || true
   fi
 fi
 
