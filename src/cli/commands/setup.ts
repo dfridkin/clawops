@@ -241,8 +241,8 @@ export default defineCommand({
       {
         type: 'input',
         name: 'openclawVersion',
-        message: 'OpenClaw version: ("stable" for the latest release, or a specific version like "2026.4")',
-        default: 'stable',
+        message: 'OpenClaw version: ("latest" for the latest release, or a specific version like "2026.4")',
+        default: 'latest',
       },
     ])
 

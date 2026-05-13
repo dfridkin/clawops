@@ -48,7 +48,7 @@ export async function localBootstrap(opts: BootstrapOpts): Promise<LocalState> {
   // When a sudo password is provided, use `sudo -S` (reads password from stdin).
   // The password is fed via printf so stdin remains free for the inline -c command.
   const command = opts.sudoPassword
-    ? `printf '%s\n' ${shellQuote(opts.sudoPassword)} | sudo -S bash -c "echo '${b64}' | base64 -d | bash"`
+    ? `printf '%s\n' ${shellQuote(opts.sudoPassword)} | sudo -S -p '' bash -c "echo '${b64}' | base64 -d | bash"`
     : `echo '${b64}' | base64 -d | sudo bash`
 
   const { session, release } = await acquireSession({
