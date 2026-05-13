@@ -862,9 +862,6 @@ async function checkDockerPreflight(opts: {
   throw new ProviderError('Docker is not installed on the target host.')
 }
 
-const DOCKER_START_TIMEOUT_MS = 120_000
-const DOCKER_POLL_INTERVAL_MS = 3_000
-
 async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
   const { choice } = await inquirer.prompt<{ choice: 'desktop' | 'colima' | 'skip' }>([{
     type: 'list',
@@ -883,7 +880,6 @@ async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
   }
 
   if (choice === 'desktop') {
-    // Try `open -a Docker` first; fall back to the full bundle path
     let opened = spawnSync('open', ['-a', 'Docker'], { stdio: 'ignore' })
     if (opened.status !== 0) {
       opened = spawnSync('open', ['/Applications/Docker.app'], { stdio: 'ignore' })
@@ -892,8 +888,9 @@ async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
       failure('Could not open Docker Desktop — is it installed in /Applications?')
       throw new Error('Failed to open Docker Desktop')
     }
-    info('Docker Desktop is opening — this can take up to 2 minutes on first launch.')
+    info('Docker Desktop is opening. If this is your first launch, accept any licence prompts in the app.')
   } else {
+    // colima start prints its own progress; inherit stdio
     const res = spawnSync('colima', ['start'], { stdio: 'inherit' })
     if (res.status !== 0) {
       failure('colima start failed — is Colima installed? (brew install colima docker)')
@@ -901,29 +898,27 @@ async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
     }
   }
 
-  const spin = spinner(`Waiting for Docker daemon (up to ${DOCKER_START_TIMEOUT_MS / 1000}s)...`)
-  const deadline = Date.now() + DOCKER_START_TIMEOUT_MS
-  let elapsed = 0
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, DOCKER_POLL_INTERVAL_MS))
-    elapsed += DOCKER_POLL_INTERVAL_MS
-    spin.text = `Waiting for Docker daemon... (${Math.round(elapsed / 1000)}s)`
+  // "Press Enter to check" loop — avoids fixed timeouts that are too short on slow machines
+  while (true) {
+    await inquirer.prompt<{ _: string }>([{
+      type: 'input',
+      name: '_',
+      message: 'Press Enter once Docker is ready to continue (Ctrl+C to abort)...',
+    }])
+
     try {
       execSync(
         'docker version >/dev/null 2>&1 || ' +
-        'DOCKER_HOST="unix://${HOME}/.docker/run/docker.sock" docker version >/dev/null 2>&1',
+        'DOCKER_HOST="${HOME}/.docker/run/docker.sock" docker version >/dev/null 2>&1 || ' +
+        'DOCKER_HOST="${HOME}/.colima/default/docker.sock" docker version >/dev/null 2>&1',
         { stdio: 'ignore' },
       )
-      spin.succeed('Docker is running.')
+      success('Docker is running.')
       return
     } catch {
-      // not ready yet — keep polling
+      failure('Docker is not ready yet — wait a moment and try again.')
     }
   }
-
-  spin.fail('Docker did not start in time.')
-  info('Wait for Docker Desktop to finish starting, then re-run: clawops setup')
-  throw new Error('Docker daemon did not become ready within timeout.')
 }
 
 const LOCALHOST_ALIASES = new Set(['localhost', '127.0.0.1', '::1'])
