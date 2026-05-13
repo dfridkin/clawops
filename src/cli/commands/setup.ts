@@ -627,6 +627,9 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
   setConfig(newConfig)
   success(`Deployment "${opts.stackName}" registered  (~/.clawops/config.json)`)
 
+  // Preflight: verify Docker is installed and running on the target host
+  await checkDockerPreflight({ host: opts.host, port: opts.port, user: opts.user, keyPath: opts.keyPath, knownHostsPath, signal: opts.signal })
+
   // Bootstrap the host — stream output to drive spinner text
   const STAGES: Array<[RegExp, string]> = [
     [/apt-get update|dnf|yum|apk update/i,                     'Updating package lists...'],
@@ -782,6 +785,60 @@ function cliInstallUrl(provider: 'aws' | 'gcp' | 'azure'): string {
   if (provider === 'aws') return 'https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html'
   if (provider === 'gcp') return 'https://cloud.google.com/sdk/docs/install'
   return 'https://learn.microsoft.com/en-us/cli/azure/install-azure-cli'
+}
+
+// Docker preflight check — runs before bootstrap so the user gets a clear message
+// instead of a cryptic bootstrap failure mid-way through.
+const DOCKER_CHECK_CMD = [
+  // Augment PATH the same way the bootstrap script does on macOS
+  'export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"',
+  'if ! command -v docker >/dev/null 2>&1; then echo NOT_INSTALLED',
+  'elif ! docker info >/dev/null 2>&1; then echo NOT_RUNNING',
+  'else echo OK; fi',
+].join('; ')
+
+async function checkDockerPreflight(opts: {
+  host: string; port: number; user: string; keyPath: string; knownHostsPath: string; signal?: AbortSignal
+}): Promise<void> {
+  const { acquireSession } = await import('../../transport/pool.js')
+  const { ProviderError } = await import('../../errors/index.js')
+
+  const spin = spinner('Checking Docker on target host...')
+  const { session, release } = await acquireSession({
+    host: opts.host, port: opts.port, user: opts.user,
+    privateKeyPath: opts.keyPath, knownHostsPath: opts.knownHostsPath, signal: opts.signal,
+  })
+  let result: { code: number | null; stdout: string }
+  try {
+    result = await session.exec(DOCKER_CHECK_CMD, opts.signal)
+  } finally {
+    release()
+  }
+
+  const out = result.stdout.trim()
+
+  if (out === 'OK') {
+    spin.succeed('Docker is installed and running.')
+    return
+  }
+
+  if (out === 'NOT_RUNNING') {
+    spin.fail('Docker is installed but not running.')
+    info('Start it with one of:')
+    info('  Docker Desktop: open the Docker Desktop app')
+    info('  Colima:         colima start')
+    info('Then re-run: clawops setup')
+    throw new ProviderError('Docker daemon is not running on the target host.')
+  }
+
+  // NOT_INSTALLED or unexpected output
+  spin.fail('Docker not found on the target host.')
+  info('Install Docker with one of:')
+  info('  Docker Desktop (GUI):  https://www.docker.com/products/docker-desktop/')
+  info('  Homebrew:              brew install --cask docker')
+  info('  Colima (FOSS):         brew install colima docker && colima start')
+  info('Then re-run: clawops setup')
+  throw new ProviderError('Docker is not installed on the target host.')
 }
 
 const LOCALHOST_ALIASES = new Set(['localhost', '127.0.0.1', '::1'])
