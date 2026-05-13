@@ -437,6 +437,14 @@ export default defineCommand({
     // ── Step 8: AI app integration ─────────────────────────────────────────────
     process.stdout.write('\n')
 
+    const mcpEntry = buildMcpEntry()
+    if (!mcpEntry.resolved) {
+      info('Note: clawops is not installed globally — AI apps will not be able to start')
+      info('the MCP server until you install it:')
+      info('  npm install -g @clawops/cli')
+      info('The config will be written now; re-run setup after installing to update the path.\n')
+    }
+
     info('Use ↑↓ to move, Space to select/deselect, Enter to confirm.')
 
     const appChoices = MCP_APPS.map((app) => ({
@@ -464,7 +472,7 @@ export default defineCommand({
             existing = JSON.parse(readFileSync(cfgPath, 'utf-8')) as Record<string, unknown>
           }
           const mcpServers = (existing['mcpServers'] ?? {}) as Record<string, unknown>
-          mcpServers['clawops'] = MCP_ENTRY
+          mcpServers['clawops'] = { command: mcpEntry.command, args: mcpEntry.args }
           existing['mcpServers'] = mcpServers
           mkdirSync(path.dirname(cfgPath), { recursive: true })
           writeFileSync(cfgPath, JSON.stringify(existing, null, 2), 'utf-8')
@@ -1142,7 +1150,18 @@ function detectSshKey(): string {
   return path.join(os.homedir(), '.ssh', 'id_ed25519')
 }
 
-const MCP_ENTRY = { command: 'clawops', args: ['mcp', 'serve', '--read-only'] }
+// Resolve the absolute path to the clawops binary so MCP host apps (Claude
+// Desktop, Cursor, etc.) can spawn it without inheriting the user's shell PATH.
+function buildMcpEntry(): { command: string; args: string[]; resolved: boolean } {
+  try {
+    const bin = execSync('which clawops', {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    if (bin) return { command: bin, args: ['mcp', 'serve', '--read-only'], resolved: true }
+  } catch { /* not on PATH */ }
+  return { command: 'clawops', args: ['mcp', 'serve', '--read-only'], resolved: false }
+}
 
 interface McpApp {
   id: string
