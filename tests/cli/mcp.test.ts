@@ -32,7 +32,6 @@ async function getCmd() {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRunFn = (ctx: any) => Promise<void> | void
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SubCmds = Record<string, { run: AnyRunFn }>
 
 beforeEach(() => {
