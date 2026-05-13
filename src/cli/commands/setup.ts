@@ -440,6 +440,8 @@ export default defineCommand({
     // ── Step 8: AI app integration ─────────────────────────────────────────────
     process.stdout.write('\n')
 
+    info('Use ↑↓ to move, Space to select/deselect, Enter to confirm.')
+
     const appChoices = MCP_APPS.map((app) => ({
       name: app.isInstalled() ? app.name : `${app.name}  (not detected — config will be written anyway)`,
       value: app.id,
