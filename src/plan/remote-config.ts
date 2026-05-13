@@ -64,17 +64,23 @@ export async function restartGateway(
 ): Promise<void> {
   const os = await detectOS(session, signal)
   const configPath = configPathForOS(os)
+  // Non-interactive SSH sessions get a minimal PATH; prepend common Docker locations on macOS.
+  const pathPrefix = os === 'Darwin'
+    ? 'export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH" && '
+    : ''
   const imgResult = await session.exec(
-    `docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo 'ghcr.io/openclaw/openclaw:latest'`,
+    `${pathPrefix}docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo 'ghcr.io/openclaw/openclaw:latest'`,
     signal,
   )
   const image = imgResult.stdout.trim()
-  const cmd = [
-    'docker stop openclaw 2>/dev/null || true',
-    'docker rm openclaw 2>/dev/null || true',
-    `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 ` +
-      `-v ${configPath}:/app/config.json:ro ${image}`,
-  ].join(' && ')
+  const cmd =
+    pathPrefix +
+    [
+      'docker stop openclaw 2>/dev/null || true',
+      'docker rm openclaw 2>/dev/null || true',
+      `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 ` +
+        `-v ${configPath}:/app/config.json:ro ${image}`,
+    ].join(' && ')
   const result = await session.exec(cmd, signal)
   if (result.code !== 0) {
     throw new Error(`Gateway restart failed: ${result.stderr}`)
