@@ -77,9 +77,9 @@ to a file.
 
 **Step 4 — Wire your AI editor**
 
-Select which AI apps should have access to clawops — Claude Desktop, Claude Code, Cursor, and
-Windsurf are all supported. The wizard writes an MCP server entry into each app's config file
-using the absolute binary path so the app can launch it independently.
+Select which AI apps should have access to clawops — Claude Desktop, Claude Code, Cursor,
+Windsurf, VS Code, and Zed are all supported. The wizard writes an MCP server entry into each
+app's config file using the absolute binary path so the app can launch it independently.
 
 **Step 5 — Deploy**
 
@@ -133,10 +133,19 @@ clawops apply /tmp/plan.json
 
 ---
 
-## Connect an AI editor manually
+## Connect an AI editor
 
-The `setup` wizard handles this automatically. If you need to add or update the MCP entry by
-hand, add the following to your editor's MCP config:
+The `setup` wizard handles this automatically (Step 4). To wire or re-wire editors at any time:
+
+```bash
+clawops mcp install
+```
+
+This opens the same interactive checkbox used in the wizard — select Claude Desktop, Claude Code,
+Cursor, Windsurf, VS Code, or Zed and clawops writes the MCP entry into each app's config using
+the correct absolute binary path.
+
+To add the entry manually instead, paste this into your editor's MCP config:
 
 ```json
 {
@@ -149,7 +158,7 @@ hand, add the following to your editor's MCP config:
 }
 ```
 
-Config file locations:
+Replace `/path/to/clawops` with the output of `which clawops`. Config file locations:
 
 | App | Path |
 |---|---|
@@ -158,6 +167,9 @@ Config file locations:
 | Claude Code | `~/.claude.json` |
 | Cursor | `~/.cursor/mcp.json` |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| VS Code (macOS) | `~/Library/Application Support/Code/User/mcp.json` |
+| VS Code (Linux) | `~/.config/Code/User/mcp.json` |
+| Zed | `~/.config/zed/settings.json` (key: `context_servers`) |
 
 **Start with `--read-only`** — it enables status, logs, config reads, and diagnostics while
 blocking mutations. Remove it only after reviewing
@@ -210,7 +222,9 @@ clawops down --yes          # Destroy local-provider stack
 | `backup` | Create or restore an OpenClaw state backup |
 | `stacks` | List named stacks and their state |
 | `doctor` | Check Node version, config, SSH key, provider credentials, and Pulumi home |
-| `mcp` | Start the embedded MCP server (`mcp serve`) |
+| `mcp serve` | Start the embedded MCP server (stdio or HTTP) |
+| `mcp install` | Interactively wire clawops into AI editors |
+| `help` | List all commands and global flags |
 
 Full flag reference: `clawops <command> --help`
 
@@ -248,23 +262,29 @@ See [`docs/plan-apply.md`](docs/plan-apply.md) for full semantics, drift guidanc
 clawops ships an embedded [MCP](https://modelcontextprotocol.io/) server. Claude Code, Cursor, and
 any MCP-compatible agent can drive deployments without leaving the chat interface.
 
-### Stdio mode (Claude Code / VS Code)
+### Wire your editor
 
-```json
-{
-  "mcpServers": {
-    "clawops": {
-      "command": "clawops",
-      "args": ["mcp", "serve", "--read-only"]
-    }
-  }
-}
+```bash
+clawops mcp install   # interactive checkbox — writes config for selected apps
+```
+
+The wizard resolves the absolute binary path automatically so app launchers can find `clawops`
+without inheriting your shell's `PATH`. See [Connect an AI editor](#connect-an-ai-editor) above
+for manual config paths.
+
+### Stdio mode (Claude Code / Cursor / VS Code)
+
+Start the server manually or confirm your config is correct:
+
+```bash
+clawops mcp serve --read-only   # safe for first evaluation
+clawops mcp serve               # full mode — enables provisioning, config write, ssh exec
 ```
 
 ### HTTP mode (remote / multi-client)
 
 ```bash
-clawops mcp serve --http --port 3333 --bind 127.0.0.1
+clawops mcp serve --http 3333 --bind 127.0.0.1
 # MCP HTTP server listening on 127.0.0.1:3333
 ```
 
