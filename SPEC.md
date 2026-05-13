@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
 **Version:** 0.9
-**Status:** M8 complete (493 unit+e2e tests); Waves 3–7 complete — WO-01–WO-15, WO-17, WO-19–WO-22 done; WO-16, WO-18, WO-23, WO-24 pending
+**Status:** M8 complete (493 unit+e2e tests); Waves 3–8B complete — WO-01–WO-17, WO-19–WO-22 done; WO-18, WO-23, WO-24, WO-26, WO-27, WO-28 pending
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -907,8 +907,8 @@ This section tracks the eight adoption milestones defined in `docs/roadmap-docs/
 **distinct from the M0–M8 development milestones in §12**. Development milestones track *what is
 built*; adoption milestones track *whether the repo is understandable, trustworthy, and launchable*.
 
-Milestone labels use `R1–R8` to avoid collision. Each milestone maps to one or more work orders
-(WO-01 through WO-24) in `docs/roadmap-docs/docs/implementation/work-orders.md`.
+Milestone labels use `R1–R11` to avoid collision. Each milestone maps to one or more work orders
+(WO-01 through WO-28) in `docs/roadmap-docs/docs/implementation/work-orders.md`.
 
 Execution is organized into waves (see `docs/roadmap-docs/docs/implementation/milestones.md`).
 WO-04 must be completed before WO-01 to avoid perpetuating inaccurate plan/apply language in the README.
@@ -925,6 +925,9 @@ WO-04 must be completed before WO-01 to avoid perpetuating inaccurate plan/apply
 | 6 | WO-12, WO-14, WO-15 | R4, R5 | Operational code |
 | 7 | WO-19, WO-20, WO-21 | R6, R7 | Contributor + provider docs |
 | 8 | WO-23, WO-24 | R8 | Launch execution |
+| 9 | WO-25 | R9 | Secret lifecycle management |
+| 10 | WO-26, WO-27 | R10 | Stack monitoring wizard |
+| 11 | WO-28 | R11 | Gateway-agent MCP wiring |
 
 ### R1 — First-Run Experience
 
@@ -1037,7 +1040,7 @@ Deliverables:
 Status:
 - [x] WO-14: Config validation design
 - [x] WO-15: Secret redaction audit
-- [ ] WO-16: Model/channel config wizard design
+- [x] WO-16: Model/channel config wizard design + implementation (`clawops setup`)
 
 ### R6 — Provider Reliability
 
@@ -1094,6 +1097,105 @@ Status:
 - [ ] WO-23: Demo script
 - [ ] WO-24: Launch issue set
 
+### R10 — Stack Monitoring
+
+Goal: give operators a live, interactive view of a running OpenClaw stack's health, resource usage, and recent activity — without leaving the terminal.
+
+Work orders: WO-26 (`clawops monitor` command), WO-27 (MCP monitor tool).
+
+Background: `clawops doctor` and `clawops status` provide point-in-time snapshots. Operators running production stacks need continuous visibility — gateway reachability, model latency, active agent sessions, and log streams — surfaced in a single interactive command.
+
+Deliverables:
+
+**WO-26 — `clawops monitor` interactive wizard**
+
+`clawops monitor [--stack <name>] [--interval <seconds>]`
+
+A refreshing terminal dashboard that shows:
+- **Gateway health**: reachability, uptime, port, auth mode
+- **Active sessions**: connected agent count, session IDs, duration
+- **Model usage**: requests/min, error rate, per-provider latency (last 5 min)
+- **Container status**: image tag, restart count, memory/CPU (via `docker stats`)
+- **Recent log tail**: last N lines from the OpenClaw container, auto-scrolling
+- **Alerts**: surfaces config issues found by `clawops doctor` inline
+
+Interaction model:
+- Polls on a configurable interval (default 10s); renders via ANSI terminal output
+- `q` / `Ctrl-C` exits cleanly (no process hang — calls `drainPool()`)
+- `r` forces an immediate refresh
+- `l` toggles the log tail panel on/off
+- `d` runs a full `clawops doctor` check and displays results inline
+
+Implementation notes:
+- Reuses the SSH pool (`acquireSession`) for all remote execs; single session per refresh cycle
+- Uses existing `readRemoteConfig`, `doctor` check helpers, and `clawops logs` infrastructure
+- Renders with ANSI escape codes (no heavy TUI dependency); falls back to plain-text if `--no-color`
+
+**WO-27 — MCP monitor tool**
+
+`clawops_monitor` MCP tool: returns a structured JSON snapshot (gateway health, session count, model usage, last 5 log lines) that an agent can poll or summarise. Complements the interactive CLI by giving agents a machine-readable health signal.
+
+Status:
+- [ ] WO-26: `clawops monitor` interactive dashboard
+- [ ] WO-27: `clawops_monitor` MCP tool
+
+### R9 — Secret Lifecycle Management
+
+Goal: give operators a first-class way to create, rotate, and audit secrets without manually editing files or rerunning the full setup wizard.
+
+Work orders: WO-25 (secret lifecycle CLI).
+
+Background: the `clawops setup` wizard stores pasted secrets in `~/.clawops/secrets/<NAME>` (chmod 600) and references them via `$secret:<NAME>` in config overlays. This works for single-operator use but has no rotation path and no visibility into which secrets are stale or missing.
+
+Deliverables:
+- `clawops secret list` — show all known secret names, their source type, and whether the ref is currently resolvable
+- `clawops secret set <name>` — create or update a secret (paste, env var ref, or file path); propagates to any running stack via config overlay re-apply
+- `clawops secret delete <name>` — remove a local secret file; warns if the secret is still referenced in any stack config
+- `clawops secret rotate <name>` — shorthand for `set` followed by automatic config overlay re-apply and gateway restart on all stacks that reference the secret
+- `clawops secret audit` — scan all stack configs for unresolved `$secret:` refs and secrets whose source file or env var is missing
+- `docs/secrets.md` — document the full secret lifecycle: creation, rotation, deletion, and the manual fallback procedure for secrets that cannot be auto-rotated (e.g. cloud SM sources)
+
+Status:
+- [ ] WO-25: Secret lifecycle CLI and docs
+
+### R11 — Gateway-Agent MCP Wiring
+
+Goal: let the AI agent running *inside* an OpenClaw gateway control clawops management commands (doctor, status, config, logs) via MCP — without the user leaving the chat interface.
+
+Work orders: WO-28 (gateway-side MCP client config).
+
+Background: the `clawops setup` wizard already wires local AI editors (Claude Desktop, Cursor, etc.) to clawops via an MCP server entry in the editor's config. This wave adds the complementary wiring: the OpenClaw gateway's own AI agent becomes an MCP *client* of clawops, so in-conversation commands like "check if my stack is healthy" or "show me the last 20 log lines" invoke the real `clawops` CLI rather than hallucinating output.
+
+Deliverables:
+
+**WO-28 — Gateway-agent MCP client config**
+
+New optional wizard step in `clawops setup` (and as a standalone `clawops mcp wire --stack <name>`):
+
+1. Detect whether the deployed gateway's OpenClaw version supports MCP client connections (read `meta.lastTouchedVersion` from remote config; require ≥ 2026.4).
+2. Prompt: *"Should the OpenClaw gateway's AI also be able to manage this stack?"* (default: no — opt-in only).
+3. If yes, write an MCP client entry into the remote `openclaw.json` under `gateway.mcpClients`:
+   ```json
+   "mcpClients": {
+     "clawops": {
+       "command": "clawops",
+       "args": ["mcp", "serve"],
+       "transport": "stdio"
+     }
+   }
+   ```
+4. Call `restartGateway` to apply the change.
+5. Show a confirmation: *"The gateway's AI can now run clawops commands. Try: 'check if my stack is healthy'"*.
+
+Implementation notes:
+- Use `atomicWriteConfig` + `restartGateway` (existing helpers) — no new SSH primitives needed.
+- The MCP server for gateway use runs **without** `--read-only` (the gateway agent needs write access for config updates and gateway restarts).
+- If the gateway's OpenClaw version does not support `mcpClients`, surface a clear version-upgrade message rather than silently failing.
+- Add a `clawops mcp wire --stack <name>` command as a standalone entry point (not just via setup wizard) so operators can add this to existing deployments without re-running full setup.
+
+Status:
+- [ ] WO-28: Gateway-agent MCP client config (wizard step + standalone command)
+
 ---
 
 ## 16. Anti-Goals (deliberately not doing)
@@ -1103,5 +1205,5 @@ Status:
 - **No custom OpenClaw fork or build pipeline.** clawops uses upstream OpenClaw releases only.
 - **No native Windows.** WSL2 is the supported path. Saves ~3 weeks of test matrix.
 - **No `clawops` as a daemon.** It's a CLI + MCP server. No persistent process beyond the user's shell session and the MCP server (which lives only as long as the client keeps it open).
-- **No automatic secret rotation in v1.** Out of scope; document the manual rotation procedure.
+- **No automatic secret rotation in v1.** Planned for Wave 9 (WO-25). Manual rotation procedure is documented in `docs/secrets.md` (Wave 9 deliverable) in the meantime.
 - **No spec changes without ADR.** R-meta-3 is binding.

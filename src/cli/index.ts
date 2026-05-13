@@ -17,6 +17,7 @@ import backupCmd from './commands/backup.js'
 import stacksCmd from './commands/stacks.js'
 import doctorCmd from './commands/doctor.js'
 import mcpCmd from './commands/mcp.js'
+import setupCmd from './commands/setup.js'
 import { handleError } from './error-handler.js'
 
 const main = defineCommand({
@@ -52,6 +53,7 @@ const main = defineCommand({
     stacks: stacksCmd,
     doctor: doctorCmd,
     mcp: mcpCmd,
+    setup: setupCmd,
   },
 })
 

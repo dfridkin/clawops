@@ -1,0 +1,107 @@
+# spec/models.yaml — LLM provider catalog for the clawops setup wizard.
+# Read at runtime by src/cli/commands/setup.ts — not compiled or code-generated.
+#
+# credentialSource:
+#   api-key    — wizard prompts for how the key is stored (env var, file, cloud SM)
+#   aws-profile — no key; uses AWS SDK credential chain (IAM role / IMDS / profile)
+#   none        — no credentials (e.g. local Ollama)
+
+providers:
+  - id: openai
+    displayName: OpenAI
+    credentialSource: api-key
+    envDefault: OPENAI_API_KEY
+    models:
+      - { id: gpt-4o,            displayName: "GPT-4o" }
+      - { id: gpt-4o-mini,       displayName: "GPT-4o Mini" }
+      - { id: gpt-4-turbo,       displayName: "GPT-4 Turbo" }
+      - { id: gpt-3.5-turbo,     displayName: "GPT-3.5 Turbo" }
+    defaultModel: gpt-4o
+    configPath: models.providers.openai
+
+  - id: anthropic
+    displayName: Anthropic
+    credentialSource: api-key
+    envDefault: ANTHROPIC_API_KEY
+    models:
+      - { id: claude-opus-4-7,          displayName: "Claude Opus 4.7" }
+      - { id: claude-sonnet-4-6,        displayName: "Claude Sonnet 4.6" }
+      - { id: claude-haiku-4-5-20251001, displayName: "Claude Haiku 4.5" }
+    defaultModel: claude-sonnet-4-6
+    configPath: models.providers.anthropic
+
+  - id: deepseek
+    displayName: DeepSeek
+    credentialSource: api-key
+    envDefault: DEEPSEEK_API_KEY
+    models:
+      - { id: deepseek-chat,      displayName: "DeepSeek Chat (V3)" }
+      - { id: deepseek-reasoner,  displayName: "DeepSeek Reasoner (R1)" }
+    defaultModel: deepseek-chat
+    configPath: models.providers.deepseek
+
+  - id: kimi
+    displayName: Kimi (Moonshot AI)
+    credentialSource: api-key
+    envDefault: MOONSHOT_API_KEY
+    models:
+      - { id: moonshot-v1-8k,    displayName: "Moonshot v1 8K" }
+      - { id: moonshot-v1-32k,   displayName: "Moonshot v1 32K" }
+      - { id: moonshot-v1-128k,  displayName: "Moonshot v1 128K" }
+    defaultModel: moonshot-v1-8k
+    configPath: models.providers.kimi
+
+  - id: bedrock
+    displayName: AWS Bedrock
+    credentialSource: aws-profile
+    # No API key — uses EC2 instance role (AmazonBedrockFullAccess) via IMDS.
+    # The Pulumi program attaches AmazonBedrockFullAccess to the instance profile
+    # and passes AWS_PROFILE=default into the container via --env-file.
+    iamPolicy: AmazonBedrockFullAccess
+    iamNote: >
+      Credentials are provided by the EC2 instance role. clawops attaches
+      AmazonBedrockFullAccess to the instance profile automatically when you
+      select Bedrock. No API key is needed.
+    models:
+      # Anthropic Claude (recommended for agents)
+      - { id: claude-sonnet-46,      displayName: "Claude Sonnet 4.6",      modelId: "anthropic.claude-sonnet-4-6",                  family: Anthropic, recommended: true }
+      - { id: claude-haiku-45,       displayName: "Claude Haiku 4.5",       modelId: "anthropic.claude-haiku-4-5-20251001-v1:0",     family: Anthropic }
+      - { id: claude-opus-46,        displayName: "Claude Opus 4.6",        modelId: "anthropic.claude-opus-4-6-v1",                 family: Anthropic }
+      # Amazon Nova
+      - { id: nova-pro,              displayName: "Amazon Nova Pro",         modelId: "amazon.nova-pro-v1:0",                         family: Amazon }
+      - { id: nova-lite,             displayName: "Amazon Nova Lite",        modelId: "amazon.nova-lite-v1:0",                        family: Amazon }
+      # Meta Llama
+      - { id: llama33-70b,           displayName: "Llama 3.3 70B Instruct", modelId: "meta.llama3-3-70b-instruct-v1:0",              family: Meta }
+      - { id: llama31-70b,           displayName: "Llama 3.1 70B Instruct", modelId: "meta.llama3-1-70b-instruct-v1:0",              family: Meta }
+      # Mistral
+      - { id: mistral-large-3,       displayName: "Mistral Large 3 (675B)", modelId: "mistral.mistral-large-3-675b-instruct",        family: Mistral }
+      - { id: mixtral-8x7b,          displayName: "Mixtral 8x7B Instruct",  modelId: "mistral.mixtral-8x7b-instruct-v0:1",           family: Mistral }
+      # DeepSeek
+      - { id: deepseek-r1,           displayName: "DeepSeek-R1",            modelId: "deepseek.r1-v1:0",                             family: DeepSeek }
+    defaultModel: claude-sonnet-46
+    configPath: models.providers.amazon-bedrock
+
+  - id: ollama
+    displayName: Ollama (self-hosted)
+    credentialSource: none
+    baseUrlDefault: http://localhost:11434
+    # Model ID is the string passed to `ollama pull <id>` and used in API calls.
+    # The model must be pulled on the instance before OpenClaw starts.
+    # Wizard outputs the pull command as a post-setup step.
+    models:
+      - { id: llama3.1,      displayName: "Llama 3.1 (8B/70B/405B tags)", family: Meta,      recommended: true, pullSuffix: ":8b" }
+      - { id: llama3.2,      displayName: "Llama 3.2 (1B/3B tags)",       family: Meta,      pullSuffix: ":3b" }
+      - { id: qwen3,         displayName: "Qwen 3 (0.6B–235B tags)",      family: Alibaba,   pullSuffix: ":8b" }
+      - { id: qwen2.5,       displayName: "Qwen 2.5 (0.5B–72B tags)",     family: Alibaba,   pullSuffix: ":7b" }
+      - { id: deepseek-r1,   displayName: "DeepSeek-R1 (reasoning)",      family: DeepSeek,  pullSuffix: ":7b" }
+      - { id: gemma3,        displayName: "Gemma 3 (1B–27B tags)",        family: Google,    pullSuffix: ":9b" }
+      - { id: mistral,       displayName: "Mistral 7B",                   family: Mistral,   pullSuffix: "" }
+      - { id: phi4,          displayName: "Phi-4 (14B)",                  family: Microsoft, pullSuffix: "" }
+      - { id: codellama,     displayName: "CodeLlama (7B–70B tags)",      family: Meta,      pullSuffix: ":7b" }
+    defaultModel: llama3.1
+    configPath: models.providers.ollama
+    postSetupNote: >
+      After deployment SSH into the host and run:
+        ollama pull <model><tag>
+      e.g. ollama pull llama3.1:8b
+      OpenClaw will fail to start until the model is available.

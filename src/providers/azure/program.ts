@@ -18,7 +18,7 @@ export const azureProgram: PulumiFn = async () => {
   const stackName = pulumi.getStack()
   const instanceType = cfg.get('instanceType') ?? 'Standard_B2s'
   const location = cfg.get('region') ?? 'eastus'
-  const openclawVersion = cfg.get('openclawVersion') ?? 'stable'
+  const openclawVersion = cfg.get('openclawVersion') ?? 'latest'
   const accessMode = cfg.get('accessMode') ?? 'restricted'
   const allowedCidrs = cfg.get('allowedCidrs') ?? ''
   const sshCidrs = cfg.get('sshCidrs') ?? ''
@@ -266,6 +266,7 @@ docker run -d \\
   --restart unless-stopped \\
   -p 18789:18789 \\
   -v "\${OPENCLAW_CONFIG}":/app/config.json:ro \\
-  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION}
+  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION} \\
+  node openclaw.mjs gateway run --allow-unconfigured
 `
 }

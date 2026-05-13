@@ -1,5 +1,6 @@
 import { defineCommand } from 'citty'
 import process from 'node:process'
+import { readFileSync } from 'node:fs'
 import { success, failure, info, spinner } from '../../output/human.js'
 import { renderTable } from '../../output/table.js'
 import { UsageError } from '../../errors/index.js'
@@ -19,6 +20,7 @@ export default defineCommand({
     'no-wait': { type: 'boolean', description: 'Return immediately without waiting for healthy state' },
     'openclaw-version': { type: 'string', description: "semver or 'stable'/'dev'" },
     stack: { type: 'string', description: 'Target stack name' },
+    config: { type: 'string', description: 'Path to openclaw config overlay JSON (local provider only)' },
   },
   async run({ args }) {
     const { buildContext } = await import('../context.js')
@@ -61,6 +63,20 @@ export default defineCommand({
         spin.succeed(`Host "${localOpts.host}" bootstrapped`)
         info(`Gateway URL: ${state.gatewayUrl}`)
         info(`SSH:         ${state.sshUser}@${state.sshHost}:${state.sshPort}`)
+
+        // Apply config overlay if --config was supplied.
+        if (typeof args.config === 'string') {
+          await applyLocalConfigOverlay({
+            configPath: args.config,
+            host: localOpts.host,
+            port: localOpts.sshPort,
+            user: localOpts.sshUser,
+            privateKeyPath: localOpts.sshKeyPath,
+            knownHostsPath: ctx.config.ssh.knownHostsPath,
+            signal: abortController.signal,
+          })
+          info('Config overlay applied and gateway restarted.')
+        }
       } catch (err) {
         spin.fail('Bootstrap failed')
         throw err
@@ -133,3 +149,46 @@ export default defineCommand({
     }
   },
 })
+
+interface LocalOverlayOpts {
+  configPath: string
+  host: string
+  port: number
+  user: string
+  privateKeyPath: string
+  knownHostsPath: string
+  signal?: AbortSignal
+}
+
+async function applyLocalConfigOverlay(opts: LocalOverlayOpts): Promise<void> {
+  const { connect } = await import('../../transport/ssh.js')
+  const { resolveSecrets } = await import('../../plan/secrets.js')
+  const { readRemoteConfig, atomicWriteConfig, restartGateway, deepMerge } = await import('../../plan/remote-config.js')
+
+  let overlay: Record<string, unknown>
+  try {
+    overlay = JSON.parse(readFileSync(opts.configPath, 'utf-8')) as Record<string, unknown>
+  } catch (err) {
+    throw new UsageError(`Cannot read config overlay at ${opts.configPath}: ${(err as Error).message}`)
+  }
+
+  // Resolve any $secret: references using environment variables only (local path).
+  const resolved = resolveSecrets(overlay, []) as Record<string, unknown>
+
+  const session = await connect({
+    host: opts.host,
+    port: opts.port,
+    user: opts.user,
+    privateKeyPath: opts.privateKeyPath,
+    knownHostsPath: opts.knownHostsPath,
+    signal: opts.signal,
+  })
+  try {
+    const remote = await readRemoteConfig(session, opts.signal)
+    const merged = deepMerge(remote, resolved)
+    await atomicWriteConfig(session, merged, opts.signal)
+    await restartGateway(session, opts.signal)
+  } finally {
+    session.close()
+  }
+}

@@ -23,7 +23,7 @@ export const gcpProgram: PulumiFn = async () => {
   const cfg = new pulumi.Config()
   const instanceType = cfg.get('instanceType') ?? 'e2-standard-2'
   const region = cfg.get('region') ?? 'us-central1'
-  const openclawVersion = cfg.get('openclawVersion') ?? 'stable'
+  const openclawVersion = cfg.get('openclawVersion') ?? 'latest'
   const zone = cfg.get('zone') ?? `${region}-a`
 
   // Network
@@ -145,6 +145,7 @@ docker run -d \\
   --restart unless-stopped \\
   -p ${GATEWAY_PORT}:${GATEWAY_PORT} \\
   -v "\${OPENCLAW_CONFIG}":/app/config.json:ro \\
-  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION}
+  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION} \\
+  node openclaw.mjs gateway run --allow-unconfigured
 `
 }

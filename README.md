@@ -143,7 +143,8 @@ clawops down --yes          # Destroy local-provider stack
 
 | Command | Description |
 |---|---|
-| `init` | Interactive setup wizard — writes config, generates SSH key pair |
+| `setup` | First-run wizard — guided LLM, integrations, and deploy-plan generation |
+| `init` | Register a stack in `~/.clawops/config.json` without provisioning |
 | `up` | Provision or update stack (`--dry-run` for preview) |
 | `down` | Destroy local-provider stack (requires `--yes`; `--dry-run` shows current outputs) |
 | `destroy` | Destroy cloud-provider stack with confirmation prompt (`--dry-run` shows current outputs) |
