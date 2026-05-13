@@ -925,6 +925,7 @@ WO-04 must be completed before WO-01 to avoid perpetuating inaccurate plan/apply
 | 6 | WO-12, WO-14, WO-15 | R4, R5 | Operational code |
 | 7 | WO-19, WO-20, WO-21 | R6, R7 | Contributor + provider docs |
 | 8 | WO-23, WO-24 | R8 | Launch execution |
+| 9 | WO-25 | R9 | Secret lifecycle management |
 
 ### R1 — First-Run Experience
 
@@ -1094,6 +1095,25 @@ Status:
 - [ ] WO-23: Demo script
 - [ ] WO-24: Launch issue set
 
+### R9 — Secret Lifecycle Management
+
+Goal: give operators a first-class way to create, rotate, and audit secrets without manually editing files or rerunning the full setup wizard.
+
+Work orders: WO-25 (secret lifecycle CLI).
+
+Background: the `clawops setup` wizard stores pasted secrets in `~/.clawops/secrets/<NAME>` (chmod 600) and references them via `$secret:<NAME>` in config overlays. This works for single-operator use but has no rotation path and no visibility into which secrets are stale or missing.
+
+Deliverables:
+- `clawops secret list` — show all known secret names, their source type, and whether the ref is currently resolvable
+- `clawops secret set <name>` — create or update a secret (paste, env var ref, or file path); propagates to any running stack via config overlay re-apply
+- `clawops secret delete <name>` — remove a local secret file; warns if the secret is still referenced in any stack config
+- `clawops secret rotate <name>` — shorthand for `set` followed by automatic config overlay re-apply and gateway restart on all stacks that reference the secret
+- `clawops secret audit` — scan all stack configs for unresolved `$secret:` refs and secrets whose source file or env var is missing
+- `docs/secrets.md` — document the full secret lifecycle: creation, rotation, deletion, and the manual fallback procedure for secrets that cannot be auto-rotated (e.g. cloud SM sources)
+
+Status:
+- [ ] WO-25: Secret lifecycle CLI and docs
+
 ---
 
 ## 16. Anti-Goals (deliberately not doing)
@@ -1103,5 +1123,5 @@ Status:
 - **No custom OpenClaw fork or build pipeline.** clawops uses upstream OpenClaw releases only.
 - **No native Windows.** WSL2 is the supported path. Saves ~3 weeks of test matrix.
 - **No `clawops` as a daemon.** It's a CLI + MCP server. No persistent process beyond the user's shell session and the MCP server (which lives only as long as the client keeps it open).
-- **No automatic secret rotation in v1.** Out of scope; document the manual rotation procedure.
+- **No automatic secret rotation in v1.** Planned for Wave 9 (WO-25). Manual rotation procedure is documented in `docs/secrets.md` (Wave 9 deliverable) in the meantime.
 - **No spec changes without ADR.** R-meta-3 is binding.
