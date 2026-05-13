@@ -897,13 +897,21 @@ async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
       throw new Error('systemctl start docker failed')
     }
   } else if (choice === 'desktop') {
-    let opened = spawnSync('open', ['-a', 'Docker'], { stdio: 'ignore' })
-    if (opened.status !== 0) opened = spawnSync('open', ['/Applications/Docker.app'], { stdio: 'ignore' })
-    if (opened.status !== 0) {
-      failure('Could not open Docker Desktop — is it installed in /Applications?')
-      throw new Error('Failed to open Docker Desktop')
+    // If the Docker Desktop backend is already running, open -a just focuses the
+    // window without restarting the engine. Guide the user to start it from the UI.
+    const backendRunning = spawnSync('pgrep', ['-f', 'com.docker.backend'], { stdio: 'ignore' }).status === 0
+    if (backendRunning) {
+      info('Docker Desktop is already open but the engine is not running.')
+      info('In the Docker Desktop menu bar icon → click "Start" or quit and relaunch the app.')
+    } else {
+      let opened = spawnSync('open', ['-a', 'Docker'], { stdio: 'ignore' })
+      if (opened.status !== 0) opened = spawnSync('open', ['/Applications/Docker.app'], { stdio: 'ignore' })
+      if (opened.status !== 0) {
+        failure('Could not open Docker Desktop — is it installed in /Applications?')
+        throw new Error('Failed to open Docker Desktop')
+      }
+      info('Docker Desktop is opening — wait for the menu bar icon to show "Engine running".')
     }
-    info('Docker Desktop is opening. Accept any licence prompts in the app before continuing.')
   } else if (choice === 'colima') {
     const res = spawnSync('colima', ['start'], { stdio: 'inherit' })
     if (res.status !== 0) {
