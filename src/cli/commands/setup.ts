@@ -103,7 +103,7 @@ export default defineCommand({
       name: 'deploymentType',
       message: 'Where would you like to run OpenClaw?',
       choices: [
-        { name: 'Cloud (AWS, GCP, or Azure) — rent a new server automatically', value: 'cloud' },
+        { name: 'Cloud (AWS, GCP, or Azure) — deploy to paid cloud hosting', value: 'cloud' },
         { name: 'On a server I already have — connect over SSH (Linux or macOS)', value: 'local' },
       ],
     }])
@@ -219,7 +219,7 @@ export default defineCommand({
 
     // ── Step 4: LLM provider ───────────────────────────────────────────────────
     process.stdout.write('\n')
-    info('Now let\'s pick the AI model that OpenClaw will use to answer questions.')
+    info('Choose the AI model that your OpenClaw agent will use.')
     info('You\'ll need an API key from your chosen provider (except Bedrock and Ollama).\n')
 
     const { modelProviderId } = await inquirer.prompt<{ modelProviderId: string }>([{
@@ -301,7 +301,7 @@ export default defineCommand({
     const { wantsIntegrations } = await inquirer.prompt<{ wantsIntegrations: boolean }>([{
       type: 'confirm',
       name: 'wantsIntegrations',
-      message: 'Which OpenClaw integrations would you like enabled?',
+      message: 'Enable OpenClaw integrations?',
       default: false,
     }])
 
