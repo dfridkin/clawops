@@ -657,6 +657,9 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
     throw err
   }
 
+  const { drainPool } = await import('../../transport/pool.js')
+  drainPool()
+
   process.stdout.write('\n')
   success('All done! OpenClaw is running.')
   info(`Gateway URL:   ${state.gatewayUrl}`)
