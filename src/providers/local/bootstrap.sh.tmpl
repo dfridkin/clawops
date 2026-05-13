@@ -33,6 +33,9 @@ case "$OS" in
     OPENCLAW_USER="$(id -un)"
     OPENCLAW_CONFIG="${HOME}/.config/openclaw/config.json"
     mkdir -p "${HOME}/.config/openclaw"
+    # sudo resets PATH; add common Docker install locations so `command -v docker` works.
+    # Covers: Docker Desktop (Intel + AS), Homebrew (AS), Colima.
+    export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"
     ;;
   *)
     echo "clawops: unsupported OS: $OS" >&2
