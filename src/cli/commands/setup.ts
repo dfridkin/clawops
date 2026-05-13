@@ -862,6 +862,41 @@ async function checkDockerPreflight(opts: {
   throw new ProviderError('Docker is not installed on the target host.')
 }
 
+const DOCKER_POLL_MS = 3_000
+const DOCKER_TIMEOUT_MS = 90_000
+
+function dockerIsReachable(): boolean {
+  try {
+    execSync(
+      'docker version >/dev/null 2>&1 || ' +
+      'DOCKER_HOST="unix://$HOME/.docker/run/docker.sock" docker version >/dev/null 2>&1 || ' +
+      'DOCKER_HOST="unix://$HOME/.colima/default/docker.sock" docker version >/dev/null 2>&1',
+      { stdio: 'ignore' },
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function pollUntilDockerReady(label: string): Promise<void> {
+  const spin = spinner(label)
+  const deadline = Date.now() + DOCKER_TIMEOUT_MS
+  let elapsed = 0
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, DOCKER_POLL_MS))
+    elapsed += DOCKER_POLL_MS
+    spin.text = `${label} (${Math.round(elapsed / 1000)}s)`
+    if (dockerIsReachable()) {
+      spin.succeed('Docker is running.')
+      return
+    }
+  }
+  spin.fail('Docker did not start within 90s.')
+  info('Check Docker Desktop for errors, then re-run: clawops setup')
+  throw new Error('Docker daemon did not become ready within timeout.')
+}
+
 async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
   const isLinux = process.platform === 'linux'
   const { choice } = await inquirer.prompt<{
@@ -871,8 +906,6 @@ async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
     name: 'choice',
     message: 'How would you like to start Docker?',
     choices: [
-      // dockerd is a real standalone binary on Linux; on macOS it is bundled inside
-      // Docker Desktop and cannot be launched independently
       ...(isLinux ? [{ name: 'Start daemon directly  (sudo dockerd)', value: 'dockerd' as const }] : []),
       ...(isLinux ? [{ name: 'systemctl             (sudo systemctl start docker)', value: 'systemctl' as const }] : []),
       ...(!isLinux ? [{ name: 'Docker Desktop        (open -a Docker)', value: 'desktop' as const }] : []),
@@ -890,61 +923,48 @@ async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
     info('Starting dockerd in the background (you may be prompted for your password)...')
     const child = spawn('sudo', ['dockerd'], { detached: true, stdio: 'ignore' })
     child.unref()
+    await pollUntilDockerReady('Waiting for Docker daemon...')
+
   } else if (choice === 'systemctl') {
-    const res = spawnSync('sudo', ['systemctl', 'start', 'docker'], { stdio: 'inherit' })
+    const spin = spinner('Running: sudo systemctl start docker...')
+    const res = spawnSync('sudo', ['systemctl', 'start', 'docker'], { stdio: 'pipe' })
     if (res.status !== 0) {
-      failure('systemctl start docker failed.')
+      spin.fail('systemctl start docker failed.')
       throw new Error('systemctl start docker failed')
     }
+    spin.succeed('Docker service started.')
+    await pollUntilDockerReady('Waiting for Docker daemon to be reachable...')
+
   } else if (choice === 'desktop') {
-    // If the backend is already running but the engine is stopped, the process is likely
-    // stuck — open -a just focuses the window without restarting it. Force-kill all
-    // Docker Desktop processes and do a clean relaunch.
     const backendRunning = spawnSync('pgrep', ['-f', 'com.docker.backend'], { stdio: 'ignore' }).status === 0
     if (backendRunning) {
-      info('Docker Desktop appears stuck — force-restarting it...')
-      // SIGKILL only Docker Desktop processes; leave com.docker.vmnetd (root networking helper) alone
+      const killSpin = spinner('Docker Desktop is stuck — force-restarting...')
       for (const pat of ['com.docker.backend', 'com.docker.virtualization', 'com.docker.build', 'Docker Desktop']) {
         spawnSync('pkill', ['-9', '-f', pat], { stdio: 'ignore' })
       }
-      await new Promise((r) => setTimeout(r, 2_000)) // let processes exit
+      await new Promise((r) => setTimeout(r, 2_000))
+      killSpin.succeed('Old Docker processes cleared.')
     }
 
+    const openSpin = spinner('Launching Docker Desktop...')
     let opened = spawnSync('open', ['-a', 'Docker'], { stdio: 'ignore' })
     if (opened.status !== 0) opened = spawnSync('open', ['/Applications/Docker.app'], { stdio: 'ignore' })
     if (opened.status !== 0) {
-      failure('Could not open Docker Desktop — is it installed in /Applications?')
+      openSpin.fail('Could not open Docker Desktop — is it installed in /Applications?')
       throw new Error('Failed to open Docker Desktop')
     }
-    info('Docker Desktop is starting — wait for the whale icon in the menu bar to stop animating.')
+    openSpin.succeed('Docker Desktop launched.')
+    await pollUntilDockerReady('Waiting for Docker engine to start...')
+
   } else if (choice === 'colima') {
-    const res = spawnSync('colima', ['start'], { stdio: 'inherit' })
+    const spin = spinner('Running: colima start...')
+    const res = spawnSync('colima', ['start'], { stdio: 'pipe' })
     if (res.status !== 0) {
-      failure('colima start failed — is Colima installed? (brew install colima docker)')
+      spin.fail('colima start failed — is Colima installed? (brew install colima docker)')
       throw new Error('colima start failed')
     }
-  }
-
-  // "Press Enter to check" loop — user controls pacing, no arbitrary timeout
-  while (true) {
-    await inquirer.prompt<{ _: string }>([{
-      type: 'input',
-      name: '_',
-      message: 'Press Enter to check if Docker is ready (Ctrl+C to abort)...',
-    }])
-
-    try {
-      execSync(
-        'docker version >/dev/null 2>&1 || ' +
-        'DOCKER_HOST="unix://$HOME/.docker/run/docker.sock" docker version >/dev/null 2>&1 || ' +
-        'DOCKER_HOST="unix://$HOME/.colima/default/docker.sock" docker version >/dev/null 2>&1',
-        { stdio: 'ignore' },
-      )
-      success('Docker is running.')
-      return
-    } catch {
-      failure('Docker is not ready yet — wait a moment and press Enter to try again.')
-    }
+    spin.succeed('Colima started.')
+    await pollUntilDockerReady('Waiting for Docker daemon to be reachable...')
   }
 }
 
