@@ -303,50 +303,47 @@ export default defineCommand({
 
     // ── Step 5: Integrations ───────────────────────────────────────────────────
     process.stdout.write('\n')
-    const { wantsIntegrations } = await inquirer.prompt<{ wantsIntegrations: boolean }>([{
-      type: 'confirm',
-      name: 'wantsIntegrations',
-      message: 'Enable OpenClaw integrations?',
-      default: false,
+    info('Use ↑↓ to move, Space to select/deselect, Enter to confirm.')
+
+    const { selectedIntegrationIds } = await inquirer.prompt<{ selectedIntegrationIds: string[] }>([{
+      type: 'checkbox',
+      name: 'selectedIntegrationIds',
+      message: 'Which chat integrations would you like to enable?',
+      choices: catalogs.integrations.map((integ) => ({
+        name: `${integ.displayName} — ${integ.description}`,
+        value: integ.id,
+        checked: false,
+      })),
+      pageSize: catalogs.integrations.length + 1,
     }])
 
     const channelsConfig: Record<string, Record<string, unknown>> = {}
     const infraRequired: Integration[] = []
 
-    if (wantsIntegrations) {
-      info('\nAnswer yes/no for each chat app you want to connect:\n')
+    for (const integ of catalogs.integrations.filter((i) => selectedIntegrationIds.includes(i.id))) {
+      process.stdout.write('\n')
+      info(`Setting up ${integ.displayName}:`)
 
-      for (const integ of catalogs.integrations) {
-        const { enabled } = await inquirer.prompt<{ enabled: boolean }>([{
-          type: 'confirm',
-          name: 'enabled',
-          message: `Connect ${integ.displayName}? — ${integ.description}`,
-          default: false,
-        }])
+      const channelConfig: Record<string, unknown> = {}
 
-        if (!enabled) continue
-
-        const channelConfig: Record<string, unknown> = {}
-
-        for (const field of integ.fields) {
-          if (field.sensitive && field.envDefault) {
-            const entry = await promptSecret(field.envDefault, `${integ.displayName} ${field.label}`, field.envDefault, inquirer)
-            secrets.push(entry)
-            channelConfig[field.name] = `$secret:${field.envDefault}`
-          } else {
-            const { value } = await inquirer.prompt<{ value: string }>([{
-              type: 'input',
-              name: 'value',
-              message: `${integ.displayName} — ${field.label}: ${field.description}`,
-              default: '',
-            }])
-            channelConfig[field.name] = value
-          }
+      for (const field of integ.fields) {
+        if (field.sensitive && field.envDefault) {
+          const entry = await promptSecret(field.envDefault, `${integ.displayName} ${field.label}`, field.envDefault, inquirer)
+          secrets.push(entry)
+          channelConfig[field.name] = `$secret:${field.envDefault}`
+        } else {
+          const { value } = await inquirer.prompt<{ value: string }>([{
+            type: 'input',
+            name: 'value',
+            message: `${field.label}: ${field.description}`,
+            default: '',
+          }])
+          channelConfig[field.name] = value
         }
-
-        channelsConfig[integ.channelKey] = channelConfig
-        if (integ.infraRequired) infraRequired.push(integ)
       }
+
+      channelsConfig[integ.channelKey] = channelConfig
+      if (integ.infraRequired) infraRequired.push(integ)
     }
 
     // ── Step 6: Output directory ───────────────────────────────────────────────
