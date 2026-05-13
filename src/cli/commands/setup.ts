@@ -133,6 +133,21 @@ export default defineCommand({
     } else {
       provider = 'local'
       info('We\'ll connect to your server over SSH to install and configure OpenClaw.\n')
+
+      // Offer to generate a key if no key is detected
+      if (!existsSync(localKeyPath)) {
+        info(`No SSH key found at ${localKeyPath}.`)
+        const { genKey } = await inquirer.prompt<{ genKey: boolean }>([{
+          type: 'confirm',
+          name: 'genKey',
+          message: 'Generate a new SSH key pair now? (recommended if you don\'t have one)',
+          default: true,
+        }])
+        if (genKey) {
+          localKeyPath = await generateSshKey()
+        }
+      }
+
       const localAnswers = await inquirer.prompt<{
         host: string; port: number; user: string; keyPath: string
       }>([
@@ -159,6 +174,7 @@ export default defineCommand({
           name: 'keyPath',
           message: `SSH private key file: (the key file on your computer used to log in — e.g. ~/.ssh/id_ed25519)`,
           default: localKeyPath,
+          validate: (v: string) => existsSync(v.trim()) || `File not found: ${v.trim()}`,
         },
       ])
       localHost = localAnswers.host
@@ -753,6 +769,20 @@ function cliInstallUrl(provider: 'aws' | 'gcp' | 'azure'): string {
   if (provider === 'aws') return 'https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html'
   if (provider === 'gcp') return 'https://cloud.google.com/sdk/docs/install'
   return 'https://learn.microsoft.com/en-us/cli/azure/install-azure-cli'
+}
+
+async function generateSshKey(): Promise<string> {
+  const keyPath = path.join(os.homedir(), '.ssh', 'id_ed25519')
+  mkdirSync(path.join(os.homedir(), '.ssh'), { recursive: true })
+  const result = spawnSync('ssh-keygen', ['-t', 'ed25519', '-f', keyPath, '-N', '', '-C', 'clawops'], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  if (result.status !== 0) {
+    throw new Error(`ssh-keygen failed: ${result.stderr?.toString().trim()}`)
+  }
+  success(`SSH key pair generated: ${keyPath}`)
+  info(`Public key (add this to your server's ~/.ssh/authorized_keys if needed):\n  ${readFileSync(`${keyPath}.pub`, 'utf-8').trim()}`)
+  return keyPath
 }
 
 function detectSshKey(): string {
