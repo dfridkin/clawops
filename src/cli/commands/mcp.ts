@@ -111,10 +111,4 @@ export default defineCommand({
     serve: serveCmd,
     install: installCmd,
   },
-  run() {
-    process.stdout.write('Usage: clawops mcp <serve | install>\n\n')
-    process.stdout.write('  serve    Start the MCP server (stdio or HTTP)\n')
-    process.stdout.write('  install  Wire clawops into AI editors interactively\n\n')
-    process.stdout.write('Run `clawops mcp <command> --help` for flags.\n')
-  },
 })

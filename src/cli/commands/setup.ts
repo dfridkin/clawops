@@ -672,6 +672,8 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
       const merged = deepMerge(remote, resolved)
       await atomicWriteConfig(session, merged, opts.signal)
       await restartGateway(session, opts.signal)
+      const { saveOverlay } = await import('../../plan/overlay-store.js')
+      saveOverlay(opts.stackName, opts.overlay, opts.secrets)
     } finally {
       session.close()
     }

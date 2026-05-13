@@ -1,0 +1,26 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.dfridkin/clawops",
+  "title": "clawops",
+  "description": "Deploy and manage self-hosted OpenClaw instances across clouds",
+  "version": "1.2.1",
+  "websiteUrl": "https://github.com/dfridkin/clawops",
+  "repository": {
+    "url": "https://github.com/dfridkin/clawops",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@clawops/cli",
+      "version": "1.2.1",
+      "packageArguments": [
+        { "type": "positional", "value": "mcp" },
+        { "type": "positional", "value": "serve" }
+      ],
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

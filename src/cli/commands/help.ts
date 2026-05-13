@@ -20,6 +20,7 @@ const COMMANDS = [
   ['stacks',  'List named stacks and their state'],
   ['doctor',  'Check Node version, config, SSH key, provider credentials, and Pulumi home'],
   ['mcp',     'MCP server operations (mcp serve | mcp install)'],
+  ['secret',  'Manage secrets (secret list | set | delete | rotate | audit)'],
   ['help',    'Show this help message'],
 ] as const
 
