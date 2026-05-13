@@ -1,0 +1,66 @@
+name: Provider support request
+description: Request support for a new cloud provider or improve an existing one
+labels: ["provider", "enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        clawops currently supports **AWS, GCP, Azure, and local VMs**. See
+        [docs/providers/matrix.md](../docs/providers/matrix.md) for the per-provider capability
+        matrix.
+
+        Use this template to request a new provider or report a missing capability in an existing one.
+
+  - type: dropdown
+    id: request-type
+    attributes:
+      label: Request type
+      options:
+        - New provider
+        - Missing capability in existing provider
+        - Provider bug (use the bug report template instead)
+    validations:
+      required: true
+
+  - type: input
+    id: provider
+    attributes:
+      label: Provider name
+      description: E.g. "DigitalOcean", "Hetzner", "Oracle Cloud", "Vultr", "AWS — missing capability"
+      placeholder: "DigitalOcean"
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: Why do you need this provider? What would it enable that the current providers don't?
+    validations:
+      required: true
+
+  - type: textarea
+    id: provider-details
+    attributes:
+      label: Provider details (new providers)
+      description: >
+        For new providers: link to the Pulumi provider package, confirm it is available on npm,
+        and list any prerequisites (CLI tool, SDK, required env vars).
+      placeholder: |
+        - Pulumi package: `@pulumi/digitalocean` (https://www.pulumi.com/registry/packages/digitalocean/)
+        - npm: available
+        - Prerequisites: `DIGITALOCEAN_TOKEN` env var
+        - VM types: Droplets (s-1vcpu-1gb, s-2vcpu-4gb, ...)
+
+  - type: textarea
+    id: capability-gap
+    attributes:
+      label: Missing capability (existing providers)
+      description: >
+        For existing providers: describe what's missing and link to the capability matrix row.
+        E.g. "AWS — no Key Vault equivalent, but Secrets Manager would work via Parameter Store."
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context

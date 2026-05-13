@@ -102,8 +102,8 @@ Goal: make the repository easy to evaluate, share, and launch.
 | Work order | Status | Deliverable |
 |---|---|---|
 | WO-22 — Public roadmap + limitations | ✅ | `docs/roadmap.md`, `docs/limitations.md` |
-| WO-23 — Demo script | ⏳ | `docs/demo-script.md` |
-| WO-24 — Launch issue set | ⏳ | GitHub issue templates + seeded issues |
+| WO-23 — Demo script | ✅ | `docs/demo-script.md` |
+| WO-24 — Launch issue set | ✅ | `.github/ISSUE_TEMPLATE/` + seeded issues |
 
 ## What is not on the roadmap
 
