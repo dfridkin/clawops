@@ -276,35 +276,10 @@ export default defineCommand({
     const selectedModel = modelProvider.models.find((m) => m.id === selectedModelId)!
 
     if (modelProvider.credentialSource === 'api-key') {
-      const keyLabel = `${modelProvider.displayName} API key`
-      const { secretSource } = await inquirer.prompt<{ secretSource: 'env' | 'file' }>([{
-        type: 'list',
-        name: 'secretSource',
-        message: `Where is your ${keyLabel}?`,
-        choices: [
-          { name: `In an environment variable — already set in my terminal  (e.g. ${modelProvider.envDefault ?? 'API_KEY'})`, value: 'env' },
-          { name: 'In a file on this computer  (e.g. ~/.secrets/api-key)', value: 'file' },
-        ],
-      }])
-
-      if (secretSource === 'env') {
-        const { envVar } = await inquirer.prompt<{ envVar: string }>([{
-          type: 'input',
-          name: 'envVar',
-          message: 'Environment variable name: (the variable that holds your API key)',
-          default: modelProvider.envDefault ?? 'API_KEY',
-        }])
-        secrets.push({ name: `${modelProviderId.toUpperCase()}_API_KEY`, source: 'env', ref: envVar })
-        modelConfig['apiKey'] = `$secret:${modelProviderId.toUpperCase()}_API_KEY`
-      } else {
-        const { filePath } = await inquirer.prompt<{ filePath: string }>([{
-          type: 'input',
-          name: 'filePath',
-          message: 'File path: (full path to the file containing your API key)',
-        }])
-        secrets.push({ name: `${modelProviderId.toUpperCase()}_API_KEY`, source: 'file', ref: filePath })
-        modelConfig['apiKey'] = `$secret:${modelProviderId.toUpperCase()}_API_KEY`
-      }
+      const secretName = `${modelProviderId.toUpperCase()}_API_KEY`
+      const entry = await promptSecret(secretName, `${modelProvider.displayName} API key`, modelProvider.envDefault ?? 'API_KEY', inquirer)
+      secrets.push(entry)
+      modelConfig['apiKey'] = `$secret:${secretName}`
     } else if (modelProvider.credentialSource === 'aws-profile') {
       process.stdout.write('\n')
       info(modelProvider.iamNote ?? 'Bedrock uses your AWS server\'s IAM role — no API key needed.')
@@ -354,35 +329,9 @@ export default defineCommand({
 
         for (const field of integ.fields) {
           if (field.sensitive && field.envDefault) {
-            const { secretSource } = await inquirer.prompt<{ secretSource: 'env' | 'file' }>([{
-              type: 'list',
-              name: 'secretSource',
-              message: `${integ.displayName} — ${field.label}: where is this credential stored?`,
-              choices: [
-                { name: `In an environment variable  (e.g. ${field.envDefault})`, value: 'env' },
-                { name: 'In a file on this computer', value: 'file' },
-              ],
-            }])
-
-            const secretName = field.envDefault
-            if (secretSource === 'env') {
-              const { envVar } = await inquirer.prompt<{ envVar: string }>([{
-                type: 'input',
-                name: 'envVar',
-                message: `Environment variable name: (holds your ${field.label})`,
-                default: field.envDefault,
-              }])
-              secrets.push({ name: secretName, source: 'env', ref: envVar })
-            } else {
-              const { filePath } = await inquirer.prompt<{ filePath: string }>([{
-                type: 'input',
-                name: 'filePath',
-                message: `File path: (full path to the file containing your ${field.label})`,
-                default: '',
-              }])
-              secrets.push({ name: secretName, source: 'file', ref: filePath })
-            }
-            channelConfig[field.name] = `$secret:${secretName}`
+            const entry = await promptSecret(field.envDefault, `${integ.displayName} ${field.label}`, field.envDefault, inquirer)
+            secrets.push(entry)
+            channelConfig[field.name] = `$secret:${field.envDefault}`
           } else {
             const { value } = await inquirer.prompt<{ value: string }>([{
               type: 'input',
@@ -785,6 +734,58 @@ function cliInstallUrl(provider: 'aws' | 'gcp' | 'azure'): string {
   if (provider === 'aws') return 'https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html'
   if (provider === 'gcp') return 'https://cloud.google.com/sdk/docs/install'
   return 'https://learn.microsoft.com/en-us/cli/azure/install-azure-cli'
+}
+
+async function promptSecret(
+  name: string,
+  label: string,
+  envDefault: string,
+  inquirer: InquirerInstance,
+): Promise<{ name: string; source: 'env' | 'file'; ref: string }> {
+  const secretsDir = path.join(os.homedir(), '.clawops', 'secrets')
+  const { secretSource } = await inquirer.prompt<{ secretSource: 'env' | 'file' | 'paste' }>([{
+    type: 'list',
+    name: 'secretSource',
+    message: `Where is your ${label}?`,
+    choices: [
+      { name: `Paste it here — saved to ~/.clawops/secrets/${name}`, value: 'paste' },
+      { name: `In an environment variable  (e.g. ${envDefault})`, value: 'env' },
+      { name: 'In a file on this computer', value: 'file' },
+    ],
+  }])
+
+  if (secretSource === 'paste') {
+    const { secretValue } = await inquirer.prompt<{ secretValue: string }>([{
+      type: 'password',
+      name: 'secretValue',
+      message: `Paste your ${label}: (input is hidden)`,
+      validate: (v: string) => v.trim() !== '' || 'Value cannot be empty',
+    }])
+    mkdirSync(secretsDir, { recursive: true })
+    spawnSync('chmod', ['700', secretsDir], { stdio: 'ignore' })
+    const secretPath = path.join(secretsDir, name)
+    writeFileSync(secretPath, secretValue.trim(), { encoding: 'utf-8', mode: 0o600 })
+    success(`Secret saved to ${secretPath}  (chmod 600)`)
+    return { name, source: 'file', ref: secretPath }
+  }
+
+  if (secretSource === 'env') {
+    const { envVar } = await inquirer.prompt<{ envVar: string }>([{
+      type: 'input',
+      name: 'envVar',
+      message: `Environment variable name: (the variable that holds your ${label})`,
+      default: envDefault,
+    }])
+    return { name, source: 'env', ref: envVar }
+  }
+
+  const { filePath } = await inquirer.prompt<{ filePath: string }>([{
+    type: 'input',
+    name: 'filePath',
+    message: `File path: (full path to the file containing your ${label})`,
+    validate: (v: string) => existsSync(v.trim()) || `File not found: ${v.trim()}`,
+  }])
+  return { name, source: 'file', ref: filePath }
 }
 
 // Docker preflight check — runs before bootstrap so the user gets a clear message
