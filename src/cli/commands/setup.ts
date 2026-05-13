@@ -862,7 +862,7 @@ async function checkDockerPreflight(opts: {
   throw new ProviderError('Docker is not installed on the target host.')
 }
 
-const DOCKER_START_TIMEOUT_MS = 60_000
+const DOCKER_START_TIMEOUT_MS = 120_000
 const DOCKER_POLL_INTERVAL_MS = 3_000
 
 async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
@@ -873,30 +873,33 @@ async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
     choices: [
       { name: 'Docker Desktop  (open the app)', value: 'desktop' },
       { name: 'Colima          (colima start)', value: 'colima' },
-      { name: 'Skip — I\'ll start it myself', value: 'skip' },
+      { name: 'Skip — I\'ll start it myself and re-run clawops setup', value: 'skip' },
     ],
   }])
 
   if (choice === 'skip') {
-    info('Make sure Docker is running before the bootstrap step begins.')
-    return
+    info('Re-run `clawops setup` once Docker is running.')
+    throw new Error('Docker not running — user chose to exit.')
   }
 
   if (choice === 'desktop') {
     spawnSync('open', ['-a', 'Docker'], { stdio: 'ignore' })
+    info('Docker Desktop is opening — this can take up to 2 minutes on first launch.')
   } else {
-    // colima start is interactive-ish; inherit stdio so the user sees progress
     const res = spawnSync('colima', ['start'], { stdio: 'inherit' })
     if (res.status !== 0) {
       failure('colima start failed — is Colima installed? (brew install colima docker)')
-      return
+      throw new Error('colima start failed')
     }
   }
 
-  const spin = spinner('Waiting for Docker to start...')
+  const spin = spinner(`Waiting for Docker daemon (up to ${DOCKER_START_TIMEOUT_MS / 1000}s)...`)
   const deadline = Date.now() + DOCKER_START_TIMEOUT_MS
+  let elapsed = 0
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, DOCKER_POLL_INTERVAL_MS))
+    elapsed += DOCKER_POLL_INTERVAL_MS
+    spin.text = `Waiting for Docker daemon... (${Math.round(elapsed / 1000)}s)`
     try {
       execSync(
         'docker version >/dev/null 2>&1 || ' +
@@ -906,10 +909,13 @@ async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
       spin.succeed('Docker is running.')
       return
     } catch {
-      // not ready yet
+      // not ready yet — keep polling
     }
   }
-  spin.warn(`Docker did not start within ${DOCKER_START_TIMEOUT_MS / 1000}s — proceeding anyway.`)
+
+  spin.fail('Docker did not start in time.')
+  info('Wait for Docker Desktop to finish starting, then re-run: clawops setup')
+  throw new Error('Docker daemon did not become ready within timeout.')
 }
 
 const LOCALHOST_ALIASES = new Set(['localhost', '127.0.0.1', '::1'])
