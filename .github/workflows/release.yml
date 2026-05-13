@@ -32,6 +32,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Create release PR or publish
+        id: changesets
         uses: changesets/action@v1
         with:
           publish: pnpm release
@@ -42,3 +43,28 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: 'true'
+
+      - name: Publish to MCP Registry
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          # Sync server.json version with the just-published package.json
+          VERSION=$(node -p "require('./package.json').version")
+          node -e "
+            const fs = require('fs');
+            const s = JSON.parse(fs.readFileSync('server.json', 'utf8'));
+            s.version = process.env.VERSION;
+            s.packages[0].version = process.env.VERSION;
+            fs.writeFileSync('server.json', JSON.stringify(s, null, 2) + '\n');
+          "
+
+          # Install mcp-publisher
+          curl -sL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
+            | tar xz mcp-publisher
+
+          # Authenticate via GitHub Actions OIDC (uses id-token: write permission)
+          ./mcp-publisher login github-oidc
+
+          # Publish to registry
+          ./mcp-publisher publish
+        env:
+          VERSION: ${{ steps.changesets.outputs.publishedPackages }}
