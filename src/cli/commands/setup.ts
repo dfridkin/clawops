@@ -7,6 +7,7 @@ import { defineCommand } from 'citty'
 import process from 'node:process'
 import os from 'node:os'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { execSync, spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { success, failure, info, spinner } from '../../output/human.js'
@@ -127,6 +128,8 @@ export default defineCommand({
         ],
       }])
       provider = answer.provider
+      process.stdout.write('\n')
+      await ensureCloudAuth(provider, inquirer)
     } else {
       provider = 'local'
       info('We\'ll connect to your server over SSH to install and configure OpenClaw.\n')
@@ -665,6 +668,92 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+const CLOUD_AUTH: Record<'aws' | 'gcp' | 'azure', {
+  check: () => string
+  identity: (out: string) => string
+  loginCmd: string[]
+  loginHint: string
+}> = {
+  aws: {
+    check: () => execSync('aws sts get-caller-identity --query Account --output text', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(),
+    identity: (out) => `AWS account ${out}`,
+    loginCmd: ['aws', 'configure'],
+    loginHint: 'This will walk you through entering your Access Key ID and Secret.',
+  },
+  gcp: {
+    check: () => {
+      const acct = execSync('gcloud config get-value account 2>/dev/null', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+      if (!acct || acct === '(unset)') throw new Error('not authenticated')
+      return acct
+    },
+    identity: (out) => `GCP account ${out}`,
+    loginCmd: ['gcloud', 'auth', 'login'],
+    loginHint: 'This will open a browser window to sign in to your Google account.',
+  },
+  azure: {
+    check: () => execSync('az account show --query user.name --output tsv', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(),
+    identity: (out) => `Azure user ${out}`,
+    loginCmd: ['az', 'login'],
+    loginHint: 'This will open a browser window to sign in to your Azure account.',
+  },
+}
+
+async function ensureCloudAuth(
+  provider: 'aws' | 'gcp' | 'azure',
+  inquirer: InquirerInstance,
+): Promise<void> {
+  const cfg = CLOUD_AUTH[provider]
+
+  // Check if already authenticated
+  try {
+    const identity = cfg.check()
+    success(`Authenticated: ${cfg.identity(identity)}`)
+    return
+  } catch {
+    // Not authenticated — guide the user
+  }
+
+  const cliName = cfg.loginCmd[0]
+  failure(`Not signed in to ${provider.toUpperCase()}. You need to authenticate before deploying.`)
+  info(`\nTo authenticate, run:\n  ${cfg.loginCmd.join(' ')}\n${cfg.loginHint}`)
+
+  const { runNow } = await inquirer.prompt<{ runNow: boolean }>([{
+    type: 'confirm',
+    name: 'runNow',
+    message: `Run \`${cfg.loginCmd.join(' ')}\` now?`,
+    default: true,
+  }])
+
+  if (runNow) {
+    process.stdout.write('\n')
+    const result = spawnSync(cfg.loginCmd[0], cfg.loginCmd.slice(1), { stdio: 'inherit' })
+    if (result.error) {
+      failure(`Could not launch ${cliName} — is it installed? (${result.error.message})`)
+      info(`Install guide: ${cliInstallUrl(provider)}`)
+      info('Re-run `clawops setup` after installing and signing in.\n')
+      return
+    }
+    // Re-check after login attempt
+    try {
+      const identity = cfg.check()
+      process.stdout.write('\n')
+      success(`Authenticated: ${cfg.identity(identity)}`)
+    } catch {
+      process.stdout.write('\n')
+      failure(`Still not authenticated — the sign-in may have been cancelled or failed.`)
+      info('Re-run `clawops setup` after signing in, or continue and authenticate before running `clawops up`.\n')
+    }
+  } else {
+    info('You can authenticate later, but `clawops up` will fail until you do.\n')
+  }
+}
+
+function cliInstallUrl(provider: 'aws' | 'gcp' | 'azure'): string {
+  if (provider === 'aws') return 'https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html'
+  if (provider === 'gcp') return 'https://cloud.google.com/sdk/docs/install'
+  return 'https://learn.microsoft.com/en-us/cli/azure/install-azure-cli'
+}
 
 function detectSshKey(): string {
   const candidates = ['id_ed25519', 'id_ecdsa', 'id_rsa', 'id_dsa']
