@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/dfridkin/clawops/tree/main/docs
+    about: Full documentation — architecture, operations, security, providers
+  - name: Public roadmap
+    url: https://github.com/dfridkin/clawops/blob/main/docs/roadmap.md
+    about: What is planned and what is explicitly out of scope
+  - name: Demo script
+    url: https://github.com/dfridkin/clawops/blob/main/docs/demo-script.md
+    about: End-to-end walkthrough for evaluating clawops

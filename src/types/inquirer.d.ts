@@ -3,9 +3,10 @@ declare module 'inquirer' {
     type: string
     name: string
     message: string
-    choices?: Array<{ name: string; value: unknown }> | Array<string>
+    choices?: Array<{ name: string; value: unknown; checked?: boolean }> | Array<string>
     default?: unknown
     validate?: (v: unknown) => boolean | string | Promise<boolean | string>
+    pageSize?: number
   }
   interface Inquirer {
     prompt<T>(questions: Question[]): Promise<T>

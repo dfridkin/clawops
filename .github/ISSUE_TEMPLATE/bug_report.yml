@@ -1,0 +1,122 @@
+name: Bug report
+description: Something is broken or behaving unexpectedly
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug report. Please fill out as much as you can — the more context you
+        provide, the faster we can reproduce and fix it.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. What did you do, what did you expect, what happened instead?
+      placeholder: "Running `clawops status` after a deploy returns an error..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps that reliably trigger the bug
+      placeholder: |
+        1. Run `clawops init --provider local --host 192.168.1.50 ...`
+        2. Run `clawops up`
+        3. Run `clawops status`
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Full command output
+      description: Paste the full terminal output, including any error messages. Use `--json` or `--debug` if available.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options:
+        - local
+        - aws
+        - gcp
+        - azure
+        - N/A (not provider-specific)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: command
+    attributes:
+      label: Command
+      options:
+        - setup
+        - init
+        - up
+        - down
+        - destroy
+        - status
+        - plan
+        - apply
+        - ssh
+        - logs
+        - tunnel
+        - config
+        - agents
+        - gateway
+        - backup
+        - stacks
+        - doctor
+        - mcp
+        - other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: clawops version
+      description: Output of `clawops --version`
+      placeholder: "@clawops/cli 1.2.0"
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      description: Output of `node --version`
+      placeholder: "v22.14.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: macOS version, Linux distro/version, or WSL2
+      placeholder: "macOS 15.3 (Sequoia) / Ubuntu 24.04 / WSL2 on Windows 11"
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Sanitized config (optional)
+      description: >
+        Paste your `~/.clawops/config.json` with credentials removed. This helps diagnose
+        stack configuration issues.
+      render: json
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Anything else relevant — SSH key type, network topology, recent changes to your environment, etc.

@@ -13,6 +13,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { success, failure, info, spinner } from '../../output/human.js'
 import type { ClawopsConfig } from '../../config/store.js'
+import { MCP_APPS, buildMcpEntry, writeAppConfigs } from '../mcp-apps.js'
 
 // Minimal typing shim for inquirer v9 (ships no bundled .d.ts).
 interface InquirerQuestion {
@@ -464,21 +465,12 @@ export default defineCommand({
     const selectedApps = MCP_APPS.filter((app) => selectedAppIds.includes(app.id))
 
     if (selectedApps.length > 0) {
-      for (const app of selectedApps) {
-        const cfgPath = app.configPath()
-        try {
-          let existing: Record<string, unknown> = {}
-          if (existsSync(cfgPath)) {
-            existing = JSON.parse(readFileSync(cfgPath, 'utf-8')) as Record<string, unknown>
-          }
-          const mcpServers = (existing['mcpServers'] ?? {}) as Record<string, unknown>
-          mcpServers['clawops'] = { command: mcpEntry.command, args: mcpEntry.args }
-          existing['mcpServers'] = mcpServers
-          mkdirSync(path.dirname(cfgPath), { recursive: true })
-          writeFileSync(cfgPath, JSON.stringify(existing, null, 2), 'utf-8')
-          success(`${app.name} configured  (${cfgPath})`)
-        } catch (err) {
-          failure(`Could not configure ${app.name}: ${(err as Error).message}`)
+      const results = writeAppConfigs(selectedApps, { command: mcpEntry.command, args: mcpEntry.args })
+      for (const r of results) {
+        if (r.ok) {
+          success(`${r.app.name} configured  (${r.configPath})`)
+        } else {
+          failure(`Could not configure ${r.app.name}: ${r.error ?? 'unknown error'}`)
           info('Add this to its MCP config manually:')
           printMcpSnippet()
         }
@@ -1150,61 +1142,6 @@ function detectSshKey(): string {
   return path.join(os.homedir(), '.ssh', 'id_ed25519')
 }
 
-// Resolve the absolute path to the clawops binary so MCP host apps (Claude
-// Desktop, Cursor, etc.) can spawn it without inheriting the user's shell PATH.
-function buildMcpEntry(): { command: string; args: string[]; resolved: boolean } {
-  try {
-    const bin = execSync('which clawops', {
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim()
-    if (bin) return { command: bin, args: ['mcp', 'serve', '--read-only'], resolved: true }
-  } catch { /* not on PATH */ }
-  return { command: 'clawops', args: ['mcp', 'serve', '--read-only'], resolved: false }
-}
-
-interface McpApp {
-  id: string
-  name: string
-  configPath: () => string
-  isInstalled: () => boolean
-}
-
-const MCP_APPS: McpApp[] = [
-  {
-    id: 'claude-desktop',
-    name: 'Claude Desktop',
-    configPath: () => process.platform === 'darwin'
-      ? path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
-      : path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json'),
-    isInstalled: () => existsSync(
-      process.platform === 'darwin'
-        ? path.join(os.homedir(), 'Library', 'Application Support', 'Claude')
-        : path.join(os.homedir(), '.config', 'Claude'),
-    ),
-  },
-  {
-    id: 'claude-code',
-    name: 'Claude Code',
-    configPath: () => path.join(os.homedir(), '.claude.json'),
-    isInstalled: () => {
-      if (existsSync(path.join(os.homedir(), '.claude.json'))) return true
-      try { execSync('claude --version', { stdio: 'ignore' }); return true } catch { return false }
-    },
-  },
-  {
-    id: 'cursor',
-    name: 'Cursor',
-    configPath: () => path.join(os.homedir(), '.cursor', 'mcp.json'),
-    isInstalled: () => existsSync(path.join(os.homedir(), '.cursor')),
-  },
-  {
-    id: 'windsurf',
-    name: 'Windsurf',
-    configPath: () => path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json'),
-    isInstalled: () => existsSync(path.join(os.homedir(), '.codeium', 'windsurf')),
-  },
-]
 
 function printMcpSnippet(): void {
   process.stdout.write('\n')
