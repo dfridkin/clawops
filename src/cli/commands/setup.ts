@@ -7,7 +7,7 @@ import { defineCommand } from 'citty'
 import process from 'node:process'
 import os from 'node:os'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
-import { execSync, spawnSync } from 'node:child_process'
+import { execSync, spawnSync, spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { success, failure, info, spinner } from '../../output/human.js'
@@ -863,14 +863,19 @@ async function checkDockerPreflight(opts: {
 }
 
 async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
-  const { choice } = await inquirer.prompt<{ choice: 'desktop' | 'colima' | 'skip' }>([{
+  const isLinux = process.platform === 'linux'
+  const { choice } = await inquirer.prompt<{
+    choice: 'dockerd' | 'systemctl' | 'desktop' | 'colima' | 'skip'
+  }>([{
     type: 'list',
     name: 'choice',
     message: 'How would you like to start Docker?',
     choices: [
-      { name: 'Docker Desktop  (open the app)', value: 'desktop' },
-      { name: 'Colima          (colima start)', value: 'colima' },
-      { name: 'Skip — I\'ll start it myself and re-run clawops setup', value: 'skip' },
+      { name: 'Start daemon directly  (sudo dockerd — works with any Docker install)', value: 'dockerd' },
+      ...(isLinux ? [{ name: 'systemctl             (sudo systemctl start docker)', value: 'systemctl' as const }] : []),
+      ...(!isLinux ? [{ name: 'Docker Desktop        (open the app)', value: 'desktop' as const }] : []),
+      { name: 'Colima               (colima start)', value: 'colima' as const },
+      { name: 'Skip — I\'ll start it myself and re-run clawops setup', value: 'skip' as const },
     ],
   }])
 
@@ -879,18 +884,26 @@ async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
     throw new Error('Docker not running — user chose to exit.')
   }
 
-  if (choice === 'desktop') {
-    let opened = spawnSync('open', ['-a', 'Docker'], { stdio: 'ignore' })
-    if (opened.status !== 0) {
-      opened = spawnSync('open', ['/Applications/Docker.app'], { stdio: 'ignore' })
+  if (choice === 'dockerd') {
+    // Spawn dockerd detached so it outlives this process; sudo required on most systems
+    info('Starting dockerd in the background (you may be prompted for your password)...')
+    const child = spawn('sudo', ['dockerd'], { detached: true, stdio: 'ignore' })
+    child.unref()
+  } else if (choice === 'systemctl') {
+    const res = spawnSync('sudo', ['systemctl', 'start', 'docker'], { stdio: 'inherit' })
+    if (res.status !== 0) {
+      failure('systemctl start docker failed.')
+      throw new Error('systemctl start docker failed')
     }
+  } else if (choice === 'desktop') {
+    let opened = spawnSync('open', ['-a', 'Docker'], { stdio: 'ignore' })
+    if (opened.status !== 0) opened = spawnSync('open', ['/Applications/Docker.app'], { stdio: 'ignore' })
     if (opened.status !== 0) {
       failure('Could not open Docker Desktop — is it installed in /Applications?')
       throw new Error('Failed to open Docker Desktop')
     }
-    info('Docker Desktop is opening. If this is your first launch, accept any licence prompts in the app.')
-  } else {
-    // colima start prints its own progress; inherit stdio
+    info('Docker Desktop is opening. Accept any licence prompts in the app before continuing.')
+  } else if (choice === 'colima') {
     const res = spawnSync('colima', ['start'], { stdio: 'inherit' })
     if (res.status !== 0) {
       failure('colima start failed — is Colima installed? (brew install colima docker)')
@@ -898,25 +911,25 @@ async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
     }
   }
 
-  // "Press Enter to check" loop — avoids fixed timeouts that are too short on slow machines
+  // "Press Enter to check" loop — user controls pacing, no arbitrary timeout
   while (true) {
     await inquirer.prompt<{ _: string }>([{
       type: 'input',
       name: '_',
-      message: 'Press Enter once Docker is ready to continue (Ctrl+C to abort)...',
+      message: 'Press Enter to check if Docker is ready (Ctrl+C to abort)...',
     }])
 
     try {
       execSync(
         'docker version >/dev/null 2>&1 || ' +
-        'DOCKER_HOST="${HOME}/.docker/run/docker.sock" docker version >/dev/null 2>&1 || ' +
-        'DOCKER_HOST="${HOME}/.colima/default/docker.sock" docker version >/dev/null 2>&1',
+        'DOCKER_HOST="unix://$HOME/.docker/run/docker.sock" docker version >/dev/null 2>&1 || ' +
+        'DOCKER_HOST="unix://$HOME/.colima/default/docker.sock" docker version >/dev/null 2>&1',
         { stdio: 'ignore' },
       )
       success('Docker is running.')
       return
     } catch {
-      failure('Docker is not ready yet — wait a moment and try again.')
+      failure('Docker is not ready yet — wait a moment and press Enter to try again.')
     }
   }
 }
