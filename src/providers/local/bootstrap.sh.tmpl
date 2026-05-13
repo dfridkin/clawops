@@ -89,7 +89,17 @@ if ! command -v docker &>/dev/null; then
 fi
 
 # ── Verify Docker daemon is reachable ─────────────────────────────────────────
-if ! docker info &>/dev/null; then
+# Try docker version (faster than docker info) across all known socket paths.
+docker_reachable() {
+  docker version >/dev/null 2>&1 && return 0
+  if [ "$OS" = "Darwin" ]; then
+    DOCKER_HOST="unix://${HOME}/.docker/run/docker.sock" docker version >/dev/null 2>&1 && return 0
+    DOCKER_HOST="unix://${HOME}/.colima/default/docker.sock" docker version >/dev/null 2>&1 && return 0
+  fi
+  return 1
+}
+
+if ! docker_reachable; then
   echo "clawops: Docker is installed but the daemon is not running." >&2
   if [ "$PKG_MANAGER" = "darwin" ]; then
     echo "Start Docker Desktop or run: colima start" >&2

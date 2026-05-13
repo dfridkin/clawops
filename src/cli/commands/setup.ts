@@ -883,7 +883,15 @@ async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
   }
 
   if (choice === 'desktop') {
-    spawnSync('open', ['-a', 'Docker'], { stdio: 'ignore' })
+    // Try `open -a Docker` first; fall back to the full bundle path
+    let opened = spawnSync('open', ['-a', 'Docker'], { stdio: 'ignore' })
+    if (opened.status !== 0) {
+      opened = spawnSync('open', ['/Applications/Docker.app'], { stdio: 'ignore' })
+    }
+    if (opened.status !== 0) {
+      failure('Could not open Docker Desktop — is it installed in /Applications?')
+      throw new Error('Failed to open Docker Desktop')
+    }
     info('Docker Desktop is opening — this can take up to 2 minutes on first launch.')
   } else {
     const res = spawnSync('colima', ['start'], { stdio: 'inherit' })
