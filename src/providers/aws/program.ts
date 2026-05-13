@@ -17,7 +17,7 @@ export const awsProgram: PulumiFn = async () => {
   const cfg = new pulumi.Config()
   const instanceType = cfg.get('instanceType') ?? 't3.small'
   const region = cfg.get('region') ?? 'us-east-1'
-  const openclawVersion = cfg.get('openclawVersion') ?? 'stable'
+  const openclawVersion = cfg.get('openclawVersion') ?? 'latest'
   const accessMode = cfg.get('accessMode') ?? 'restricted'
   const allowedCidrs = cfg.get('allowedCidrs') ?? ''
   const sshCidrs = cfg.get('sshCidrs') ?? ''
