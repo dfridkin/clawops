@@ -495,6 +495,7 @@ export default defineCommand({
           openclawVersion: stackAnswers.openclawVersion,
           overlay: openclawConfigOverlay,
           signal: ac.signal,
+          inquirer,
         })
       } else {
         const { getConfigDir } = await import('../../config/store.js')
@@ -546,6 +547,7 @@ interface LocalDeployOpts {
   openclawVersion: string
   overlay: Record<string, unknown>
   signal?: AbortSignal
+  inquirer: InquirerInstance
 }
 
 async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
@@ -577,7 +579,7 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
   success(`Deployment "${opts.stackName}" registered  (~/.clawops/config.json)`)
 
   // Preflight: verify Docker is installed and running on the target host
-  await checkDockerPreflight({ host: opts.host, port: opts.port, user: opts.user, keyPath: opts.keyPath, knownHostsPath, signal: opts.signal })
+  await checkDockerPreflight({ host: opts.host, port: opts.port, user: opts.user, keyPath: opts.keyPath, knownHostsPath, signal: opts.signal, inquirer: opts.inquirer })
 
   // Bootstrap the host — stream output to drive spinner text
   const STAGES: Array<[RegExp, string]> = [
@@ -796,14 +798,20 @@ async function promptSecret(
 // a clearer error if Docker truly isn't usable.
 const DOCKER_PREFLIGHT_TIMEOUT_MS = 10_000
 
+// Docker Desktop on Apple Silicon uses ~/.docker/run/docker.sock, not /var/run/docker.sock.
+// Try the default socket first, then the Docker Desktop user socket, then Colima's socket.
 const DOCKER_CHECK_CMD = [
   'export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"',
   'if ! command -v docker >/dev/null 2>&1; then echo NOT_INSTALLED; exit 0; fi',
-  'docker version >/dev/null 2>&1 && echo OK || echo NOT_RUNNING',
+  'if docker version >/dev/null 2>&1; then echo OK; exit 0; fi',
+  'if DOCKER_HOST="unix://${HOME}/.docker/run/docker.sock" docker version >/dev/null 2>&1; then echo OK; exit 0; fi',
+  'if DOCKER_HOST="unix://${HOME}/.colima/default/docker.sock" docker version >/dev/null 2>&1; then echo OK; exit 0; fi',
+  'echo NOT_RUNNING',
 ].join('; ')
 
 async function checkDockerPreflight(opts: {
-  host: string; port: number; user: string; keyPath: string; knownHostsPath: string; signal?: AbortSignal
+  host: string; port: number; user: string; keyPath: string; knownHostsPath: string
+  signal?: AbortSignal; inquirer: InquirerInstance
 }): Promise<void> {
   const { acquireSession } = await import('../../transport/pool.js')
   const { ProviderError } = await import('../../errors/index.js')
@@ -839,12 +847,9 @@ async function checkDockerPreflight(opts: {
   }
 
   if (out === 'NOT_RUNNING') {
-    spin.fail('Docker is installed but not running.')
-    info('Start it with one of:')
-    info('  Docker Desktop: open the Docker Desktop app')
-    info('  Colima:         colima start')
-    info('Then re-run: clawops setup')
-    throw new ProviderError('Docker daemon is not running on the target host.')
+    spin.warn('Docker is installed but not running.')
+    await startDockerAndWait(opts.inquirer)
+    return
   }
 
   // NOT_INSTALLED or empty output
@@ -855,6 +860,56 @@ async function checkDockerPreflight(opts: {
   info('  Colima (FOSS):         brew install colima docker && colima start')
   info('Then re-run: clawops setup')
   throw new ProviderError('Docker is not installed on the target host.')
+}
+
+const DOCKER_START_TIMEOUT_MS = 60_000
+const DOCKER_POLL_INTERVAL_MS = 3_000
+
+async function startDockerAndWait(inquirer: InquirerInstance): Promise<void> {
+  const { choice } = await inquirer.prompt<{ choice: 'desktop' | 'colima' | 'skip' }>([{
+    type: 'list',
+    name: 'choice',
+    message: 'How would you like to start Docker?',
+    choices: [
+      { name: 'Docker Desktop  (open the app)', value: 'desktop' },
+      { name: 'Colima          (colima start)', value: 'colima' },
+      { name: 'Skip — I\'ll start it myself', value: 'skip' },
+    ],
+  }])
+
+  if (choice === 'skip') {
+    info('Make sure Docker is running before the bootstrap step begins.')
+    return
+  }
+
+  if (choice === 'desktop') {
+    spawnSync('open', ['-a', 'Docker'], { stdio: 'ignore' })
+  } else {
+    // colima start is interactive-ish; inherit stdio so the user sees progress
+    const res = spawnSync('colima', ['start'], { stdio: 'inherit' })
+    if (res.status !== 0) {
+      failure('colima start failed — is Colima installed? (brew install colima docker)')
+      return
+    }
+  }
+
+  const spin = spinner('Waiting for Docker to start...')
+  const deadline = Date.now() + DOCKER_START_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, DOCKER_POLL_INTERVAL_MS))
+    try {
+      execSync(
+        'docker version >/dev/null 2>&1 || ' +
+        'DOCKER_HOST="unix://${HOME}/.docker/run/docker.sock" docker version >/dev/null 2>&1',
+        { stdio: 'ignore' },
+      )
+      spin.succeed('Docker is running.')
+      return
+    } catch {
+      // not ready yet
+    }
+  }
+  spin.warn(`Docker did not start within ${DOCKER_START_TIMEOUT_MS / 1000}s — proceeding anyway.`)
 }
 
 const LOCALHOST_ALIASES = new Set(['localhost', '127.0.0.1', '::1'])
