@@ -31,6 +31,18 @@ vi.mock('@pulumi/pulumi', () => {
   return pulumi
 })
 
+vi.mock('@pulumi/random', () => {
+  return {
+    RandomPassword: class {
+      result: string
+      constructor(name: string, _inputs: Record<string, unknown> = {}) {
+        this.result = 'mock-random-gateway-token-32chars'
+        created.push({ type: 'random:index/randomPassword:RandomPassword', name, inputs: _inputs })
+      }
+    },
+  }
+})
+
 vi.mock('@pulumi/azure-native', async () => {
   function makeConstructor(type: string) {
     return class {
@@ -189,7 +201,7 @@ describe('azureProgram — Key Vault (keyVaultEnabled)', () => {
     expect(kv).toBeUndefined()
   })
 
-  it('creates Key Vault, RoleAssignment, and Secret when keyVaultEnabled=true', async () => {
+  it('creates Key Vault, RoleAssignment, RandomPassword, and Secret when keyVaultEnabled=true', async () => {
     setConfig({
       sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
       keyVaultEnabled: 'true',
@@ -199,11 +211,26 @@ describe('azureProgram — Key Vault (keyVaultEnabled)', () => {
 
     expect(created.find(r => r.type === 'azure-native:keyvault:Vault')).toBeDefined()
     expect(created.find(r => r.type === 'azure-native:authorization:RoleAssignment')).toBeDefined()
+    expect(created.find(r => r.type === 'random:index/randomPassword:RandomPassword')).toBeDefined()
     expect(created.find(r => r.type === 'azure-native:keyvault:Secret')).toBeDefined()
   })
 
-  it('truncates Key Vault name to 24 chars', async () => {
-    mockStackName = 'very-long-stack-name-that-exceeds'
+  it('gateway-token Secret uses a generated token, not "CHANGEME"', async () => {
+    setConfig({
+      sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
+      keyVaultEnabled: 'true',
+    })
+
+    await runProgram()
+
+    const secret = created.find(r => r.type === 'azure-native:keyvault:Secret')
+    const value = (secret!.inputs['properties'] as Record<string, unknown>)['value'] as string
+    expect(value).not.toBe('CHANGEME')
+    expect(value.length).toBeGreaterThan(0)
+  })
+
+  it('Key Vault name is ≤24 chars for long stack names', async () => {
+    mockStackName = 'very-long-stack-name-that-exceeds-the-limit'
     setConfig({
       sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
       keyVaultEnabled: 'true',
@@ -214,6 +241,40 @@ describe('azureProgram — Key Vault (keyVaultEnabled)', () => {
     const kv = created.find(r => r.type === 'azure-native:keyvault:Vault')
     const kvName = kv?.inputs['vaultName'] as string
     expect(kvName.length).toBeLessThanOrEqual(24)
+  })
+
+  it('distinct long stack names produce distinct Key Vault names (no collision)', async () => {
+    const names: string[] = []
+
+    for (const stackName of ['very-long-stack-name-that-exceeds-A', 'very-long-stack-name-that-exceeds-B']) {
+      created.length = 0
+      mockStackName = stackName
+      setConfig({
+        sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
+        keyVaultEnabled: 'true',
+      })
+      vi.resetModules()
+      const { azureProgram } = await import('../../../src/providers/azure/program.js')
+      await azureProgram()
+      const kv = created.find(r => r.type === 'azure-native:keyvault:Vault')
+      names.push(kv!.inputs['vaultName'] as string)
+    }
+
+    expect(names[0]).not.toBe(names[1])
+  })
+
+  it('replaces underscores in stack name with hyphens for valid KV name', async () => {
+    mockStackName = 'prod_us_east'
+    setConfig({
+      sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
+      keyVaultEnabled: 'true',
+    })
+
+    await runProgram()
+
+    const kv = created.find(r => r.type === 'azure-native:keyvault:Vault')
+    const kvName = kv?.inputs['vaultName'] as string
+    expect(kvName).not.toContain('_')
   })
 })
 

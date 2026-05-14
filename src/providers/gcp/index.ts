@@ -38,6 +38,12 @@ const gcpAdapter: ProviderAdapter = {
   },
 
   normalizeInstanceType(alias: InstanceAlias): string {
+    if (alias === 'gpu') {
+      throw new Error(
+        'GPU instances are not yet supported on GCP. ' +
+        'Use --provider aws (g4dn.xlarge) or --provider azure (Standard_NC6s_v3) for GPU workloads.',
+      )
+    }
     const mapped = INSTANCE_TYPE_MAP[alias]
     if (!mapped) throw new Error(`Unknown instance alias: ${alias}`)
     return mapped
@@ -54,11 +60,14 @@ const gcpAdapter: ProviderAdapter = {
   async validateConfig(): Promise<ValidationResult> {
     const errors: string[] = []
 
-    const hasKeyFile = Boolean(process.env['GOOGLE_APPLICATION_CREDENTIALS'])
-    const hasUserCreds = Boolean(process.env['CLOUDSDK_AUTH_ACCESS_TOKEN'])
+    const hasKeyFile  = Boolean(process.env['GOOGLE_APPLICATION_CREDENTIALS'])
+    // GOOGLE_OAUTH_ACCESS_TOKEN is the env var the GCP client library reads for
+    // short-lived access tokens. CLOUDSDK_AUTH_ACCESS_TOKEN is gcloud-internal only.
+    const hasToken    = Boolean(process.env['GOOGLE_OAUTH_ACCESS_TOKEN'])
+    // gcloud auth application-default login writes credentials here (no env var set)
+    const hasAdcFile  = await checkAdcFile()
 
-    if (!hasKeyFile && !hasUserCreds) {
-      // Check if running on GCP instance metadata server (ADC via instance metadata)
+    if (!hasKeyFile && !hasToken && !hasAdcFile) {
       const onGcp = await checkInstanceMetadata()
       if (!onGcp) {
         errors.push(
@@ -71,6 +80,18 @@ const gcpAdapter: ProviderAdapter = {
 
     return { ok: errors.length === 0, errors }
   },
+}
+
+async function checkAdcFile(): Promise<boolean> {
+  try {
+    const { accessSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const home = process.env['HOME'] ?? process.env['USERPROFILE'] ?? ''
+    accessSync(join(home, '.config', 'gcloud', 'application_default_credentials.json'))
+    return true
+  } catch {
+    return false
+  }
 }
 
 async function checkInstanceMetadata(): Promise<boolean> {

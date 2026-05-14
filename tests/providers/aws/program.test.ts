@@ -182,6 +182,20 @@ describe('awsProgram — accessMode=open', () => {
   })
 })
 
+describe('awsProgram — metadataOptions', () => {
+  it('sets IMDSv2 with hopLimit=2 so Docker containers can reach IMDS', async () => {
+    setConfig({ sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test' })
+
+    await runProgram()
+
+    const instance = created.find(r => r.type === 'aws:ec2/instance:Instance')
+    const meta = instance!.inputs['metadataOptions'] as { httpTokens: string; httpPutResponseHopLimit: number }
+    expect(meta).toBeDefined()
+    expect(meta.httpTokens).toBe('required')
+    expect(meta.httpPutResponseHopLimit).toBe(2)
+  })
+})
+
 describe('awsProgram — bedrockEnabled', () => {
   it('attaches Bedrock policy when bedrockEnabled=true', async () => {
     setConfig({
@@ -204,6 +218,24 @@ describe('awsProgram — bedrockEnabled', () => {
     const attachments = created.filter(r => r.type === 'aws:iam/rolePolicyAttachment:RolePolicyAttachment')
     const bedrock = attachments.find(r => String(r.inputs['policyArn']).includes('BedrockFullAccess'))
     expect(bedrock).toBeUndefined()
+  })
+
+  it('passes AWS_DEFAULT_REGION env var to container when bedrockEnabled=true', async () => {
+    setConfig({
+      sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
+      bedrockEnabled: 'true',
+    })
+
+    const result = await runProgram()
+    // The userData startup script should contain -e AWS_DEFAULT_REGION for the docker run
+    const instance = created.find(r => r.type === 'aws:ec2/instance:Instance')
+    const userData = instance!.inputs['userData'] as string
+    expect(userData).toContain('AWS_DEFAULT_REGION')
+    // Must NOT contain the old broken AWS_PROFILE=default approach
+    expect(userData).not.toContain('AWS_PROFILE=default')
+    // Must NOT contain --env-file /etc/openclaw.env
+    expect(userData).not.toContain('/etc/openclaw.env')
+    void result
   })
 })
 
