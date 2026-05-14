@@ -158,6 +158,71 @@ clawops plan                      # preview resources before deploying
 clawops status                    # current stack state
 ```
 
+## Stack diagram
+
+```mermaid
+flowchart TD
+    A([awsProgram]) --> CFG["Read Pulumi Config\ninstanceType, region, openclawVersion\naccessMode, allowedCidrs, sshPublicKey\nbedrockEnabled"]
+
+    CFG --> CIDR["resolveIngressCidrs\nSSH CIDRs + Gateway CIDRs"]
+    CFG --> AMI["getAmi\nUbuntu 22.04 LTS"]
+
+    CIDR --> VPC
+
+    subgraph NET["Networking"]
+        VPC["aws:ec2:Vpc\n10.0.0.0/16"]
+        IGW["aws:ec2:InternetGateway"]
+        IGWA["aws:ec2:InternetGatewayAttachment"]
+        SUBNET["aws:ec2:Subnet\n10.0.1.0/24"]
+        RT["aws:ec2:RouteTable"]
+        ROUTE["aws:ec2:Route\n0.0.0.0/0 via IGW"]
+        RTA["aws:ec2:RouteTableAssociation"]
+
+        VPC --> IGW --> IGWA
+        VPC --> SUBNET
+        VPC --> RT --> ROUTE
+        RT --> RTA --> SUBNET
+    end
+
+    subgraph SG["Security Group"]
+        SEC["aws:ec2:SecurityGroup\ningress: resolved CIDRs on :22, :18789\negress: 0.0.0.0/0"]
+    end
+
+    VPC --> SG
+
+    subgraph IAM["IAM"]
+        ROLE["aws:iam:Role\nec2.amazonaws.com assume"]
+        SSM["aws:iam:RolePolicyAttachment\nAmazonSSMManagedInstanceCore"]
+        BED["aws:iam:RolePolicyAttachment\nAmazonBedrockFullAccess\nif bedrockEnabled"]
+        PROF["aws:iam:InstanceProfile"]
+
+        ROLE --> SSM
+        ROLE --> BED
+        ROLE --> PROF
+    end
+
+    subgraph COMPUTE["Compute"]
+        KP["aws:ec2:KeyPair\nsshPublicKey"]
+        EC2["aws:ec2:Instance\nUbuntu 22.04\nIMDSv2 hopLimit=2\nuserData: bootstrap script"]
+        EIP["aws:ec2:Eip"]
+        EIPASSOC["aws:ec2:EipAssociation"]
+
+        KP --> EC2
+        AMI --> EC2
+        SUBNET --> EC2
+        SEC --> EC2
+        PROF --> EC2
+        EC2 --> EIPASSOC
+        EIP --> EIPASSOC
+    end
+
+    EIP --> OUT
+
+    subgraph OUT["Stack Outputs"]
+        O1["publicIp, gatewayUrl\nsshHost, sshUser=ubuntu\ninstanceId, region, provisionedAt"]
+    end
+```
+
 ## See Also
 
 - `src/providers/aws/` — adapter + Pulumi program
