@@ -402,20 +402,21 @@ Each cloud provider is an inline Pulumi program that creates the resources below
 ```mermaid
 flowchart LR
     subgraph NET["Networking"]
-        VPC[Vpc]
-        IGW[InternetGateway]
-        SUBNET[Subnet]
-        RT[RouteTable]
-        SG[SecurityGroup]
+        VPC["VPC (10.0.0.0/16)"]
+        IGW[Internet Gateway]
+        SUBNET["Subnet (10.0.1.0/24)"]
+        RT[Route Table]
+        SG["Security Group (ports 22, 18789)"]
     end
     subgraph IAM["IAM"]
-        ROLE[Role]
-        SSM[RolePolicyAttachment]
-        IP[InstanceProfile]
+        ROLE[IAM Role]
+        SSM[SSM Policy Attachment]
+        BED["Bedrock Policy Attachment (optional)"]
+        IP[Instance Profile]
     end
     subgraph COMPUTE["Compute"]
-        KP[KeyPair]
-        EC2[Instance]
+        KP[EC2 Key Pair]
+        EC2["EC2 Instance (Ubuntu 22.04, IMDSv2)"]
         EIP[Elastic IP]
     end
 ```
@@ -427,14 +428,14 @@ flowchart LR
 ```mermaid
 flowchart LR
     subgraph NET["Networking"]
-        NW[Network]
-        SN[Subnetwork]
-        FW1["Firewall (SSH, conditional)"]
-        FW2["Firewall (gateway, conditional)"]
-        ADDR[Static Address]
+        NW[VPC Network]
+        SN["Subnetwork (10.0.0.0/24)"]
+        FW1["Firewall: SSH port 22 (conditional)"]
+        FW2["Firewall: Gateway port 18789 (conditional)"]
+        ADDR[Static External IP]
     end
     subgraph COMPUTE["Compute"]
-        VM["Instance (Debian 12)"]
+        VM["Compute Instance (Debian 12, 20 GB)"]
     end
 ```
 
@@ -444,21 +445,21 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    RG[ResourceGroup]
+    RG[Resource Group]
     subgraph NET["Networking"]
-        VNET[VirtualNetwork]
-        SUBNET[Subnet]
-        NSG[NetworkSecurityGroup]
-        PIP[PublicIPAddress]
-        NIC[NetworkInterface]
+        VNET["Virtual Network (10.0.0.0/16)"]
+        SUBNET["Subnet (10.0.1.0/24)"]
+        NSG["Network Security Group (ports 22, 18789)"]
+        PIP["Public IP Address (Static)"]
+        NIC[Network Interface]
     end
     subgraph COMPUTE["Compute"]
-        VM["VirtualMachine (Ubuntu 22.04)"]
+        VM["VM (Ubuntu 22.04, managed identity)"]
     end
     subgraph KV["Key Vault (optional)"]
-        VAULT[Vault]
-        RA[RoleAssignment]
-        SECRET[Secret]
+        VAULT["Key Vault (RBAC, name max 24 chars)"]
+        RA["Role Assignment (Secrets User)"]
+        SECRET["Secret: gateway-token"]
     end
 ```
 
