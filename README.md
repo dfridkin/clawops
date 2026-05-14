@@ -393,6 +393,172 @@ Key design decisions:
 
 See [`docs/architecture.md`](docs/architecture.md) for a full narrative, and [`docs/decisions/`](docs/decisions/) for ADRs.
 
+### Cloud provider stacks
+
+Each cloud provider is an inline Pulumi program that creates the resources below. All three share the same outputs (`publicIp`, `gatewayUrl`, `sshHost`, `sshPort`, `sshUser`) consumed by the SSH and config-overlay layers.
+
+#### AWS
+
+```mermaid
+flowchart TD
+    A([awsProgram]) --> CFG[Read Pulumi Config\ninstanceType · region · openclawVersion\naccessMode · allowedCidrs · sshPublicKey\nbedrockEnabled]
+
+    CFG --> CIDR[resolveIngressCidrs\nSSH CIDRs + Gateway CIDRs]
+    CFG --> AMI[getAmi\nUbuntu 22.04 LTS — Canonical]
+
+    CIDR --> VPC
+
+    subgraph NET [Networking]
+        VPC[aws:ec2:Vpc\n10.0.0.0/16]
+        IGW[aws:ec2:InternetGateway]
+        IGWA[aws:ec2:InternetGatewayAttachment]
+        SUBNET[aws:ec2:Subnet\n10.0.1.0/24]
+        RT[aws:ec2:RouteTable]
+        ROUTE[aws:ec2:Route\n0.0.0.0/0 → IGW]
+        RTA[aws:ec2:RouteTableAssociation]
+
+        VPC --> IGW --> IGWA
+        VPC --> SUBNET
+        VPC --> RT --> ROUTE
+        RT --> RTA --> SUBNET
+    end
+
+    subgraph SG [Security Group]
+        SEC[aws:ec2:SecurityGroup\ningress: resolved CIDRs → :22 :18789\negress: 0.0.0.0/0]
+    end
+
+    VPC --> SG
+
+    subgraph IAM [IAM]
+        ROLE[aws:iam:Role\nec2.amazonaws.com assume]
+        SSM[aws:iam:RolePolicyAttachment\nAmazonSSMManagedInstanceCore]
+        BED[aws:iam:RolePolicyAttachment\nAmazonBedrockFullAccess\nif bedrockEnabled]
+        PROF[aws:iam:InstanceProfile]
+
+        ROLE --> SSM
+        ROLE --> BED
+        ROLE --> PROF
+    end
+
+    subgraph COMPUTE [Compute]
+        KP[aws:ec2:KeyPair\nsshPublicKey]
+        EC2[aws:ec2:Instance\nUbuntu 22.04\nIMDSv2 hopLimit=2\nuserData: bootstrap script]
+        EIP[aws:ec2:Eip]
+        EIPASSOC[aws:ec2:EipAssociation]
+
+        KP --> EC2
+        AMI --> EC2
+        SUBNET --> EC2
+        SEC --> EC2
+        PROF --> EC2
+        EC2 --> EIPASSOC
+        EIP --> EIPASSOC
+    end
+
+    EIP --> OUT
+
+    subgraph OUT [Stack Outputs]
+        O1[publicIp · gatewayUrl\nsshHost · sshUser=ubuntu\ninstanceId · region · provisionedAt]
+    end
+```
+
+#### GCP
+
+```mermaid
+flowchart TD
+    A([gcpProgram]) --> CFG[Read Pulumi Config\ninstanceType · region · zone\nopenclawVersion · accessMode\nallowedCidrs · sshPublicKey ⟵ required]
+
+    CFG --> CIDR[resolveIngressCidrs\nSSH CIDRs + Gateway CIDRs]
+
+    subgraph NET [Networking]
+        NW[gcp:compute:Network\nautoCreateSubnetworks=false]
+        SN[gcp:compute:Subnetwork\n10.0.0.0/24]
+        NW --> SN
+    end
+
+    CIDR -->|SSH CIDRs present| FW1[gcp:compute:Firewall ssh\nprotocol=tcp port=22\nsourceRanges=resolved CIDRs]
+    CIDR -->|Gateway CIDRs present| FW2[gcp:compute:Firewall gateway\nprotocol=tcp port=18789\nsourceRanges=resolved CIDRs]
+
+    FW1 --> NW
+    FW2 --> NW
+
+    ADDR[gcp:compute:Address\nstatic external IP]
+
+    subgraph COMPUTE [Compute]
+        VM[gcp:compute:Instance\nDebian 12 · 20 GB disk\ntags=clawops\nserviceAccount: cloud-platform scope]
+        META[instance metadata\nssh-keys: clawops:sshPublicKey\nstartup-script: bootstrap.sh]
+        VM --- META
+    end
+
+    CFG --> META
+    NW --> VM
+    SN --> VM
+    ADDR --> VM
+
+    VM --> OUT
+
+    subgraph OUT [Stack Outputs]
+        O1[publicIp · gatewayUrl\nsshHost · sshUser=clawops\ninstanceId · region · provisionedAt]
+    end
+```
+
+#### Azure
+
+```mermaid
+flowchart TD
+    A([azureProgram]) --> CFG[Read Pulumi Config\ninstanceType · region · openclawVersion\naccessMode · allowedCidrs · sshPublicKey ⟵ required\nkeyVaultEnabled · resourceGroupName]
+
+    CFG --> CIDR[resolveIngressCidrs\nSSH CIDRs + Gateway CIDRs]
+    CFG --> RG[azure:resources:ResourceGroup\nclawops-stackName]
+
+    subgraph NET [Networking]
+        VNET[azure:network:VirtualNetwork\n10.0.0.0/16]
+        SUBNET[azure:network:Subnet\n10.0.1.0/24]
+        NSG[azure:network:NetworkSecurityGroup\ningress rules from resolved CIDRs\n:22 SSH · :18789 gateway]
+        PIP[azure:network:PublicIPAddress\nStatic · Standard SKU]
+        NIC[azure:network:NetworkInterface\nNSG attached · dynamic private IP]
+
+        RG --> VNET --> SUBNET
+        RG --> NSG
+        RG --> PIP
+        SUBNET --> NIC
+        PIP --> NIC
+        NSG --> NIC
+    end
+
+    CIDR --> NSG
+
+    subgraph COMPUTE [Compute]
+        VM[azure:compute:VirtualMachine\nUbuntu 22.04 LTS\nSystemAssigned managed identity\ncustomData: base64 bootstrap script\ndisablePasswordAuth=true]
+    end
+
+    RG --> VM
+    NIC --> VM
+    CFG -->|sshPublicKey| VM
+
+    subgraph KV [Key Vault — optional]
+        direction TB
+        VAULT[azure:keyvault:Vault\nRBAC authorization\nname: sanitized+hash ≤24 chars]
+        RA[azure:authorization:RoleAssignment\nKey Vault Secrets User\nprincipal: VM managed identity]
+        RPASS[random:RandomPassword\nlength=32 · stable in Pulumi state]
+        SECRET[azure:keyvault:Secret\ngateway-token = generated token]
+
+        VAULT --> RA
+        VAULT --> SECRET
+        RPASS --> SECRET
+    end
+
+    VM -->|identity.principalId| RA
+    VM -->|identity.tenantId| VAULT
+    RG --> VAULT
+
+    VM --> OUT
+
+    subgraph OUT [Stack Outputs]
+        O1[publicIp · gatewayUrl\nsshHost · sshUser=clawops\ninstanceId · region · provisionedAt]
+    end
+```
+
 ---
 
 ## Development
