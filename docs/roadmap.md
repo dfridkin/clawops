@@ -105,6 +105,44 @@ Goal: make the repository easy to evaluate, share, and launch.
 | WO-23 — Demo script | ✅ | `docs/demo-script.md` |
 | WO-24 — Launch issue set | ✅ | `.github/ISSUE_TEMPLATE/` + seeded issues |
 
+### R9 — Secret Lifecycle Management
+
+Goal: give operators a first-class CLI for creating, rotating, and auditing secrets.
+
+| Work order | Status | Deliverable |
+|---|---|---|
+| WO-25 — Secret lifecycle CLI | ✅ | `clawops secret list/set/delete/rotate/audit`; `docs/secrets.md` |
+
+### R10 — Stack Monitoring
+
+Goal: live terminal dashboard and MCP tool for continuous stack health visibility.
+
+| Work order | Status | Deliverable |
+|---|---|---|
+| WO-26 — `clawops monitor` interactive dashboard | ⏳ | Refreshing ANSI dashboard: gateway health, sessions, model usage, log tail |
+| WO-27 — `clawops_monitor` MCP tool | ⏳ | Structured JSON health snapshot for agents |
+
+### R11 — Gateway-Agent MCP Wiring
+
+Goal: let the OpenClaw gateway's own AI agent invoke clawops management commands via MCP.
+
+| Work order | Status | Deliverable |
+|---|---|---|
+| WO-28 — Gateway-agent MCP client config | ⏳ | `clawops mcp wire` command; optional wizard step |
+
+### R12 — Server Hardening
+
+Goal: reduce attack surface and optionally route all traffic through a private Tailscale network, with provider-specific hardening steps and a multi-select wizard step during setup.
+
+| Work order | Status | Deliverable |
+|---|---|---|
+| WO-29 — `clawops harden` command + wizard integration | ⏳ | Core hardening command, shared module framework, multi-select wizard step |
+| WO-30 — AWS hardening | ⏳ | VPC Flow Logs, GuardDuty opt-in, Security Group audit, Session Manager check |
+| WO-31 — GCP hardening | ⏳ | Shielded VM check, VPC firewall audit, OS Login opt-in |
+| WO-32 — Azure hardening | ⏳ | JIT VM Access, Defender for Cloud, NSG audit, disk encryption check |
+| WO-33 — Local/VPS hardening | ⏳ | SSH hardening, UFW, fail2ban, unattended-upgrades, CIS Level 1 report |
+| WO-34 — Tailscale VPN integration | ⏳ | Install Tailscale, join network, update SSH/gateway config, optional private-only mode |
+
 ## What is not on the roadmap
 
 The following are explicitly out of scope for the current roadmap. They may be revisited in a
