@@ -4,8 +4,8 @@ This document tracks the public roadmap for clawops. Development milestones (M0�
 core implementation; adoption milestones (R1–R12) cover documentation, safety, operational
 maturity, and hardening.
 
-**Current state (v1.3.0):** all development milestones and adoption waves R1–R9 are complete.
-Waves R10–R12 are planned and specced; R10 is next.
+**Current state (v1.3.0, published):** all development milestones and adoption waves R1–R9 are
+complete. Waves R10–R12 are planned and specced; R10 is next.
 
 ## Development milestones
 
