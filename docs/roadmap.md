@@ -1,8 +1,11 @@
 # Public Roadmap
 
 This document tracks the public roadmap for clawops. Development milestones (M0–M8) cover the
-core implementation; adoption milestones (R1–R8) cover documentation, safety, and launch
-readiness.
+core implementation; adoption milestones (R1–R12) cover documentation, safety, operational
+maturity, and hardening.
+
+**Current state (v1.2.1):** all development milestones and adoption waves R1–R9 are complete.
+Waves R10–R12 are planned and specced; R10 is next.
 
 ## Development milestones
 
@@ -18,12 +21,22 @@ All core development milestones are complete as of v1.0.
 | M5 — MCP Layer | ✅ | `mcp serve` (stdio + HTTP), all CLI ops as MCP tools |
 | M6 — Plan/Apply | ✅ | `plan` + `apply`; deploy-plan schema; `workflow_deploy_app` |
 | M7 — v1.0 Polish | ✅ | Full `doctor`; `destroy`; `--dry-run` across commands; CI guide |
-| M8 — Test Coverage | ✅ | 476 tests; SSH integration harness; e2e mock suite |
+| M8 — Test Coverage | ✅ | 539 tests; SSH integration harness; e2e mock suite |
 
 ## Adoption milestones
 
-These milestones track documentation, security model, and launch-readiness work. They do not
-change the core implementation but make clawops easier to understand, evaluate, and trust.
+These milestones track documentation, security model, operational maturity, and hardening work.
+R1–R9 are complete. R10–R12 are planned.
+
+### Wave status at a glance
+
+| Wave | Milestone | Status | Summary |
+|---|---|---|---|
+| 1–8 | R1–R8 | ✅ | Docs, security model, operations, launch |
+| 9 | R9 | ✅ | Secret lifecycle CLI (`clawops secret`) |
+| 10 | R10 | ⏳ | Stack monitoring dashboard + MCP tool |
+| 11 | R11 | ⏳ | Gateway-agent MCP wiring (`clawops mcp wire`) |
+| 12 | R12 | ⏳ | Server hardening + Tailscale VPN (`clawops harden`) |
 
 ### R1 — First-Run Experience
 
@@ -151,13 +164,14 @@ future major version:
 - High-availability or multi-node deployments
 - Kubernetes provider
 - OpenClaw skill/agent authoring
-- Automatic secret rotation
+- Scheduled / trigger-based secret rotation (manual rotation via `clawops secret rotate` is supported; automatic scheduling is not)
 - Native Windows support (WSL2 is supported)
 - Fleet management across many stacks
+- Multi-region or active-active topologies per stack
 
 ## How to contribute
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for the contribution guide. The roadmap items above with
-⏳ status are all open for contribution. Good first issues are labeled accordingly on GitHub.
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for the contribution guide. Work orders with ⏳ status
+are open for contribution. Good first issues are labeled accordingly on GitHub.
 
 To propose a new roadmap item, open a GitHub issue with the `roadmap` label.
