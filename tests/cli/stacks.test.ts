@@ -4,12 +4,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { withTempConfig, MINIMAL_CONFIG } from '../helpers/config.js'
 import type { ClawopsConfig } from '../../src/config/store.js'
 
+vi.mock('../../src/cli/context.js', () => ({ buildContext: vi.fn() }))
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRunFn = (ctx: any) => Promise<void>
 
 async function getCmd() {
   const { default: cmd } = await import('../../src/cli/commands/stacks.js')
   return cmd
+}
+
+async function getMocks() {
+  const { buildContext } = await import('../../src/cli/context.js')
+  return { buildContext: vi.mocked(buildContext) }
 }
 
 const TWO_STACK_CONFIG: ClawopsConfig = {
@@ -173,5 +180,44 @@ describe('stacks delete', () => {
     })
 
     exitSpy.mockRestore()
+  })
+
+  it('blocks delete of a deployed cloud stack without --force', async () => {
+    const { buildContext } = await getMocks()
+    buildContext.mockReturnValue({
+      adapter: {
+        name: 'aws',
+        getConnectionInfo: vi.fn(),
+      },
+      getStack: vi.fn().mockResolvedValue({
+        outputs: vi.fn().mockResolvedValue({ publicIp: { value: '1.2.3.4' } }),
+      }),
+    } as unknown as ReturnType<typeof buildContext>)
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: string | number | null) => {
+      throw new Error(`process.exit(${_code})`)
+    })
+
+    await withTempConfig(TWO_STACK_CONFIG, async () => {
+      const cmd = await getCmd()
+      await expect(
+        (cmd.run as AnyRunFn)({ args: { _: ['delete', 'staging'], json: false, yes: true, force: false } }),
+      ).rejects.toThrow('process.exit(1)')
+      expect(exitSpy).toHaveBeenCalledWith(1)
+    })
+
+    exitSpy.mockRestore()
+  })
+
+  it('allows delete of a deployed stack with --force', async () => {
+    const { getConfig } = await import('../../src/config/store.js')
+
+    await withTempConfig(TWO_STACK_CONFIG, async () => {
+      const cmd = await getCmd()
+      await (cmd.run as AnyRunFn)({ args: { _: ['delete', 'staging'], json: false, yes: true, force: true } })
+      const updated = getConfig()
+      expect(updated?.stacks).not.toHaveProperty('staging')
+      expect(updated?.stacks).toHaveProperty('default')
+    })
   })
 })

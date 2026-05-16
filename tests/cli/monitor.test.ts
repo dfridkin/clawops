@@ -1,8 +1,9 @@
-// Unit tests for `clawops monitor` — gatherSnapshot, renderSnapshot, and command edge cases.
+// Unit tests for `clawops monitor` — gatherSnapshot, renderSnapshot, renderMenu, and command edge cases.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { FakeSshSession } from '../helpers/ssh.js'
 import { makeFakeContext, makeLocalFakeContext, FAKE_LOCAL_STATE } from '../helpers/context.js'
+import type { MenuEntry } from '../../src/cli/commands/monitor.js'
 
 vi.mock('../../src/cli/context.js', () => ({ buildContext: vi.fn() }))
 vi.mock('../../src/transport/pool.js', () => ({
@@ -178,6 +179,79 @@ describe('formatUptime()', () => {
   })
 })
 
+// ─── renderMenu ───────────────────────────────────────────────────────────────
+
+describe('renderMenu()', () => {
+  const entries: MenuEntry[] = [
+    { name: 'default', provider: 'aws', region: 'us-east-1', deployed: true },
+    { name: 'staging', provider: 'gcp', region: 'us-central1', deployed: false },
+  ]
+
+  it('shows only deployed stacks in running-only view', async () => {
+    const { renderMenu } = await import('../../src/cli/commands/monitor.js')
+    const out = renderMenu(entries, 0, false, true, null)
+    expect(out).toContain('default')
+    expect(out).not.toContain('staging')
+  })
+
+  it('shows all stacks in all-stacks view with status indicators', async () => {
+    const { renderMenu } = await import('../../src/cli/commands/monitor.js')
+    const out = renderMenu(entries, 0, true, true, null)
+    expect(out).toContain('default')
+    expect(out).toContain('staging')
+    expect(out).toContain('✓ running')
+    expect(out).toContain('✗ not deployed')
+  })
+
+  it('places cursor on selected entry', async () => {
+    const { renderMenu } = await import('../../src/cli/commands/monitor.js')
+    const out = renderMenu(entries, 0, true, true, null)
+    expect(out).toContain('▶')
+  })
+
+  it('shows delete hint when a not-deployed entry is selected in all view', async () => {
+    const { renderMenu } = await import('../../src/cli/commands/monitor.js')
+    const out = renderMenu(entries, 1, true, true, null)
+    expect(out).toContain('[d] delete')
+  })
+
+  it('does not show delete hint in running-only view', async () => {
+    const { renderMenu } = await import('../../src/cli/commands/monitor.js')
+    const out = renderMenu(entries, 0, false, true, null)
+    expect(out).not.toContain('[d] delete')
+  })
+
+  it('shows confirmation prompt when confirmDelete is set', async () => {
+    const { renderMenu } = await import('../../src/cli/commands/monitor.js')
+    const out = renderMenu(entries, 1, true, true, 'staging')
+    expect(out).toContain('Delete "staging"')
+    expect(out).toContain('[y/n]')
+  })
+
+  it('shows no-deployed-stacks message when none are running', async () => {
+    const { renderMenu } = await import('../../src/cli/commands/monitor.js')
+    const noneDeployed: MenuEntry[] = [
+      { name: 'staging', provider: 'aws', region: 'us-east-1', deployed: false },
+    ]
+    const out = renderMenu(noneDeployed, 0, false, true, null)
+    expect(out).toContain('No deployed stacks found')
+  })
+
+  it('includes running count in all-stacks heading', async () => {
+    const { renderMenu } = await import('../../src/cli/commands/monitor.js')
+    const out = renderMenu(entries, 0, true, true, null)
+    expect(out).toContain('1 of 2 running')
+  })
+
+  it('shows toggle hint to switch between views', async () => {
+    const { renderMenu } = await import('../../src/cli/commands/monitor.js')
+    const runningOut = renderMenu(entries, 0, false, true, null)
+    const allOut     = renderMenu(entries, 0, true,  true, null)
+    expect(runningOut).toContain('[a] show all')
+    expect(allOut).toContain('[a] running only')
+  })
+})
+
 // ─── command — edge cases ──────────────────────────────────────────────────────
 
 describe('monitor command', () => {
@@ -197,7 +271,7 @@ describe('monitor command', () => {
 
     const { default: cmd } = await import('../../src/cli/commands/monitor.js')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await expect((cmd.run as any)({ args: {} })).rejects.toThrow('exit')
+    await expect((cmd.run as any)({ args: { stack: 'default' } })).rejects.toThrow('exit')
     expect(exitSpy).toHaveBeenCalledWith(4)
 
     exitSpy.mockRestore()
@@ -211,7 +285,7 @@ describe('monitor command', () => {
 
     const { default: cmd } = await import('../../src/cli/commands/monitor.js')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await expect((cmd.run as any)({ args: {} })).rejects.toThrow('exit')
+    await expect((cmd.run as any)({ args: { stack: 'local-default' } })).rejects.toThrow('exit')
     expect(exitSpy).toHaveBeenCalledWith(4)
 
     exitSpy.mockRestore()
@@ -228,14 +302,13 @@ describe('monitor command', () => {
     const writes: string[] = []
     vi.spyOn(process.stdout, 'write').mockImplementation((s) => { writes.push(String(s)); return true })
 
-    // Force non-TTY
     const isTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY')
     Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true })
 
     try {
       const { default: cmd } = await import('../../src/cli/commands/monitor.js')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (cmd.run as any)({ args: {} })
+      await (cmd.run as any)({ args: { stack: 'local-default' } })
     } finally {
       if (isTTYDescriptor) Object.defineProperty(process.stdout, 'isTTY', isTTYDescriptor)
     }
@@ -243,5 +316,21 @@ describe('monitor command', () => {
     expect(release).toHaveBeenCalled()
     expect(vi.mocked(drainPool)).toHaveBeenCalled()
     expect(writes.some(w => w.includes('Gateway') || w.includes('monitor'))).toBe(true)
+  })
+
+  it('exits with code 2 when no --stack given and stdout is not a TTY', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => { throw new Error('exit') }) as never)
+    const isTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY')
+    Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true })
+
+    try {
+      const { default: cmd } = await import('../../src/cli/commands/monitor.js')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await expect((cmd.run as any)({ args: {} })).rejects.toThrow('exit')
+      expect(exitSpy).toHaveBeenCalledWith(2)
+    } finally {
+      if (isTTYDescriptor) Object.defineProperty(process.stdout, 'isTTY', isTTYDescriptor)
+      exitSpy.mockRestore()
+    }
   })
 })
