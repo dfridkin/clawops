@@ -2,15 +2,17 @@
 // Public IP, Network Interface, VM. Optional: Key Vault + Role Assignment + Secret.
 // URN namespace: clawops:infra:* / clawops:net:*
 
+import { createHash } from 'node:crypto'
 import type { PulumiFn } from '../types.js'
 
 const GATEWAY_PORT = 18789
 const SSH_PORT = 22
 
 export const azureProgram: PulumiFn = async () => {
-  const [pulumi, azure, { resolveIngressCidrs, detectEgressIp }] = await Promise.all([
+  const [pulumi, azure, random, { resolveIngressCidrs, detectEgressIp }] = await Promise.all([
     import('@pulumi/pulumi'),
     import('@pulumi/azure-native'),
+    import('@pulumi/random'),
     import('../firewall.js'),
   ])
 
@@ -179,9 +181,13 @@ export const azureProgram: PulumiFn = async () => {
 
   // --- Optional: Key Vault ---
   if (keyVaultEnabled) {
-    // Enforce max 24-char Key Vault name
-    const rawKvName = `clawops-${stackName}-kv`
-    const kvName = rawKvName.length > 24 ? rawKvName.slice(0, 24) : rawKvName
+    // Azure KV names: 3–24 chars, alphanumeric + hyphens, start/end with alphanumeric.
+    // Replace underscores/dots/other chars with hyphens, then hash-truncate if still too long.
+    const safeName = stackName.replace(/[^a-zA-Z0-9-]/g, '-')
+    const rawKvName = `clawops-${safeName}-kv`
+    const kvName = rawKvName.length > 24
+      ? `cl-${createHash('sha256').update(stackName).digest('hex').slice(0, 20)}`
+      : rawKvName
 
     const kv = new azure.keyvault.Vault('clawops-kv', {
       resourceGroupName: rg.name,
@@ -201,11 +207,17 @@ export const azureProgram: PulumiFn = async () => {
       principalType: 'ServicePrincipal',
     })
 
+    // Generate a stable random token stored in Pulumi state — not regenerated on each up.
+    const gatewayToken = new random.RandomPassword('clawops-kv-gateway-token', {
+      length: 32,
+      special: false,
+    })
+
     new azure.keyvault.Secret('clawops-gateway-token', {
       resourceGroupName: rg.name,
       vaultName: kv.name,
       secretName: 'gateway-token',
-      properties: { value: 'CHANGEME' },
+      properties: { value: gatewayToken.result },
     })
   }
 

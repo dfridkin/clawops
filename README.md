@@ -9,6 +9,31 @@ and Cursor drive them through typed MCP tools with explicit safety controls.
 
 ---
 
+## What's new in v1.4.0
+
+**`clawops monitor`** — live dashboard for any deployed stack. Shows gateway health, container
+status, CPU/memory, disk usage, and a rolling log tail. Refreshes on an interval with `[r]`,
+toggles logs with `[l]`, and quits with `[q]`.
+
+Run without `--stack` to get an **interactive stack picker** first — probes all registered stacks
+in parallel, shows only running ones by default, and lets you toggle to a full list (`[a]`) where
+not-deployed stacks can be deleted from the registry with `[d]`. Press `[s]` inside the dashboard
+to go back to the picker.
+
+```bash
+clawops monitor              # interactive stack selection → dashboard
+clawops monitor --stack prod # jump straight to a named stack
+clawops monitor --stack prod | cat  # one-shot snapshot for CI
+```
+
+**`clawops_monitor` MCP tool** — same snapshot as a single structured JSON call, so Claude Code
+and Cursor can check stack health without opening a terminal.
+
+**`clawops stacks delete` guard** — now blocks deletion of a still-deployed stack and requires
+`--force` to remove from the registry without tearing down cloud resources first.
+
+---
+
 ## Who this is for
 
 - **OpenClaw users** who want the simplest path to self-hosting across cloud or local VMs, with
@@ -392,6 +417,78 @@ Key design decisions:
 - **MCP-first:** every CLI operation has a typed MCP tool; schemas generated from `spec/mcp-tools.yaml`; all destructive tools use elicitation
 
 See [`docs/architecture.md`](docs/architecture.md) for a full narrative, and [`docs/decisions/`](docs/decisions/) for ADRs.
+
+### Cloud provider stacks
+
+Each cloud provider is an inline Pulumi program that creates the resources below. All three share the same outputs (`publicIp`, `gatewayUrl`, `sshHost`, `sshPort`, `sshUser`) consumed by the SSH and config-overlay layers.
+
+#### AWS
+
+```mermaid
+flowchart LR
+    subgraph NET["Networking"]
+        VPC["VPC (10.0.0.0/16)"]
+        IGW[Internet Gateway]
+        SUBNET["Subnet (10.0.1.0/24)"]
+        RT[Route Table]
+        SG["Security Group (ports 22, 18789)"]
+    end
+    subgraph IAM["IAM"]
+        ROLE[IAM Role]
+        SSM[SSM Policy Attachment]
+        BED["Bedrock Policy Attachment (optional)"]
+        IP[Instance Profile]
+    end
+    subgraph COMPUTE["Compute"]
+        KP[EC2 Key Pair]
+        EC2["EC2 Instance (Ubuntu 22.04, IMDSv2)"]
+        EIP[Elastic IP]
+    end
+```
+
+[Detailed diagram →](docs/providers/aws.md#stack-diagram)
+
+#### GCP
+
+```mermaid
+flowchart LR
+    subgraph NET["Networking"]
+        NW[VPC Network]
+        SN["Subnetwork (10.0.0.0/24)"]
+        FW1["Firewall: SSH port 22 (conditional)"]
+        FW2["Firewall: Gateway port 18789 (conditional)"]
+        ADDR[Static External IP]
+    end
+    subgraph COMPUTE["Compute"]
+        VM["Compute Instance (Debian 12, 20 GB)"]
+    end
+```
+
+[Detailed diagram →](docs/providers/gcp.md#stack-diagram)
+
+#### Azure
+
+```mermaid
+flowchart LR
+    RG[Resource Group]
+    subgraph NET["Networking"]
+        VNET["Virtual Network (10.0.0.0/16)"]
+        SUBNET["Subnet (10.0.1.0/24)"]
+        NSG["Network Security Group (ports 22, 18789)"]
+        PIP["Public IP Address (Static)"]
+        NIC[Network Interface]
+    end
+    subgraph COMPUTE["Compute"]
+        VM["VM (Ubuntu 22.04, managed identity)"]
+    end
+    subgraph KV["Key Vault (optional)"]
+        VAULT["Key Vault (RBAC, name max 24 chars)"]
+        RA["Role Assignment (Secrets User)"]
+        SECRET["Secret: gateway-token"]
+    end
+```
+
+[Detailed diagram →](docs/providers/azure.md#stack-diagram)
 
 ---
 

@@ -21,6 +21,7 @@ const COMMANDS = [
   ['doctor',  'Check Node version, config, SSH key, provider credentials, and Pulumi home'],
   ['mcp',     'MCP server operations (mcp serve | mcp install)'],
   ['secret',  'Manage secrets (secret list | set | delete | rotate | audit)'],
+  ['monitor', 'Live dashboard: gateway health, container status, resource usage, log tail'],
   ['help',    'Show this help message'],
 ] as const
 

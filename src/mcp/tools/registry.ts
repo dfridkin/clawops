@@ -9,6 +9,7 @@ import {
   type Toolset,
   clawops_statusSchema,          clawops_statusAnnotations,
   clawops_logs_tailSchema,       clawops_logs_tailAnnotations,
+  clawops_monitorSchema,         clawops_monitorAnnotations,
   clawops_stacks_listSchema,     clawops_stacks_listAnnotations,
   clawops_config_getSchema,      clawops_config_getAnnotations,
   clawops_agents_listSchema,     clawops_agents_listAnnotations,
@@ -30,6 +31,7 @@ import {
   type ConfigSetInput, type ConfigUnsetInput, type ConfigValidateInput,
   type AgentsRestartInput, type GatewayRestartInput,
   type WorkflowDeployAppInput, type WorkflowRecoverInput, type TaskStatusInput,
+  type MonitorInput,
 } from './_generated.js'
 
 import type { McpServeOpts } from '../server.js'
@@ -46,6 +48,7 @@ import { handleDestroy } from './cli/destroy.js'
 import { handlePlan } from './cli/plan.js'
 import { handleApply } from './cli/apply.js'
 import { handleTaskStatus } from './cli/task.js'
+import { handleMonitor } from './cli/monitor.js'
 import { handleWorkflowDeployApp } from './workflow/deploy_app.js'
 import { handleWorkflowRecover } from './workflow/recover.js'
 
@@ -75,6 +78,7 @@ function makeEntry<T>(
 const TOOL_REGISTRY: Record<string, ToolEntry> = {
   clawops_status:           makeEntry<StatusInput>(clawops_statusSchema, clawops_statusAnnotations, handleStatus),
   clawops_logs_tail:        makeEntry<LogsTailInput>(clawops_logs_tailSchema, clawops_logs_tailAnnotations, handleLogsTail),
+  clawops_monitor:          makeEntry<MonitorInput>(clawops_monitorSchema, clawops_monitorAnnotations, handleMonitor),
   clawops_stacks_list:      makeEntry<StacksListInput>(clawops_stacks_listSchema, clawops_stacks_listAnnotations, handleStacksList),
   clawops_config_get:       makeEntry<ConfigGetInput>(clawops_config_getSchema, clawops_config_getAnnotations, handleConfigGet),
   clawops_agents_list:      makeEntry<AgentsListInput>(clawops_agents_listSchema, clawops_agents_listAnnotations, handleAgentsList),

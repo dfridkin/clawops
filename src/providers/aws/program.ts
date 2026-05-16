@@ -176,6 +176,12 @@ export const awsProgram: PulumiFn = async () => {
     iamInstanceProfile: instanceProfile.name,
     keyName: keyPair.keyName,
     userData: makeStartupScript(openclawVersion, bedrockEnabled),
+    // IMDSv2 with hopLimit=2 so Docker containers on this host can reach IMDS
+    // and obtain the instance role credentials (required for Bedrock access).
+    metadataOptions: {
+      httpTokens: 'required',
+      httpPutResponseHopLimit: 2,
+    },
     tags: { Name: 'clawops' },
   })
 
@@ -203,10 +209,11 @@ export const awsProgram: PulumiFn = async () => {
 }
 
 function makeStartupScript(openclawVersion: string, bedrockEnabled: boolean): string {
-  const bedrockEnvSetup = bedrockEnabled
-    ? '\n# Write AWS_PROFILE so the container can use the instance role for Bedrock\necho "AWS_PROFILE=default" > /etc/openclaw.env\n'
-    : ''
-  const bedrockEnvFlag = bedrockEnabled ? '  --env-file /etc/openclaw.env \\\\\n' : ''
+  // When Bedrock is enabled, the container accesses AWS via the instance role
+  // through IMDS. No env vars needed — the hop limit on the EC2 Instance
+  // resource (httpPutResponseHopLimit: 2) allows Docker containers to reach
+  // the IMDSv2 endpoint directly.
+  const bedrockEnvFlag = bedrockEnabled ? '  -e AWS_DEFAULT_REGION=$(curl -sf http://169.254.169.254/latest/meta-data/placement/region || echo us-east-1) \\\n' : ''
 
   return `#!/bin/bash
 set -euo pipefail
@@ -217,7 +224,7 @@ mkdir -p /home/clawops/.ssh
 chmod 700 /home/clawops/.ssh
 chown clawops:clawops /home/clawops/.ssh
 
-# Install Docker if not present (Ubuntu/Debian only; AWS AMI is ubuntu-22.04)
+# Install Docker if not present (AWS AMI is ubuntu-22.04)
 if ! command -v docker &>/dev/null; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -q
@@ -235,7 +242,7 @@ if ! command -v docker &>/dev/null; then
 fi
 
 usermod -aG docker clawops
-${bedrockEnvSetup}
+
 # Pull OpenClaw image
 OPENCLAW_VERSION="${openclawVersion}"
 docker pull ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION}

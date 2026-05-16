@@ -10,9 +10,12 @@ describe('gcpAdapter.normalizeInstanceType()', () => {
     ['small', 'e2-standard-2'],
     ['medium', 'e2-standard-4'],
     ['large', 'e2-standard-8'],
-    ['gpu', 'n1-standard-4'],
   ] as const)('%s → %s', (alias, expected) => {
     expect(gcpAdapter.normalizeInstanceType(alias)).toBe(expected)
+  })
+
+  it('throws a clear error for gpu (not yet supported on GCP)', () => {
+    expect(() => gcpAdapter.normalizeInstanceType('gpu')).toThrow('GPU instances are not yet supported on GCP')
   })
 })
 
@@ -57,15 +60,19 @@ describe('gcpAdapter.getConnectionInfo()', () => {
 })
 
 describe('gcpAdapter.validateConfig()', () => {
-  let prevCred: string | undefined
+  const envVars = ['GOOGLE_APPLICATION_CREDENTIALS', 'GOOGLE_OAUTH_ACCESS_TOKEN']
+  let saved: Record<string, string | undefined> = {}
 
   beforeEach(() => {
-    prevCred = process.env['GOOGLE_APPLICATION_CREDENTIALS']
+    saved = Object.fromEntries(envVars.map(k => [k, process.env[k]]))
+    envVars.forEach(k => delete process.env[k])
   })
 
   afterEach(() => {
-    if (prevCred === undefined) delete process.env['GOOGLE_APPLICATION_CREDENTIALS']
-    else process.env['GOOGLE_APPLICATION_CREDENTIALS'] = prevCred
+    envVars.forEach(k => {
+      if (saved[k] === undefined) delete process.env[k]
+      else process.env[k] = saved[k]
+    })
   })
 
   it('returns ok:true when GOOGLE_APPLICATION_CREDENTIALS is set', async () => {
@@ -75,11 +82,19 @@ describe('gcpAdapter.validateConfig()', () => {
     expect(result.errors).toHaveLength(0)
   })
 
-  it('returns ok:false with error message when no credentials', async () => {
-    delete process.env['GOOGLE_APPLICATION_CREDENTIALS']
-    delete process.env['CLOUDSDK_AUTH_ACCESS_TOKEN']
+  it('returns ok:true when GOOGLE_OAUTH_ACCESS_TOKEN is set', async () => {
+    process.env['GOOGLE_OAUTH_ACCESS_TOKEN'] = 'ya29.some-token'
+    const result = await gcpAdapter.validateConfig()
+    expect(result.ok).toBe(true)
+    expect(result.errors).toHaveLength(0)
+  })
 
-    // Mock the metadata server check to return false (not on GCP)
+  it('returns ok:false with error message when no credentials and no ADC file', async () => {
+    // Mock fs.accessSync to throw (ADC file absent) and fetch to reject (not on GCP)
+    vi.mock('node:fs', async (importOriginal) => {
+      const orig = await importOriginal<typeof import('node:fs')>()
+      return { ...orig, accessSync: vi.fn().mockImplementation(() => { throw new Error('ENOENT') }) }
+    })
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'))
 
     try {
@@ -88,6 +103,7 @@ describe('gcpAdapter.validateConfig()', () => {
       expect(result.errors[0]).toContain('GOOGLE_APPLICATION_CREDENTIALS')
     } finally {
       fetchSpy.mockRestore()
+      vi.unmock('node:fs')
     }
   })
 })

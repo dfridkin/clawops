@@ -14,7 +14,7 @@ export default defineCommand({
   args: {
     json:  { type: 'boolean', description: 'Emit JSON (for list)' },
     yes:   { type: 'boolean', description: 'Skip confirmation prompt on delete' },
-    force: { type: 'boolean', description: 'Allow deleting the default stack' },
+    force: { type: 'boolean', description: 'Skip safety checks (allow deleting default or still-deployed stacks)' },
   },
   async run({ args }) {
     const [action, name] = (args._ ?? []) as string[]
@@ -84,6 +84,35 @@ export default defineCommand({
         `"${name}" is the default stack. Use --force to delete it ` +
           '(clawops will switch the default to another stack).',
       )
+    }
+
+    let isDeployed = false
+    if (!args.force) {
+      try {
+        const { buildContext } = await import('../context.js')
+        const ctx = buildContext({ stack: name })
+        if (ctx.adapter.name === 'local') {
+          isDeployed = !!ctx.localState
+        } else {
+          const stack = await ctx.getStack()
+          const outputMap = await stack.outputs()
+          const outputs = Object.fromEntries(
+            Object.entries(outputMap).map(([k, v]) => [k, (v as { value: unknown }).value]),
+          )
+          isDeployed = !!outputs['publicIp']
+        }
+      } catch {
+        warn(`Could not verify deployment status for "${name}" — proceeding anyway.`)
+      }
+    }
+
+    if (isDeployed) {
+      failure(
+        `Stack "${name}" is still deployed. ` +
+          `Run \`clawops down --stack ${name}\` first to destroy cloud resources, ` +
+          `or pass --force to remove from registry only.`,
+      )
+      process.exit(1)
     }
 
     warn(

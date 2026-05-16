@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
 **Version:** 0.9
-**Status:** M8 complete (493 unit+e2e tests); Waves 3–8 complete — WO-01–WO-17, WO-19–WO-24 done; WO-18, WO-25, WO-26, WO-27, WO-28 pending
+**Status:** M8 complete (539 unit+e2e tests); Waves 1–9 complete — WO-01–WO-17, WO-19–WO-25 done; WO-18, WO-26–WO-34 pending
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -928,6 +928,7 @@ WO-04 must be completed before WO-01 to avoid perpetuating inaccurate plan/apply
 | 9 | WO-25 | R9 | Secret lifecycle management |
 | 10 | WO-26, WO-27 | R10 | Stack monitoring wizard |
 | 11 | WO-28 | R11 | Gateway-agent MCP wiring |
+| 12 | WO-29–WO-34 | R12 | Server hardening + Tailscale VPN |
 
 ### R1 — First-Run Experience
 
@@ -1195,6 +1196,168 @@ Implementation notes:
 
 Status:
 - [ ] WO-28: Gateway-agent MCP client config (wizard step + standalone command)
+
+### R12 — Server Hardening
+
+Goal: reduce the attack surface of every deployed stack and optionally route traffic through a private Tailscale network, with sensible defaults applied via a multi-select wizard step and a standalone `clawops harden` command.
+
+Work orders: WO-29 (core command + wizard), WO-30 (AWS), WO-31 (GCP), WO-32 (Azure), WO-33 (local/VPS), WO-34 (Tailscale VPN).
+
+Background: `clawops up` provisions a server that is reachable on the public internet over SSH (port 22) and the gateway port (18789). The access-mode system limits which CIDRs can connect, but the server itself has no additional hardening applied post-provision. This wave adds a first-class `clawops harden` command that runs a set of idempotent hardening scripts over SSH and surfaces provider-specific security options (GuardDuty, OS Login, JIT access, etc.) as well as Tailscale for full private-network operation.
+
+#### Hardening options (multi-select, applied via `clawops harden`)
+
+Each option is idempotent — re-running `clawops harden` is safe. A `--dry-run` flag prints what would change without applying.
+
+| Option | Default | Applies to |
+|---|---|---|
+| SSH hardening | ON | all — disable root login, disable password auth, restrict to clawops user |
+| Automatic security updates | ON | all — `unattended-upgrades` (Ubuntu/Debian); OS-appropriate elsewhere |
+| Fail2ban | ON | all — SSH jail: 5 failures → 10-min ban |
+| UFW firewall | ON | all — default deny inbound; allow configured SSH + gateway ports only |
+| Docker socket hardening | ON | all — restrict `/var/run/docker.sock` to the `docker` group; verify no world-readable |
+| auditd | OFF | all — kernel audit logging for privileged commands, file access, network |
+| Tailscale VPN | OFF | all — see WO-34 |
+| Provider-specific | varies | see WO-30–WO-33 |
+
+Wizard integration: after the deploy step in `clawops setup`, a new multi-select step presents the options above (defaults pre-checked). Selecting at least one option runs `clawops harden` before the wizard exits. The wizard step can be skipped with `--no-harden`.
+
+---
+
+**WO-29 — `clawops harden` command + wizard integration**
+
+`clawops harden [--stack <name>] [--dry-run] [--options ssh,ufw,fail2ban,...]`
+
+Core deliverables:
+- Shared hardening module framework: each option is a `HardeningModule` with `check()` (reads current state) and `apply()` (idempotent change). `check()` is always run first; if already satisfied, `apply()` is skipped.
+- SSH runner: uses the existing SSH pool (`acquireSession`) to execute hardening steps; collects stdout/stderr per module; reports a summary table on completion.
+- Provider detection: reads `config.provider` to filter which options are available; prevents cloud-specific options appearing for local stacks.
+- Multi-select wizard step in `clawops setup` (after `runLocalDeploy` / `stack.up()`): pre-checks the four ON-by-default options; user can toggle any; pressing Enter runs the selected modules.
+- Standalone command: `clawops harden` with `--options` CSV to skip the wizard and apply directly (suitable for CI / ansible-style automation).
+- `clawops doctor` extended: adds a "hardening" section that reports which modules are applied, which are missing, and which have drifted (e.g. fail2ban installed but not running).
+
+Implementation notes:
+- All hardening scripts emit POSIX sh compatible with Ubuntu 22.04 and Debian 12 (the two supported OS images). Scripts are embedded in TypeScript template literals (same pattern as `makeStartupScript`).
+- `check()` must be non-destructive — only reads `/etc/`, `systemctl status`, and package query commands.
+- Each module writes a sentinel file (`/etc/clawops/hardening/<module>.applied`) so `check()` can detect previous runs without re-reading full config.
+
+Status:
+- [ ] WO-29: `clawops harden` command + shared module framework + wizard integration
+
+---
+
+**WO-30 — AWS hardening**
+
+Provider-specific options surfaced by `clawops harden --stack <name>` when `config.provider === 'aws'`:
+
+| Option | Default | Notes |
+|---|---|---|
+| VPC Flow Logs | OFF | Billed per GB; creates CloudWatch log group + flow log resource via Pulumi state update |
+| Security Group audit | ON (check-only) | Warns if any rule allows `0.0.0.0/0` on ports other than configured accessMode ports |
+| Session Manager access | ON (check-only) | Verifies the IAM role has `AmazonSSMManagedInstanceCore` so emergency shell access works without opening port 22 |
+| Amazon GuardDuty | OFF | Opt-in; separate AWS billing (~$4/mo per account); calls `aws guardduty create-detector` via AWS SDK |
+
+Implementation notes:
+- VPC Flow Logs and GuardDuty require Pulumi state updates (new resources). Use `runPulumiUp` to add them rather than out-of-band AWS API calls, so state stays consistent.
+- Security Group audit and Session Manager check are read-only (describe calls only) and do not require a Pulumi update.
+- IMDSv2 enforcement is already applied at provision time (`httpPutResponseHopLimit: 2`). The audit verifies it is active by checking the instance metadata response code.
+
+Status:
+- [ ] WO-30: AWS hardening options (VPC Flow Logs, SG audit, SSM check, GuardDuty opt-in)
+
+---
+
+**WO-31 — GCP hardening**
+
+Provider-specific options for `config.provider === 'gcp'`:
+
+| Option | Default | Notes |
+|---|---|---|
+| VPC Firewall audit | ON (check-only) | Warns if any firewall rule has `sourceRanges: ["0.0.0.0/0"]` on ports other than configured |
+| Shielded VM | OFF | Requires re-provision (boot disk change); wizard warns and offers to re-run `clawops up` with shielded options enabled |
+| OS Login | OFF | Replaces SSH-key-based auth with Google IAM identity; disabling clawops SSH key injection — use only when team has Google accounts configured |
+| Cloud Audit Logs | ON (check-only) | Verifies admin activity logging is enabled on the project; no new resources required |
+
+Implementation notes:
+- Shielded VM (`enableVtpm: true`, `enableIntegrityMonitoring: true`) is a Pulumi config option, not a post-provision SSH change. WO-31 adds a `shieldedVm` Pulumi config key and updates `gcpProgram` to set `shieldedInstanceConfig` when enabled.
+- OS Login sets `metadata: { 'enable-oslogin': 'TRUE' }` on the instance and removes the `ssh-keys` metadata entry. Wizard warns: "This disables direct key-based SSH and requires Google IAM. Existing clawops SSH sessions will break until IAM is configured."
+- Firewall audit and Cloud Audit Logs are describe-only (no GCP mutations).
+
+Status:
+- [ ] WO-31: GCP hardening options (firewall audit, Shielded VM, OS Login, audit logs check)
+
+---
+
+**WO-32 — Azure hardening**
+
+Provider-specific options for `config.provider === 'azure'`:
+
+| Option | Default | Notes |
+|---|---|---|
+| NSG audit | ON (check-only) | Warns if any NSG rule has `sourceAddressPrefix: "*"` or `"Internet"` on ports other than configured |
+| Disk encryption check | ON (check-only) | Verifies OS disk uses platform-managed key encryption (default on Azure, but explicitly confirmed) |
+| Microsoft Defender for Cloud | OFF | Opt-in; requires Defender for Servers P1 plan on the subscription; calls Azure REST API to enable |
+| JIT VM Access | OFF | Requires Defender for Servers P1; configures NSG to deny port 22 by default and open it on-demand via Azure portal / CLI |
+
+Implementation notes:
+- NSG audit and disk encryption check are read-only Azure REST describe calls — no ARM changes.
+- Defender for Cloud and JIT VM Access require an active Defender for Servers plan. WO-32 checks for the plan before offering these options; if not enabled, shows estimated monthly cost and a link to enable.
+- JIT VM Access, when applied, updates the NSG (via Pulumi state update) to add a deny-all rule for port 22 with higher priority than existing allow rules, with a corresponding JIT policy resource.
+
+Status:
+- [ ] WO-32: Azure hardening options (NSG audit, disk encryption check, Defender opt-in, JIT access)
+
+---
+
+**WO-33 — Local/VPS hardening**
+
+For `config.provider === 'local'`. No cloud-specific options; applies the full common module set plus:
+
+| Module | Default | Notes |
+|---|---|---|
+| SSH hardening | ON | `sshd_config`: `PermitRootLogin no`, `PasswordAuthentication no`, `MaxAuthTries 3`, `LoginGraceTime 30` |
+| UFW | ON | `ufw default deny incoming`, `ufw allow <sshPort>/tcp`, `ufw allow 18789/tcp`, `ufw --force enable` |
+| Fail2ban | ON | Install + configure SSH jail (`maxretry=5`, `bantime=600`); restart fail2ban |
+| Unattended upgrades | ON | Install `unattended-upgrades`; configure `20auto-upgrades` for security-only updates |
+| Docker socket | ON | Verify `/var/run/docker.sock` is owned by `root:docker` and permissions are `660` |
+| auditd | OFF | Install + enable auditd; apply CIS-recommended rules for privileged command logging |
+| CIS Level 1 report | OFF | Read-only CIS benchmark scan using `lynis audit system`; outputs a scored report, does not auto-remediate |
+| Kernel sysctl hardening | OFF | Apply hardened `sysctl.d` settings: disable IP forwarding, enable TCP SYN cookies, restrict ICMP redirects |
+
+Implementation notes:
+- Local stacks connect to machines not managed by a cloud provider, so there is no IAM/network layer underneath. The full common module set is the primary hardening surface.
+- CIS Level 1 report uses `lynis` (installed if absent); does not require a lynis license for read-only audits. Output is summarised to a score + top-5 findings; full report saved to `~/.clawops/reports/<stack>-lynis-<date>.txt`.
+- SSH hardening must preserve the `clawops` user's authorized key before restarting sshd. The module reads `/home/clawops/.ssh/authorized_keys`, confirms the provisioned key is present, then applies `sshd_config` changes. If the key is absent, it aborts with an error rather than risk locking out access.
+
+Status:
+- [ ] WO-33: Local/VPS hardening (SSH, UFW, fail2ban, unattended-upgrades, Docker socket, optional auditd + lynis + sysctl)
+
+---
+
+**WO-34 — Tailscale VPN integration**
+
+Available on all providers. Converts a stack from public-internet exposure to private Tailscale network access, optionally removing public port exposure entirely.
+
+`clawops harden --tailscale [--tailscale-key <key>] [--private-only]`
+
+Steps applied:
+1. **Install Tailscale** — runs the official install script (`https://tailscale.com/install.sh`) via SSH. Idempotent: checks for existing `tailscale` binary first.
+2. **Join network** — runs `tailscale up --auth-key=<key> --hostname=clawops-<stackName> --accept-routes`. Auth key sourced from: `--tailscale-key` flag → `$secret:TAILSCALE_AUTH_KEY` → interactive prompt (stored as a secret if entered interactively).
+3. **Read Tailscale IP** — runs `tailscale ip -4` to get the assigned `100.x.x.x` IP.
+4. **Update clawops config** — rewrites `sshHost` to the Tailscale IP and `gatewayUrl` to `https://<tailscale-ip>:18789` in `~/.clawops/config.json`. Backs up the original values under `_preTailscale` so the change can be reverted.
+5. **Verify connectivity** — opens a new SSH session via the Tailscale IP to confirm reachability before removing public access.
+6. **Private-only mode** (`--private-only`) — after successful Tailscale verification, removes public port exposure:
+   - AWS: removes Security Group ingress rules for ports 22 and 18789.
+   - GCP: deletes `clawops-firewall-ssh` and `clawops-firewall-gateway` Firewall resources (via Pulumi update).
+   - Azure: updates NSG to deny ports 22 and 18789 from `Internet`.
+   - Local: adds UFW rules to deny the ports from non-Tailscale interfaces.
+
+Revert: `clawops harden --tailscale-revert` reads `_preTailscale` config, restores public access rules, and runs `tailscale down` on the server.
+
+`clawops doctor` extended: checks Tailscale status (`tailscale status`), verifies the gateway is reachable on the Tailscale IP, and reports if the Tailscale session has expired (auth key rotation needed).
+
+Status:
+- [ ] WO-34: Tailscale VPN integration (install, join, config update, optional private-only mode, doctor check)
 
 ---
 

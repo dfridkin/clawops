@@ -152,6 +152,46 @@ clawops status               # current stack state
 clawops doctor --stack prod  # remote health (container, disk, log rotation)
 ```
 
+## Stack diagram
+
+```mermaid
+flowchart TD
+    A([gcpProgram]) --> CFG["Read Pulumi Config\ninstanceType, region, zone\nopenclawVersion, accessMode\nallowedCidrs, sshPublicKey (required)"]
+
+    CFG --> CIDR["resolveIngressCidrs\nSSH CIDRs + Gateway CIDRs"]
+
+    subgraph NET["Networking"]
+        NW["gcp:compute:Network\nautoCreateSubnetworks=false"]
+        SN["gcp:compute:Subnetwork\n10.0.0.0/24"]
+        NW --> SN
+    end
+
+    CIDR -->|SSH CIDRs present| FW1["gcp:compute:Firewall ssh\nprotocol=tcp port=22\nsourceRanges: resolved CIDRs"]
+    CIDR -->|Gateway CIDRs present| FW2["gcp:compute:Firewall gateway\nprotocol=tcp port=18789\nsourceRanges: resolved CIDRs"]
+
+    FW1 --> NW
+    FW2 --> NW
+
+    ADDR["gcp:compute:Address\nstatic external IP"]
+
+    subgraph COMPUTE["Compute"]
+        VM["gcp:compute:Instance\nDebian 12, 20 GB disk\ntags: clawops\nserviceAccount: cloud-platform scope"]
+        META["instance metadata\nssh-keys: clawops:sshPublicKey\nstartup-script: bootstrap.sh"]
+        VM --- META
+    end
+
+    CFG --> META
+    NW --> VM
+    SN --> VM
+    ADDR --> VM
+
+    VM --> OUT
+
+    subgraph OUT["Stack Outputs"]
+        O1["publicIp, gatewayUrl\nsshHost, sshUser=clawops\ninstanceId, region, provisionedAt"]
+    end
+```
+
 ## See Also
 
 - `src/providers/gcp/` — adapter + Pulumi program

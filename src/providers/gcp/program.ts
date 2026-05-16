@@ -15,9 +15,10 @@ const SSH_PORT = 22
  */
 export const gcpProgram: PulumiFn = async () => {
   // Lazy imports: keep Pulumi SDK out of module-load graph.
-  const [pulumi, gcp] = await Promise.all([
+  const [pulumi, gcp, { resolveIngressCidrs, detectEgressIp }] = await Promise.all([
     import('@pulumi/pulumi'),
     import('@pulumi/gcp'),
+    import('../firewall.js'),
   ])
 
   const cfg = new pulumi.Config()
@@ -25,6 +26,33 @@ export const gcpProgram: PulumiFn = async () => {
   const region = cfg.get('region') ?? 'us-central1'
   const openclawVersion = cfg.get('openclawVersion') ?? 'latest'
   const zone = cfg.get('zone') ?? `${region}-a`
+  const accessMode = cfg.get('accessMode') ?? 'restricted'
+  const allowedCidrs = cfg.get('allowedCidrs') ?? ''
+  const sshCidrs = cfg.get('sshCidrs') ?? ''
+  const gatewayCidrs = cfg.get('gatewayCidrs') ?? ''
+
+  const sshPublicKey = cfg.get('sshPublicKey')
+  if (!sshPublicKey) {
+    throw new Error(
+      'Stack config "sshPublicKey" is required for the GCP adapter. ' +
+      'Set it with: pulumi config set --stack <name> sshPublicKey "ssh-ed25519 ..."',
+    )
+  }
+
+  // Detect egress IP for 'auto' mode
+  const detectedIp = accessMode === 'auto'
+    ? await detectEgressIp('https://checkip.amazonaws.com')
+    : ''
+
+  if (accessMode === 'open') {
+    process.stderr.write(
+      '[clawops] WARNING: accessMode=open allows 0.0.0.0/0 on SSH and gateway ports. ' +
+      'Only use this for development/sandbox stacks.\n',
+    )
+  }
+
+  const sshIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, sshCidrs, detectedIp)
+  const gatewayIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, gatewayCidrs, detectedIp)
 
   // Network
   const network = new gcp.compute.Network('clawops-network', {
@@ -38,18 +66,24 @@ export const gcpProgram: PulumiFn = async () => {
     network: network.id,
   })
 
-  // Firewall: allow SSH and gateway port
-  new gcp.compute.Firewall('clawops-firewall', {
-    network: network.selfLink,
-    allows: [
-      {
-        protocol: 'tcp',
-        ports: [String(SSH_PORT), String(GATEWAY_PORT)],
-      },
-    ],
-    sourceRanges: ['0.0.0.0/0'],
-    targetTags: ['clawops'],
-  })
+  // Firewall: separate rules per port so CIDRs can differ
+  if (sshIngressCidrs.length > 0) {
+    new gcp.compute.Firewall('clawops-firewall-ssh', {
+      network: network.selfLink,
+      allows: [{ protocol: 'tcp', ports: [String(SSH_PORT)] }],
+      sourceRanges: sshIngressCidrs,
+      targetTags: ['clawops'],
+    })
+  }
+
+  if (gatewayIngressCidrs.length > 0) {
+    new gcp.compute.Firewall('clawops-firewall-gateway', {
+      network: network.selfLink,
+      allows: [{ protocol: 'tcp', ports: [String(GATEWAY_PORT)] }],
+      sourceRanges: gatewayIngressCidrs,
+      targetTags: ['clawops'],
+    })
+  }
 
   // Static external IP
   const address = new gcp.compute.Address('clawops-address', { region })
@@ -78,6 +112,8 @@ export const gcpProgram: PulumiFn = async () => {
       },
     ],
     metadata: {
+      // GCP guest agent reads 'ssh-keys' and populates /home/<user>/.ssh/authorized_keys
+      'ssh-keys': `clawops:${sshPublicKey}`,
       'startup-script': makeStartupScript(openclawVersion),
     },
     serviceAccount: {

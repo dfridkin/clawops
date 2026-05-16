@@ -67,11 +67,19 @@ if ! command -v docker &>/dev/null; then
       apt-get update -q
       apt-get install -y -q ca-certificates curl gnupg lsb-release
       install -m 0755 -d /etc/apt/keyrings
-      curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+      # Detect Ubuntu vs Debian; use the correct Docker APT repo for each.
+      # /etc/os-release ID is 'ubuntu' on Ubuntu and 'debian' on Debian.
+      # Other debian-based distros (Raspbian, Mint, etc.) fall back to the debian repo.
+      . /etc/os-release
+      case "${ID:-ubuntu}" in
+        ubuntu) DOCKER_DISTRO=ubuntu ;;
+        *)      DOCKER_DISTRO=debian ;;
+      esac
+      curl -fsSL "https://download.docker.com/linux/${DOCKER_DISTRO}/gpg" \
         | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
       chmod a+r /etc/apt/keyrings/docker.gpg
       echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-        https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+        https://download.docker.com/linux/${DOCKER_DISTRO} $(lsb_release -cs) stable" \
         > /etc/apt/sources.list.d/docker.list
       apt-get update -q
       apt-get install -y -q docker-ce docker-ce-cli containerd.io

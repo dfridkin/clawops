@@ -19,6 +19,7 @@ import doctorCmd from './commands/doctor.js'
 import mcpCmd from './commands/mcp.js'
 import setupCmd from './commands/setup.js'
 import secretCmd from './commands/secret.js'
+import monitorCmd from './commands/monitor.js'
 import helpCmd from './commands/help.js'
 import { handleError } from './error-handler.js'
 
@@ -57,6 +58,7 @@ const main = defineCommand({
     mcp: mcpCmd,
     setup: setupCmd,
     secret: secretCmd,
+    monitor: monitorCmd,
     help: helpCmd,
   },
 })

@@ -87,6 +87,44 @@ tools:
       truncated: { type: boolean }
       fullLogResource: { type: string, format: uri, description: "clawops:// URI for full log" }
 
+  - name: clawops_monitor
+    toolset: [cli, read]
+    description: |
+      Take a live snapshot of a running clawops stack: gateway health, container
+      status, resource usage (CPU, memory, disk), and recent log lines.
+
+      Use when: the user wants to know if the gateway is running, how much
+      memory or CPU it is using, what recent log activity looks like, or
+      wants a quick health overview richer than clawops_status.
+
+      Do NOT use when: the user wants real-time streaming logs (use
+      clawops_logs_tail or suggest `clawops logs -f`). Do NOT use for
+      configuration queries (use clawops_config_get).
+    annotations:
+      title: Monitor Stack Health
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true, description: "Stack name. Defaults to active stack." }
+      tailLines: { type: integer, optional: true, default: 5, description: "Log lines to include in snapshot." }
+    output:
+      gateway:
+        reachable: { type: boolean }
+        version: { type: string }
+        authMode: { type: string }
+      container:
+        status: { type: string }
+        image: { type: string }
+        restartCount: { type: integer }
+        memUsage: { type: string }
+        cpuPct: { type: string }
+        uptime: { type: string }
+      disk: { type: string }
+      logLines: { type: array, items: { type: string } }
+      capturedAt: { type: string, format: date-time }
+
   - name: clawops_stacks_list
     toolset: [admin, read]
     description: |

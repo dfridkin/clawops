@@ -46,6 +46,7 @@
     "@pulumi/docker": "^4.0.0",
     "@pulumi/gcp": "^7.0.0",
     "@pulumi/pulumi": "^3.0.0",
+    "@pulumi/random": "^4.20.0",
     "ajv": "^8.0.0",
     "ajv-formats": "^3.0.0",
     "chalk": "^5.0.0",

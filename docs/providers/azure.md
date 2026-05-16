@@ -165,6 +165,63 @@ clawops plan                       # preview resources before deploying
 clawops status                     # current stack state
 ```
 
+## Stack diagram
+
+```mermaid
+flowchart TD
+    A([azureProgram]) --> CFG["Read Pulumi Config\ninstanceType, region, openclawVersion\naccessMode, allowedCidrs, sshPublicKey (required)\nkeyVaultEnabled, resourceGroupName"]
+
+    CFG --> CIDR["resolveIngressCidrs\nSSH CIDRs + Gateway CIDRs"]
+    CFG --> RG["azure:resources:ResourceGroup\nclawops-stackName"]
+
+    subgraph NET["Networking"]
+        VNET["azure:network:VirtualNetwork\n10.0.0.0/16"]
+        SUBNET["azure:network:Subnet\n10.0.1.0/24"]
+        NSG["azure:network:NetworkSecurityGroup\ningress: resolved CIDRs on :22, :18789"]
+        PIP["azure:network:PublicIPAddress\nStatic, Standard SKU"]
+        NIC["azure:network:NetworkInterface\nNSG attached, dynamic private IP"]
+
+        RG --> VNET --> SUBNET
+        RG --> NSG
+        RG --> PIP
+        SUBNET --> NIC
+        PIP --> NIC
+        NSG --> NIC
+    end
+
+    CIDR --> NSG
+
+    subgraph COMPUTE["Compute"]
+        VM["azure:compute:VirtualMachine\nUbuntu 22.04 LTS\nSystemAssigned managed identity\ncustomData: base64 bootstrap script"]
+    end
+
+    RG --> VM
+    NIC --> VM
+    CFG -->|sshPublicKey| VM
+
+    subgraph KV["Key Vault (optional)"]
+        direction TB
+        VAULT["azure:keyvault:Vault\nRBAC authorization\nname: sanitized+hash, max 24 chars"]
+        RA["azure:authorization:RoleAssignment\nKey Vault Secrets User\nprincipal: VM managed identity"]
+        RPASS["random:RandomPassword\nlength=32, stable in Pulumi state"]
+        SECRET["azure:keyvault:Secret\ngateway-token: generated token"]
+
+        VAULT --> RA
+        VAULT --> SECRET
+        RPASS --> SECRET
+    end
+
+    VM -->|identity.principalId| RA
+    VM -->|identity.tenantId| VAULT
+    RG --> VAULT
+
+    VM --> OUT
+
+    subgraph OUT["Stack Outputs"]
+        O1["publicIp, gatewayUrl\nsshHost, sshUser=clawops\ninstanceId, region, provisionedAt"]
+    end
+```
+
 ## See Also
 
 - `src/providers/azure/` — adapter + Pulumi program

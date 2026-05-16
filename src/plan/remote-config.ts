@@ -43,7 +43,11 @@ export async function readRemoteConfig(
 ): Promise<Record<string, unknown>> {
   const os = await detectOS(session, signal)
   const configPath = configPathForOS(os)
-  const result = await session.exec(`cat ${configPath}`, signal)
+  // On Linux the SSH user may differ from the 'clawops' owner (e.g. AWS 'ubuntu').
+  // Fall back to sudo -n so the read succeeds regardless of file permissions.
+  const result = os === 'Darwin'
+    ? await session.exec(`cat ${configPath}`, signal)
+    : await execWithFallbackSudo(session, `cat ${configPath}`, signal)
   if (result.code !== 0) {
     throw new Error(`Cannot read ${configPath}: ${result.stderr}`)
   }
