@@ -27,7 +27,7 @@ export type StatusInput = z.infer<typeof clawops_statusSchema>
 
 export const clawops_logs_tailSchema = z.object({
   stackName: z.string().optional(),
-  tailLines: z.number().int().default(100),
+  tailLines: z.number().int().optional().default(100),
   sinceMin: z.number().int().optional(),
 })
 
@@ -41,6 +41,24 @@ export const clawops_logs_tailAnnotations = {
 } as const
 
 export type LogsTailInput = z.infer<typeof clawops_logs_tailSchema>
+
+// ── clawops_monitor ─────────────────────────────────────────────────────────
+
+export const clawops_monitorSchema = z.object({
+  stackName: z.string().optional(),
+  tailLines: z.number().int().optional().default(5),
+})
+
+export const clawops_monitorAnnotations = {
+  title: "Monitor Stack Health",
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+  toolsets: ["cli","read"] as const,
+} as const
+
+export type MonitorInput = z.infer<typeof clawops_monitorSchema>
 
 // ── clawops_stacks_list ─────────────────────────────────────────────────────
 
@@ -98,9 +116,9 @@ export const clawops_upSchema = z.object({
   stackName: z.string().optional(),
   provider: z.enum(['aws', 'gcp', 'azure', 'local']).optional(),
   region: z.string().optional(),
-  instanceType: z.enum(['micro', 'small', 'medium', 'large', 'gpu']).default("small"),
+  instanceType: z.enum(['micro', 'small', 'medium', 'large', 'gpu']).optional().default("small"),
   openclawVersion: z.string().optional(),
-  dryRun: z.boolean().default(false),
+  dryRun: z.boolean().optional().default(false),
 })
 
 export const clawops_upAnnotations = {
@@ -118,7 +136,7 @@ export type UpInput = z.infer<typeof clawops_upSchema>
 
 export const clawops_destroySchema = z.object({
   stackName: z.string(),
-  yes: z.boolean().default(false),
+  yes: z.boolean().optional().default(false),
 })
 
 export const clawops_destroyAnnotations = {
@@ -136,7 +154,7 @@ export type DestroyInput = z.infer<typeof clawops_destroySchema>
 
 export const clawops_applySchema = z.object({
   planPath: z.string(),
-  yes: z.boolean().default(false),
+  yes: z.boolean().optional().default(false),
 })
 
 export const clawops_applyAnnotations = {
@@ -177,7 +195,7 @@ export const clawops_config_setSchema = z.object({
   stackName: z.string().optional(),
   key: z.string(),
   value: z.string(),
-  restart: z.boolean().default(false),
+  restart: z.boolean().optional().default(false),
 })
 
 export const clawops_config_setAnnotations = {
@@ -196,7 +214,7 @@ export type ConfigSetInput = z.infer<typeof clawops_config_setSchema>
 export const clawops_config_unsetSchema = z.object({
   stackName: z.string().optional(),
   key: z.string(),
-  restart: z.boolean().default(false),
+  restart: z.boolean().optional().default(false),
 })
 
 export const clawops_config_unsetAnnotations = {
@@ -267,8 +285,8 @@ export type GatewayRestartInput = z.infer<typeof clawops_gateway_restartSchema>
 export const clawops_workflow_deploy_appSchema = z.object({
   provider: z.enum(['aws', 'gcp', 'azure', 'local']),
   region: z.string().optional(),
-  stackName: z.string().default("default"),
-  instanceType: z.enum(['micro', 'small', 'medium', 'large', 'gpu']).default("small"),
+  stackName: z.string().optional().default("default"),
+  instanceType: z.enum(['micro', 'small', 'medium', 'large', 'gpu']).optional().default("small"),
 })
 
 export const clawops_workflow_deploy_appAnnotations = {
@@ -322,6 +340,7 @@ export const TOOLSETS: Record<Toolset, string[]> = {
   cli: [
     'clawops_status',
     'clawops_logs_tail',
+    'clawops_monitor',
     'clawops_config_get',
     'clawops_agents_list',
     'clawops_up',
@@ -342,6 +361,7 @@ export const TOOLSETS: Record<Toolset, string[]> = {
   read: [
     'clawops_status',
     'clawops_logs_tail',
+    'clawops_monitor',
     'clawops_stacks_list',
     'clawops_config_get',
     'clawops_agents_list',

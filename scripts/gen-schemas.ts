@@ -193,7 +193,13 @@ function zodField(key: string, def: ToolInput): string {
   }
 
   if (def.default !== undefined) {
-    base += `.default(${JSON.stringify(def.default)})`
+    // .optional().default(x) makes the field omittable in the inferred input type
+    // while still guaranteeing the output is always the base type (never undefined).
+    if (def.optional) {
+      base += `.optional().default(${JSON.stringify(def.default)})`
+    } else {
+      base += `.default(${JSON.stringify(def.default)})`
+    }
   } else if (def.optional) {
     base += '.optional()'
   }
