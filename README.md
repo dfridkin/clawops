@@ -9,6 +9,31 @@ and Cursor drive them through typed MCP tools with explicit safety controls.
 
 ---
 
+## What's new in v1.4.0
+
+**`clawops monitor`** — live dashboard for any deployed stack. Shows gateway health, container
+status, CPU/memory, disk usage, and a rolling log tail. Refreshes on an interval with `[r]`,
+toggles logs with `[l]`, and quits with `[q]`.
+
+Run without `--stack` to get an **interactive stack picker** first — probes all registered stacks
+in parallel, shows only running ones by default, and lets you toggle to a full list (`[a]`) where
+not-deployed stacks can be deleted from the registry with `[d]`. Press `[s]` inside the dashboard
+to go back to the picker.
+
+```bash
+clawops monitor              # interactive stack selection → dashboard
+clawops monitor --stack prod # jump straight to a named stack
+clawops monitor --stack prod | cat  # one-shot snapshot for CI
+```
+
+**`clawops_monitor` MCP tool** — same snapshot as a single structured JSON call, so Claude Code
+and Cursor can check stack health without opening a terminal.
+
+**`clawops stacks delete` guard** — now blocks deletion of a still-deployed stack and requires
+`--force` to remove from the registry without tearing down cloud resources first.
+
+---
+
 ## Who this is for
 
 - **OpenClaw users** who want the simplest path to self-hosting across cloud or local VMs, with
