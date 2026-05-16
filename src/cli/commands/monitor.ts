@@ -44,13 +44,17 @@ export async function gatherSnapshot(
   signal: AbortSignal,
   tailLines = 10,
 ): Promise<MonitorSnapshot> {
+  // Prefix docker commands with common install paths so non-interactive SSH sessions
+  // (which don't source ~/.zshrc) find docker on macOS Docker Desktop and Homebrew.
+  const DOCKER = 'PATH=/usr/local/bin:/opt/homebrew/bin:$PATH docker'
+
   const [inspectRaw, statsRaw, healthRaw, configRaw, diskRaw, logsRaw] = await Promise.all([
     session.exec(
-      `docker inspect openclaw --format '{{.State.Status}}|{{.Config.Image}}|{{.State.StartedAt}}|{{.RestartCount}}' 2>/dev/null || echo 'not found|||0'`,
+      `${DOCKER} inspect openclaw --format '{{.State.Status}}|{{.Config.Image}}|{{.State.StartedAt}}|{{.RestartCount}}' 2>/dev/null || echo 'not found|||0'`,
       signal,
     ),
     session.exec(
-      `docker stats openclaw --no-stream --format '{{.MemUsage}}|{{.CPUPerc}}' 2>/dev/null || echo '—|—'`,
+      `${DOCKER} stats openclaw --no-stream --format '{{.MemUsage}}|{{.CPUPerc}}' 2>/dev/null || echo '—|—'`,
       signal,
     ),
     session.exec(
@@ -66,7 +70,7 @@ export async function gatherSnapshot(
       signal,
     ),
     session.exec(
-      `docker logs openclaw -n ${tailLines} 2>&1 || echo '(no logs)'`,
+      `${DOCKER} logs openclaw -n ${tailLines} 2>&1 || echo '(no logs)'`,
       signal,
     ),
   ])
@@ -136,6 +140,7 @@ export function renderSnapshot(
     g.bold(header) + ' '.repeat(padding) + g.dim(`updated ${timeStr}`),
     LINE,
     '',
+    `  Stack       ${g.bold(opts.stackName)}`,
     `  Gateway     ${gatewayStr}   version ${g.bold(snap.gateway.version)}   auth ${snap.gateway.authMode}`,
     `  Container   ${containerStr}   ${g.dim(snap.container.image)}`,
     `  Image tag   ${shortImage}   uptime ${uptime}`,
