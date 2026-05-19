@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { execSync, spawnSync, spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { success, failure, info, spinner } from '../../output/human.js'
+import { success, failure, info, spinner, printCta } from '../../output/human.js'
 import type { ClawopsConfig } from '../../config/store.js'
 import { MCP_APPS, buildMcpEntry, writeAppConfigs } from '../mcp-apps.js'
 
@@ -696,6 +696,7 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
   info(`SSH access:     ${state.sshUser}@${state.sshHost}:${state.sshPort}`)
   info(`Token saved to  ${tokenPath}`)
   info(`\nRun  clawops doctor --stack ${opts.stackName}  to check everything is healthy`)
+  printCta()
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

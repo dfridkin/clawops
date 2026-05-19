@@ -929,6 +929,7 @@ WO-04 must be completed before WO-01 to avoid perpetuating inaccurate plan/apply
 | 10 | WO-26, WO-27 | R10 | Stack monitoring wizard |
 | 11 | WO-28 | R11 | Gateway-agent MCP wiring |
 | 12 | WO-29–WO-34 | R12 | Server hardening + Tailscale VPN |
+| 13 | WO-35 | R13 | Integrated bug reporting |
 
 ### R1 — First-Run Experience
 
@@ -1358,6 +1359,51 @@ Revert: `clawops harden --tailscale-revert` reads `_preTailscale` config, restor
 
 Status:
 - [ ] WO-34: Tailscale VPN integration (install, join, config update, optional private-only mode, doctor check)
+
+---
+
+### R13 — Integrated Bug Reporting
+
+Work orders: WO-35 (clawops bug command).
+
+**Goal:** Let users report bugs without leaving the terminal, with system context pre-filled.
+
+**WO-35 — `clawops bug` command**
+
+```
+clawops bug
+```
+
+Flow:
+1. Run `clawops doctor` internally and capture its output as structured context (version, Node, provider, stack count, SSH key presence, credential status).
+2. Prompt: `Describe the issue in one line:` (free text, required).
+3. Prompt: `Which command triggered it? (optional):` (free text).
+4. Construct a GitHub new-issue URL with a pre-filled body template:
+
+```
+**clawops version:** 1.4.0
+**Node:** v22.x
+**Provider:** aws
+**OS:** darwin arm64
+
+**Description:**
+<user input>
+
+**Command:**
+<user input>
+
+**Doctor output:**
+<doctor output, truncated to 2000 chars>
+```
+
+5. Print the URL and attempt to open it in the system browser (`open` on macOS, `xdg-open` on Linux). If the browser open fails, print a plain-text fallback with the URL.
+
+Non-interactive / `--json` mode: emit the URL as JSON only, skip the browser open.
+
+`clawops doctor` integration: add a footer line `Run \`clawops bug\` to open a pre-filled GitHub issue.` when doctor finds any failures.
+
+Status:
+- [ ] WO-35: `clawops bug` command — doctor context + pre-filled GitHub issue URL + browser open
 
 ---
 

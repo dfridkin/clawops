@@ -1,5 +1,5 @@
 import { defineCommand } from 'citty'
-import { chalk } from '../../output/human.js'
+import { chalk, printCta } from '../../output/human.js'
 
 const COMMANDS = [
   ['setup',   'Interactive first-run wizard — configure, deploy, and wire AI apps'],
@@ -61,6 +61,7 @@ export default defineCommand({
       process.stdout.write(`  ${flag.padEnd(flagWidth)}  ${dim(desc)}\n`)
     }
 
-    process.stdout.write(`\n${dim('Run `clawops <command> --help` for command-specific flags.')}\n\n`)
+    process.stdout.write(`\n${dim('Run `clawops <command> --help` for command-specific flags.')}\n`)
+    printCta()
   },
 })
