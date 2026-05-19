@@ -19,7 +19,7 @@ const COMMANDS = [
   ['backup',  'Create or restore an OpenClaw state backup'],
   ['stacks',  'List named stacks and their state'],
   ['doctor',  'Check Node version, config, SSH key, provider credentials, and Pulumi home'],
-  ['mcp',     'MCP server operations (mcp serve | mcp install)'],
+  ['mcp',     'MCP server operations (mcp serve | mcp install | mcp wire)'],
   ['secret',  'Manage secrets (secret list | set | delete | rotate | audit)'],
   ['monitor', 'Live dashboard: gateway health, container status, resource usage, log tail'],
   ['help',    'Show this help message'],
