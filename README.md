@@ -9,6 +9,27 @@ and Cursor drive them through typed MCP tools with explicit safety controls.
 
 ---
 
+## What's new in v1.5.0
+
+**`clawops mcp wire`** — wire the OpenClaw gateway's own AI as an MCP client of clawops.
+Once wired, in-conversation commands like "check if my stack is healthy" or "show me the last 20
+log lines" invoke the real `clawops` CLI rather than having the gateway AI guess.
+
+```bash
+clawops mcp wire                   # wire the default stack
+clawops mcp wire --stack prod      # target a named stack
+clawops mcp wire --force           # bypass gateway version check
+```
+
+Version-gated: requires OpenClaw ≥ 2026.4 on the gateway side. If the version is older, the
+command surfaces a clear upgrade prompt and exits cleanly.
+
+The `clawops setup` wizard now also asks at the end of a successful deploy:
+*"Should the OpenClaw gateway's AI also be able to manage this stack?"* — accepting wires the
+client automatically over the same SSH session.
+
+---
+
 ## What's new in v1.4.0
 
 **`clawops monitor`** — live dashboard for any deployed stack. Shows gateway health, container
@@ -296,6 +317,18 @@ clawops mcp install   # interactive checkbox — writes config for selected apps
 The wizard resolves the absolute binary path automatically so app launchers can find `clawops`
 without inheriting your shell's `PATH`. See [Connect an AI editor](#connect-an-ai-editor) above
 for manual config paths.
+
+### Wire the gateway AI
+
+The OpenClaw gateway runs its own AI agent. Once wired, that agent can call clawops directly
+instead of guessing at infrastructure state:
+
+```bash
+clawops mcp wire --stack prod   # write MCP client entry into gateway config + restart
+```
+
+Requires OpenClaw ≥ 2026.4 on the gateway. The `clawops setup` wizard offers this step
+automatically after a successful deploy.
 
 ### Stdio mode (Claude Code / Cursor / VS Code)
 

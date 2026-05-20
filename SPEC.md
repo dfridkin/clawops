@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
 **Version:** 0.9
-**Status:** M8 complete (539 unit+e2e tests); Waves 1–9 complete — WO-01–WO-17, WO-19–WO-25 done; WO-18, WO-26–WO-34 pending
+**Status:** M8 complete (595 unit+e2e tests); Waves 1–11 complete — WO-01–WO-17, WO-19–WO-28 done; WO-18, WO-29–WO-34 pending
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -1196,7 +1196,7 @@ Implementation notes:
 - Add a `clawops mcp wire --stack <name>` command as a standalone entry point (not just via setup wizard) so operators can add this to existing deployments without re-running full setup.
 
 Status:
-- [ ] WO-28: Gateway-agent MCP client config (wizard step + standalone command)
+- [x] WO-28: Gateway-agent MCP client config (wizard step + standalone command)
 
 ### R12 — Server Hardening
 
