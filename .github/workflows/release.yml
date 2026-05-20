@@ -44,6 +44,12 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: 'true'
 
+      - name: Publish to GitHub Packages
+        if: steps.changesets.outputs.published == 'true'
+        run: pnpm build && npm publish --registry https://npm.pkg.github.com --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ACTIONS_PAT }}
+
       - name: Publish to MCP Registry
         if: steps.changesets.outputs.published == 'true'
         run: |

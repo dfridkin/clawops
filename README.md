@@ -1,5 +1,8 @@
 # clawops
 
+[![npm version](https://img.shields.io/npm/v/@clawops/cli)](https://www.npmjs.com/package/@clawops/cli)
+[![npm downloads](https://img.shields.io/npm/dm/@clawops/cli)](https://www.npmjs.com/package/@clawops/cli)
+
 MCP-native infrastructure ops for OpenClaw — with read-only mode, destructive-action confirmation, and audit logs built in.
 
 **clawops** is a CLI and [MCP](https://modelcontextprotocol.io/) server for deploying and operating
