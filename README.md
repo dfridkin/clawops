@@ -271,8 +271,11 @@ clawops down --yes          # Destroy local-provider stack
 | `backup` | Create or restore an OpenClaw state backup |
 | `stacks` | List named stacks and their state |
 | `doctor` | Check Node version, config, SSH key, provider credentials, and Pulumi home |
+| `secret` | Manage secrets: `list`, `set`, `delete`, `rotate`, `audit` |
+| `monitor` | Live dashboard: gateway health, container stats, log tail, stack picker |
 | `mcp serve` | Start the embedded MCP server (stdio or HTTP) |
 | `mcp install` | Interactively wire clawops into AI editors |
+| `mcp wire` | Wire the gateway's AI as an MCP client of clawops |
 | `help` | List all commands and global flags |
 
 Full flag reference: `clawops <command> --help`
