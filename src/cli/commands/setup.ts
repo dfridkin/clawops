@@ -1204,6 +1204,10 @@ async function maybeWireGatewayMcp(opts: {
       success('The gateway\'s AI can now run clawops commands.')
       info('Try asking it: "check if my stack is healthy"')
     }
+  } catch (err) {
+    spin.fail('Failed to wire gateway MCP client.')
+    failure(err instanceof Error ? err.message : String(err))
+    info('You can retry later: clawops mcp wire --stack ' + opts.stackName)
   } finally {
     session.close()
   }

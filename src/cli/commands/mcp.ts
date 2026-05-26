@@ -171,6 +171,10 @@ const wireCmd = defineCommand({
       }
       success('The gateway\'s AI can now run clawops commands.')
       info('Try asking it: "check if my stack is healthy"')
+    } catch (err) {
+      spin.fail('Failed to wire gateway MCP client.')
+      failure(err instanceof Error ? err.message : String(err))
+      process.exit(1)
     } finally {
       release()
       drainPool()
