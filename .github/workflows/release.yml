@@ -26,7 +26,8 @@ jobs:
         with:
           node-version: '22.x'
           cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
+          # No registry-url — omitting it prevents setup-node from writing an
+          # _authToken entry to .npmrc that would shadow OIDC auth.
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -40,8 +41,10 @@ jobs:
           # PAT required so the Version Packages PR triggers CI
           # (GITHUB_TOKEN-created PRs don't trigger other workflows)
           GITHUB_TOKEN: ${{ secrets.ACTIONS_PAT }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # NPM_TOKEN intentionally absent — changesets creates an .npmrc token
+          # entry when NPM_TOKEN is set, which would override OIDC auth.
+          # npm uses the GitHub Actions OIDC token automatically when
+          # NPM_CONFIG_PROVENANCE is true and id-token: write is granted.
           NPM_CONFIG_PROVENANCE: 'true'
 
       - name: Publish to GitHub Packages
