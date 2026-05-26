@@ -1,5 +1,27 @@
 # @clawops/cli
 
+## 1.5.0
+
+### Minor Changes
+
+- fb0ed21: feat(monitor): Wave 10 — clawops monitor interactive dashboard + clawops_monitor MCP tool (WO-26, WO-27)
+- fb0ed21: Wave 11 (WO-28): gateway-agent MCP client wiring.
+
+  Adds `clawops mcp wire [--stack <name>] [--force]` — a standalone command that writes an MCP client entry into the deployed gateway's `openclaw.json` so the gateway's own AI agent can call clawops directly. Version-gated (requires OpenClaw ≥ 2026.4; bypass with `--force`). Re-run detection shows a targeted re-wire message when the entry already existed.
+
+  Also adds an optional wizard step at the end of `clawops setup`: after a successful local or cloud deploy, the wizard prompts "Should the OpenClaw gateway's AI also be able to manage this stack?" (default: no). Accepting wires the client automatically over the same SSH session.
+
+- fb0ed21: feat(secret): secret lifecycle CLI — list, set, delete, rotate, audit (WO-25)
+
+  - `clawops secret list` — show all secrets in ~/.clawops/secrets/ with status and last-modified
+  - `clawops secret set <name>` — create or update a secret interactively (hidden input, chmod 600)
+  - `clawops secret delete <name>` — remove a secret with cross-stack ref warning
+  - `clawops secret rotate <name>` — update secret + re-apply config overlay + gateway restart
+  - `clawops secret audit` — report empty/missing secret files and unresolvable $secret: refs
+  - `src/plan/overlay-store.ts` — persist config overlay + secrets refs per stack so rotate can re-apply without re-running the wizard
+  - `clawops setup` and `clawops apply` now save the overlay after each successful apply
+  - `docs/secrets.md` — full secret lifecycle reference: sources, rotation procedures, security notes
+
 ## 1.4.0
 
 ### Minor Changes
