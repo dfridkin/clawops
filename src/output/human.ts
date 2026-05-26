@@ -25,3 +25,17 @@ export function info(msg: string): void {
 export function spinner(text: string): Ora {
   return ora(text).start()
 }
+
+export const REPO_URL = 'https://github.com/dfridkin/clawops'
+
+export function printCta(): void {
+  process.stdout.write(
+    '\n' +
+    chalk.dim('  Thank you for using clawops! If it has been useful, star the project:') + '\n' +
+    chalk.dim('  ' + REPO_URL) + '\n' +
+    '\n' +
+    chalk.dim('  Found a bug? Open an issue:') + '\n' +
+    chalk.dim('  ' + REPO_URL + '/issues') + '\n' +
+    '\n',
+  )
+}

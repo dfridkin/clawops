@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { execSync, spawnSync, spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { success, failure, info, spinner } from '../../output/human.js'
+import { success, failure, info, spinner, printCta } from '../../output/human.js'
 import type { ClawopsConfig } from '../../config/store.js'
 import { MCP_APPS, buildMcpEntry, writeAppConfigs } from '../mcp-apps.js'
 
@@ -533,6 +533,17 @@ export default defineCommand({
           signal: ac.signal,
           inquirer,
         })
+
+        // ── Optional: wire gateway AI as MCP client ──────────────────────
+        await maybeWireGatewayMcp({
+          stackName: stackAnswers.stackName,
+          host: localHost,
+          port: localPort,
+          user: localUser,
+          keyPath: localKeyPath,
+          signal: ac.signal,
+          inquirer,
+        })
       } else {
         const { getConfigDir } = await import('../../config/store.js')
         const knownHostsPath = path.join(getConfigDir(), 'known_hosts')
@@ -564,6 +575,9 @@ export default defineCommand({
           failure(err instanceof Error ? err.message : String(err))
           process.exit(1)
         }
+
+        // ── Optional: wire gateway AI as MCP client ──────────────────────
+        await maybeWireGatewayMcpCloud({ stackName: stackAnswers.stackName, signal: ac.signal, inquirer })
       } else {
         info(`\nTo deploy later:  clawops apply ${outputPath}`)
       }
@@ -696,6 +710,7 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
   info(`SSH access:     ${state.sshUser}@${state.sshHost}:${state.sshPort}`)
   info(`Token saved to  ${tokenPath}`)
   info(`\nRun  clawops doctor --stack ${opts.stackName}  to check everything is healthy`)
+  printCta()
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1152,6 +1167,71 @@ function printMcpSnippet(): void {
       clawops: { command: 'clawops', args: ['mcp', 'serve', '--read-only'] },
     },
   }, null, 2) + '\n\n')
+}
+
+// ── Gateway MCP wiring helpers ────────────────────────────────────────────────
+
+async function maybeWireGatewayMcp(opts: {
+  stackName: string
+  host: string
+  port: number
+  user: string
+  keyPath: string
+  signal?: AbortSignal
+  inquirer: InquirerInstance
+}): Promise<void> {
+  process.stdout.write('\n')
+  const { wireGateway } = await inquirerPromptWire(opts.inquirer)
+  if (!wireGateway) return
+
+  const { connect } = await import('../../transport/ssh.js')
+  const { getConfigDir } = await import('../../config/store.js')
+  const { wireGatewayMcp } = await import('../mcp-wire.js')
+
+  const knownHostsPath = path.join(getConfigDir(), 'known_hosts')
+  const spin = spinner('Wiring gateway MCP client...')
+  const session = await connect({
+    host: opts.host, port: opts.port, user: opts.user,
+    privateKeyPath: opts.keyPath, knownHostsPath, signal: opts.signal,
+  })
+  try {
+    const result = await wireGatewayMcp(session, opts.signal ?? AbortSignal.timeout(30_000))
+    if (result.status === 'version-blocked') {
+      spin.warn(`Gateway version ${result.version} is too old for MCP client support (requires ≥ 2026.4).`)
+      info('Upgrade OpenClaw and run: clawops mcp wire --stack ' + opts.stackName)
+    } else {
+      spin.succeed(result.rewired ? 'Gateway MCP client re-wired.' : 'Gateway MCP client wired.')
+      success('The gateway\'s AI can now run clawops commands.')
+      info('Try asking it: "check if my stack is healthy"')
+    }
+  } catch (err) {
+    spin.fail('Failed to wire gateway MCP client.')
+    failure(err instanceof Error ? err.message : String(err))
+    info('You can retry later: clawops mcp wire --stack ' + opts.stackName)
+  } finally {
+    session.close()
+  }
+}
+
+async function maybeWireGatewayMcpCloud(opts: {
+  stackName: string
+  signal?: AbortSignal
+  inquirer: InquirerInstance
+}): Promise<void> {
+  process.stdout.write('\n')
+  const { wireGateway } = await inquirerPromptWire(opts.inquirer)
+  if (!wireGateway) return
+
+  info(`Run this after the server is ready:  clawops mcp wire --stack ${opts.stackName}`)
+}
+
+async function inquirerPromptWire(inquirer: InquirerInstance): Promise<{ wireGateway: boolean }> {
+  return inquirer.prompt<{ wireGateway: boolean }>([{
+    type: 'confirm',
+    name: 'wireGateway',
+    message: 'Should the OpenClaw gateway\'s AI also be able to manage this stack? (adds clawops MCP client to gateway)',
+    default: false,
+  }])
 }
 
 function loadCatalogs(yaml: typeof import('js-yaml')): Catalogs {
