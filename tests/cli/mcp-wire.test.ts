@@ -8,7 +8,7 @@ import type { SshSession } from '../../src/transport/ssh.js'
 
 const mockReadRemoteConfig = vi.fn()
 const mockAtomicWriteConfig = vi.fn()
-const mockDeepMerge = vi.fn((a: unknown, b: unknown) => ({ ...(a as object), ...(b as object) }))
+const mockDeepMerge = vi.fn((...args: unknown[]) => ({ ...(args[0] as object), ...(args[1] as object) }))
 const mockRestartGateway = vi.fn()
 
 vi.mock('../../src/plan/remote-config.js', () => ({
