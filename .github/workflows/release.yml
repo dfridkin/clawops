@@ -43,7 +43,7 @@ jobs:
           # changeset publish calls npm publish, which uses the OIDC token
           # automatically when NPM_CONFIG_PROVENANCE is true and id-token:write
           # is granted (npm trusted publishing must be configured on npmjs.com).
-          publish: changeset publish
+          publish: pnpm changeset publish
         env:
           # PAT required so the Version Packages PR triggers CI
           # (GITHUB_TOKEN-created PRs don't trigger other workflows)
