@@ -38,9 +38,12 @@ jobs:
       - name: Create release PR or publish
         id: changesets
         uses: changesets/action@v1
-        # No custom publish: — changesets runs 'changeset publish' natively and
-        # handles the OIDC token exchange internally. A custom publish: shell
-        # command does not inherit that exchange, causing ENEEDAUTH.
+        with:
+          # Build is pre-done above; this just runs the publish step.
+          # changeset publish calls npm publish, which uses the OIDC token
+          # automatically when NPM_CONFIG_PROVENANCE is true and id-token:write
+          # is granted (npm trusted publishing must be configured on npmjs.com).
+          publish: changeset publish
         env:
           # PAT required so the Version Packages PR triggers CI
           # (GITHUB_TOKEN-created PRs don't trigger other workflows)
