@@ -32,19 +32,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build
+        run: pnpm build
+
       - name: Create release PR or publish
         id: changesets
         uses: changesets/action@v1
-        with:
-          publish: pnpm release
+        # No custom publish: — changesets runs 'changeset publish' natively and
+        # handles the OIDC token exchange internally. A custom publish: shell
+        # command does not inherit that exchange, causing ENEEDAUTH.
         env:
           # PAT required so the Version Packages PR triggers CI
           # (GITHUB_TOKEN-created PRs don't trigger other workflows)
           GITHUB_TOKEN: ${{ secrets.ACTIONS_PAT }}
-          # NPM_TOKEN intentionally absent — changesets creates an .npmrc token
-          # entry when NPM_TOKEN is set, which would override OIDC auth.
-          # npm uses the GitHub Actions OIDC token automatically when
-          # NPM_CONFIG_PROVENANCE is true and id-token: write is granted.
+          # NPM_TOKEN intentionally absent — OIDC handles auth.
           NPM_CONFIG_PROVENANCE: 'true'
 
       - name: Publish to GitHub Packages
