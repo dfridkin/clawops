@@ -58,7 +58,10 @@ jobs:
 
       - name: Publish to GitHub Packages
         if: steps.changesets.outputs.published == 'true'
-        run: npm publish --registry https://npm.pkg.github.com --no-git-checks
+        run: |
+          # setup-node wrote .npmrc only for registry.npmjs.org; add GitHub Packages auth.
+          npm config set "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}"
+          npm publish --registry https://npm.pkg.github.com
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ACTIONS_PAT }}
 
