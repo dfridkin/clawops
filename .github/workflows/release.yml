@@ -39,11 +39,12 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
-          # Build is pre-done above; this just runs the publish step.
-          # changeset publish calls npm publish, which uses the OIDC token
-          # automatically when NPM_CONFIG_PROVENANCE is true and id-token:write
-          # is granted (npm trusted publishing must be configured on npmjs.com).
-          publish: pnpm changeset publish
+          # ci-publish.sh temporarily hides pnpm detection signals so
+          # @changesets/cli calls `npm publish` instead of `pnpm publish`.
+          # npm (not pnpm) performs the GitHub Actions OIDC automated token
+          # exchange when NPM_CONFIG_PROVENANCE=true and id-token:write is set
+          # (npm trusted publishing must be configured on npmjs.com).
+          publish: bash scripts/ci-publish.sh
         env:
           # PAT required so the Version Packages PR triggers CI
           # (GITHUB_TOKEN-created PRs don't trigger other workflows)
@@ -53,7 +54,7 @@ jobs:
 
       - name: Publish to GitHub Packages
         if: steps.changesets.outputs.published == 'true'
-        run: pnpm build && npm publish --registry https://npm.pkg.github.com --no-git-checks
+        run: npm publish --registry https://npm.pkg.github.com --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ACTIONS_PAT }}
 
