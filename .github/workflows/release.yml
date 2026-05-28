@@ -24,10 +24,15 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: '22.x'
+          # Node 24 ships with npm 11.5.1+ which added OIDC automated token
+          # support (npm trusted publishing). npm 10.x has no OIDC auth code.
+          node-version: '24.x'
           cache: pnpm
-          # No registry-url — omitting it prevents setup-node from writing an
-          # _authToken entry to .npmrc that would shadow OIDC auth.
+          # registry-url is required: it tells npm which registry to use for
+          # the OIDC exchange. NODE_AUTH_TOKEN is intentionally not set so the
+          # _authToken template expands to empty string (falsy), leaving npm
+          # free to attempt the OIDC exchange instead.
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -41,27 +46,15 @@ jobs:
         with:
           # ci-publish.sh temporarily hides pnpm detection signals so
           # @changesets/cli calls `npm publish` instead of `pnpm publish`.
-          # npm (not pnpm) performs the GitHub Actions OIDC automated token
-          # exchange when NPM_CONFIG_PROVENANCE=true and id-token:write is set
-          # (npm trusted publishing must be configured on npmjs.com).
+          # npm 11.5.1+ then performs the OIDC automated token exchange
+          # (npm trusted publishing configured on npmjs.com).
           publish: bash scripts/ci-publish.sh
         env:
           # PAT required so the Version Packages PR triggers CI
           # (GITHUB_TOKEN-created PRs don't trigger other workflows)
           GITHUB_TOKEN: ${{ secrets.ACTIONS_PAT }}
           # NPM_TOKEN intentionally absent — OIDC handles auth.
-          NPM_CONFIG_PROVENANCE: 'true'
-
-      - name: Dump npm debug log on publish failure
-        if: failure()
-        run: |
-          LOG=$(ls ~/.npm/_logs/*.log 2>/dev/null | tail -1)
-          if [[ -n "$LOG" ]]; then
-            echo "=== npm debug log: $LOG ==="
-            cat "$LOG" | grep -v "^0 " | head -200
-          else
-            echo "No npm debug log found"
-          fi
+          # provenance is handled by publishConfig.provenance:true in package.json
 
       - name: Publish to GitHub Packages
         if: steps.changesets.outputs.published == 'true'
