@@ -52,6 +52,17 @@ jobs:
           # NPM_TOKEN intentionally absent — OIDC handles auth.
           NPM_CONFIG_PROVENANCE: 'true'
 
+      - name: Dump npm debug log on publish failure
+        if: failure()
+        run: |
+          LOG=$(ls ~/.npm/_logs/*.log 2>/dev/null | tail -1)
+          if [[ -n "$LOG" ]]; then
+            echo "=== npm debug log: $LOG ==="
+            cat "$LOG" | grep -v "^0 " | head -200
+          else
+            echo "No npm debug log found"
+          fi
+
       - name: Publish to GitHub Packages
         if: steps.changesets.outputs.published == 'true'
         run: npm publish --registry https://npm.pkg.github.com --no-git-checks
