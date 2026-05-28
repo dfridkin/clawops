@@ -39,6 +39,20 @@ node -e "
 # Hide the pnpm lock file so package-manager-detector returns npm
 mv "$LOCK_FILE" "$LOCK_BACKUP"
 
+# Diagnostics: print what npm sees (auth-redacted)
+echo "--- ci-publish diagnostics ---"
+echo "npm version: $(npm --version)"
+echo "GITHUB_ACTIONS: ${GITHUB_ACTIONS:-unset}"
+echo "ACTIONS_ID_TOKEN_REQUEST_URL: ${ACTIONS_ID_TOKEN_REQUEST_URL:+set}"
+echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+set}"
+echo "NPM_CONFIG_PROVENANCE: ${NPM_CONFIG_PROVENANCE:-unset}"
+echo "NODE_AUTH_TOKEN: ${NODE_AUTH_TOKEN:+set}"
+echo ".npmrc files:"
+for f in "$HOME/.npmrc" ".npmrc" "$(npm config get userconfig)"; do
+  [[ -f "$f" ]] && echo "  $f: $(cat "$f" | sed 's/=.*/=***/')" || echo "  $f: absent"
+done
+echo "--- end diagnostics ---"
+
 # Run changeset publish — it now detects npm and calls `npm publish`,
 # which performs the GitHub Actions OIDC automated token exchange.
 npx --no changeset publish
