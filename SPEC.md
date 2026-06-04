@@ -1,7 +1,7 @@
 # clawops — Technical Specification
 
 **Version:** 0.9
-**Status:** M8 complete (595 unit+e2e tests); Waves 1–11 complete — WO-01–WO-17, WO-19–WO-28 done; WO-18, WO-29–WO-34 pending
+**Status:** M8 complete (595 unit+e2e tests); Waves 1–11 complete — WO-01–WO-17, WO-19–WO-28 done; WO-18, WO-29–WO-35 pending (grouped into v1.6/v1.7/v1.8 releases)
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -907,29 +907,30 @@ This section tracks the eight adoption milestones defined in `docs/roadmap-docs/
 **distinct from the M0–M8 development milestones in §12**. Development milestones track *what is
 built*; adoption milestones track *whether the repo is understandable, trustworthy, and launchable*.
 
-Milestone labels use `R1–R11` to avoid collision. Each milestone maps to one or more work orders
-(WO-01 through WO-28) in `docs/roadmap-docs/docs/implementation/work-orders.md`.
+Milestone labels use `R1–R13` to avoid collision. Each milestone maps to one or more work orders
+(WO-01 through WO-35) in `docs/roadmap-docs/docs/implementation/work-orders.md`.
 
 Execution is organized into waves (see `docs/roadmap-docs/docs/implementation/milestones.md`).
 WO-04 must be completed before WO-01 to avoid perpetuating inaccurate plan/apply language in the README.
 
 ### Wave structure
 
-| Wave | Work Orders | Milestone(s) | Gate |
-|---|---|---|---|
-| 1 | WO-04, WO-01, WO-22, WO-17 | R1, R2, R6, R8 | Minimum viable public launch gate |
-| 2 | WO-02, WO-03 | R1 | First-run experience complete |
-| 3 | WO-07, WO-08, WO-09 | R3 | Soft launch: MCP safety documented |
-| 4 | WO-05, WO-06 | R2 | Plan surface code (WO-06 design-first) |
-| 5 | WO-10, WO-11, WO-13 | R4 | Operations guides |
-| 6 | WO-12, WO-14, WO-15 | R4, R5 | Operational code |
-| 7 | WO-19, WO-20, WO-21 | R6, R7 | Contributor + provider docs |
-| 8 | WO-23, WO-24 | R8 | Launch execution |
-| 9 | WO-25 | R9 | Secret lifecycle management |
-| 10 | WO-26, WO-27 | R10 | Stack monitoring wizard |
-| 11 | WO-28 | R11 | Gateway-agent MCP wiring |
-| 12 | WO-29–WO-34 | R12 | Server hardening + Tailscale VPN |
-| 13 | WO-35 | R13 | Integrated bug reporting |
+| Wave | Work Orders | Milestone(s) | Release | Gate |
+|---|---|---|---|---|
+| 1 | WO-04, WO-01, WO-22, WO-17 | R1, R2, R6, R8 | v1.0 | Minimum viable public launch gate |
+| 2 | WO-02, WO-03 | R1 | v1.0 | First-run experience complete |
+| 3 | WO-07, WO-08, WO-09 | R3 | v1.0 | Soft launch: MCP safety documented |
+| 4 | WO-05, WO-06 | R2 | v1.0 | Plan surface code (WO-06 design-first) |
+| 5 | WO-10, WO-11, WO-13 | R4 | v1.0 | Operations guides |
+| 6 | WO-12, WO-14, WO-15 | R4, R5 | v1.0 | Operational code |
+| 7 | WO-19, WO-20, WO-21 | R6, R7 | v1.0 | Contributor + provider docs |
+| 8 | WO-23, WO-24 | R8 | v1.0 | Launch execution |
+| 9 | WO-25 | R9 | v1.3 | Secret lifecycle management |
+| 10 | WO-26, WO-27 | R10 | v1.4 | Stack monitoring + MCP tool |
+| 11 | WO-28 | R11 | v1.5 | Gateway-agent MCP wiring |
+| 12a | WO-35, WO-18, M8 stubs | R13, R6 | v1.6 | Bug reporting + quality |
+| 12b | WO-29, WO-33, WO-30 | R12 | v1.7 | Hardening MVP (core + local/VPS + AWS) |
+| 12c | WO-31, WO-32, WO-34 | R12 | v1.8 | Hardening complete (GCP + Azure + Tailscale) |
 
 ### R1 — First-Run Experience
 
