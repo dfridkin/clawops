@@ -180,6 +180,12 @@ describe('gcpProgram — firewall / accessMode=auto', () => {
       expect(fw.inputs['sourceRanges']).toEqual(['203.0.113.42/32'])
     }
   })
+
+  it('throws when egress IP detection fails — never silently locks out', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('timeout'))
+    setConfig({ ...BASE_CONFIG, accessMode: 'auto' })
+    await expect(runProgram()).rejects.toThrow(/egress IP detection failed/)
+  })
 })
 
 describe('gcpProgram — firewall / accessMode=open', () => {

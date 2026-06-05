@@ -86,6 +86,12 @@ vi.mock('@pulumi/azure-native', async () => {
   }
   const authorization = {
     RoleAssignment: makeConstructor('azure-native:authorization:RoleAssignment'),
+    getClientConfig: vi.fn().mockResolvedValue({
+      subscriptionId: 'mock-sub-id-1234',
+      tenantId: 'mock-tenant-id',
+      clientId: 'mock-client-id',
+      objectId: 'mock-object-id',
+    }),
   }
 
   return { resources, network, compute, keyvault, authorization }
@@ -280,7 +286,43 @@ describe('azureProgram — Key Vault (keyVaultEnabled)', () => {
 
 describe('azureProgram — sshPublicKey validation', () => {
   it('throws a clear error when sshPublicKey is missing', async () => {
-    // No sshPublicKey set
     await expect(runProgram()).rejects.toThrow('sshPublicKey')
+  })
+})
+
+describe('azureProgram — accessMode=auto failure', () => {
+  it('throws when egress IP detection fails — never silently locks out', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('timeout'))
+    setConfig({
+      sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
+      accessMode: 'auto',
+    })
+    await expect(runProgram()).rejects.toThrow(/egress IP detection failed/)
+  })
+})
+
+describe('azureProgram — image reference', () => {
+  it('uses the current Ubuntu 22.04 LTS offer (not deprecated UbuntuServer)', async () => {
+    setConfig({ sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test' })
+    await runProgram()
+    const vm = created.find(r => r.type === 'azure-native:compute:VirtualMachine')
+    const imageRef = (vm!.inputs['storageProfile'] as Record<string, unknown>)['imageReference'] as Record<string, string>
+    expect(imageRef['offer']).toBe('0001-com-ubuntu-server-jammy')
+    expect(imageRef['sku']).toBe('22_04-lts-gen2')
+    expect(imageRef['offer']).not.toBe('UbuntuServer')
+  })
+})
+
+describe('azureProgram — Key Vault roleDefinitionId', () => {
+  it('includes subscription ID in roleDefinitionId', async () => {
+    setConfig({
+      sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
+      keyVaultEnabled: 'true',
+    })
+    await runProgram()
+    const ra = created.find(r => r.type === 'azure-native:authorization:RoleAssignment')
+    const roleDefId = ra!.inputs['roleDefinitionId'] as string
+    expect(roleDefId).toContain('/subscriptions/mock-sub-id-1234/')
+    expect(roleDefId).toContain('4633458b-17de-408a-b874-0445c86b69e6')
   })
 })

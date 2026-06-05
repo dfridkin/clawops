@@ -5,6 +5,7 @@
 // importing this module (e.g. in tests) does not trigger Pulumi SDK initialisation.
 
 import type { PulumiFn } from '../types.js'
+import { makeStartupScript } from '../startup.js'
 
 const GATEWAY_PORT = 18789
 const SSH_PORT = 22
@@ -14,7 +15,6 @@ const SSH_PORT = 22
  * Reads instance type and region from Pulumi stack config at runtime.
  */
 export const gcpProgram: PulumiFn = async () => {
-  // Lazy imports: keep Pulumi SDK out of module-load graph.
   const [pulumi, gcp, { resolveIngressCidrs, detectEgressIp }] = await Promise.all([
     import('@pulumi/pulumi'),
     import('@pulumi/gcp'),
@@ -39,10 +39,10 @@ export const gcpProgram: PulumiFn = async () => {
     )
   }
 
-  // Detect egress IP for 'auto' mode
-  const detectedIp = accessMode === 'auto'
-    ? await detectEgressIp('https://checkip.amazonaws.com')
-    : ''
+  // Detect egress IP for 'auto' mode using a provider-neutral service.
+  const egressResult = accessMode === 'auto'
+    ? await detectEgressIp('https://ifconfig.me')
+    : { ok: true as const, ip: '' }
 
   if (accessMode === 'open') {
     process.stderr.write(
@@ -51,8 +51,8 @@ export const gcpProgram: PulumiFn = async () => {
     )
   }
 
-  const sshIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, sshCidrs, detectedIp)
-  const gatewayIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, gatewayCidrs, detectedIp)
+  const sshIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, sshCidrs, egressResult)
+  const gatewayIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, gatewayCidrs, egressResult)
 
   // Network
   const network = new gcp.compute.Network('clawops-network', {
@@ -63,7 +63,7 @@ export const gcpProgram: PulumiFn = async () => {
   const subnet = new gcp.compute.Subnetwork('clawops-subnet', {
     ipCidrRange: '10.0.0.0/24',
     region,
-    network: network.id,
+    network: network.selfLink,
   })
 
   // Firewall: separate rules per port so CIDRs can differ
@@ -101,8 +101,8 @@ export const gcpProgram: PulumiFn = async () => {
     },
     networkInterfaces: [
       {
-        network: network.id,
-        subnetwork: subnet.id,
+        network: network.selfLink,
+        subnetwork: subnet.selfLink,
         accessConfigs: [
           {
             natIp: address.address,
@@ -114,7 +114,7 @@ export const gcpProgram: PulumiFn = async () => {
     metadata: {
       // GCP guest agent reads 'ssh-keys' and populates /home/<user>/.ssh/authorized_keys
       'ssh-keys': `clawops:${sshPublicKey}`,
-      'startup-script': makeStartupScript(openclawVersion),
+      'startup-script': makeStartupScript({ openclawVersion, os: 'debian' }),
     },
     serviceAccount: {
       scopes: ['https://www.googleapis.com/auth/cloud-platform'],
@@ -131,57 +131,4 @@ export const gcpProgram: PulumiFn = async () => {
     region,
     provisionedAt: new Date().toISOString(),
   }
-}
-
-function makeStartupScript(openclawVersion: string): string {
-  return `#!/bin/bash
-set -euo pipefail
-
-# Create clawops user with SSH access
-id -u clawops &>/dev/null || useradd -m -s /bin/bash clawops
-mkdir -p /home/clawops/.ssh
-chmod 700 /home/clawops/.ssh
-
-# Install Docker if not present
-if ! command -v docker &>/dev/null; then
-  apt-get update -q
-  apt-get install -y -q ca-certificates curl gnupg lsb-release
-  install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/debian/gpg \\
-    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-  chmod a+r /etc/apt/keyrings/docker.gpg
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \\
-    https://download.docker.com/linux/debian $(lsb_release -cs) stable" \\
-    > /etc/apt/sources.list.d/docker.list
-  apt-get update -q
-  apt-get install -y -q docker-ce docker-ce-cli containerd.io
-  systemctl enable --now docker
-fi
-
-usermod -aG docker clawops
-
-# Pull OpenClaw image
-OPENCLAW_VERSION="${openclawVersion}"
-docker pull ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION}
-
-# Create default openclaw.json if not present
-OPENCLAW_CONFIG=/home/clawops/openclaw.json
-if [ ! -f "\${OPENCLAW_CONFIG}" ]; then
-  cat > "\${OPENCLAW_CONFIG}" <<'OPENCLAWJSON'
-{"meta":{"lastTouchedVersion":"2026.4"},"gateway":{"port":18789,"auth":{"mode":"token"}},"models":{},"channels":{}}
-OPENCLAWJSON
-  chown clawops:clawops "\${OPENCLAW_CONFIG}"
-fi
-
-# Start OpenClaw container
-docker stop openclaw 2>/dev/null || true
-docker rm   openclaw 2>/dev/null || true
-docker run -d \\
-  --name openclaw \\
-  --restart unless-stopped \\
-  -p ${GATEWAY_PORT}:${GATEWAY_PORT} \\
-  -v "\${OPENCLAW_CONFIG}":/app/config.json:ro \\
-  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION} \\
-  node openclaw.mjs gateway run --allow-unconfigured
-`
 }

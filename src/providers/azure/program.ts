@@ -4,6 +4,7 @@
 
 import { createHash } from 'node:crypto'
 import type { PulumiFn } from '../types.js'
+import { makeStartupScript } from '../startup.js'
 
 const GATEWAY_PORT = 18789
 const SSH_PORT = 22
@@ -36,10 +37,15 @@ export const azureProgram: PulumiFn = async () => {
     )
   }
 
-  // Detect egress IP for 'auto' mode
-  const detectedIp = accessMode === 'auto'
+  // Hoist subscription lookup alongside other async initialisations.
+  // Any future data-source calls (e.g. getResourceGroup) should be batched
+  // here with Promise.all to avoid sequential await latency.
+  const clientConfig = await azure.authorization.getClientConfig({})
+
+  // Detect egress IP for 'auto' mode using a provider-neutral service.
+  const egressResult = accessMode === 'auto'
     ? await detectEgressIp('https://ifconfig.me')
-    : ''
+    : { ok: true as const, ip: '' }
 
   if (accessMode === 'open') {
     process.stderr.write(
@@ -48,8 +54,8 @@ export const azureProgram: PulumiFn = async () => {
     )
   }
 
-  const sshIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, sshCidrs, detectedIp)
-  const gatewayIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, gatewayCidrs, detectedIp)
+  const sshIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, sshCidrs, egressResult)
+  const gatewayIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, gatewayCidrs, egressResult)
 
   // --- Resource Group ---
   const rg = new azure.resources.ResourceGroup('clawops-rg', {
@@ -142,6 +148,8 @@ export const azureProgram: PulumiFn = async () => {
   })
 
   // --- Virtual Machine ---
+  // customData must be base64-encoded: the azure-native provider passes the
+  // string as-is to the ARM REST API, which requires it pre-encoded.
   const vm = new azure.compute.VirtualMachine('clawops-vm', {
     resourceGroupName: rg.name,
     location: rg.location,
@@ -150,7 +158,7 @@ export const azureProgram: PulumiFn = async () => {
     osProfile: {
       adminUsername: 'clawops',
       computerName: 'clawops',
-      customData: Buffer.from(makeStartupScript(openclawVersion)).toString('base64'),
+      customData: Buffer.from(makeStartupScript({ openclawVersion, os: 'ubuntu' })).toString('base64'),
       linuxConfiguration: {
         disablePasswordAuthentication: true,
         ssh: {
@@ -164,8 +172,10 @@ export const azureProgram: PulumiFn = async () => {
     storageProfile: {
       imageReference: {
         publisher: 'Canonical',
-        offer: 'UbuntuServer',
-        sku: '22.04-LTS',
+        // Ubuntu 22.04 LTS — Canonical migrated from the legacy 'UbuntuServer'
+        // offer to this naming scheme. 22_04-lts-gen2 is available in all regions.
+        offer: '0001-com-ubuntu-server-jammy',
+        sku: '22_04-lts-gen2',
         version: 'latest',
       },
       osDisk: {
@@ -181,8 +191,7 @@ export const azureProgram: PulumiFn = async () => {
 
   // --- Optional: Key Vault ---
   if (keyVaultEnabled) {
-    // Azure KV names: 3–24 chars, alphanumeric + hyphens, start/end with alphanumeric.
-    // Replace underscores/dots/other chars with hyphens, then hash-truncate if still too long.
+    // Azure KV names: 3–24 chars, alphanumeric + hyphens, globally unique.
     const safeName = stackName.replace(/[^a-zA-Z0-9-]/g, '-')
     const rawKvName = `clawops-${safeName}-kv`
     const kvName = rawKvName.length > 24
@@ -200,14 +209,19 @@ export const azureProgram: PulumiFn = async () => {
       },
     })
 
+    // roleDefinitionId must include the subscription scope for the ARM API.
+    // 4633458b-17de-408a-b874-0445c86b69e6 = Key Vault Secrets User (built-in).
+    const kvSecretsUserRoleId =
+      `/subscriptions/${clientConfig.subscriptionId}` +
+      `/providers/Microsoft.Authorization/roleDefinitions/4633458b-17de-408a-b874-0445c86b69e6`
+
     new azure.authorization.RoleAssignment('clawops-kv-role', {
       scope: kv.id,
-      roleDefinitionId: '/providers/Microsoft.Authorization/roleDefinitions/4633458b-17de-408a-b874-0445c86b69e6', // Key Vault Secrets User
+      roleDefinitionId: kvSecretsUserRoleId,
       principalId: pulumi.output(vm.identity).apply(i => i?.principalId ?? ''),
       principalType: 'ServicePrincipal',
     })
 
-    // Generate a stable random token stored in Pulumi state — not regenerated on each up.
     const gatewayToken = new random.RandomPassword('clawops-kv-gateway-token', {
       length: 32,
       special: false,
@@ -233,52 +247,4 @@ export const azureProgram: PulumiFn = async () => {
     region: location,
     provisionedAt: new Date().toISOString(),
   }
-}
-
-function makeStartupScript(openclawVersion: string): string {
-  return `#!/bin/bash
-set -euo pipefail
-
-# Install Docker if not present
-if ! command -v docker &>/dev/null; then
-  apt-get update -q
-  apt-get install -y -q ca-certificates curl gnupg lsb-release
-  install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \\
-    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-  chmod a+r /etc/apt/keyrings/docker.gpg
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \\
-    https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \\
-    > /etc/apt/sources.list.d/docker.list
-  apt-get update -q
-  apt-get install -y -q docker-ce docker-ce-cli containerd.io
-  systemctl enable --now docker
-fi
-
-usermod -aG docker clawops
-
-# Pull OpenClaw image
-OPENCLAW_VERSION="${openclawVersion}"
-docker pull ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION}
-
-# Create default openclaw.json if not present
-OPENCLAW_CONFIG=/home/clawops/openclaw.json
-if [ ! -f "\${OPENCLAW_CONFIG}" ]; then
-  cat > "\${OPENCLAW_CONFIG}" <<'OPENCLAWJSON'
-{"meta":{"lastTouchedVersion":"2026.4"},"gateway":{"port":18789,"auth":{"mode":"token"}},"models":{},"channels":{}}
-OPENCLAWJSON
-  chown clawops:clawops "\${OPENCLAW_CONFIG}"
-fi
-
-# Start OpenClaw container
-docker stop openclaw 2>/dev/null || true
-docker rm   openclaw 2>/dev/null || true
-docker run -d \\
-  --name openclaw \\
-  --restart unless-stopped \\
-  -p 18789:18789 \\
-  -v "\${OPENCLAW_CONFIG}":/app/config.json:ro \\
-  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION} \\
-  node openclaw.mjs gateway run --allow-unconfigured
-`
 }
