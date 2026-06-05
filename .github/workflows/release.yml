@@ -64,8 +64,10 @@ jobs:
           # GITHUB_TOKEN is used here (not ACTIONS_PAT) because GitHub Packages
           # requires write:packages scope, which GITHUB_TOKEN gets automatically
           # when packages: write is declared in permissions above.
+          # --no-provenance: GitHub Packages does not support npm provenance
+          # statements (npmjs.com-only feature).
           npm config set "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}"
-          npm publish --registry https://npm.pkg.github.com
+          npm publish --registry https://npm.pkg.github.com --no-provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

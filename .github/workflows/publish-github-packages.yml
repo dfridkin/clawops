@@ -43,6 +43,9 @@ jobs:
       - name: Publish to GitHub Packages
         run: |
           npm config set "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}"
-          npm publish --registry https://npm.pkg.github.com
+          # --no-provenance: GitHub Packages does not support npm provenance
+          # statements (that feature is npmjs.com-only). publishConfig.provenance
+          # in package.json is correct for the primary registry; suppress it here.
+          npm publish --registry https://npm.pkg.github.com --no-provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
