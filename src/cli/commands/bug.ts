@@ -1,6 +1,5 @@
 import { defineCommand } from 'citty'
 import process from 'node:process'
-import { createRequire } from 'node:module'
 import { accessSync, constants } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { info, REPO_URL } from '../../output/human.js'
@@ -9,9 +8,12 @@ import { printJson, jsonOk } from '../../output/json.js'
 const ISSUES_URL = `${REPO_URL}/issues/new`
 const BODY_CAP = 2000
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const pkg = (createRequire(import.meta.url)('../../../package.json') as any)
-const VERSION: string = pkg.version ?? 'unknown'
+// __CLI_VERSION__ is replaced at build time by tsup define; fallback for
+// ts-node / pnpm dev paths where the define isn't applied.
+declare const __CLI_VERSION__: string
+const VERSION: string = typeof __CLI_VERSION__ !== 'undefined'
+  ? __CLI_VERSION__
+  : 'dev'
 
 async function collectContext(): Promise<string> {
   const nodeVersion = process.version
