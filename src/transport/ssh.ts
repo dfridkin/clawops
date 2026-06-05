@@ -148,6 +148,7 @@ class Ssh2Session implements SshSession {
       }
 
       server.on('error', (err: NodeJS.ErrnoException) => {
+        closeAll()
         const msg =
           err.code === 'EADDRINUSE'
             ? `Port ${localPort} is already in use`

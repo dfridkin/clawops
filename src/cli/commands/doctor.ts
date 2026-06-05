@@ -2,7 +2,7 @@ import { defineCommand } from 'citty'
 import process from 'node:process'
 import { accessSync, mkdirSync, constants } from 'node:fs'
 import path from 'node:path'
-import { success, failure, warn, info } from '../../output/human.js'
+import { success, failure, warn, info, REPO_URL } from '../../output/human.js'
 
 export default defineCommand({
   meta: {
@@ -224,6 +224,12 @@ export default defineCommand({
     }
 
     process.stdout.write('\n')
-    if (!nodeOk) process.exit(1)
+
+    if (!nodeOk) {
+      process.stdout.write(
+        `Run \`clawops bug\` to open a pre-filled issue at ${REPO_URL}/issues\n\n`,
+      )
+      process.exit(1)
+    }
   },
 })

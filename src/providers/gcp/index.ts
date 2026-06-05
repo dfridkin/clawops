@@ -29,9 +29,9 @@ const gcpAdapter: ProviderAdapter = {
 
   getConnectionInfo(outputs: StackOutputs): ConnectionInfo {
     return {
-      host: String(outputs['sshHost']),
-      port: Number(outputs['sshPort']),
-      user: String(outputs['sshUser']),
+      host: String(outputs['sshHost'] ?? ''),
+      port: Number(outputs['sshPort'] ?? 22),
+      user: String(outputs['sshUser'] ?? 'clawops'),
       privateKeyPath: String(outputs['privateKeyPath'] ?? ''),
       knownHostsPath: String(outputs['knownHostsPath'] ?? ''),
     }

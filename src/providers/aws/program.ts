@@ -1,8 +1,10 @@
-// AWS inline Pulumi program — creates: VPC, IGW, Subnet, Route Table, Security Group,
-// IAM Role + Instance Profile, Key Pair, EC2 Instance, Elastic IP.
+// AWS inline Pulumi program — creates: VPC, IGW, Subnet, Route Table,
+// Security Group + individual Ingress/Egress rules, IAM Role + Instance Profile,
+// Key Pair, EC2 Instance, Elastic IP.
 // URN namespace: clawops:infra:* / clawops:net:*
 
 import type { PulumiFn } from '../types.js'
+import { makeStartupScript } from '../startup.js'
 
 const GATEWAY_PORT = 18789
 const SSH_PORT = 22
@@ -24,6 +26,10 @@ export const awsProgram: PulumiFn = async () => {
   const gatewayCidrs = cfg.get('gatewayCidrs') ?? ''
   const bedrockEnabled = cfg.get('bedrockEnabled') === 'true'
 
+  // Optional: pin the AMI rather than using the most-recent lookup.
+  // Useful when you need plan → apply reproducibility.
+  const pinnedAmiId = cfg.get('amiId')
+
   const sshPublicKey = cfg.get('sshPublicKey')
   if (!sshPublicKey) {
     throw new Error(
@@ -32,10 +38,10 @@ export const awsProgram: PulumiFn = async () => {
     )
   }
 
-  // Detect egress IP for 'auto' mode
-  const detectedIp = accessMode === 'auto'
-    ? await detectEgressIp('https://checkip.amazonaws.com')
-    : ''
+  // Detect egress IP for 'auto' mode — returns a Result so failures are explicit.
+  const egressResult = accessMode === 'auto'
+    ? await detectEgressIp('https://ifconfig.me')
+    : { ok: true as const, ip: '' }
 
   if (accessMode === 'open') {
     process.stderr.write(
@@ -44,8 +50,8 @@ export const awsProgram: PulumiFn = async () => {
     )
   }
 
-  const sshIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, sshCidrs, detectedIp)
-  const gatewayIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, gatewayCidrs, detectedIp)
+  const sshIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, sshCidrs, egressResult)
+  const gatewayIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, gatewayCidrs, egressResult)
 
   // --- Networking ---
   const vpc = new aws.ec2.Vpc('clawops-vpc', {
@@ -89,36 +95,45 @@ export const awsProgram: PulumiFn = async () => {
   })
 
   // --- Security Group ---
-  type IngressRule = {
-    protocol: string
-    fromPort: number
-    toPort: number
-    cidrBlocks: string[]
-    description: string
-  }
-
-  const ingressRules: IngressRule[] = [
-    ...sshIngressCidrs.map((cidr): IngressRule => ({
-      protocol: 'tcp', fromPort: SSH_PORT, toPort: SSH_PORT,
-      cidrBlocks: [cidr], description: 'SSH',
-    })),
-    ...gatewayIngressCidrs.map((cidr): IngressRule => ({
-      protocol: 'tcp', fromPort: GATEWAY_PORT, toPort: GATEWAY_PORT,
-      cidrBlocks: [cidr], description: 'OpenClaw gateway',
-    })),
-  ]
-
+  // Use individual SecurityGroupIngressRule / SecurityGroupEgressRule resources
+  // rather than inline ingress/egress arrays. This lets Pulumi diff individual
+  // rules without replacing the entire Security Group when CIDRs change,
+  // avoiding a connectivity outage window on day-2 updates.
   const sg = new aws.ec2.SecurityGroup('clawops-sg', {
     vpcId: vpc.id,
-    ingress: ingressRules,
-    egress: [{
-      protocol: '-1',
-      fromPort: 0,
-      toPort: 0,
-      cidrBlocks: ['0.0.0.0/0'],
-      description: 'Allow all egress',
-    }],
+    description: 'clawops managed security group',
     tags: { Name: 'clawops' },
+  })
+
+  // One ingress rule per CIDR per port — individually diffable by Pulumi.
+  sshIngressCidrs.forEach((cidr, i) => {
+    new aws.vpc.SecurityGroupIngressRule(`clawops-sg-ssh-${i}`, {
+      securityGroupId: sg.id,
+      ipProtocol: 'tcp',
+      fromPort: SSH_PORT,
+      toPort: SSH_PORT,
+      cidrIpv4: cidr,
+      tags: { Name: `clawops-ssh-${i}` },
+    })
+  })
+
+  gatewayIngressCidrs.forEach((cidr, i) => {
+    new aws.vpc.SecurityGroupIngressRule(`clawops-sg-gw-${i}`, {
+      securityGroupId: sg.id,
+      ipProtocol: 'tcp',
+      fromPort: GATEWAY_PORT,
+      toPort: GATEWAY_PORT,
+      cidrIpv4: cidr,
+      tags: { Name: `clawops-gateway-${i}` },
+    })
+  })
+
+  // Single egress rule: allow all outbound.
+  new aws.vpc.SecurityGroupEgressRule('clawops-sg-egress', {
+    securityGroupId: sg.id,
+    ipProtocol: '-1',
+    cidrIpv4: '0.0.0.0/0',
+    tags: { Name: 'clawops-egress' },
   })
 
   // --- IAM ---
@@ -140,10 +155,22 @@ export const awsProgram: PulumiFn = async () => {
   })
 
   if (bedrockEnabled) {
-    new aws.iam.RolePolicyAttachment('clawops-bedrock', {
+    // Least-privilege: only InvokeModel and InvokeModelWithResponseStream.
+    // AmazonBedrockFullAccess grants control-plane write actions (CreateCustomModel,
+    // DeleteFoundationModel, etc.) that are not needed for inference.
+    new aws.iam.RolePolicy('clawops-bedrock-invoke', {
       role: role.name,
-      // FullAccess required for bedrock:InvokeModel — ReadOnly only covers describe/list.
-      policyArn: 'arn:aws:iam::aws:policy/AmazonBedrockFullAccess',
+      policy: JSON.stringify({
+        Version: '2012-10-17',
+        Statement: [{
+          Effect: 'Allow',
+          Action: [
+            'bedrock:InvokeModel',
+            'bedrock:InvokeModelWithResponseStream',
+          ],
+          Resource: '*',
+        }],
+      }),
     })
   }
 
@@ -158,24 +185,26 @@ export const awsProgram: PulumiFn = async () => {
   })
 
   // --- AMI lookup (Ubuntu 22.04 LTS) ---
-  const ami = await aws.ec2.getAmi({
+  // Set stack config 'amiId' to pin a specific AMI for plan→apply reproducibility.
+  const amiId = pinnedAmiId ?? (await aws.ec2.getAmi({
     mostRecent: true,
     owners: ['099720109477'], // Canonical
     filters: [
       { name: 'name', values: ['ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*'] },
       { name: 'virtualization-type', values: ['hvm'] },
     ],
-  })
+  })).id
+  process.stderr.write(`[clawops] Using AMI: ${amiId}\n`)
 
   // --- EC2 Instance ---
   const instance = new aws.ec2.Instance('clawops-instance', {
-    ami: ami.id,
+    ami: amiId,
     instanceType,
     subnetId: subnet.id,
     vpcSecurityGroupIds: [sg.id],
     iamInstanceProfile: instanceProfile.name,
     keyName: keyPair.keyName,
-    userData: makeStartupScript(openclawVersion, bedrockEnabled),
+    userData: makeStartupScript({ openclawVersion, os: 'ubuntu', bedrockEnabled }),
     // IMDSv2 with hopLimit=2 so Docker containers on this host can reach IMDS
     // and obtain the instance role credentials (required for Bedrock access).
     metadataOptions: {
@@ -206,66 +235,4 @@ export const awsProgram: PulumiFn = async () => {
     region,
     provisionedAt: new Date().toISOString(),
   }
-}
-
-function makeStartupScript(openclawVersion: string, bedrockEnabled: boolean): string {
-  // When Bedrock is enabled, the container accesses AWS via the instance role
-  // through IMDS. No env vars needed — the hop limit on the EC2 Instance
-  // resource (httpPutResponseHopLimit: 2) allows Docker containers to reach
-  // the IMDSv2 endpoint directly.
-  const bedrockEnvFlag = bedrockEnabled ? '  -e AWS_DEFAULT_REGION=$(curl -sf http://169.254.169.254/latest/meta-data/placement/region || echo us-east-1) \\\n' : ''
-
-  return `#!/bin/bash
-set -euo pipefail
-
-# Create clawops user with SSH access
-id -u clawops &>/dev/null || useradd -m -s /bin/bash clawops
-mkdir -p /home/clawops/.ssh
-chmod 700 /home/clawops/.ssh
-chown clawops:clawops /home/clawops/.ssh
-
-# Install Docker if not present (AWS AMI is ubuntu-22.04)
-if ! command -v docker &>/dev/null; then
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -q
-  apt-get install -y -q ca-certificates curl gnupg lsb-release
-  install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \\
-    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-  chmod a+r /etc/apt/keyrings/docker.gpg
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \\
-    https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \\
-    > /etc/apt/sources.list.d/docker.list
-  apt-get update -q
-  apt-get install -y -q docker-ce docker-ce-cli containerd.io
-  systemctl enable --now docker
-fi
-
-usermod -aG docker clawops
-
-# Pull OpenClaw image
-OPENCLAW_VERSION="${openclawVersion}"
-docker pull ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION}
-
-# Create default openclaw.json if not present
-# apply.ts will overwrite this with the plan's config overlay post-provisioning.
-OPENCLAW_CONFIG=/home/clawops/openclaw.json
-if [ ! -f "\${OPENCLAW_CONFIG}" ]; then
-  cat > "\${OPENCLAW_CONFIG}" <<'OPENCLAWJSON'
-{"meta":{"lastTouchedVersion":"2026.4"},"gateway":{"port":18789,"auth":{"mode":"token"}},"models":{},"channels":{}}
-OPENCLAWJSON
-  chown clawops:clawops "\${OPENCLAW_CONFIG}"
-fi
-
-# Start OpenClaw container
-docker stop openclaw 2>/dev/null || true
-docker rm   openclaw 2>/dev/null || true
-docker run -d \\
-  --name openclaw \\
-  --restart unless-stopped \\
-  -p ${GATEWAY_PORT}:${GATEWAY_PORT} \\
-  -v "\${OPENCLAW_CONFIG}":/app/config.json:ro \\
-${bedrockEnvFlag}  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION} \\
-  node openclaw.mjs gateway run --allow-unconfigured
-`
 }

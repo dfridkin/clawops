@@ -277,6 +277,7 @@ clawops down --yes          # Destroy local-provider stack
 | `mcp install` | Interactively wire clawops into AI editors |
 | `mcp wire` | Wire the gateway's AI as an MCP client of clawops |
 | `help` | List all commands and global flags |
+| `bug` | Open a pre-filled GitHub issue with system context from `doctor` |
 
 Full flag reference: `clawops <command> --help`
 

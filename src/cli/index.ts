@@ -21,6 +21,7 @@ import setupCmd from './commands/setup.js'
 import secretCmd from './commands/secret.js'
 import monitorCmd from './commands/monitor.js'
 import helpCmd from './commands/help.js'
+import bugCmd from './commands/bug.js'
 import { handleError } from './error-handler.js'
 
 const main = defineCommand({
@@ -60,6 +61,7 @@ const main = defineCommand({
     secret: secretCmd,
     monitor: monitorCmd,
     help: helpCmd,
+    bug: bugCmd,
   },
 })
 
