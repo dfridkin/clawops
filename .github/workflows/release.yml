@@ -15,7 +15,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      id-token: write   # required for npm trusted publishing (OIDC)
+      id-token: write      # required for npm trusted publishing (OIDC)
+      packages: write      # required for GitHub Packages publish
 
     steps:
       - uses: actions/checkout@v6
@@ -60,10 +61,13 @@ jobs:
         if: steps.changesets.outputs.published == 'true'
         run: |
           # setup-node wrote .npmrc only for registry.npmjs.org; add GitHub Packages auth.
+          # GITHUB_TOKEN is used here (not ACTIONS_PAT) because GitHub Packages
+          # requires write:packages scope, which GITHUB_TOKEN gets automatically
+          # when packages: write is declared in permissions above.
           npm config set "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}"
           npm publish --registry https://npm.pkg.github.com
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.ACTIONS_PAT }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to MCP Registry
         if: steps.changesets.outputs.published == 'true'
