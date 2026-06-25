@@ -132,6 +132,9 @@ dist
 # Local planning/strategy docs (not part of project)
 docs/roadmap-docs/
 
+# Local test artifacts from `clawops setup` (may contain real tokens)
+openclaw-local-test*.json
+
 # yarn v3
 .pnp.*
 .yarn/*
