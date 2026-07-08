@@ -161,11 +161,11 @@ Goal: reduce attack surface and optionally route all traffic through a private T
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-29 — `clawops harden` command + wizard integration | ⏳ | Core hardening command, shared module framework, multi-select wizard step |
-| WO-30 — AWS hardening | ⏳ | VPC Flow Logs, GuardDuty opt-in, Security Group audit, Session Manager check |
+| WO-29 — `clawops harden` command + wizard integration | ✅ | Core hardening command, shared module framework, multi-select wizard step |
+| WO-30 — AWS hardening | ✅ | VPC Flow Logs, GuardDuty opt-in, Security Group audit, Session Manager check |
 | WO-31 — GCP hardening | ⏳ | Shielded VM check, VPC firewall audit, OS Login opt-in |
 | WO-32 — Azure hardening | ⏳ | JIT VM Access, Defender for Cloud, NSG audit, disk encryption check |
-| WO-33 — Local/VPS hardening | ⏳ | SSH hardening, UFW, fail2ban, unattended-upgrades, CIS Level 1 report |
+| WO-33 — Local/VPS hardening | ✅ | SSH hardening, UFW, fail2ban, unattended-upgrades, CIS Level 1 report |
 | WO-34 — Tailscale VPN integration | ⏳ | Install Tailscale, join network, update SSH/gateway config, optional private-only mode |
 
 ### R13 — Integrated Bug Reporting

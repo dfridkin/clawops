@@ -544,6 +544,14 @@ export default defineCommand({
           signal: ac.signal,
           inquirer,
         })
+
+        // ── Optional: harden the server ──────────────────────────────────
+        await maybeHarden({
+          stackName: stackAnswers.stackName,
+          provider: 'local',
+          signal: ac.signal,
+          inquirer,
+        })
       } else {
         const { getConfigDir } = await import('../../config/store.js')
         const knownHostsPath = path.join(getConfigDir(), 'known_hosts')
@@ -578,6 +586,14 @@ export default defineCommand({
 
         // ── Optional: wire gateway AI as MCP client ──────────────────────
         await maybeWireGatewayMcpCloud({ stackName: stackAnswers.stackName, signal: ac.signal, inquirer })
+
+        // ── Optional: harden the server ──────────────────────────────────
+        await maybeHarden({
+          stackName: stackAnswers.stackName,
+          provider,
+          signal: ac.signal,
+          inquirer,
+        })
       } else {
         info(`\nTo deploy later:  clawops apply ${outputPath}`)
       }
@@ -1284,4 +1300,85 @@ function instanceChoices(provider: string): Array<{ name: string; value: string 
     ],
   }
   return table[provider] ?? []
+}
+
+// ── Hardening wizard step ──────────────────────────────────────────────────────
+
+async function maybeHarden(opts: {
+  stackName: string
+  provider: string
+  signal?: AbortSignal
+  inquirer: InquirerInstance
+}): Promise<void> {
+  const { MODULE_CATALOG, resolveModules, runHardening, formatHardenSummary } = await import('../../harden/index.js')
+  const { getConfig } = await import('../../config/store.js')
+
+  const config = getConfig()
+  if (!config) return
+
+  const availableModules = resolveModules(MODULE_CATALOG, undefined, opts.provider)
+  if (availableModules.length === 0) return
+
+  process.stdout.write('\n')
+
+  // Multi-select: pre-check defaultOn modules
+  const { selectedIds } = await opts.inquirer.prompt<{ selectedIds: string[] }>([{
+    type: 'checkbox',
+    name: 'selectedIds',
+    message: 'Apply security hardening? (Space to toggle, Enter to confirm)',
+    choices: availableModules.map((m) => ({
+      name: `${m.label}${m.defaultOn ? '' : '  (opt-in)'}`,
+      value: m.id,
+      checked: m.defaultOn,
+    })),
+  }])
+
+  if (selectedIds.length === 0) {
+    info('Hardening skipped. Run `clawops harden --stack ' + opts.stackName + '` later.')
+    return
+  }
+
+  const modules = availableModules.filter((m) => selectedIds.includes(m.id))
+
+  process.stdout.write('\nApplying hardening modules...\n\n')
+
+  try {
+    const { buildContext } = await import('../context.js')
+    const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
+    const ctx = buildContext({ stack: opts.stackName })
+    const stackObj = await ctx.getStack()
+    const outputMap = await stackObj.outputs()
+    const outputs: Record<string, unknown> = Object.fromEntries(
+      Object.entries(outputMap).map(([k, v]) => [k, v.value]),
+    )
+    const base = extractBaseOutputs(outputs)
+    const conn = ctx.adapter.getConnectionInfo({
+      ...base,
+      privateKeyPath: config.ssh.keyPath,
+      knownHostsPath: config.ssh.knownHostsPath,
+    })
+
+    const { success: ok, failure: fail } = await import('../../output/human.js')
+    const results = await runHardening(conn, {
+      modules,
+      signal: opts.signal,
+      onProgress: (r) => {
+        process.stdout.write(`  · ${r.module.label}\n`)
+      },
+    })
+
+    process.stdout.write('\n' + formatHardenSummary(results))
+
+    const errors = results.filter((r) => r.error)
+    if (errors.length > 0) {
+      for (const r of errors) fail(`${r.module.label}: ${r.error}`)
+      info('Some modules failed. Run `clawops harden --stack ' + opts.stackName + '` to retry.')
+    } else {
+      ok('Hardening complete.')
+    }
+  } catch (err) {
+    const { failure: fail } = await import('../../output/human.js')
+    fail(`Hardening failed: ${err instanceof Error ? err.message : String(err)}`)
+    info('Run `clawops harden --stack ' + opts.stackName + '` to retry.')
+  }
 }

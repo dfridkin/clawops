@@ -39,6 +39,10 @@
     "release": "pnpm build && changeset publish"
   },
   "dependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.1063.0",
+    "@aws-sdk/client-ec2": "^3.1063.0",
+    "@aws-sdk/client-guardduty": "^3.1063.0",
+    "@aws-sdk/client-iam": "^3.1063.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@pulumi/aws": "^6.0.0",
     "@pulumi/azure-native": "^2.0.0",

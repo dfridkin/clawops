@@ -223,6 +223,51 @@ export default defineCommand({
       }
     }
 
+    // ── Hardening status (requires --stack) ──────────────────────────────────
+    if (args.stack && config) {
+      process.stdout.write('\nHardening\n')
+      try {
+        const { MODULE_CATALOG, resolveModules, withRemoteExec } = await import('../../harden/index.js')
+        const { buildContext } = await import('../context.js')
+        const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
+
+        const ctx = buildContext({ stack: args.stack })
+        const stackObj = await ctx.getStack()
+        const outputMap = await stackObj.outputs()
+        const outputs: Record<string, unknown> = Object.fromEntries(
+          Object.entries(outputMap).map(([k, v]) => [k, v.value]),
+        )
+        const base = extractBaseOutputs(outputs)
+        const conn = ctx.adapter.getConnectionInfo({
+          ...base,
+          privateKeyPath: config.ssh.keyPath,
+          knownHostsPath: config.ssh.knownHostsPath,
+        })
+
+        const hardenAc = new AbortController()
+        process.on('SIGINT', () => hardenAc.abort())
+
+        const provider = ctx.adapter.name
+        const modules = resolveModules(MODULE_CATALOG, undefined, provider)
+
+        await withRemoteExec(conn, hardenAc.signal, async (exec) => {
+          for (const mod of modules) {
+            const result = await mod.check(exec)
+            if (result.status === 'applied') {
+              success(`${mod.label.padEnd(32)} applied`)
+            } else if (result.status === 'drifted') {
+              warn(`${mod.label.padEnd(32)} drifted — ${result.detail}`)
+            } else if (result.status === 'missing') {
+              info(`${mod.label.padEnd(32)} not applied — run \`clawops harden\``)
+            }
+            // 'skipped' modules are silently omitted
+          }
+        })
+      } catch (err) {
+        failure(`Hardening checks failed: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+
     process.stdout.write('\n')
 
     if (!nodeOk) {
