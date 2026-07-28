@@ -12,6 +12,68 @@ and Cursor drive them through typed MCP tools with explicit safety controls.
 
 ---
 
+## What's new in v1.7.0
+
+**`clawops harden`** — run an idempotent set of server-hardening modules against a deployed
+stack over SSH. Each module has a read-only `check()` and an `apply()` step; `check()` runs first
+and `apply()` is skipped when the box is already compliant. Sentinel files under
+`/etc/clawops/hardening/` record what has been applied.
+
+```bash
+clawops harden --list                          # show available modules
+clawops harden --stack prod --dry-run          # preview changes, apply nothing
+clawops harden --stack prod                     # apply the default module set
+clawops harden --stack prod --options ssh,ufw   # apply a specific subset
+```
+
+**Common modules (all providers), ON by default:** `ssh` (hardens `sshd_config`, guards against
+lockout by verifying `authorized_keys` is non-empty before restarting sshd), `ufw` (deny-all
+incoming, allow SSH + gateway 18789), `fail2ban` (SSH jail: 5 failures → 10-minute ban),
+`unattended-upgrades` (security-only auto updates), and `docker-socket` (verify
+`/var/run/docker.sock` is `root:docker 660`). **Opt-in:** `auditd`, `lynis` (CIS Level 1 scan →
+`~/.clawops/reports/`), `sysctl`.
+
+**AWS modules (check-only, ON by default):** `aws-sg-audit` (warns on `0.0.0.0/0` ingress on
+unexpected ports) and `aws-ssm-check` (verifies `AmazonSSMManagedInstanceCore` for emergency SSM
+shell access). **Opt-in:** `aws-flow-logs`, `aws-guardduty`.
+
+`clawops setup` now presents a multi-select hardening step after deploy (skippable with
+`--no-harden`), and `clawops doctor --stack <name>` gains a Hardening section showing which
+modules are applied, missing, or drifted.
+
+---
+
+## What's new in v1.6.0
+
+**`clawops bug`** — open a pre-filled GitHub issue with system context (version, Node, OS,
+provider, stack count, SSH key presence) populated automatically. `--json` emits the URL without
+prompting or opening a browser, suitable for scripting. `clawops doctor` now prints a `clawops bug`
+hint in its footer when it exits with an error.
+
+```bash
+clawops bug              # open a pre-filled issue in the browser
+clawops bug --json       # print the issue URL for scripting
+```
+
+**Cloud deploy bug fixes (AWS, GCP, Azure).** This release fixes 10 bugs found in a deploy audit,
+several deploy-blocking:
+
+- **Azure:** updated deprecated image reference `UbuntuServer/22.04-LTS` →
+  `0001-com-ubuntu-server-jammy/22_04-lts-gen2` — every Azure deployment was broken; and fixed a
+  malformed Key Vault `roleDefinitionId` that broke Key Vault RBAC entirely.
+- **AWS:** Bedrock startup script now uses the IMDSv2 PUT→GET token flow (a plain `curl` to IMDS
+  returned 401, so the region always fell back to `us-east-1`); replaced
+  `AmazonBedrockFullAccess` with a least-privilege inline policy.
+- **AWS (⚠️ migration impact):** migrated from inline Security Group ingress/egress arrays to
+  individual `SecurityGroupIngressRule`/`SecurityGroupEgressRule` resources so CIDR changes no
+  longer replace the whole Security Group. **Existing AWS stacks have their Security Group
+  replaced on the first `clawops up` after this upgrade** — see
+  `docs/decisions/0009-aws-sg-rule-resources.md` for the import-based mitigation.
+- **All providers:** `accessMode=auto` egress-IP detection now returns a `Result` and throws a
+  clear error on failure instead of silently producing a VM with zero ingress rules.
+
+---
+
 ## What's new in v1.5.0
 
 **`clawops mcp wire`** — wire the OpenClaw gateway's own AI as an MCP client of clawops.
