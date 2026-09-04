@@ -25,3 +25,12 @@ tool, which dropped the config mount entirely, now mirrors the CLI path.
 **Ollama** now defaults to `host.docker.internal` and clawops passes
 `--add-host=host.docker.internal:host-gateway`, so a host-side Ollama is reachable from
 the container for the first time.
+
+**Gateway auth token.** A fresh local bootstrap could not start a gateway at all: OpenClaw
+refuses a non-loopback bind without auth, and the bootstrap never supplied a token, so the
+container exited 78 and systemd restart-looped. A token is now generated once and passed
+via a 0600 env file — never on argv.
+
+**Packaging.** `spec/` was missing from the published files and both it and
+`bootstrap.sh.tmpl` were unresolvable from the bundle, so `clawops plan` and `clawops up`
+(local) failed from an installed package. All three are now shipped and resolved correctly.
