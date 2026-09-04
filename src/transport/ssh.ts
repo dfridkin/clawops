@@ -6,6 +6,11 @@ import { createServer, type Server, type Socket } from 'node:net'
 import path from 'node:path'
 import { Client, type ConnectConfig } from 'ssh2'
 import { NetworkError } from '../errors/index.js'
+import {
+  verifyAgainstKnownHosts,
+  formatKnownHostsLine,
+  keyTypeFromBlob,
+} from './known-hosts.js'
 
 /** Handle returned by SshSession.tunnel(); call close() to tear down. */
 export interface TunnelHandle {
@@ -176,7 +181,8 @@ class Ssh2Session implements SshSession {
  * - If the host key is in known_hosts: it must match.
  * - If not: the key is accepted and appended to known_hosts.
  *
- * TODO M2: implement full RFC 4253 known_hosts verification.
+ * Entries are read in standard OpenSSH format, including hashed hostnames and
+ * `[host]:port` forms; clawops's own legacy two-field hex lines are still accepted.
  */
 export async function connect(opts: SshConnectOpts): Promise<SshSession> {
   let privateKey: Buffer
@@ -236,33 +242,26 @@ function verifyHostKey(
   keyHash: Buffer,
   knownHostsPath: string,
 ): boolean {
-  const keyHex = keyHash.toString('hex')
-  const hostEntry = port === 22 ? host : `[${host}]:${port}`
-
-  let existing: string | null = null
+  let content = ''
   try {
-    const content = readFileSync(knownHostsPath, 'utf-8')
-    for (const line of content.split('\n')) {
-      const parts = line.trim().split(/\s+/)
-      if (parts[0] === hostEntry && parts.length >= 2) {
-        existing = parts[1] ?? null
-        break
-      }
-    }
+    content = readFileSync(knownHostsPath, 'utf-8')
   } catch {
-    // File doesn't exist yet — TOFU first use
+    // No file yet — trust on first use below.
   }
 
-  if (existing !== null) {
-    return existing === keyHex
-  }
+  const verdict = verifyAgainstKnownHosts(content, host, port, keyHash)
+  if (verdict === 'match') return true
+  if (verdict === 'mismatch') return false
 
-  // First time seeing this host — record key (TOFU)
+  // Unknown host — trust on first use, and record it in standard OpenSSH format so the
+  // file stays valid for `ssh` itself and for a knownHostsPath pointed at ~/.ssh.
+  const keyType = keyTypeFromBlob(keyHash)
+  if (!keyType) return false
   try {
     mkdirSync(path.dirname(knownHostsPath), { recursive: true })
-    appendFileSync(knownHostsPath, `${hostEntry} ${keyHex}\n`, 'utf-8')
+    appendFileSync(knownHostsPath, formatKnownHostsLine(host, port, keyType, keyHash), 'utf-8')
   } catch {
-    // Non-fatal: accept even if we can't persist
+    // Non-fatal: accept even if we cannot persist.
   }
 
   return true
