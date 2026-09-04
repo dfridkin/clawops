@@ -69,6 +69,17 @@ usermod -aG docker clawops
 OPENCLAW_VERSION="${openclawVersion}"
 docker pull ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION}
 
+# ── Gateway auth token ───────────────────────────────────────────────────────
+# OpenClaw refuses a non-loopback bind without auth, and in a container it always
+# binds 0.0.0.0. Without a token the gateway exits 78 and restart-loops.
+OPENCLAW_ENV_FILE=/home/clawops/openclaw.env
+if [ ! -s "\${OPENCLAW_ENV_FILE}" ]; then
+  OPENCLAW_TOKEN=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \\n')
+  printf 'OPENCLAW_GATEWAY_TOKEN=%s\\n' "\${OPENCLAW_TOKEN}" > "\${OPENCLAW_ENV_FILE}"
+  chmod 600 "\${OPENCLAW_ENV_FILE}"
+  chown clawops:clawops "\${OPENCLAW_ENV_FILE}"
+fi
+
 # ── Default config (apply.ts will overwrite with plan overlay) ───────────────
 OPENCLAW_CONFIG=/home/clawops/openclaw.json
 if [ ! -f "\${OPENCLAW_CONFIG}" ]; then
@@ -86,6 +97,7 @@ docker run -d \\
   --restart unless-stopped \\
   -p 18789:18789 \\
   -e OPENCLAW_CONFIG_PATH=/app/config.json --add-host=host.docker.internal:host-gateway \\
+  --env-file "\${OPENCLAW_ENV_FILE}" \\
   -v "\${OPENCLAW_CONFIG}":/app/config.json:ro \\
 ${bedrockEnvBlock}  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION} \\
   node openclaw.mjs gateway run --allow-unconfigured --port 18789

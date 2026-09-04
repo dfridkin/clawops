@@ -115,3 +115,37 @@ describe('normaliseGatewayPort', () => {
     expect(normaliseGatewayPort({ gateway: [] })).toBeUndefined()
   })
 })
+
+describe('gateway auth token', () => {
+  // OpenClaw refuses a non-loopback bind without auth, and in a container it always
+  // binds 0.0.0.0. The bootstrap never supplied a token, so a fresh local deployment
+  // exited 78 and systemd restart-looped. Verified on 2026.7.1 before and after.
+  const tmpl = read('src/providers/local/bootstrap.sh.tmpl')
+  const startup = makeStartupScript({ openclawVersion: '2026.7.1', os: 'ubuntu' })
+
+  it('the local bootstrap generates a token', () => {
+    expect(tmpl).toContain('OPENCLAW_GATEWAY_TOKEN=')
+    expect(tmpl).toMatch(/openssl rand -hex 32/)
+  })
+
+  it('the cloud startup script generates a token', () => {
+    expect(startup).toContain('OPENCLAW_GATEWAY_TOKEN=')
+    expect(startup).toMatch(/openssl rand -hex 32/)
+  })
+
+  it('passes the token by env-file, never on argv', () => {
+    for (const src of [tmpl, startup]) {
+      expect(src).toContain('--env-file')
+      // `--token <value>` on the run command would expose it in `ps`.
+      expect(src).not.toMatch(/gateway run[^\n]*--token \$/)
+    }
+  })
+
+  it('restricts the env file and reuses an existing token', () => {
+    for (const src of [tmpl, startup]) {
+      expect(src).toContain('chmod 600')
+      // -s, not -f: an empty file must be regenerated rather than reused.
+      expect(src).toMatch(/if \[ ! -s "\$\{OPENCLAW_ENV_FILE\}" \]/)
+    }
+  })
+})

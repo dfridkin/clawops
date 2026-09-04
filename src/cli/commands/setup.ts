@@ -4,13 +4,13 @@
 // at runtime; no codegen needed for those catalog files.
 
 import { defineCommand } from 'citty'
+import { resolveSpecDir } from '../../spec-path.js'
 import process from 'node:process'
 import os from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { execSync, spawnSync, spawn } from 'node:child_process'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { success, failure, info, spinner, printCta } from '../../output/human.js'
 import type { ClawopsConfig } from '../../config/store.js'
 import { MCP_APPS, buildMcpEntry, writeAppConfigs } from '../mcp-apps.js'
@@ -1259,7 +1259,7 @@ async function inquirerPromptWire(inquirer: InquirerInstance): Promise<{ wireGat
 }
 
 function loadCatalogs(yaml: typeof import('js-yaml')): Catalogs {
-  const specDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../spec')
+  const specDir = resolveSpecDir()
   try {
     const modelsRaw = yaml.load(readFileSync(path.join(specDir, 'models.yaml'), 'utf-8'))
     const integrationsRaw = yaml.load(readFileSync(path.join(specDir, 'integrations.yaml'), 'utf-8'))

@@ -6,12 +6,10 @@
 // See docs/spikes/SP-01-container-profile.md for what that produces.
 
 import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { join, dirname } from 'node:path'
+import { join } from 'node:path'
 import type { Result } from '../types/result.js'
 import { ok, err } from '../types/result.js'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
+import { resolveSpecDir } from '../spec-path.js'
 
 /**
  * Moving tags clawops accepts as an OpenClaw version. These cannot be range-checked
@@ -39,7 +37,7 @@ let _spec: VersionSpec | undefined
 /** Load and cache spec/openclaw-versions.yaml. */
 export function loadVersionSpec(yaml: typeof import('js-yaml')): VersionSpec {
   if (_spec) return _spec
-  const specPath = join(__dirname, '../../spec/openclaw-versions.yaml')
+  const specPath = join(resolveSpecDir(), 'openclaw-versions.yaml')
   try {
     const raw = yaml.load(readFileSync(specPath, 'utf-8')) as Partial<VersionSpec>
     if (!raw?.support?.min) {
