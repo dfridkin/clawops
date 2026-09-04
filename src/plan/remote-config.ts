@@ -166,6 +166,40 @@ export async function restartGateway(
   if (result.code !== 0) {
     throw new Error(`Gateway restart failed: ${result.stderr}`)
   }
+
+  // Health-gate the result. v1.7.2 starts delivering config that has never been
+  // applied before, so a stored value can take effect for the first time here. The
+  // port cases are already handled (normalise + argv pin); this catches whatever
+  // they did not, by verifying the gateway actually answers before we call it done.
+  const healthy = await waitForGateway(session, pathPrefix, signal)
+  if (!healthy) {
+    throw new Error(
+      `Gateway restarted but did not become healthy on port ${GATEWAY_PORT}. ` +
+        `The previous container has already been replaced; inspect it with ` +
+        `\`docker logs openclaw\`. If the newly-applied config is at fault, ` +
+        `revert it and restart — before v1.7.2 this config was never applied, so a ` +
+        `value that has sat unused may now be taking effect.`,
+    )
+  }
+}
+
+/** Poll the gateway's health endpoint until it answers or the budget runs out. */
+async function waitForGateway(
+  session: SshSession,
+  pathPrefix: string,
+  signal?: AbortSignal,
+  attempts = 15,
+): Promise<boolean> {
+  const probe =
+    `${pathPrefix}curl -fsS -m 3 http://127.0.0.1:${GATEWAY_PORT}/healthz >/dev/null 2>&1 ` +
+    `&& echo ok || echo waiting`
+  for (let i = 0; i < attempts; i++) {
+    if (signal?.aborted) return false
+    const r = await session.exec(probe, signal)
+    if (r.stdout.trim().endsWith('ok')) return true
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+  }
+  return false
 }
 
 /** Deep-merge overlay into base. Arrays in overlay replace (not concat) base arrays. */
