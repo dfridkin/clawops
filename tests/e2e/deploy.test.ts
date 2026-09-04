@@ -78,7 +78,7 @@ describe('e2e: applyPlan → stack.up()', () => {
         region: 'us-east-1',
         stackName: 'default',
         instanceType: 'small',
-        openclaw: { version: 'stable' },
+        openclaw: { version: '2026.7.1-2' },
         network: { allowedSshCidrs: [], allowedGatewayCidrs: [] },
       },
     }
@@ -111,7 +111,7 @@ describe('e2e: applyPlan → stack.up()', () => {
         region: 'us-east-1',
         stackName: 'default',
         instanceType: 'small',
-        openclaw: { version: 'stable' },
+        openclaw: { version: '2026.7.1-2' },
         network: { allowedSshCidrs: [], allowedGatewayCidrs: [] },
       },
     }
@@ -146,7 +146,7 @@ describe('e2e: applyPlan → stack.up()', () => {
         region: 'us-east-1',
         stackName: 'default',
         instanceType: 'small',
-        openclaw: { version: 'stable' },
+        openclaw: { version: '2026.7.1-2' },
         network: { allowedSshCidrs: [], allowedGatewayCidrs: [] },
       },
     }

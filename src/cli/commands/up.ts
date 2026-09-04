@@ -18,17 +18,21 @@ export default defineCommand({
     'instance-type': { type: 'string', description: 'Instance size alias (micro|small|medium|large|gpu)' },
     'dry-run': { type: 'boolean', description: 'Preview without applying' },
     'no-wait': { type: 'boolean', description: 'Return immediately without waiting for healthy state' },
-    'openclaw-version': { type: 'string', description: "semver or 'stable'/'dev'" },
+    'openclaw-version': { type: 'string', description: "OpenClaw release (e.g. 2026.7.1-2). Moving tags are resolved and range-checked" },
     stack: { type: 'string', description: 'Target stack name' },
     config: { type: 'string', description: 'Path to openclaw config overlay JSON (local provider only)' },
   },
   async run({ args }) {
     const { buildContext } = await import('../context.js')
 
+    const { guardOpenclawVersion, defaultOpenclawVersion } = await import('../version-guard.js')
+
     const ctx = buildContext(args)
-    const openclawVersion = typeof args['openclaw-version'] === 'string'
+    const requestedVersion = typeof args['openclaw-version'] === 'string'
       ? args['openclaw-version']
-      : 'stable'
+      : await defaultOpenclawVersion()
+    // Refuse an unsupported OpenClaw release before provisioning anything.
+    const openclawVersion = await guardOpenclawVersion(requestedVersion)
 
     // ── Local provider path (no Pulumi) ────────────────────────────────────────
     if (ctx.adapter.name === 'local') {

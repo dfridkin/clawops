@@ -72,7 +72,7 @@ describe('up command — local provider', () => {
         host: '10.0.0.1',
         port: 22,
         user: 'root',
-        openclawVersion: 'stable',
+        openclawVersion: '2026.7.1-2',
       }),
     )
   })
@@ -84,11 +84,37 @@ describe('up command — local provider', () => {
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
-    await (cmd.run as AnyRunFn)({ args: { 'openclaw-version': '2099.1' } })
+    await (cmd.run as AnyRunFn)({ args: { 'openclaw-version': '2026.6.34' } })
 
     expect(mockLocalBootstrap).toHaveBeenCalledWith(
-      expect.objectContaining({ openclawVersion: '2099.1' }),
+      expect.objectContaining({ openclawVersion: '2026.6.34' }),
     )
+  })
+
+  it('refuses an OpenClaw version outside the supported range', async () => {
+    mockBuildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
+    mockLocalBootstrap.mockResolvedValue(FAKE_LOCAL_STATE)
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    // 2026.8.1 is OpenClaw 2.0: a different container runtime contract that this
+    // clawops line cannot deploy. It must be refused BEFORE anything is provisioned.
+    await expect(
+      (cmd.run as AnyRunFn)({ args: { 'openclaw-version': '2026.8.1' } }),
+    ).rejects.toThrow(/clawops 2\.x/)
+
+    expect(mockLocalBootstrap).not.toHaveBeenCalled()
+  })
+
+  it('refuses an unresolved moving tag rather than assuming it is safe', async () => {
+    mockBuildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
+    mockLocalBootstrap.mockResolvedValue(FAKE_LOCAL_STATE)
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await expect(
+      (cmd.run as AnyRunFn)({ args: { 'openclaw-version': 'latest' } }),
+    ).rejects.toThrow(/moving tag/)
+
+    expect(mockLocalBootstrap).not.toHaveBeenCalled()
   })
 
   it('passes --no-wait to bootstrap', async () => {
@@ -166,7 +192,7 @@ describe('up command — cloud provider path', () => {
     await (cmd.run as AnyRunFn)({ args: { 'instance-type': 'small', region: 'eu-west-1' } })
     expect(mockSetConfig).toHaveBeenCalledWith('region', { value: 'eu-west-1' })
     expect(mockSetConfig).toHaveBeenCalledWith('instanceType', expect.any(Object))
-    expect(mockSetConfig).toHaveBeenCalledWith('openclawVersion', { value: 'stable' })
+    expect(mockSetConfig).toHaveBeenCalledWith('openclawVersion', { value: '2026.7.1-2' })
   })
 
   it('runs preview (not up) when --dry-run is set', async () => {

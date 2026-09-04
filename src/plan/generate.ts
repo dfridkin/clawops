@@ -107,7 +107,10 @@ export async function generatePlan(
   const { version } = await import('../../package.json', { assert: { type: 'json' } })
   const config = getConfig()
   const instanceType = intent.instanceType ?? 'small'
-  const openclawVersion = intent.openclawVersion ?? 'latest'
+  const { guardOpenclawVersion, defaultOpenclawVersion } = await import('../cli/version-guard.js')
+  const openclawVersion = await guardOpenclawVersion(
+    intent.openclawVersion ?? (await defaultOpenclawVersion()),
+  )
   const network = intent.network ?? {
     allowedSshCidrs: [],
     allowedGatewayCidrs: [],
