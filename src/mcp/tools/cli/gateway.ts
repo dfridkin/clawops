@@ -30,10 +30,15 @@ export async function handleGatewayRestart(input: GatewayRestartInput, server: M
       `docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo 'ghcr.io/openclaw/openclaw:stable'`,
     )
     const image = imgResult.stdout.trim()
+    // Must mirror the CLI restart path (src/cli/commands/gateway.ts). Before v1.7.2
+    // this dropped the config bind-mount entirely, so restarting through MCP silently
+    // reverted the gateway to defaults — and would now also undo config delivery.
     const cmd = [
       'docker stop openclaw 2>/dev/null || true',
       'docker rm   openclaw 2>/dev/null || true',
-      `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 ${image}`,
+      `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 ` +
+        `-e OPENCLAW_CONFIG_PATH=/app/config.json --add-host=host.docker.internal:host-gateway ` +
+        `-v /home/clawops/openclaw.json:/app/config.json:ro ${image}`,
     ].join(' && ')
     const result = await session.exec(cmd)
     if (result.code !== 0) {

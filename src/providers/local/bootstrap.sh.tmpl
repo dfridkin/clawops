@@ -158,9 +158,10 @@ ExecStartPre=-/usr/bin/docker stop openclaw
 ExecStartPre=-/usr/bin/docker rm openclaw
 ExecStart=/usr/bin/docker run --name openclaw --rm \
   -p ${OPENCLAW_PORT}:${OPENCLAW_PORT} \
+  -e OPENCLAW_CONFIG_PATH=/app/config.json --add-host=host.docker.internal:host-gateway \
   -v ${OPENCLAW_CONFIG}:/app/config.json:ro \
   ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION} \
-  node openclaw.mjs gateway run --allow-unconfigured
+  node openclaw.mjs gateway run --allow-unconfigured --port ${OPENCLAW_PORT}
 ExecStop=/usr/bin/docker stop openclaw
 
 [Install]
@@ -179,9 +180,10 @@ elif [ "$OS" = "Darwin" ]; then
     --name openclaw \
     --restart unless-stopped \
     -p "${OPENCLAW_PORT}:${OPENCLAW_PORT}" \
+    -e OPENCLAW_CONFIG_PATH=/app/config.json --add-host=host.docker.internal:host-gateway \
     -v "${OPENCLAW_CONFIG}":/app/config.json:ro \
     "ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}" \
-    node openclaw.mjs gateway run --allow-unconfigured
+    node openclaw.mjs gateway run --allow-unconfigured --port ${OPENCLAW_PORT}
 fi
 
 echo "clawops: bootstrap complete"

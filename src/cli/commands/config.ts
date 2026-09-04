@@ -13,6 +13,7 @@ export function dockerRunCmd(image: string): string {
     'docker stop openclaw 2>/dev/null || true',
     'docker rm   openclaw 2>/dev/null || true',
     `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 ` +
+      `-e OPENCLAW_CONFIG_PATH=/app/config.json --add-host=host.docker.internal:host-gateway ` +
       `-v ${OPENCLAW_CONFIG}:/app/config.json:ro ${image}`,
   ].join(' && ')
 }

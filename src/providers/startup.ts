@@ -85,9 +85,10 @@ docker run -d \\
   --name openclaw \\
   --restart unless-stopped \\
   -p 18789:18789 \\
+  -e OPENCLAW_CONFIG_PATH=/app/config.json --add-host=host.docker.internal:host-gateway \\
   -v "\${OPENCLAW_CONFIG}":/app/config.json:ro \\
 ${bedrockEnvBlock}  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION} \\
-  node openclaw.mjs gateway run --allow-unconfigured
+  node openclaw.mjs gateway run --allow-unconfigured --port 18789
 `
 }
 
