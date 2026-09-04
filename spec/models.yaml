@@ -84,7 +84,10 @@ providers:
   - id: ollama
     displayName: Ollama (self-hosted)
     credentialSource: none
-    baseUrlDefault: http://localhost:11434
+    # OpenClaw runs in a container, so `localhost` is the container, not the host.
+    # Reaching a host-side Ollama needs the host.docker.internal alias, which clawops
+    # provides via --add-host=host.docker.internal:host-gateway at every run site.
+    baseUrlDefault: http://host.docker.internal:11434
     # Model ID is the string passed to `ollama pull <id>` and used in API calls.
     # The model must be pulled on the instance before OpenClaw starts.
     # Wizard outputs the pull command as a post-setup step.
@@ -101,7 +104,10 @@ providers:
     defaultModel: llama3.1
     configPath: models.providers.ollama
     postSetupNote: >
-      After deployment SSH into the host and run:
+      Ollama runs on the host; OpenClaw runs in a container and reaches it at
+      http://host.docker.internal:11434. After deployment, SSH into the host and run:
         ollama pull <model><tag>
       e.g. ollama pull llama3.1:8b
+      Ollama must also listen on an address the container can reach:
+        OLLAMA_HOST=0.0.0.0:11434 ollama serve
       OpenClaw will fail to start until the model is available.

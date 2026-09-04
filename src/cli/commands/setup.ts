@@ -290,10 +290,18 @@ export default defineCommand({
       const { baseUrl } = await inquirer.prompt<{ baseUrl: string }>([{
         type: 'input',
         name: 'baseUrl',
-        message: 'Ollama address: (the URL where Ollama is running — usually http://localhost:11434)',
-        default: modelProvider.baseUrlDefault ?? 'http://localhost:11434',
+        message:
+          'Ollama address: (OpenClaw runs in a container, so use host.docker.internal ' +
+          'rather than localhost to reach Ollama on the host)',
+        default: modelProvider.baseUrlDefault ?? 'http://host.docker.internal:11434',
       }])
-      modelConfig['baseUrl'] = baseUrl
+      // A localhost answer resolves to the container itself and silently fails to
+      // connect. Rewrite it rather than letting the deployment look configured.
+      const rewritten = rewriteLocalhostForContainer(baseUrl)
+      if (rewritten !== baseUrl) {
+        info(`  Using ${rewritten} — inside the container, localhost is the container itself.`)
+      }
+      modelConfig['baseUrl'] = rewritten
     }
 
     const builtModelConfig: Record<string, unknown> = {
@@ -1262,6 +1270,18 @@ function loadCatalogs(yaml: typeof import('js-yaml')): Catalogs {
   } catch (err) {
     throw new Error(`Cannot load wizard catalogs from spec/: ${(err as Error).message}`)
   }
+}
+
+/**
+ * Rewrite a loopback host to the Docker host alias.
+ *
+ * OpenClaw runs in a container: `localhost` there is the container, not the machine
+ * running Ollama. clawops passes --add-host=host.docker.internal:host-gateway at
+ * every run site so this alias resolves.
+ */
+export function rewriteLocalhostForContainer(url: string): string {
+  return url.replace(/^(https?:\/\/)(localhost|127\.0\.0\.1|\[::1\])(?=[:/]|$)/i,
+    '$1host.docker.internal')
 }
 
 function defaultRegion(provider: string): string {
