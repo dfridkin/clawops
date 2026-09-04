@@ -1,14 +1,19 @@
 # OpenClaw Version Compatibility Matrix
-# Used by `clawops doctor` and adapters to validate deployment targets.
-# Update via /openclaw-config skill.
+# Enforced by src/openclaw/versions.ts — `doctor`, `plan`, `up` and `apply` refuse
+# an OpenClaw version outside this range. Update via /openclaw-config skill.
+#
+# This is the clawops 1.x line: it supports the pre-2.0 OpenClaw runtime contract only.
+# OpenClaw 2026.8.1 ("OpenClaw 2.0") changed that contract — state moved into SQLite,
+# config moved to a writable path, and provider plugins became install-gated. Deploying
+# it from this line produces a crash-looping gateway (exit 78). Use clawops 2.x instead.
 
 version: 1
 
 # Minimum and maximum versions clawops supports
 support:
   min: "2026.4.5"
-  max: ""  # empty = unbounded
-  recommended: "2026.4.5"
+  max: "2026.7.1-2"   # last release before the 2.0 runtime contract
+  recommended: "2026.7.1-2"
 
 # Provider-specific quirks discovered through testing
 quirks:
@@ -49,3 +54,14 @@ tested:
 incompatible:
   - openclawVersionRange: "<2026.4.5"
     reason: "Below clawops's declared minimum support. Earlier OpenClaw versions used different config paths and channel registration semantics."
+  - openclawVersionRange: ">=2026.8.1"
+    reason: |
+      OpenClaw 2.0 changed the container runtime contract. Verified against 2026.8.1:
+        - No gateway token on first boot => "Refusing to bind gateway to auto without
+          auth", exit 78, crash-loop under --restart unless-stopped.
+        - Sessions, transcripts and credentials moved into SQLite under the state
+          directory, which this line does not mount => total state loss on restart.
+        - Provider plugins (Bedrock included) are install-gated; a configured but
+          uninstalled provider prevents startup entirely.
+      Use clawops 2.x, which targets OpenClaw >= 2026.9.1.
+    useInstead: "@clawops/cli@2"
