@@ -12,113 +12,58 @@ and Cursor drive them through typed MCP tools with explicit safety controls.
 
 ---
 
-## What's new in v1.7.0
+## What's new in v1.7.3
 
-**`clawops harden`** — run an idempotent set of server-hardening modules against a deployed
-stack over SSH. Each module has a read-only `check()` and an `apply()` step; `check()` runs first
-and `apply()` is skipped when the box is already compliant. Sentinel files under
-`/etc/clawops/hardening/` record what has been applied.
-
-```bash
-clawops harden --list                          # show available modules
-clawops harden --stack prod --dry-run          # preview changes, apply nothing
-clawops harden --stack prod                     # apply the default module set
-clawops harden --stack prod --options ssh,ufw   # apply a specific subset
-```
-
-**Common modules (all providers), ON by default:** `ssh` (hardens `sshd_config`, guards against
-lockout by verifying `authorized_keys` is non-empty before restarting sshd), `ufw` (deny-all
-incoming, allow SSH + gateway 18789), `fail2ban` (SSH jail: 5 failures → 10-minute ban),
-`unattended-upgrades` (security-only auto updates), and `docker-socket` (verify
-`/var/run/docker.sock` is `root:docker 660`). **Opt-in:** `auditd`, `lynis` (CIS Level 1 scan →
-`~/.clawops/reports/`), `sysctl`.
-
-**AWS modules (check-only, ON by default):** `aws-sg-audit` (warns on `0.0.0.0/0` ingress on
-unexpected ports) and `aws-ssm-check` (verifies `AmazonSSMManagedInstanceCore` for emergency SSM
-shell access). **Opt-in:** `aws-flow-logs`, `aws-guardduty`.
-
-`clawops setup` now presents a multi-select hardening step after deploy (skippable with
-`--no-harden`), and `clawops doctor --stack <name>` gains a Hardening section showing which
-modules are applied, missing, or drifted.
+**README maintenance.** The release-notes section had grown to four versions and was missing
+v1.7.2 entirely. It now carries the current line only; [`CHANGELOG.md`](CHANGELOG.md) remains the
+full history.
 
 ---
 
-## What's new in v1.6.0
+## What's new in v1.7.2
 
-**`clawops bug`** — open a pre-filled GitHub issue with system context (version, Node, OS,
-provider, stack count, SSH key presence) populated automatically. `--json` emits the URL without
-prompting or opening a browser, suitable for scripting. `clawops doctor` now prints a `clawops bug`
-hint in its footer when it exits with an error.
+**Refuses OpenClaw 2.0.** OpenClaw `2026.8.1` changed the container runtime contract — state moved
+into SQLite, config moved to a writable path, and model providers became install-gated plugins.
+Deploying it from this release line produces a crash-looping gateway. `doctor`, `plan`, `up` and
+`apply` now refuse anything above `2026.7.1-2`.
 
-```bash
-clawops bug              # open a pre-filled issue in the browser
-clawops bug --json       # print the issue URL for scripting
-```
+The support range in `spec/openclaw-versions.yaml` was previously unbounded *and read by no code*,
+so any OpenClaw release was accepted. Moving tags are now resolved to a concrete version **before**
+the range check, and an unresolved tag is refused rather than assumed safe — `latest` and `stable`
+both point at 2.0 today. The default is now a concrete pin.
 
-**Cloud deploy bug fixes (AWS, GCP, Azure).** This release fixes 10 bugs found in a deploy audit,
-several deploy-blocking:
+`clawops doctor --stack <name>` reports the version a deployed gateway is actually running, so an
+existing deployment that already picked up 2.0 through a moving tag can be identified.
 
-- **Azure:** updated deprecated image reference `UbuntuServer/22.04-LTS` →
-  `0001-com-ubuntu-server-jammy/22_04-lts-gen2` — every Azure deployment was broken; and fixed a
-  malformed Key Vault `roleDefinitionId` that broke Key Vault RBAC entirely.
-- **AWS:** Bedrock startup script now uses the IMDSv2 PUT→GET token flow (a plain `curl` to IMDS
-  returned 401, so the region always fell back to `us-east-1`); replaced
-  `AmazonBedrockFullAccess` with a least-privilege inline policy.
-- **AWS (⚠️ migration impact):** migrated from inline Security Group ingress/egress arrays to
-  individual `SecurityGroupIngressRule`/`SecurityGroupEgressRule` resources so CIDR changes no
-  longer replace the whole Security Group. **Existing AWS stacks have their Security Group
-  replaced on the first `clawops up` after this upgrade** — see
-  `docs/decisions/0009-aws-sg-rule-resources.md` for the import-based mitigation.
-- **All providers:** `accessMode=auto` egress-IP detection now returns a `Result` and throws a
-  clear error on failure instead of silently producing a VM with zero ingress rules.
+**`clawops config set` now applies.** It never has. The config clawops mounted was read by nothing
+on either OpenClaw line — models, channels and auth mode were silently discarded. Setting
+`OPENCLAW_CONFIG_PATH` fixes it, with four guards: `gateway.port` normalisation (with a warning),
+an argv `--port` pin, a parse check, and a post-restart health gate. The MCP `gateway restart`
+tool, which dropped the config mount entirely, now matches the CLI path.
 
----
+**A fresh local deployment starts.** OpenClaw refuses a non-loopback bind without auth and always
+binds `0.0.0.0` in a container, and the bootstrap never supplied a token — so the gateway exited 78
+and systemd restart-looped. A token is now generated once, kept in a `0600` env file, and passed
+via `--env-file`, never on the command line.
 
-## What's new in v1.5.0
+**Ollama is reachable.** `localhost` inside the container is the container. clawops now passes
+`--add-host=host.docker.internal:host-gateway` and defaults the Ollama address to match.
 
-**`clawops mcp wire`** — wire the OpenClaw gateway's own AI as an MCP client of clawops.
-Once wired, in-conversation commands like "check if my stack is healthy" or "show me the last 20
-log lines" invoke the real `clawops` CLI rather than having the gateway AI guess.
+**Packaging.** `spec/` was missing from the published files, and neither it nor
+`bootstrap.sh.tmpl` resolved from the bundle — so `clawops plan` and `clawops up --provider local`
+failed from an npm install. Both are now shipped and resolved correctly.
 
-```bash
-clawops mcp wire                   # wire the default stack
-clawops mcp wire --stack prod      # target a named stack
-clawops mcp wire --force           # bypass gateway version check
-```
+**SSH host keys.** The verifier read each `known_hosts` line's *key type* as the key, so any
+standard entry failed permanently with `Host denied`. Standard entries now parse, including
+comma-separated host lists, `[host]:port`, hashed hostnames, `@revoked` / `@cert-authority`
+markers, and wildcard and negated patterns.
 
-Version-gated: requires OpenClaw ≥ 2026.4 on the gateway side. If the version is older, the
-command surfaces a clear upgrade prompt and exits cleanly.
-
-The `clawops setup` wizard now also asks at the end of a successful deploy:
-*"Should the OpenClaw gateway's AI also be able to manage this stack?"* — accepting wires the
-client automatically over the same SSH session.
+> **Behaviour change:** a host covered by a wildcard whose key does not match is now refused where
+> it previously connected. Ignoring wildcards meant trust-on-first-use accepted a key your own
+> `known_hosts` contradicted. This matches OpenSSH.
 
 ---
 
-## What's new in v1.4.0
-
-**`clawops monitor`** — live dashboard for any deployed stack. Shows gateway health, container
-status, CPU/memory, disk usage, and a rolling log tail. Refreshes on an interval with `[r]`,
-toggles logs with `[l]`, and quits with `[q]`.
-
-Run without `--stack` to get an **interactive stack picker** first — probes all registered stacks
-in parallel, shows only running ones by default, and lets you toggle to a full list (`[a]`) where
-not-deployed stacks can be deleted from the registry with `[d]`. Press `[s]` inside the dashboard
-to go back to the picker.
-
-```bash
-clawops monitor              # interactive stack selection → dashboard
-clawops monitor --stack prod # jump straight to a named stack
-clawops monitor --stack prod | cat  # one-shot snapshot for CI
-```
-
-**`clawops_monitor` MCP tool** — same snapshot as a single structured JSON call, so Claude Code
-and Cursor can check stack health without opening a terminal.
-
-**`clawops stacks delete` guard** — now blocks deletion of a still-deployed stack and requires
-`--force` to remove from the registry without tearing down cloud resources first.
-
----
 
 ## Who this is for
 
@@ -612,7 +557,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (493 tests, ~3s)
+pnpm test                  # vitest (786 tests, ~4s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm typecheck             # tsc --noEmit

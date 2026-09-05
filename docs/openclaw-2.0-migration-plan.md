@@ -142,8 +142,8 @@ Sizes are T-shirts (S / M / L), not estimates. **v2.0.0 ships Phases 0–3 plus 
 
 **WO-50 — Cut the two release lines** *(D1 — M)*
 Branch `1.x` from v1.7.2; `main` becomes 2.x. Dist-tags `latest` → 2.x, `v1` → 1.x. Decide three
-things rather than gesture at them: an **EOL date** (proposal: six months after v2.0.0, reviewed at
-three), backport scope (security + provider-adapter fixes only), and **which gaps apply to `1.x`** —
+things rather than gesture at them: the **EOL date — decided: 2027-03-31 (end of Q1 2027)**,
+recorded as a date in `SECURITY.md` and `docs/support-matrix.md` rather than a duration; backport scope (security + provider-adapter fixes only), and **which gaps apply to `1.x`** —
 G7 and G3 are both live there. The npm OIDC publish path is fussy; budget for it.
 
 **WO-58 — Systematic gap audit** *(M)*
@@ -252,10 +252,14 @@ loopback publishing, the default set may be **SSH only**.
 
 ### Deferred to clawops 2.1
 
-**WO-53 — Agent sandboxing** *(D4 — L)* — feasible (SP-04). Derived image `+70 MB` with `docker-ce-cli`
-(SP-03); socket mount plus runtime-read docker gid; sandbox image built on the host; **state dir
-identity-mapped** — without it the agent silently gets an empty workspace and root-owned junk
-accumulates on the host. Wizard question states the socket tradeoff in one sentence.
+**WO-53 — Agent sandboxing** *(D4 — L)* — feasible (SP-04), and **no clawops-published image is
+needed** (SP-09). Mount Docker's own statically-linked CLI into the **unmodified official image**:
+verified `CLI 28.5.2 -> daemon 25.0.16`, sandbox backend active, sibling containers spawned from
+inside the gateway with `cap-drop=ALL` and `network=none`. The derived image (SP-03, +70 MB) stays
+as the fallback for hosts that cannot reach `download.docker.com`. Plus socket mount and a
+runtime-read docker gid; sandbox image built on the host; **state dir identity-mapped** — without it
+the agent silently gets an empty workspace and root-owned junk accumulates on the host. Wizard
+question states the socket tradeoff in one sentence.
 **WO-54 — Config surface for roles, agents, credential store, telemetry** *(M)*
 **WO-56 — Observability plugins** *(S)*
 **WO-55 — TLS and public origin** *(XL)* — gates Portals, Teams, Slack, Discord Activities.
@@ -437,7 +441,7 @@ policy) · DESIGN_RULES (N10 as plan-driven).
 - **Enabling config delivery is itself a breaking change.** Configs that have never been applied will
   apply for the first time. Hence v1.7.2's four guards.
 - **Two lines is a standing tax** — two CI matrices, two release paths, a backport judgement per fix.
-  WO-50 must state the EOL date or dual support becomes permanent.
+  The EOL date (2027-03-31) is what keeps that bounded.
 - **We will maintain a container image** (WO-53). Deferring to 2.1 keeps it out of this release but
   does not make it go away; decide who owns it first.
 - **Provider matrix is unsized** — four adapters × sandboxed/not × migration.
