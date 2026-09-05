@@ -1,6 +1,6 @@
 {
   "name": "@clawops/cli",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "description": "Deploy and manage self-hosted OpenClaw instances across clouds",
   "type": "module",
   "bin": {
