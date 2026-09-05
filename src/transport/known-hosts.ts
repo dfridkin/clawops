@@ -12,10 +12,14 @@
 //   [host]:port key-type base64-key          non-default port
 //   |1|salt|hash key-type base64-key         hashed hostname (HMAC-SHA1)
 //   @revoked host key-type base64-key        marker-prefixed
+//   *.example.com key-type base64-key        wildcard pattern
+//   !secure.example,*.example key-type key    negated pattern
 //   host <hex>                               legacy clawops format, still read
 //
-// Wildcards (`*.example.com`) are intentionally not matched: clawops connects to
-// concrete hosts, and quietly honouring a wildcard would widen what a host key covers.
+// Wildcards are honoured because ignoring them is the less safe option, not the safer
+// one: an unmatched wildcard falls through to trust-on-first-use, which *accepts* a key
+// the user's own file contradicts and then records it. Matching the wildcard turns that
+// case into the refusal it should be.
 
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
@@ -86,10 +90,51 @@ function hashedHostMatches(token: string, hostEntry: string): boolean {
   }
 }
 
+/**
+ * Translate an OpenSSH host pattern to a RegExp.
+ *
+ * `*` matches any run of characters (dots included) and `?` exactly one, per
+ * ssh_config(5) PATTERNS. Regex metacharacters are escaped first — `[host]:2222`
+ * must be treated as literal brackets, not a character class. Matching is
+ * case-insensitive because OpenSSH lowercases hostnames before comparing.
+ */
+function patternToRegExp(pattern: string): RegExp {
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.')
+  return new RegExp(`^${escaped}$`, 'i')
+}
+
+const isPattern = (host: string): boolean => host.includes('*') || host.includes('?')
+
+/**
+ * Does this entry's host list cover `hostEntry`?
+ *
+ * A negated pattern (`!host`) voids the entry outright, regardless of any other
+ * pattern in the same list — that is how an operator excludes one host from a
+ * subdomain wildcard, so honouring `*` without `!` would trust a host they
+ * explicitly excluded.
+ */
 function entryMatchesHost(entry: KnownHostsEntry, hostEntry: string): boolean {
-  return entry.hosts.some((h) =>
-    h.startsWith('|1|') ? hashedHostMatches(h, hostEntry) : h === hostEntry,
-  )
+  let matched = false
+  for (const host of entry.hosts) {
+    if (host.startsWith('|1|')) {
+      // Hashed entries are exact by construction; they are never patterns.
+      if (hashedHostMatches(host, hostEntry)) matched = true
+      continue
+    }
+    const negated = host.startsWith('!')
+    const pattern = negated ? host.slice(1) : host
+    const hit = isPattern(pattern)
+      ? patternToRegExp(pattern).test(hostEntry)
+      : pattern === hostEntry
+    if (hit) {
+      if (negated) return false
+      matched = true
+    }
+  }
+  return matched
 }
 
 /**
