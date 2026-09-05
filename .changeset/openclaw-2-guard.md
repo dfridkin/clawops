@@ -34,3 +34,16 @@ via a 0600 env file — never on argv.
 **Packaging.** `spec/` was missing from the published files and both it and
 `bootstrap.sh.tmpl` were unresolvable from the bundle, so `clawops plan` and `clawops up`
 (local) failed from an installed package. All three are now shipped and resolved correctly.
+
+**SSH host-key verification.** The verifier read `parts[1]` of each `known_hosts` line as
+the key, but in OpenSSH format that field is the key *type* — so any standard entry failed
+permanently with `Host denied (verification failed)`. It only worked against clawops's own
+two-field hex format, and would have corrupted `~/.ssh/known_hosts` if pointed at one.
+Standard entries now parse, including comma-separated host lists, `[host]:port`, hashed
+hostnames, `@revoked` / `@cert-authority` markers, and wildcard and negated patterns.
+Legacy hex entries are still accepted; new entries are written in standard format.
+
+⚠️ **Behaviour change:** a host covered by a wildcard whose key does not match is now
+refused where it previously connected. Ignoring wildcards meant trust-on-first-use
+accepted a key the operator's own file contradicted; matching them turns that into the
+refusal it should be. This matches OpenSSH, and was cross-checked against `ssh` directly.
