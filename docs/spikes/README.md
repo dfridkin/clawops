@@ -16,7 +16,8 @@ lives only in a scratch file is a fact we will rediscover.
 | SP-05 | Containerised Fleet CLI | blocked on VM |
 | SP-04 | DooD sandboxing end to end | blocked on VM |
 | SP-07 | 1.x → 2.0 migration | blocked on VM |
-| SP-08 | Bedrock `auth.profiles` via IMDSv2 | blocked on EC2 |
+| SP-08 | Bedrock `auth.profiles` via IMDSv2 | done |
+| SP-09 | Can the sandbox backend work without a derived image? | done |
 
 ## Environment
 
@@ -36,6 +37,7 @@ the plan are **not** valid on Docker Desktop.
 | SP-06 | Documented Fleet cell profile **matches reality exactly** |
 | SP-07 | Migration works, but **1.x state is inside the container** and there is **no config to carry forward** |
 | SP-08 | Bedrock works — **only on ≥2026.9.1**. Floor moved. |
+| SP-09 | **No published image needed** — Docker's static CLI mounted into the unmodified official image drives the sandbox backend |
 
 **Two P0s refuted, four new gaps found (G25, G26, plugin-gated providers, plugin/runtime skew),
 one version floor moved.**
