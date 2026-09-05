@@ -3,11 +3,9 @@
 import Ajv from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
 import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { join, dirname } from 'node:path'
+import { join } from 'node:path'
 import type { DeployPlan } from './generate'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
+import { resolveSpecDir } from '../spec-path.js'
 
 let _validate: ReturnType<Ajv['compile']> | undefined
 
@@ -16,7 +14,7 @@ function getValidator(): ReturnType<Ajv['compile']> {
   const ajv = new Ajv({ strict: false })
   addFormats(ajv)
   const schema = JSON.parse(
-    readFileSync(join(__dirname, '../../spec/deploy-plan.schema.json'), 'utf-8'),
+    readFileSync(join(resolveSpecDir(), 'deploy-plan.schema.json'), 'utf-8'),
   ) as object
   _validate = ajv.compile(schema)
   return _validate

@@ -39,7 +39,7 @@ const basePlan = {
     region: 'us-east-1',
     stackName: 'default',
     instanceType: 'small',
-    openclaw: { version: 'stable' },
+    openclaw: { version: '2026.7.1-2' },
     network: { allowedSshCidrs: [], allowedGatewayCidrs: [] },
   },
 }
@@ -99,7 +99,7 @@ describe('applyPlan()', () => {
 
     expect(mockSetConfig).toHaveBeenCalledWith('instanceType', { value: 'small' })
     expect(mockSetConfig).toHaveBeenCalledWith('region', { value: 'us-east-1' })
-    expect(mockSetConfig).toHaveBeenCalledWith('openclawVersion', { value: 'stable' })
+    expect(mockSetConfig).toHaveBeenCalledWith('openclawVersion', { value: '2026.7.1-2' })
   })
 
   it('omits region setConfig when plan has no region', async () => {

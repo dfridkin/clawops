@@ -1,7 +1,7 @@
 // Local provider bootstrap — runs the idempotent bootstrap.sh on the remote host via SSH.
 // Transfers the rendered script over SSH exec (no SCP dependency).
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { acquireSession } from '../../transport/pool.js'
@@ -29,9 +29,21 @@ export interface BootstrapOpts {
 }
 
 function loadTemplate(): string {
-  // Works in both ts-node/tsx (src/) and compiled (dist/) forms.
+  // The template sits beside this module in src/, and tsup copies it beside the
+  // bundle in dist/. Both are checked because the bundle flattens the directory
+  // structure, so a single relative path is correct in only one of the two.
   const dir = path.dirname(fileURLToPath(import.meta.url))
-  return readFileSync(path.join(dir, 'bootstrap.sh.tmpl'), 'utf-8')
+  const candidates = [
+    path.join(dir, 'bootstrap.sh.tmpl'),
+    path.join(dir, '../src/providers/local/bootstrap.sh.tmpl'),
+  ]
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return readFileSync(candidate, 'utf-8')
+  }
+  throw new Error(
+    `Cannot find bootstrap.sh.tmpl (looked in: ${candidates.join(', ')}). ` +
+      'If this is an installed package, the template may be missing from the build output.',
+  )
 }
 
 function renderScript(openclawVersion: string): string {

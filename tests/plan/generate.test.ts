@@ -69,7 +69,10 @@ describe('generatePlan()', () => {
     expect(plan.spec.stackName).toBe('default')
     expect(plan.spec.instanceType).toBe('small')
     expect(plan.spec.region).toBe('us-east-1')
-    expect(plan.spec.openclaw.version).toBe('latest')
+    // Default is a concrete pin from the support matrix, not a moving tag:
+    // `latest` and `stable` both now resolve to OpenClaw 2.0, which this line
+    // cannot deploy. See docs/spikes/SP-01-container-profile.md.
+    expect(plan.spec.openclaw.version).toBe('2026.7.1-2')
   })
 
   it('validates the plan against the JSON schema', async () => {
@@ -128,10 +131,13 @@ describe('generatePlan()', () => {
     expect(plan.spec.instanceType).toBe('small')
   })
 
-  it('applies default openclawVersion of latest', async () => {
+  it('applies a concrete default openclawVersion, not a moving tag', async () => {
     const { generatePlan } = await import('../../src/plan/generate.js')
     const plan = await generatePlan({ stackName: 'default', provider: 'aws' })
-    expect(plan.spec.openclaw.version).toBe('latest')
+    // Default is a concrete pin from the support matrix, not a moving tag:
+    // `latest` and `stable` both now resolve to OpenClaw 2.0, which this line
+    // cannot deploy. See docs/spikes/SP-01-container-profile.md.
+    expect(plan.spec.openclaw.version).toBe('2026.7.1-2')
   })
 
   it('returns plan even when preview throws (non-fatal)', async () => {

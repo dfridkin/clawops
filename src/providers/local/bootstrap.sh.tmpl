@@ -128,6 +128,18 @@ fi
 # ── Pull OpenClaw image ────────────────────────────────────────────────────────
 docker pull "ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}"
 
+# ── Gateway auth token ────────────────────────────────────────────────────────
+# OpenClaw refuses to bind a non-loopback listener without auth, and in a container
+# it always binds 0.0.0.0 — so without a token the gateway exits 78 and systemd
+# restart-loops. Generated once and reused on re-runs so restarts don't rotate it.
+OPENCLAW_ENV_FILE=/home/clawops/openclaw.env
+if [ ! -s "${OPENCLAW_ENV_FILE}" ]; then
+  OPENCLAW_TOKEN=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+  printf 'OPENCLAW_GATEWAY_TOKEN=%s\n' "${OPENCLAW_TOKEN}" > "${OPENCLAW_ENV_FILE}"
+  chmod 600 "${OPENCLAW_ENV_FILE}"
+  chown "${OPENCLAW_USER}" "${OPENCLAW_ENV_FILE}" 2>/dev/null || true
+fi
+
 # ── Write default openclaw.json if absent ─────────────────────────────────────
 # clawops up --config will overwrite this with the plan config overlay.
 if [ ! -f "${OPENCLAW_CONFIG}" ]; then
@@ -158,9 +170,11 @@ ExecStartPre=-/usr/bin/docker stop openclaw
 ExecStartPre=-/usr/bin/docker rm openclaw
 ExecStart=/usr/bin/docker run --name openclaw --rm \
   -p ${OPENCLAW_PORT}:${OPENCLAW_PORT} \
+  -e OPENCLAW_CONFIG_PATH=/app/config.json --add-host=host.docker.internal:host-gateway \
+  --env-file ${OPENCLAW_ENV_FILE} \
   -v ${OPENCLAW_CONFIG}:/app/config.json:ro \
   ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION} \
-  node openclaw.mjs gateway run --allow-unconfigured
+  node openclaw.mjs gateway run --allow-unconfigured --port ${OPENCLAW_PORT}
 ExecStop=/usr/bin/docker stop openclaw
 
 [Install]
@@ -179,9 +193,12 @@ elif [ "$OS" = "Darwin" ]; then
     --name openclaw \
     --restart unless-stopped \
     -p "${OPENCLAW_PORT}:${OPENCLAW_PORT}" \
+    -e OPENCLAW_CONFIG_PATH=/app/config.json --add-host=host.docker.internal:host-gateway \
+    --env-file "${OPENCLAW_ENV_FILE}" \
+  --env-file ${OPENCLAW_ENV_FILE} \
     -v "${OPENCLAW_CONFIG}":/app/config.json:ro \
     "ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}" \
-    node openclaw.mjs gateway run --allow-unconfigured
+    node openclaw.mjs gateway run --allow-unconfigured --port ${OPENCLAW_PORT}
 fi
 
 echo "clawops: bootstrap complete"

@@ -39,6 +39,11 @@ export async function applyPlan(
     )
   }
 
+  // A plan can be generated on one clawops line and applied on another, so the
+  // version is re-checked here rather than trusted from plan generation.
+  const { guardOpenclawVersion } = await import('../cli/version-guard.js')
+  await guardOpenclawVersion(plan.spec.openclaw.version)
+
   const ctx = buildContext({
     stack: plan.spec.stackName,
     provider: plan.spec.provider,

@@ -3,6 +3,7 @@
 // Extracted so the MCP config handler and plan layer share one implementation.
 
 import type { SshSession, SshExecResult } from '../transport/ssh.js'
+import { COMMON_RUN_FLAGS, PORT_PIN, GATEWAY_PORT } from '../openclaw/run-flags.js'
 
 export const OPENCLAW_CONFIG_LINUX = '/home/clawops/openclaw.json'
 export const OPENCLAW_CONFIG_MACOS = '~/.config/openclaw/config.json'
@@ -58,6 +59,28 @@ export async function readRemoteConfig(
   }
 }
 
+/**
+ * Force `gateway.port` to the port clawops publishes.
+ *
+ * Config delivery was broken until v1.7.2, so a non-default port in a stored config
+ * has never taken effect — there is no working behaviour to preserve, only a dormant
+ * value that would now move the listener away from the `-p` mapping. Returns the
+ * previous value when it changed, so the caller can say so rather than silently
+ * rewriting the user's file.
+ */
+export function normaliseGatewayPort(cfg: Record<string, unknown>): number | undefined {
+  const gateway = cfg['gateway']
+  if (!gateway || typeof gateway !== 'object' || Array.isArray(gateway)) return undefined
+  const g = gateway as Record<string, unknown>
+  const current = g['port']
+  if (typeof current === 'number' && current !== GATEWAY_PORT) {
+    g['port'] = GATEWAY_PORT
+    return current
+  }
+  if (current === undefined) g['port'] = GATEWAY_PORT
+  return undefined
+}
+
 /** Atomically write a config object to the remote openclaw.json. */
 export async function atomicWriteConfig(
   session: SshSession,
@@ -110,22 +133,30 @@ export async function restartGateway(
   // --allow-unconfigured is always passed: it lets the gateway start without
   // requiring a fully-validated model config in /app/config.json.
   // --token TOKEN overlays the auth token so the session requires the correct secret.
-  let gatewayCmd = 'node openclaw.mjs gateway run --allow-unconfigured'
+  // --port pins the listener to the published port so a stored gateway.port cannot
+  // move it out from under the -p mapping now that config is actually delivered.
+  let gatewayCmd = `node openclaw.mjs gateway run --allow-unconfigured ${PORT_PIN}`
   try {
     const cfg = JSON.parse(cfgResult.stdout) as Record<string, unknown>
     const token = (cfg?.['gateway'] as Record<string, unknown>)?.['auth'] as Record<string, unknown>
     const tokenVal = token?.['token'] as string | undefined
     if (tokenVal) {
-      gatewayCmd = `node openclaw.mjs gateway run --allow-unconfigured --token '${tokenVal}'`
+      gatewayCmd =
+        `node openclaw.mjs gateway run --allow-unconfigured ${PORT_PIN} --token '${tokenVal}'`
     }
-  } catch { /* keep allow-unconfigured-only fallback */ }
+  } catch {
+    // Unparseable config: fall through without a token. The config is still mounted,
+    // but an invalid file is the one case where delivering it could make things worse
+    // than the pre-v1.7.2 behaviour of ignoring it entirely.
+  }
 
   const restartCmd =
     pathPrefix +
     [
       'docker stop openclaw 2>/dev/null || true',
       'docker rm openclaw 2>/dev/null || true',
-      `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 ` +
+      `docker run -d --name openclaw --restart unless-stopped ` +
+        `-p ${GATEWAY_PORT}:${GATEWAY_PORT} ${COMMON_RUN_FLAGS} ` +
         `-v ${configPath}:/app/config.json:ro ${image} ${gatewayCmd}`,
     ].join(' && ')
 
@@ -135,6 +166,40 @@ export async function restartGateway(
   if (result.code !== 0) {
     throw new Error(`Gateway restart failed: ${result.stderr}`)
   }
+
+  // Health-gate the result. v1.7.2 starts delivering config that has never been
+  // applied before, so a stored value can take effect for the first time here. The
+  // port cases are already handled (normalise + argv pin); this catches whatever
+  // they did not, by verifying the gateway actually answers before we call it done.
+  const healthy = await waitForGateway(session, pathPrefix, signal)
+  if (!healthy) {
+    throw new Error(
+      `Gateway restarted but did not become healthy on port ${GATEWAY_PORT}. ` +
+        `The previous container has already been replaced; inspect it with ` +
+        `\`docker logs openclaw\`. If the newly-applied config is at fault, ` +
+        `revert it and restart — before v1.7.2 this config was never applied, so a ` +
+        `value that has sat unused may now be taking effect.`,
+    )
+  }
+}
+
+/** Poll the gateway's health endpoint until it answers or the budget runs out. */
+async function waitForGateway(
+  session: SshSession,
+  pathPrefix: string,
+  signal?: AbortSignal,
+  attempts = 15,
+): Promise<boolean> {
+  const probe =
+    `${pathPrefix}curl -fsS -m 3 http://127.0.0.1:${GATEWAY_PORT}/healthz >/dev/null 2>&1 ` +
+    `&& echo ok || echo waiting`
+  for (let i = 0; i < attempts; i++) {
+    if (signal?.aborted) return false
+    const r = await session.exec(probe, signal)
+    if (r.stdout.trim().endsWith('ok')) return true
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+  }
+  return false
 }
 
 /** Deep-merge overlay into base. Arrays in overlay replace (not concat) base arrays. */

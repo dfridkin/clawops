@@ -22,6 +22,23 @@ live infrastructure, which may produce a different diff than the one you reviewe
 
 See [`docs/plan-apply.md`](plan-apply.md) for full semantics and drift guidance.
 
+## OpenClaw version support
+
+**This clawops line supports OpenClaw up to 2026.7.1-2 only.** OpenClaw 2026.8.1
+("OpenClaw 2.0") changed the container runtime contract: sessions and credentials moved
+into SQLite under a state directory this line does not mount, the config moved to a
+writable path, and model providers became install-gated plugins. Deploying it from here
+produces a crash-looping gateway. `doctor`, `plan`, `up` and `apply` refuse it.
+
+For OpenClaw 2026.9.1 and later, use clawops 2.x. `clawops doctor --stack <name>` reports
+the version a deployed gateway is actually running, so an existing deployment that
+already picked up 2.0 through a moving tag can be identified.
+
+**Moving tags are not accepted unresolved.** `latest` and `stable` both now point at
+OpenClaw 2.0. clawops resolves a moving tag to a concrete release before checking it, and
+refuses one it cannot resolve rather than assuming it is compatible. The default is a
+concrete pin.
+
 ## Infrastructure scope
 
 **clawops manages the host, not OpenClaw's internal configuration.** Deploying a stack provisions
@@ -30,6 +47,12 @@ separately via `clawops config set` or the OpenClaw UI.
 
 **clawops does not author or manage OpenClaw agents or skills.** It manages the infrastructure
 those agents run on.
+
+**Ollama and other host-local model runtimes are reached at `host.docker.internal`.**
+OpenClaw runs in a container, so `localhost` there is the container rather than the host.
+clawops passes `--add-host=host.docker.internal:host-gateway` and defaults the Ollama
+address accordingly. The runtime must also listen on an address the container can reach
+(`OLLAMA_HOST=0.0.0.0:11434 ollama serve`); one bound to `127.0.0.1` stays unreachable.
 
 ## Networking and TLS
 

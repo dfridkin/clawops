@@ -117,6 +117,20 @@ export default defineCommand({
       }
     }
 
+    // ── OpenClaw compatibility ───────────────────────────────────────────────
+    process.stdout.write('\nOpenClaw\n')
+    try {
+      const yaml = await import('js-yaml')
+      const { loadVersionSpec, describeRange } = await import('../../openclaw/versions.js')
+      const support = loadVersionSpec(yaml).support
+      success(`Supported range  ${describeRange(support)}  (recommended ${support.recommended})`)
+      if (!support.max) {
+        warn('No upper bound declared — this line would accept any OpenClaw release')
+      }
+    } catch (e) {
+      failure(`Version matrix   ${(e as Error).message}`)
+    }
+
     // ── Remote health (requires --stack) ─────────────────────────────────────
     if (args.stack) {
       process.stdout.write('\nRemote health\n')
@@ -166,6 +180,43 @@ export default defineCommand({
               success(`Container    running`)
             } else {
               failure(`Container    ${containerStatus || 'unknown'}`)
+            }
+
+            // Deployed OpenClaw version — the half that helps users who ALREADY ran
+            // `clawops up` with a moving tag and are now on an unsupported release.
+            // Refusing future operations does nothing for them.
+            const imageResult = await session.exec(
+              `docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo ''`,
+              ac.signal,
+            )
+            const image = imageResult.stdout.trim()
+            const deployedVersion = image.includes(':') ? image.slice(image.lastIndexOf(':') + 1) : ''
+            if (deployedVersion) {
+              const yaml = await import('js-yaml')
+              const { loadVersionSpec, checkVersion, isMovingTag } =
+                await import('../../openclaw/versions.js')
+              const support = loadVersionSpec(yaml).support
+              if (isMovingTag(deployedVersion)) {
+                warn(
+                  `Deployed     ${image}  (moving tag — pin an explicit version; ` +
+                    `"${deployedVersion}" now resolves to OpenClaw 2.0)`,
+                )
+              } else {
+                const check = checkVersion(deployedVersion, support)
+                if (check.ok) {
+                  success(`Deployed     OpenClaw ${deployedVersion}`)
+                } else {
+                  failure(`Deployed     OpenClaw ${deployedVersion} is not supported by this clawops line`)
+                  if (check.error.reason === 'too-new') {
+                    warn(
+                      '  This gateway is running OpenClaw 2.0 or later. Session state may ' +
+                        'already have been lost: 2.0 stores sessions and credentials in SQLite ' +
+                        'under a directory this clawops line does not mount, so every container ' +
+                        'restart discards them. Upgrade to clawops 2.x before making changes.',
+                    )
+                  }
+                }
+              }
             }
 
             // Docker healthcheck
