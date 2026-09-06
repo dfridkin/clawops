@@ -48,7 +48,18 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
+    <html
+      lang="en"
+      className={`${display.variable} ${body.variable} ${mono.variable}`}
+      // Fumadocs' RootProvider (next-themes) writes `class` and `color-scheme` onto
+      // <html> before React hydrates, so the server markup cannot match by design.
+      // This is the documented fix, and it suppresses only this element's attributes
+      // — mismatches in children are still reported.
+      suppressHydrationWarning
+      // globals.css sets `scroll-behavior: smooth`; Next needs this marker to disable
+      // it during route transitions rather than animating a page change.
+      data-scroll-behavior="smooth"
+    >
       <body>{children}</body>
     </html>
   )
