@@ -1,4 +1,6 @@
 import type { Metadata } from 'next'
+import { Analytics } from '@vercel/analytics/next'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import { Newsreader, Public_Sans, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 
@@ -60,7 +62,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       // it during route transitions rather than animating a page change.
       data-scroll-behavior="smooth"
     >
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Cookieless and aggregate-only — no personal data, so no consent banner.
+
+            Both are client components that inject their script from a useEffect, so
+            neither appears in server-rendered HTML. Verifying with `curl | grep` will
+            always come up empty; check the client chunk, or the network tab for
+            /_vercel/insights/script.js. Off Vercel that request 404s harmlessly. */}
+        <Analytics />
+        <SpeedInsights />
+      </body>
     </html>
   )
 }
