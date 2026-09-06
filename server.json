@@ -4,7 +4,7 @@
   "title": "clawops",
   "description": "Deploy and manage self-hosted OpenClaw instances across clouds",
   "version": "1.7.3",
-  "websiteUrl": "https://github.com/dfridkin/clawops",
+  "websiteUrl": "https://clawops.fyi",
   "repository": {
     "url": "https://github.com/dfridkin/clawops",
     "source": "github"
