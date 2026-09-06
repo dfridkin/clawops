@@ -30,13 +30,23 @@ Please include:
 
 ## Supported Versions
 
-Only the latest minor version receives security patches. See `docs/support-matrix.md` for the current support window.
+clawops ships two release lines, because clawops 2.x and 1.x target incompatible OpenClaw
+runtimes. See [`docs/support-matrix.md`](docs/support-matrix.md) for the full policy.
 
-| Version | Supported |
-|---|---|
-| Latest minor (e.g., 1.x) | ✅ |
-| Previous minor | Security only, 6 months |
-| Older | ❌ |
+| Line | npm dist-tag | OpenClaw versions | Security patches until |
+|---|---|---|---|
+| **2.x** (`main`) | `latest` | `>= 2026.9.1` | current line — no end date |
+| **1.x** (maintenance) | `v1` | `<= 2026.7.1-2` | **2027-03-31** |
+| Anything older | — | — | not supported |
+
+Install a specific line with `npm install -g @clawops/cli@v1` or `@latest`.
+
+**What gets backported to 1.x:** security fixes, and provider-adapter fixes for breakage caused
+by a cloud provider changing its API. Nothing else — not features, not refactors, not
+OpenClaw 2.0 support, which is the entire reason the 2.x line exists.
+
+After **2027-03-31** the 1.x line receives nothing, including security fixes. That date is
+fixed rather than expressed as a duration so it does not quietly move.
 
 ## Threat Model
 
