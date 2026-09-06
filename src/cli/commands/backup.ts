@@ -8,12 +8,12 @@ import { UsageError } from '../../errors/index.js'
 export default defineCommand({
   meta: {
     name: 'backup',
-    description: 'Create or restore an OpenClaw backup (create | restore)',
+    description: 'Create an OpenClaw backup (restore is unavailable on this release line)',
   },
   args: {
-    action: { type: 'positional', description: 'Action: create | restore', required: true },
+    action: { type: 'positional', description: 'Action: create (restore returns in clawops 2.x)', required: true },
     out: { type: 'string', description: '[create] Local path to write the backup archive' },
-    file: { type: 'string', description: '[restore] Local backup archive to restore from' },
+    file: { type: 'string', description: '[restore] Local backup archive (restore is unavailable)' },
     stack: { type: 'string', description: 'Target stack name' },
     yes: { type: 'boolean', description: '[restore] Skip confirmation prompt' },
   },

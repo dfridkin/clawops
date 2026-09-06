@@ -175,8 +175,10 @@ Quick reference:
 
 ```bash
 clawops backup create --out /backups/openclaw-$(date +%Y%m%d).tar.gz
-clawops backup restore --file /backups/openclaw-20260508.tar.gz
 ```
+
+`clawops backup restore` is not available on the 1.x line — OpenClaw `2026.7.1-2` has no restore
+subcommand. Recovery is a manual, documented procedure; the command returns in clawops 2.x.
 
 ## Config management
 
