@@ -1,0 +1,66 @@
+---
+title: Commands
+description: Every clawops command, grouped by what you reach for it.
+---
+
+`clawops <command> --help` prints the flags for any of these.
+
+## Global flags
+
+| Flag | Effect |
+|---|---|
+| `--stack` | Target a named stack (default comes from config) |
+| `--provider` | Override provider: `aws`, `gcp`, `azure`, `local` |
+| `--json` | Emit JSON to stdout, for scripting |
+| `--quiet` | Suppress non-error output |
+| `--profile` | Auth profile from `~/.clawops/config.json` |
+| `--dry-run` | Preview without applying, on mutating commands |
+| `--yes` | Skip interactive confirmations (CI) |
+
+## Getting started
+
+| Command | Does |
+|---|---|
+| `init` | Choose a provider, configure the state backend, generate an SSH key |
+| `setup` | Interactive wizard — configure and deploy in one pass |
+| `doctor` | Check Node, SSH keys, credentials, and the supported OpenClaw range |
+
+## Provisioning
+
+| Command | Does |
+|---|---|
+| `up` | Provision and deploy a stack |
+| `plan` | Generate a deploy plan without applying it |
+| `apply` | Apply a plan produced by `clawops plan` |
+| `down` | Destroy provisioned resources for a stack |
+| `destroy` | Destroy everything in a stack — irreversible |
+| `stacks` | List or delete stacks |
+| `status` | Outputs, region, provisioned time |
+
+## Operating a deployment
+
+| Command | Does |
+|---|---|
+| `logs` | Stream gateway logs |
+| `monitor` | Live dashboard: health, container status, resources, log tail |
+| `ssh` | Open a session to the instance |
+| `tunnel` | Forward the gateway port to localhost |
+| `gateway` | `status`, `restart`, `update [version]` |
+| `agents` | `list`, `restart [name]`, `logs <name>` |
+| `config` | `get`, `set`, `unset` on the gateway configuration |
+| `backup` | `create`, `restore` |
+
+## Security
+
+| Command | Does |
+|---|---|
+| `harden` | Apply hardening modules: ssh, ufw, fail2ban, unattended-upgrades, auditd |
+| `secret` | `list`, `set`, `delete`, `rotate`, `audit` |
+
+## Other
+
+| Command | Does |
+|---|---|
+| `mcp` | MCP server operations — see [MCP](/docs/mcp) |
+| `bug` | Open a pre-filled GitHub issue with system context |
+| `help` | Available commands and global flags |

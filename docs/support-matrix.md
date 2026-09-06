@@ -44,17 +44,43 @@ The MCP server in stdio mode requires a POSIX-like environment for the working-d
 
 ## OpenClaw Versions
 
-See `spec/openclaw-versions.yaml` for the canonical machine-readable matrix. Highlights:
+`spec/openclaw-versions.yaml` is the canonical machine-readable matrix, and since v1.7.2 it is
+**enforced** — `doctor`, `plan`, `up` and `apply` refuse a version outside the supported range
+rather than deploying something that cannot work.
 
 | OpenClaw Version | Support |
 |---|---|
-| 2026.4.5 | ✅ Recommended |
-| 2026.4.x (other) | ✅ Compatible |
-| < 2026.4.5 | ❌ Not supported (different config schemas) |
+| 2026.7.1-2 | ✅ Recommended |
+| 2026.4.5 – 2026.7.1-2 | ✅ Supported |
+| < 2026.4.5 | ❌ Different config schemas and channel registration semantics |
+| **>= 2026.8.1** | ❌ **Not supported on the clawops 1.x line** — use clawops 2.x |
 
-### Known Quirks
+### OpenClaw 2.0 (2026.8.1 and later)
 
-- **Bedrock + AWS_PROFILE**: OpenClaw 2026.4.5+ requires `AWS_PROFILE` in systemd EnvironmentFile, ignores `auth: "aws-sdk"` in openclaw.json. AWS adapter handles this transparently.
+OpenClaw 2.0 changed the container runtime contract. Verified against `2026.8.1`:
+
+- Sessions, transcripts and credentials moved into SQLite under a state directory the 1.x line does
+  not mount, so every container replacement discards them.
+- Config moved to a writable path; the file this line mounts is read by nothing.
+- Model providers became install-gated plugins — a configured but uninstalled provider prevents the
+  gateway from starting at all.
+
+Deploying it from this line produces a crash-looping gateway (exit 78). clawops refuses it instead.
+
+`clawops doctor --stack <name>` reports the version a deployed gateway is actually running, so a
+stack that picked up 2.0 through a moving tag can be identified.
+
+**Moving tags are not accepted unresolved.** `latest` and `stable` both point at OpenClaw 2.0.
+clawops resolves a moving tag to a concrete release before checking it, and refuses one it cannot
+resolve rather than assuming compatibility. The default is a concrete pin.
+
+### Bedrock
+
+The 2.0-era form is `auth.profiles.<id>.mode: "aws-sdk"` in `openclaw.json`, and the Bedrock
+provider is a separately installed plugin requiring OpenClaw >= 2026.9.1. The older guidance —
+`AWS_PROFILE` in the systemd EnvironmentFile, with `auth: "aws-sdk"` ignored — applied to the
+2026.4.x line and no longer describes current behaviour.
+
 
 ## MCP Clients
 

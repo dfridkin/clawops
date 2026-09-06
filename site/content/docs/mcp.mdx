@@ -1,0 +1,58 @@
+---
+title: MCP server
+description: Let Claude Code or Cursor drive deployments through typed tools.
+---
+
+clawops ships an MCP server in the same package. Every operation is a typed tool carrying explicit
+safety annotations, so an agent knows what is read-only, what is destructive, and what needs
+confirmation before it acts.
+
+## Claude Code
+
+```bash
+claude mcp add clawops -- clawops mcp serve
+```
+
+## Cursor
+
+Add to `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "clawops": {
+      "command": "clawops",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+## Read-only mode
+
+For an agent you would rather not let provision anything:
+
+```bash
+clawops mcp serve --read-only
+```
+
+Only tools annotated read-only are exposed. Nothing can create, modify or destroy infrastructure.
+
+## How the safety model works
+
+Every tool declares four hints — read-only, destructive, idempotent, and open-world — rather than
+relying on defaults. Destructive tools require explicit confirmation unless the caller passes
+`yes: true`.
+
+Long-running operations do not block: anything over a minute returns a task id immediately, and
+progress arrives as notifications.
+
+Tool calls are written to an audit log with arguments sanitised — `Authorization`, anything matching
+`*token*`, `*secret*` or `*key*`, passwords and connection strings are redacted before they are
+recorded.
+
+## Plans, not prose
+
+The MCP tools generate deploy plans. They do not apply infrastructure straight from a
+natural-language instruction — an agent produces a plan, you review it, and application is a
+separate explicit step. See [Plan → Apply](/docs/plan-apply).

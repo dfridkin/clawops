@@ -1,0 +1,39 @@
+---
+title: Installation
+description: Install the CLI and verify your machine before provisioning anything.
+---
+
+## Requirements
+
+| | |
+|---|---|
+| Node.js | 22 or newer |
+| Target host | Ubuntu, Debian or RHEL-family Linux, reachable over SSH |
+| Cloud credentials | Only for cloud providers — via your existing CLI profiles |
+
+clawops never stores cloud credentials. It reads the profiles you already have: `AWS_PROFILE`,
+gcloud ADC, `AZURE_CLIENT_ID` and friends.
+
+## Install
+
+```bash
+npm install -g @clawops/cli
+```
+
+## Verify
+
+`doctor` checks the things that break a deploy at the worst moment — Node version, SSH key and
+`known_hosts` readability, cloud credentials per configured stack, and the supported OpenClaw range.
+
+```bash
+clawops doctor
+```
+
+Run it against a deployed stack to include remote health:
+
+```bash
+clawops doctor --stack production
+```
+
+That form also reports **which OpenClaw version the gateway is actually running**, which matters if
+a stack was created with a moving tag.

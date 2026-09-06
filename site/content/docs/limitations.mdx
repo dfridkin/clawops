@@ -1,0 +1,56 @@
+---
+title: Limitations
+description: What clawops does not do — worth knowing before you install it.
+---
+
+These are deliberate scope choices or deferred work, not defects.
+
+## Topology
+
+**One node per stack.** No clustering, load balancing or failover. For high availability, run
+multiple stacks and route between them yourself.
+
+**Not a Kubernetes replacement.** clawops deploys to VMs.
+
+## Networking
+
+**No TLS or domain automation.** The gateway runs on port 18789 without TLS termination. Reach it
+over `clawops tunnel`, or bring your own reverse proxy. Certificate and DNS automation is planned.
+
+**No Tailscale integration yet.** The deploy-plan schema reserves a field for it; it is not
+implemented.
+
+## Scope
+
+**clawops manages the host, not your agent.** It provisions and operates the infrastructure OpenClaw
+runs on. Authoring agents, skills and prompts is OpenClaw's job.
+
+**Ollama and other host-local runtimes** are reached at `host.docker.internal`, because `localhost`
+inside the gateway container is the container. clawops passes the right `--add-host` and defaults
+the address accordingly — but the runtime must listen somewhere the container can reach
+(`OLLAMA_HOST=0.0.0.0:11434 ollama serve`).
+
+## Providers
+
+**`plan` and `apply` are cloud-only.** The local provider bootstraps over SSH without a state
+backend; use `clawops up`.
+
+**Capabilities vary by provider.** Hardening ships for AWS and local; GCP and Azure follow in v1.8.
+
+## Platform
+
+**No native Windows.** WSL2 is fully supported. Native Windows needs POSIX path semantics for the
+MCP server's working-directory invariants.
+
+## Operations
+
+**No cost estimation.** clawops will not tell you what a stack costs before creating it.
+
+**No built-in monitoring hooks.** `logs`, `status` and `monitor` cover inspection; Prometheus,
+Grafana and alert routing are not set up for you.
+
+## Secrets
+
+**No automatic rotation.** Rotate manually by updating the value in your secret store and
+re-applying. `~/.clawops/config.json` holds no secrets, but it does hold connection metadata —
+protect it accordingly.

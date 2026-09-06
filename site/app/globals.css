@@ -1,0 +1,87 @@
+/* clawops.fyi — cool slate neutrals with a deep teal accent.
+   The palette is deliberately not the default developer-tool purple/blue gradient:
+   the audience is infrastructure engineers, and the page should read like a tool,
+   not a launch announcement. */
+
+:root {
+  color-scheme: light dark;
+
+  --ground: #f4f6f7;
+  --surface: #ffffff;
+  --surface-sub: #eaeef0;
+  --rule: #d3dbdf;
+  --rule-soft: #e3e9ec;
+  --ink: #141d24;
+  --ink-mid: #465562;
+  --ink-soft: #6b7a87;
+  --accent: #0d6b6b;
+  --accent-soft: #e0efee;
+  --warn: #92600a;
+  --warn-soft: #f8eeda;
+  --code-bg: #edf1f3;
+
+  --measure: 68ch;
+  --step--1: 0.82rem;
+  --step-0: 1rem;
+  --step-1: 1.2rem;
+  --step-2: 1.5rem;
+  --step-3: 2rem;
+  --step-4: 3.1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #0e141a;
+    --surface: #161f27;
+    --surface-sub: #1d2831;
+    --rule: #2c3a45;
+    --rule-soft: #232f39;
+    --ink: #e4eaee;
+    --ink-mid: #a6b4bf;
+    --ink-soft: #7e8e9b;
+    --accent: #4fb5ae;
+    --accent-soft: #16302f;
+    --warn: #dfae55;
+    --warn-soft: #2c2312;
+    --code-bg: #1b252e;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: var(--step-0);
+  line-height: 1.62;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation: none !important; transition: none !important; }
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--font-mono), ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

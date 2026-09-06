@@ -1,0 +1,61 @@
+---
+title: Quickstart
+description: A running gateway on your own Linux box, without a cloud account.
+---
+
+The local provider needs a Linux host you can SSH into. Docker is installed for you.
+
+## 1. Point clawops at a host
+
+```bash
+clawops init --provider local --host 10.0.0.42
+```
+
+This writes `~/.clawops/config.json` — connection metadata only, no secrets.
+
+## 2. Deploy
+
+```bash
+clawops up --openclaw-version 2026.7.1-2
+```
+
+<Callout type="warn" title="Pin a version">
+  `latest` and `stable` both point at OpenClaw 2.0, which this line does not support. clawops
+  resolves a moving tag to a concrete release before checking it and refuses one it cannot resolve,
+  so an unpinned deploy fails fast rather than producing a broken gateway.
+</Callout>
+
+The bootstrap installs Docker, creates a service user, generates a gateway token into a `0600` env
+file, and starts OpenClaw under systemd.
+
+## 3. Reach the gateway
+
+The gateway is not exposed to the internet. Forward it over SSH:
+
+```bash
+clawops tunnel
+# Control UI on http://127.0.0.1:18789
+```
+
+## 4. Day two
+
+```bash
+clawops status              # is it up
+clawops logs --follow       # tail the gateway
+clawops monitor             # resource + container dashboard
+clawops backup create       # archive state
+clawops harden              # ssh, ufw, fail2ban, unattended-upgrades
+```
+
+## Deploying to a cloud instead
+
+Cloud providers go through the plan/apply flow rather than `up`:
+
+```bash
+clawops init --provider aws --region us-east-1
+clawops plan --stack production
+# review the emitted JSON, then
+clawops apply plan.json
+```
+
+See [Plan → Apply](/docs/plan-apply).
