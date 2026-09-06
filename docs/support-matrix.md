@@ -162,8 +162,12 @@ change lines and start refusing the OpenClaw version it deploys today.
 | New feature | ❌ |
 | OpenClaw 2.0 support | ❌ — this is what 2.x is for |
 
-The branch point is **v1.7.6**. v1.7.5 and v1.7.6 each repaired defects that were live in the
-shipped product, so 1.x starts from the first version of the line with no known live defects.
+The branch point is **v1.7.7**. v1.7.5 and v1.7.6 each repaired defects that were live in the
+shipped product, and v1.7.7 carries the release wiring both lines need, so 1.x starts from the
+first version with no known live defects and a publish path that cannot take `latest` back.
+
+Versions do not collide across the lines: `main` published 1.7.7 and goes to 2.0.0 next, so the
+next 1.x patch is 1.7.8 and no number is ever claimed twice.
 
 After **2027-03-31**, 1.x receives nothing at all, including security fixes. The date is recorded
 as a date rather than a duration so that it cannot quietly move.
