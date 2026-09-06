@@ -57,26 +57,60 @@ jobs:
           # provenance is handled by publishConfig.provenance:true in package.json
 
       - name: Publish to MCP Registry
-        if: steps.changesets.outputs.published == 'true'
+        # Also runs on manual dispatch, so a registry entry that fell behind can be
+        # backfilled without waiting for the next release. The registry was stuck on
+        # 1.2.1 because this step had been failing silently-ish for several releases.
+        if: steps.changesets.outputs.published == 'true' || github.event_name == 'workflow_dispatch'
         run: |
-          # Sync server.json version with the just-published package.json
-          VERSION=$(node -p "require('./package.json').version")
-          node -e "
-            const fs = require('fs');
-            const s = JSON.parse(fs.readFileSync('server.json', 'utf8'));
-            s.version = process.env.VERSION;
-            s.packages[0].version = process.env.VERSION;
-            fs.writeFileSync('server.json', JSON.stringify(s, null, 2) + '\n');
-          "
+          set -euo pipefail
 
-          # Install mcp-publisher
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Registering @clawops/cli@${VERSION} with the MCP registry"
+
+          # Sync server.json with the version that was just published.
+          node -e '
+            const fs = require("fs");
+            const version = process.argv[1];
+            const s = JSON.parse(fs.readFileSync("server.json", "utf8"));
+            s.version = version;
+            s.packages[0].version = version;
+            fs.writeFileSync("server.json", JSON.stringify(s, null, 2) + "\n");
+          ' "$VERSION"
+
+          # The registry validates a submission by querying npm for the version, and
+          # npm takes a moment to serve a freshly published package. Without this wait
+          # the registry 404s and the whole release run goes red even though the npm
+          # publish succeeded — which is what happened for both 1.7.2 and 1.7.3.
+          echo "Waiting for npm to serve ${VERSION}..."
+          npm_ready=false
+          for i in $(seq 1 30); do
+            if npm view "@clawops/cli@${VERSION}" version >/dev/null 2>&1; then
+              npm_ready=true
+              echo "npm is serving ${VERSION} (after $(( (i - 1) * 10 ))s)"
+              break
+            fi
+            sleep 10
+          done
+          if [ "$npm_ready" != "true" ]; then
+            echo "::error::npm did not serve ${VERSION} within 5 minutes; not registering with the MCP registry."
+            echo "The npm publish itself succeeded — re-run this workflow to register."
+            exit 1
+          fi
+
           curl -sL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
             | tar xz mcp-publisher
 
-          # Authenticate via GitHub Actions OIDC (uses id-token: write permission)
           ./mcp-publisher login github-oidc
 
-          # Publish to registry
-          ./mcp-publisher publish
-        env:
-          VERSION: ${{ steps.changesets.outputs.publishedPackages }}
+          # Retry the publish itself: the registry can still be reading a stale npm
+          # cache immediately after the version appears.
+          for attempt in 1 2 3; do
+            if ./mcp-publisher publish; then
+              echo "Registered @clawops/cli@${VERSION}"
+              exit 0
+            fi
+            echo "publish attempt ${attempt} failed; retrying in 30s"
+            sleep 30
+          done
+          echo "::error::MCP registry publish failed after 3 attempts. npm release is unaffected."
+          exit 1
