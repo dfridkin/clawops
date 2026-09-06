@@ -1,0 +1,42 @@
+---
+title: Plan → Apply
+description: Why cloud deployments go through a reviewable artifact.
+---
+
+Cloud providers do not deploy straight from a command. They emit a plan you read first.
+
+```bash
+clawops plan --stack production      # writes plan.json
+# review it, commit it, put it in a PR
+clawops apply plan.json
+```
+
+## Why
+
+A deployment driven by an agent, or by a colleague in a hurry, should not reach a cloud account
+without something a human can read. The plan is that artifact: JSON, diffable, and committable.
+
+This matters more when an agent is driving. The MCP tools generate plans; they do not apply them
+without the plan existing first.
+
+## What a plan contains
+
+Provider and region, instance type, network rules (which CIDRs may reach SSH and the gateway),
+the OpenClaw version, and any config overlay. Secrets appear as **references**, never values.
+
+## What it is not
+
+<Callout type="warn">
+  `apply` is not immutable plan execution. It re-runs the provisioning with the parameters from
+  the reviewed plan — it does not replay a locked provider-level artifact. Cloud state that changed
+  between `plan` and `apply` is reconciled against live infrastructure, which can produce a
+  different diff than the one you read.
+</Callout>
+
+The plan records the stack version at generation time and compares it at apply time, so drift is
+detected and surfaced rather than silently applied.
+
+## Local provider
+
+`plan` and `apply` are cloud-only. The local provider bootstraps over SSH with no state backend —
+use `clawops up` directly.

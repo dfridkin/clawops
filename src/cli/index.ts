@@ -25,11 +25,19 @@ import bugCmd from './commands/bug.js'
 import hardenCmd from './commands/harden.js'
 import { handleError } from './error-handler.js'
 
+// Replaced at build time by tsup's `define`; falls back for the tsx/dev path where
+// no define is applied. Previously this was a hardcoded '0.2.0', so `clawops --help`
+// and `--version` reported a version five releases stale while `clawops bug` — which
+// reads the same define — reported the real one.
+declare const __CLI_VERSION__: string
+const CLI_VERSION: string =
+  typeof __CLI_VERSION__ !== 'undefined' ? __CLI_VERSION__ : 'dev'
+
 const main = defineCommand({
   meta: {
     name: 'clawops',
     description: 'Deploy and manage self-hosted OpenClaw instances across clouds',
-    version: '0.2.0',
+    version: CLI_VERSION,
   },
   args: {
     stack: { type: 'string', description: 'Target named stack (default from config)' },

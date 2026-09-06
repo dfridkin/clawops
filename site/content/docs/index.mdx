@@ -1,0 +1,45 @@
+---
+title: Introduction
+description: What clawops is, and what it deliberately leaves alone.
+---
+
+clawops provisions and operates **self-hosted OpenClaw** on AWS, GCP, Azure or any Linux box you
+can reach over SSH.
+
+It owns the layer between "I want an agent" and "an agent is running": the VM, the firewall, the
+container, secrets, health checks and the upgrade path. It does not author your agents — that is
+OpenClaw's job.
+
+## The shape of it
+
+<Cards>
+  <Card title="Plans you read before they run" href="/docs/plan-apply">
+    `clawops plan` emits a JSON artifact you review, diff and commit. `clawops apply` executes
+    exactly that. Nothing reaches your cloud account straight from a natural-language instruction.
+  </Card>
+  <Card title="Embedded Pulumi" href="/docs/installation">
+    The Automation API runs in-process — no separate Pulumi install, no state backend to stand up
+    before your first deploy.
+  </Card>
+  <Card title="Typed MCP tools" href="/docs/mcp">
+    Every operation is a tool with explicit safety annotations, so a coding agent knows what is
+    read-only, what is destructive, and what needs confirmation.
+  </Card>
+  <Card title="Known limits" href="/docs/limitations">
+    Single-node, no TLS automation, no cost estimation. Worth reading before you install it.
+  </Card>
+</Cards>
+
+## Before you start
+
+<Callout type="warn" title="OpenClaw 2.0 is not supported on this line">
+  This release line supports OpenClaw up to `2026.7.1-2`. OpenClaw `2026.8.1` changed the container
+  runtime contract, and clawops refuses versions it cannot deploy correctly rather than producing a
+  crash-looping gateway. See [OpenClaw compatibility](/docs/openclaw-compatibility).
+</Callout>
+
+## Where things live
+
+These pages cover using clawops. Design decisions, ADRs and the project roadmap live in
+[`docs/`](https://github.com/dfridkin/clawops/tree/main/docs) in the repository — they are written
+for contributors rather than operators.
