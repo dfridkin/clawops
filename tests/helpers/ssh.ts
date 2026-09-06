@@ -16,7 +16,19 @@ export class FakeSshSession implements SshSession {
   private execHandlers: ExecHandler[] = []
   private streamHandlers: StreamHandler[] = []
   private tunnelHandlers: TunnelHandler[] = []
+  private execLog: string[] = []
+  private streamLog: string[] = []
   closed = false
+
+  /** Every command passed to exec(), in order. */
+  execCalls(): string[] {
+    return [...this.execLog]
+  }
+
+  /** Every command passed to stream(), in order. */
+  streamCalls(): string[] {
+    return [...this.streamLog]
+  }
 
   /** Queue a handler that will respond to the next exec() call. */
   onExec(handler: ExecHandler): this {
@@ -37,6 +49,7 @@ export class FakeSshSession implements SshSession {
   }
 
   async exec(command: string, signal?: AbortSignal): Promise<SshExecResult> {
+    this.execLog.push(command)
     if (signal?.aborted) throw new Error('Operation aborted')
     const handler = this.execHandlers.shift()
     if (!handler) {
@@ -46,6 +59,7 @@ export class FakeSshSession implements SshSession {
   }
 
   async stream(command: string, signal?: AbortSignal): Promise<NodeJS.ReadableStream> {
+    this.streamLog.push(command)
     if (signal?.aborted) throw new Error('Operation aborted')
     const handler = this.streamHandlers.shift()
     if (!handler) {

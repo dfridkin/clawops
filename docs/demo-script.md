@@ -229,11 +229,9 @@ clawops backup create
   Size: 4.2 KB
 ```
 
-Restore from backup:
-
-```bash
-clawops backup restore ~/.clawops/backups/my-vm-2026-05-13T14-35-00Z.tar.gz
-```
+Restoring is a manual procedure on this release line — OpenClaw `2026.7.1-2` has no `backup
+restore` subcommand, so there is nothing to demo here beyond the archive itself. See
+[Recovering from an archive](backup-restore.md#recovering-from-an-archive).
 
 ---
 

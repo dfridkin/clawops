@@ -38,7 +38,7 @@ current implementation — not aspirational claims.
 | `clawops agents list/restart` | ✓ | ✓ | ✓ | ✓ |
 | `clawops gateway restart` | ✓ | ✓ | ✓ | ✓ |
 | `clawops backup create` | ✓ | ✓ | ✓ | ✓ |
-| `clawops backup restore` | ✓ | ✓ | ✓ | ✓ |
+| `clawops backup restore` | — | — | — | — |
 | `clawops doctor` | ✓ | ✓ | ✓ | ✓ |
 
 ## Secrets and credentials

@@ -67,7 +67,28 @@ describe('backup command — create', () => {
     const cmd = await getCmd()
     await (cmd.run as AnyRunFn)({ args: { action: 'create', out: '/tmp/test-backup.tar.gz' } })
 
-    expect(streamSpy).toHaveBeenCalledWith(expect.stringContaining('backup create'))
+    // The archive is written to a path inside the container and streamed out with
+    // `cat`. `openclaw backup create` has no stdout mode — the previous version
+    // invoked `openclaw-ctl backup create --stdout`, where neither the binary nor
+    // the flag exists, so it never produced a backup.
+    const execCmds = session.execCalls().join('\n')
+    expect(execCmds).toContain('openclaw backup create --output')
+    expect(execCmds).not.toContain('openclaw-ctl')
+    expect(session.streamCalls().join('\n')).toContain('cat /tmp/clawops-backup.tar.gz')
+  })
+
+  it('removes the archive from the container afterwards', async () => {
+    const session = new FakeSshSession()
+    session.onStream(() => Readable.from(['data']))
+
+    const { buildContext, acquireSession } = await getMocks()
+    buildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
+    acquireSession.mockResolvedValue({ session, release: vi.fn() })
+
+    const cmd = await getCmd()
+    await (cmd.run as AnyRunFn)({ args: { action: 'create', out: '/tmp/b.tar.gz' } })
+
+    expect(session.execCalls().join('\n')).toContain('rm -f /tmp/clawops-backup.tar.gz')
   })
 
   it('uses default output path when --out is not provided', async () => {
@@ -88,51 +109,13 @@ describe('backup command — create', () => {
 })
 
 describe('backup command — restore', () => {
-  it('requires --file for restore', async () => {
-    const { buildContext, acquireSession } = await getMocks()
-    buildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
-    acquireSession.mockResolvedValue({ session: new FakeSshSession(), release: vi.fn() })
-
-    const cmd = await getCmd()
-    await expect(
-      (cmd.run as AnyRunFn)({ args: { action: 'restore', yes: true } }),
-    ).rejects.toThrow('--file is required')
-  })
-
-  it('prompts for confirmation without --yes', async () => {
+  it('refuses, because OpenClaw <= 2026.7.1-2 has no restore subcommand', async () => {
+    // 2026.7.1 ships `backup create` and `backup verify` only; restore arrived in
+    // OpenClaw 2.0. The previous implementation piped an archive into
+    // `openclaw-ctl backup restore --stdin` — neither the binary nor the subcommand
+    // exists, so it silently restored nothing.
     const session = new FakeSshSession()
-    session.onStream(() => Readable.from([]))
-
-    const { buildContext, acquireSession } = await getMocks()
-    buildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
-    acquireSession.mockResolvedValue({ session, release: vi.fn() })
-
-    const cmd = await getCmd()
-    await (cmd.run as AnyRunFn)({ args: { action: 'restore', file: '/tmp/backup.tar.gz' } })
-
-    expect(mockQuestion).toHaveBeenCalledOnce()
-  })
-
-  it('cancels without streaming when user declines', async () => {
-    mockQuestion.mockResolvedValue('n')
-
-    const session = new FakeSshSession()
-    const streamSpy = vi.fn()
-    vi.spyOn(session, 'stream').mockImplementation(streamSpy)
-
-    const { buildContext, acquireSession } = await getMocks()
-    buildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
-    acquireSession.mockResolvedValue({ session, release: vi.fn() })
-
-    const cmd = await getCmd()
-    await (cmd.run as AnyRunFn)({ args: { action: 'restore', file: '/tmp/backup.tar.gz' } })
-
-    expect(streamSpy).not.toHaveBeenCalled()
-  })
-
-  it('streams restore when --yes is given', async () => {
-    const session = new FakeSshSession()
-    const streamSpy = vi.fn().mockResolvedValue(Readable.from([]))
+    const streamSpy = vi.fn().mockResolvedValue(Readable.from(['x']))
     session.onStream(streamSpy)
 
     const { buildContext, acquireSession } = await getMocks()
@@ -140,33 +123,23 @@ describe('backup command — restore', () => {
     acquireSession.mockResolvedValue({ session, release: vi.fn() })
 
     const cmd = await getCmd()
-    await (cmd.run as AnyRunFn)({ args: { action: 'restore', file: '/tmp/backup.tar.gz', yes: true } })
+    await expect(
+      (cmd.run as AnyRunFn)({ args: { action: 'restore', file: '/tmp/b.tar.gz', yes: true } }),
+    ).rejects.toThrow(/not available on this clawops release/)
 
-    expect(streamSpy).toHaveBeenCalledWith(expect.stringContaining('restore'))
+    // and it must not have touched the remote host on the way to failing
+    expect(streamSpy).not.toHaveBeenCalled()
   })
-})
 
-describe('backup command — validation', () => {
-  it('throws for unknown action', async () => {
+  it('names the version that does support restore', async () => {
+    const session = new FakeSshSession()
     const { buildContext, acquireSession } = await getMocks()
     buildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
-    acquireSession.mockResolvedValue({ session: new FakeSshSession(), release: vi.fn() })
+    acquireSession.mockResolvedValue({ session, release: vi.fn() })
 
     const cmd = await getCmd()
     await expect(
-      (cmd.run as AnyRunFn)({ args: { action: 'upload' } }),
-    ).rejects.toThrow('Unknown action')
-  })
-
-  it('exits when local state is missing', async () => {
-    const { buildContext } = await getMocks()
-    buildContext.mockReturnValue(makeLocalFakeContext(null))
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit') })
-
-    const cmd = await getCmd()
-    await expect(
-      (cmd.run as AnyRunFn)({ args: { action: 'create' } }),
-    ).rejects.toThrow('exit')
-    expect(exitSpy).toHaveBeenCalledWith(4)
+      (cmd.run as AnyRunFn)({ args: { action: 'restore', file: '/tmp/b.tar.gz', yes: true } }),
+    ).rejects.toThrow(/clawops 2\.x/)
   })
 })

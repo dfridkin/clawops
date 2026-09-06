@@ -3,18 +3,16 @@ import process from 'node:process'
 import { spinner, success, failure } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
 import { renderTable } from '../../output/table.js'
+import { gatewayRunCommand } from '../../openclaw/run-flags.js'
 
 const OPENCLAW_CONFIG = '/home/clawops/openclaw.json'
 
 /** Shared docker stop → rm → run command. Exported for tests. */
 export function dockerRunCmd(version: string): string {
-  return (
-    'docker stop openclaw 2>/dev/null || true && ' +
-    'docker rm   openclaw 2>/dev/null || true && ' +
-    `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 ` +
-    `-e OPENCLAW_CONFIG_PATH=/app/config.json --add-host=host.docker.internal:host-gateway ` +
-    `-v ${OPENCLAW_CONFIG}:/app/config.json:ro ghcr.io/openclaw/openclaw:${version}`
-  )
+  return gatewayRunCommand({
+    image: `ghcr.io/openclaw/openclaw:${version}`,
+    configPath: OPENCLAW_CONFIG,
+  })
 }
 
 export default defineCommand({

@@ -275,7 +275,7 @@ clawops down --yes          # Destroy local-provider stack
 | `config` | Get/set remote OpenClaw config values (`--dry-run` shows would-write JSON) |
 | `agents` | List or restart OpenClaw agents |
 | `gateway` | Restart the OpenClaw gateway service |
-| `backup` | Create or restore an OpenClaw state backup |
+| `backup` | Create an OpenClaw state backup (`restore` returns in clawops 2.x — see [limitations](docs/limitations.md#backup-and-restore)) |
 | `stacks` | List named stacks and their state |
 | `doctor` | Check Node version, config, SSH key, provider credentials, and Pulumi home |
 | `secret` | Manage secrets: `list`, `set`, `delete`, `rotate`, `audit` |

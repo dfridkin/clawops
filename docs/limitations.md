@@ -95,6 +95,19 @@ semantics for the MCP server's working-directory invariants and is deferred to v
 **No built-in monitoring hooks in v1.** clawops can tail logs and check container status, but does
 not set up Prometheus, Grafana, or alert routing. This is planned for a future release.
 
+## Backup and restore
+
+**Backups can be created but not restored by clawops on the 1.x line.** `clawops backup create`
+works and verifies the archive it produces. `clawops backup restore` fails with an explanation:
+OpenClaw up to `2026.7.1-2` ships `backup create` and `backup verify` only, so there is no restore
+subcommand for clawops to call. Recovery is a manual procedure documented in
+[`docs/backup-restore.md`](backup-restore.md#recovering-from-an-archive). OpenClaw 2.0 adds a real
+restore that understands its SQLite state layout, and `clawops backup restore` returns in the
+clawops 2.x line built on that.
+
+Releases before v1.7.5 advertised this command, but it invoked `openclaw-ctl`, a binary that does
+not exist in the OpenClaw image, so it never ran.
+
 ## Cost
 
 **No cost estimate output.** clawops does not calculate or display estimated cloud costs before
@@ -112,5 +125,6 @@ The following limitations are tracked in the roadmap and expected to be addresse
 | Config validation command | R5 — Configuration and Secrets |
 | Monitoring hooks | R4 — Production Operations (later) |
 | Cost estimate output | R6 — Provider Reliability (later) |
+| `backup restore` | clawops 2.x, on OpenClaw 2.0's restore subcommand |
 
 See [`docs/roadmap.md`](roadmap.md) for the full adoption roadmap.

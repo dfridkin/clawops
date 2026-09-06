@@ -1,4 +1,5 @@
 import { defineCommand } from 'citty'
+import { gatewayRunCommand } from '../../openclaw/run-flags.js'
 import process from 'node:process'
 import { success, failure, warn, info } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
@@ -9,13 +10,7 @@ const OPENCLAW_TMP = '/tmp/clawops-config.json.tmp'
 
 /** docker stop + rm + run with the given full image reference and config mount. */
 export function dockerRunCmd(image: string): string {
-  return [
-    'docker stop openclaw 2>/dev/null || true',
-    'docker rm   openclaw 2>/dev/null || true',
-    `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 ` +
-      `-e OPENCLAW_CONFIG_PATH=/app/config.json --add-host=host.docker.internal:host-gateway ` +
-      `-v ${OPENCLAW_CONFIG}:/app/config.json:ro ${image}`,
-  ].join(' && ')
+  return gatewayRunCommand({ image, configPath: OPENCLAW_CONFIG })
 }
 
 /** Read a nested value from obj using dot-notation key. */

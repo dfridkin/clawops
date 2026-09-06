@@ -3,7 +3,7 @@
 // Extracted so the MCP config handler and plan layer share one implementation.
 
 import type { SshSession, SshExecResult } from '../transport/ssh.js'
-import { COMMON_RUN_FLAGS, PORT_PIN, GATEWAY_PORT } from '../openclaw/run-flags.js'
+import { GATEWAY_PORT, gatewayRunCommand } from '../openclaw/run-flags.js'
 
 export const OPENCLAW_CONFIG_LINUX = '/home/clawops/openclaw.json'
 export const OPENCLAW_CONFIG_MACOS = '~/.config/openclaw/config.json'
@@ -126,39 +126,14 @@ export async function restartGateway(
     : await execWithFallbackSudo(session, imgCmd, signal)
   const image = imgResult.stdout.trim()
 
-  // Read the auth token from the config that was just written so we can pass it
-  // explicitly to `gateway run --token`. This ensures the gateway enforces the
-  // specific token rather than relying on --allow-unconfigured defaults.
-  const cfgResult = await session.exec(`cat ${configPath}`, signal)
-  // --allow-unconfigured is always passed: it lets the gateway start without
-  // requiring a fully-validated model config in /app/config.json.
-  // --token TOKEN overlays the auth token so the session requires the correct secret.
-  // --port pins the listener to the published port so a stored gateway.port cannot
-  // move it out from under the -p mapping now that config is actually delivered.
-  let gatewayCmd = `node openclaw.mjs gateway run --allow-unconfigured ${PORT_PIN}`
-  try {
-    const cfg = JSON.parse(cfgResult.stdout) as Record<string, unknown>
-    const token = (cfg?.['gateway'] as Record<string, unknown>)?.['auth'] as Record<string, unknown>
-    const tokenVal = token?.['token'] as string | undefined
-    if (tokenVal) {
-      gatewayCmd =
-        `node openclaw.mjs gateway run --allow-unconfigured ${PORT_PIN} --token '${tokenVal}'`
-    }
-  } catch {
-    // Unparseable config: fall through without a token. The config is still mounted,
-    // but an invalid file is the one case where delivering it could make things worse
-    // than the pre-v1.7.2 behaviour of ignoring it entirely.
-  }
-
-  const restartCmd =
-    pathPrefix +
-    [
-      'docker stop openclaw 2>/dev/null || true',
-      'docker rm openclaw 2>/dev/null || true',
-      `docker run -d --name openclaw --restart unless-stopped ` +
-        `-p ${GATEWAY_PORT}:${GATEWAY_PORT} ${COMMON_RUN_FLAGS} ` +
-        `-v ${configPath}:/app/config.json:ro ${image} ${gatewayCmd}`,
-    ].join(' && ')
+  // The token comes from the env file the bootstrap writes, not from config and not
+  // from argv. Reading it out of openclaw.json stopped working when v1.7.2 moved the
+  // token to an env file, and passing it on the command line exposed it in `ps`.
+  const restartCmd = gatewayRunCommand({
+    image,
+    configPath,
+    pathPrefix,
+  })
 
   const result = os === 'Darwin'
     ? await session.exec(restartCmd, signal)
