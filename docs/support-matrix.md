@@ -133,13 +133,45 @@ clawops can deploy OpenClaw to:
 
 ## Support Lifecycle
 
-| clawops version | Type of support | Duration |
-|---|---|---|
-| Latest minor (e.g., 1.7.x) | Full support | Until next minor release |
-| Previous minor (e.g., 1.6.x) | Security only | 6 months after 1.7.0 |
-| Older | None | Upgrade required |
+### Two release lines
 
-Major version bumps follow [SemVer](https://semver.org/) and document migration paths in the corresponding ADR.
+OpenClaw 2.0 changed the container runtime contract — state moved into SQLite, config moved to a
+writable path, and model providers became install-gated plugins. A single clawops line cannot
+deploy both correctly, so there are two, each pinned to the OpenClaw range it can actually run.
+
+| Line | npm dist-tag | Branch | OpenClaw range | Status |
+|---|---|---|---|---|
+| **2.x** | `latest` | `main` | `>= 2026.9.1` | current |
+| **1.x** | `v1` | `1.x` | `<= 2026.7.1-2` | maintenance until **2027-03-31** |
+
+```bash
+npm install -g @clawops/cli          # 2.x — the current line
+npm install -g @clawops/cli@v1       # 1.x — maintenance
+```
+
+Pin the tag in CI. `latest` moves to 2.x, so a pipeline installing `@clawops/cli` unpinned will
+change lines and start refusing the OpenClaw version it deploys today.
+
+### What 1.x receives
+
+| Change | Backported to 1.x? |
+|---|---|
+| Security fix | ✅ |
+| Provider-adapter fix for a cloud API change | ✅ |
+| Bug fix in shared code | Only if it causes data loss or an unrecoverable deployment |
+| New feature | ❌ |
+| OpenClaw 2.0 support | ❌ — this is what 2.x is for |
+
+The branch point is **v1.7.6**. v1.7.5 and v1.7.6 each repaired defects that were live in the
+shipped product, so 1.x starts from the first version of the line with no known live defects.
+
+After **2027-03-31**, 1.x receives nothing at all, including security fixes. The date is recorded
+as a date rather than a duration so that it cannot quietly move.
+
+### Version bumps
+
+Major version bumps follow [SemVer](https://semver.org/) and document migration paths in the
+corresponding ADR.
 
 ## How to Request Support
 

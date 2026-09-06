@@ -2,7 +2,10 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    # main is the 2.x line; 1.x is the maintenance line (see docs/support-matrix.md).
+    # One workflow serves both so it does not have to be fixed twice; the only
+    # per-branch difference is the dist-tag, computed below.
+    branches: [main, '1.x']
     paths:
       - '.changeset/**'
       - 'package.json'
@@ -48,7 +51,9 @@ jobs:
           # @changesets/cli calls `npm publish` instead of `pnpm publish`.
           # npm 11.5.1+ then performs the OIDC automated token exchange
           # (npm trusted publishing configured on npmjs.com).
-          publish: bash scripts/ci-publish.sh
+          # 1.x publishes under the `v1` dist-tag so it cannot take `latest` back
+          # from 2.x. main passes no tag and keeps changesets' default of `latest`.
+          publish: bash scripts/ci-publish.sh ${{ github.ref_name == '1.x' && 'v1' || '' }}
         env:
           # PAT required so the Version Packages PR triggers CI
           # (GITHUB_TOKEN-created PRs don't trigger other workflows)
@@ -60,7 +65,13 @@ jobs:
         # Also runs on manual dispatch, so a registry entry that fell behind can be
         # backfilled without waiting for the next release. The registry was stuck on
         # 1.2.1 because this step had been failing silently-ish for several releases.
-        if: steps.changesets.outputs.published == 'true' || github.event_name == 'workflow_dispatch'
+        #
+        # main only: the registry serves one current version per server, so a 1.x
+        # patch published after 2.0.0 would drag the entry backwards for every MCP
+        # client discovering clawops through it.
+        if: >-
+          (steps.changesets.outputs.published == 'true' || github.event_name == 'workflow_dispatch')
+          && github.ref_name == 'main'
         run: |
           set -euo pipefail
 
