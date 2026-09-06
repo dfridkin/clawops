@@ -3,7 +3,9 @@ import process from 'node:process'
 import { spinner, success, failure } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
 import { renderTable } from '../../output/table.js'
-import { gatewayRunCommand } from '../../openclaw/run-flags.js'
+import {
+  gatewayRunCommand, IMAGE_INSPECT_CMD, imageForRestart, versionOf,
+} from '../../openclaw/run-flags.js'
 
 const OPENCLAW_CONFIG = '/home/clawops/openclaw.json'
 
@@ -94,12 +96,14 @@ export default defineCommand({
           )
         }
       } else if (action === 'restart') {
-        // Preserve current image version
-        const imgResult = await session.exec(
-          `docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo 'ghcr.io/openclaw/openclaw:stable'`,
-          abortController.signal,
-        )
-        const version = imgResult.stdout.trim().split(':')[1] ?? 'stable'
+        // Reuse the version the host already runs — a restart must not change it.
+        const imgResult = await session.exec(IMAGE_INSPECT_CMD, abortController.signal)
+        const image = imageForRestart(imgResult.stdout)
+        if (!image.ok) {
+          failure(image.error)
+          process.exit(1)
+        }
+        const version = versionOf(image.value)
 
         const spin = spinner('Restarting gateway...')
         const result = await session.exec(dockerRunCmd(version), abortController.signal)

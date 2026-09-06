@@ -75,11 +75,25 @@ describe('restartGateway health gate', () => {
     const session = {
       exec: vi.fn(async (cmd: string): Promise<SshExecResult> => {
         if (cmd.includes('uname')) return exec('Linux')
-        if (cmd.includes('docker inspect')) return exec('img')
+        if (cmd.includes('docker inspect')) return exec('ghcr.io/openclaw/openclaw:2026.7.1')
         if (cmd.includes('cat ')) return exec('{}')
         return exec('', 1) // the restart command itself fails
       }),
     } as unknown as SshSession
     await expect(restartGateway(session)).rejects.toThrow(/Gateway restart failed/)
+  })
+
+  it('refuses to restart when no container is running', async () => {
+    // There is no image to reuse, and the old `|| echo ...:latest` fallback resolved
+    // to OpenClaw 2.0 — an unsupported version, applied past the version guard.
+    const session = {
+      exec: vi.fn(async (cmd: string): Promise<SshExecResult> => {
+        if (cmd.includes('uname')) return exec('Linux')
+        if (cmd.includes('docker inspect')) return exec('', 1)
+        if (cmd.includes('cat ')) return exec('{}')
+        return exec('')
+      }),
+    } as unknown as SshSession
+    await expect(restartGateway(session)).rejects.toThrow(/No running OpenClaw container/)
   })
 })

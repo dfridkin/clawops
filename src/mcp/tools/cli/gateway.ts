@@ -6,6 +6,8 @@ import type { GatewayRestartInput } from '../_generated.js'
 import { buildContext } from '../../../cli/context.js'
 import { acquireSession, drainPool } from '../../../transport/pool.js'
 import { resolveConn, okText, errText } from '../_conn.js'
+import { IMAGE_INSPECT_CMD, imageForRestart, gatewayRunCommand } from '../../../openclaw/run-flags.js'
+import { OPENCLAW_CONFIG } from '../../../plan/remote-config.js'
 
 export async function handleGatewayRestart(input: GatewayRestartInput, server: McpServer): Promise<CallToolResult> {
   // R19: always elicit
@@ -25,22 +27,17 @@ export async function handleGatewayRestart(input: GatewayRestartInput, server: M
   const conn = await resolveConn(ctx)
   const { session, release } = await acquireSession(conn)
   try {
-    // Preserve current image version
-    const imgResult = await session.exec(
-      `docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo 'ghcr.io/openclaw/openclaw:stable'`,
+    // Reuse the version the host already runs. This path does NOT go through the
+    // shared builder by accident of history: it hand-wrote its own run command and
+    // so missed the v1.7.5 fix, leaving an agent calling clawops_gateway_restart
+    // able to break a working deployment exactly as the CLI once did.
+    const imgResult = await session.exec(IMAGE_INSPECT_CMD)
+    const image = imageForRestart(imgResult.stdout)
+    if (!image.ok) return errText(image.error)
+
+    const result = await session.exec(
+      gatewayRunCommand({ image: image.value, configPath: OPENCLAW_CONFIG }),
     )
-    const image = imgResult.stdout.trim()
-    // Must mirror the CLI restart path (src/cli/commands/gateway.ts). Before v1.7.2
-    // this dropped the config bind-mount entirely, so restarting through MCP silently
-    // reverted the gateway to defaults — and would now also undo config delivery.
-    const cmd = [
-      'docker stop openclaw 2>/dev/null || true',
-      'docker rm   openclaw 2>/dev/null || true',
-      `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 ` +
-        `-e OPENCLAW_CONFIG_PATH=/app/config.json --add-host=host.docker.internal:host-gateway ` +
-        `-v /home/clawops/openclaw.json:/app/config.json:ro ${image}`,
-    ].join(' && ')
-    const result = await session.exec(cmd)
     if (result.code !== 0) {
       return errText(`Gateway restart failed: ${result.stderr}`)
     }

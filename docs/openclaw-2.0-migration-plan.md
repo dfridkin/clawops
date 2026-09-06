@@ -113,7 +113,7 @@ Evidence in [`docs/spikes/`](spikes/).
 | **G15** | Channel configs are schema-invalid: Discord's field is `token` not `botToken`; every channel requires `dmPolicy` and `groupPolicy`; `additionalProperties: false`. | ⬆️ P1→**P0** | Any deployment configuring a channel produces a rejected config. |
 | **G5** | Permanent `--allow-unconfigured`; missing `gateway.mode` → exit 78. | ✅ confirmed | Never reaches a supported configured state. |
 | **G6** | Token on argv. | ✅ confirmed — **load-bearing** | Given G3, this is the *only* reason deployments work. Visible in `ps`/`docker inspect`. |
-| **G7** | `ghcr.io/anthropics/openclaw` in the Pulumi component. | ✅ | Pull fails. Also live on `1.x`. |
+| **G7** | `ghcr.io/anthropics/openclaw` in the Pulumi component. | ✅ confirmed, **downgraded** | Pull fails, but nothing constructs `Gateway` — only its own test does. Dead code, so no user hits it. It is a trap for whoever wires it up next; fixed or deleted under WO-38. |
 
 ### Refuted — the plan was wrong
 
@@ -144,11 +144,34 @@ Sizes are T-shirts (S / M / L), not estimates. **v2.0.0 ships Phases 0–3 plus 
 Branch `1.x` from v1.7.2; `main` becomes 2.x. Dist-tags `latest` → 2.x, `v1` → 1.x. Decide three
 things rather than gesture at them: the **EOL date — decided: 2027-03-31 (end of Q1 2027)**,
 recorded as a date in `SECURITY.md` and `docs/support-matrix.md` rather than a duration; backport scope (security + provider-adapter fixes only), and **which gaps apply to `1.x`** —
-G7 and G3 are both live there. The npm OIDC publish path is fussy; budget for it.
+**which gaps apply to `1.x`** — re-checked against shipped code, not the original
+survey: **G3 was fixed in v1.7.2** (config delivery); **G7 survives only in the unreachable Pulumi
+`Gateway` component**, so no user is exposed. Branch point is **v1.7.6**, not v1.7.2 — v1.7.5 and
+v1.7.6 both fixed live defects. The npm OIDC publish path is fussy; budget for it, and note that
+publishing from `1.x` must pass `--tag v1` or it will steal `latest` back from 2.x.
 
-**WO-58 — Systematic gap audit** *(M)*
+**WO-58 — Systematic gap audit** *(M)* — **in progress**
 30 files reference `openclaw`; the spikes covered the runtime and config surfaces. Read the rest
 against the 2.0 contract. **Phase 1 is not scoped until this lands.**
+
+Findings so far, by where they landed:
+
+| Finding | Where | Disposition |
+|---|---|---|
+| G29 `openclaw-ctl` is not a binary | backup, MCP agents | fixed, v1.7.5 |
+| G30 restart paths pass no gateway command | `gateway restart`/`update`, `config set` | fixed, v1.7.5 |
+| G31 backup flags wrong; no `restore` upstream | backup | fixed, v1.7.5 |
+| **G32** MCP `clawops_gateway_restart` hand-rolled its own run command — same defect as G30, missed by the v1.7.5 sweep | `src/mcp/tools/cli/gateway.ts` | fixed, v1.7.6 |
+| **G33** restart paths fell back to `:latest`/`:stable` when no container was found — resolving to 2.0, *past* the version guard | 3 restart paths | fixed, v1.7.6 |
+| G7 wrong registry | `src/pulumi/components/gateway.ts` | dead code → WO-38 |
+| Port hardcoded in 16 files | widespread | WO-42 / WO-48 |
+| `logs.ts` assumes a `journalctl -u openclaw` unit only the local provider creates | `src/cli/commands/logs.ts` | 2.0; falls through to `docker logs` by accident today |
+| `monitor.ts` reads `/home/clawops/openclaw.json` directly | `src/cli/commands/monitor.ts` | WO-39 |
+
+**Method note.** G32 and G33 were found by enumerating *every* site that starts a gateway container
+and asking which lacked the command — not by reading the diff of the previous fix. The v1.7.5 sweep
+missed them because it followed the three paths a bug report named. Enumerate the surface, then
+check each element; do not follow the trail of the last defect.
 
 **WO-36 — Capture and normalise the config schema** *(S)*
 `openclaw config schema` from the pinned image → rebase the 9 dangling `$defs` refs (G26) → commit as
