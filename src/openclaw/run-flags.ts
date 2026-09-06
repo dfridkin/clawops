@@ -43,3 +43,46 @@ export const PORT_PIN = `--port ${GATEWAY_PORT}`
 
 /** Flags common to every run site that mounts a config. */
 export const COMMON_RUN_FLAGS = `${CONFIG_PATH_ENV} ${ADD_HOST_FLAG}`
+
+/** Host path to the env file holding OPENCLAW_GATEWAY_TOKEN. */
+export const ENV_FILE_PATH = '/home/clawops/openclaw.env'
+
+export interface GatewayRunOpts {
+  /** Full image reference, e.g. `ghcr.io/openclaw/openclaw:2026.7.1`. */
+  image: string
+  /** Host path to openclaw.json. */
+  configPath: string
+  /** Host path to the token env file. */
+  envFilePath?: string
+  /** Prefix for hosts where docker is not on a non-interactive PATH (macOS). */
+  pathPrefix?: string
+}
+
+/**
+ * The one place a gateway container is started.
+ *
+ * Every restart path previously built this string by hand, and they had drifted:
+ * `gateway restart`, `gateway update` and `config set` passed no command at all, so
+ * the container fell back to the image's bare CMD — losing `--allow-unconfigured`,
+ * the port pin and the token, and dying with "existing config is missing
+ * gateway.mode". Verified on 2026.7.1.
+ *
+ * The env file is attached through a shell test rather than unconditionally, so a
+ * deployment created before v1.7.2 — which has no env file — still starts instead of
+ * failing on a missing `--env-file` target.
+ */
+export function gatewayRunCommand(opts: GatewayRunOpts): string {
+  const { image, configPath, envFilePath = ENV_FILE_PATH, pathPrefix = '' } = opts
+  const envFileArg = `$([ -s ${envFilePath} ] && echo --env-file ${envFilePath})`
+  return (
+    pathPrefix +
+    [
+      'docker stop openclaw 2>/dev/null || true',
+      'docker rm   openclaw 2>/dev/null || true',
+      `docker run -d --name openclaw --restart unless-stopped ` +
+        `-p ${GATEWAY_PORT}:${GATEWAY_PORT} ${COMMON_RUN_FLAGS} ${envFileArg} ` +
+        `-v ${configPath}:${CONFIG_MOUNT_PATH}:ro ${image} ` +
+        `node openclaw.mjs gateway run --allow-unconfigured ${PORT_PIN}`,
+    ].join(' && ')
+  )
+}

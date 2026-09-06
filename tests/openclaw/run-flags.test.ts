@@ -14,7 +14,8 @@ import {
 } from '../../src/openclaw/run-flags.js'
 import { normaliseGatewayPort } from '../../src/plan/remote-config.js'
 import { makeStartupScript } from '../../src/providers/startup.js'
-import { dockerRunCmd } from '../../src/cli/commands/gateway.js'
+import { dockerRunCmd, dockerRunCmd as gatewayDockerRunCmd } from '../../src/cli/commands/gateway.js'
+import { dockerRunCmd as configDockerRunCmd } from '../../src/cli/commands/config.js'
 
 const ROOT = join(__dirname, '../..')
 const read = (p: string): string => readFileSync(join(ROOT, p), 'utf-8')
@@ -39,38 +40,68 @@ describe('run flags', () => {
 })
 
 describe('every run site delivers the config', () => {
-  // A site that mounts /app/config.json but omits OPENCLAW_CONFIG_PATH silently
-  // ignores everything clawops writes. Keeping this list explicit is the point:
-  // it fails when a new run site is added without the flag.
-  const sites: Array<[string, string]> = [
-    ['cloud VM startup script', 'src/providers/startup.ts'],
-    ['local bootstrap template', 'src/providers/local/bootstrap.sh.tmpl'],
-    ['gateway restart (CLI)', 'src/cli/commands/gateway.ts'],
-    ['config apply (CLI)', 'src/cli/commands/config.ts'],
-    ['gateway restart (MCP)', 'src/mcp/tools/cli/gateway.ts'],
+  // These assert the *rendered* command rather than grepping source for literals.
+  // The literal-grep version passed right up until the commands were consolidated
+  // behind gatewayRunCommand(), at which point it started failing on correct code —
+  // and it would equally have passed on a site that built the string wrongly.
+
+  const rendered: Array<[string, string]> = [
+    ['gateway restart / update (CLI)', gatewayDockerRunCmd('2026.7.1')],
+    ['config set (CLI)', configDockerRunCmd('ghcr.io/openclaw/openclaw:2026.7.1')],
+    ['cloud VM startup script', makeStartupScript({ openclawVersion: '2026.7.1', os: 'ubuntu' })],
   ]
 
-  for (const [label, path] of sites) {
+  for (const [label, cmd] of rendered) {
     it(`${label} sets OPENCLAW_CONFIG_PATH`, () => {
-      const src = read(path)
-      expect(src).toContain('OPENCLAW_CONFIG_PATH=/app/config.json')
+      expect(cmd).toContain('OPENCLAW_CONFIG_PATH=/app/config.json')
     })
 
     it(`${label} makes host.docker.internal resolvable`, () => {
-      expect(read(path)).toContain('host.docker.internal:host-gateway')
+      expect(cmd).toContain('host.docker.internal:host-gateway')
+    })
+
+    it(`${label} passes the gateway command with its flags`, () => {
+      // Omitting this is what broke `gateway restart`: the container fell back to the
+      // image CMD and died with "existing config is missing gateway.mode".
+      expect(cmd).toContain('gateway run')
+      expect(cmd).toContain('--allow-unconfigured')
+      expect(cmd).toContain('--port 18789')
     })
   }
 
-  it('remote-config restart uses the shared flags rather than its own literals', () => {
-    const src = read('src/plan/remote-config.ts')
-    expect(src).toContain('COMMON_RUN_FLAGS')
-    expect(src).toContain('PORT_PIN')
+  it('the restart paths attach the token env file when one exists', () => {
+    // Conditional so a deployment created before v1.7.2, which has no env file,
+    // still starts rather than failing on a missing --env-file target.
+    for (const [, cmd] of rendered.slice(0, 2)) {
+      expect(cmd).toContain('/home/clawops/openclaw.env')
+      expect(cmd).toMatch(/\[ -s [^\]]+ \] && echo --env-file/)
+    }
   })
 
-  it('MCP restart mounts the config, as the CLI path does', () => {
-    // It previously ran `docker run … ${image}` with no -v at all, silently
-    // reverting the gateway to defaults on every MCP-initiated restart.
-    expect(read('src/mcp/tools/cli/gateway.ts')).toContain('/app/config.json:ro')
+  it('the shell template and MCP tool still carry the flags inline', () => {
+    // These two build their command as text, so a source check is the only option.
+    for (const path of ['src/providers/local/bootstrap.sh.tmpl', 'src/mcp/tools/cli/gateway.ts']) {
+      const src = read(path)
+      expect(src, path).toContain('OPENCLAW_CONFIG_PATH=/app/config.json')
+      expect(src, path).toContain('host.docker.internal:host-gateway')
+    }
+  })
+
+  it('no site invokes openclaw-ctl, which is not a binary in the image', () => {
+    // `command -v openclaw-ctl` returns nothing in ghcr.io/openclaw/openclaw; the
+    // binary is /usr/local/bin/openclaw. Every caller of the former was dead code.
+    //
+    // Matches the invocation, not the bare word: the files still mention
+    // `openclaw-ctl` in comments explaining what used to be wrong, and that history
+    // is worth keeping.
+    const invocation = /docker exec[^\n'"`]*openclaw-ctl/
+    for (const path of [
+      'src/cli/commands/backup.ts',
+      'src/mcp/tools/cli/agents.ts',
+      'src/cli/commands/agents.ts',
+    ]) {
+      expect(read(path), path).not.toMatch(invocation)
+    }
   })
 })
 

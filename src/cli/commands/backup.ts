@@ -1,5 +1,5 @@
 import { defineCommand } from 'citty'
-import { createWriteStream, createReadStream } from 'node:fs'
+import { createWriteStream } from 'node:fs'
 import { pipeline } from 'node:stream/promises'
 import process from 'node:process'
 import { success, failure, info, spinner } from '../../output/human.js'
@@ -85,52 +85,50 @@ export default defineCommand({
         info(`Writing backup to ${outPath}...`)
         const spin = spinner('Creating backup on remote host...')
 
-        // Ask OpenClaw to stream a backup archive to stdout
-        const backupStream = await session.stream(
-          'docker exec openclaw openclaw-ctl backup create --stdout',
+        // `openclaw backup create` writes to a path; it has no stdout mode. Write it
+        // inside the container, stream it out with `docker exec cat`, then clean up.
+        // The previous implementation invoked `openclaw-ctl backup create --stdout`:
+        // that binary does not exist, and neither does that flag.
+        const remoteArchive = '/tmp/clawops-backup.tar.gz'
+        const createResult = await session.exec(
+          `docker exec openclaw sh -lc 'rm -f ${remoteArchive} && ` +
+            `openclaw backup create --output ${remoteArchive} --verify --json'`,
           abortController.signal,
         )
+        if (createResult.code !== 0) {
+          spin.stop()
+          throw new Error(`Backup failed on the remote host: ${createResult.stderr.slice(0, 300)}`)
+        }
 
+        const backupStream = await session.stream(
+          `docker exec openclaw cat ${remoteArchive}`,
+          abortController.signal,
+        )
         spin.stop()
         const fileStream = createWriteStream(outPath)
         await pipeline(backupStream, fileStream)
-        success(`Backup saved to ${outPath}`)
-      } else {
-        // restore
-        const filePath = typeof args.file === 'string' ? args.file : null
-        if (!filePath) {
-          throw new UsageError('--file is required for backup restore')
-        }
-
-        if (!args.yes) {
-          const { createInterface } = await import('node:readline/promises')
-          const rl = createInterface({ input: process.stdin, output: process.stdout })
-          try {
-            const answer = await rl.question(
-              `Restore backup from "${filePath}" to stack "${ctx.stackName}"? This will overwrite existing data. (y/N) `,
-            )
-            if (answer.trim().toLowerCase() !== 'y') {
-              info('Restore cancelled.')
-              return
-            }
-          } finally {
-            rl.close()
-          }
-        }
-
-        info(`Restoring from ${filePath}...`)
-        const spin = spinner('Transferring and restoring backup...')
-
-        // Stream the archive into the restore command on the remote host
-        const restoreStream = await session.stream(
-          'docker exec -i openclaw openclaw-ctl backup restore --stdin',
+        await session.exec(
+          `docker exec openclaw rm -f ${remoteArchive}`,
           abortController.signal,
         )
-
-        const fileStream = createReadStream(filePath)
-        await pipeline(fileStream, restoreStream as unknown as NodeJS.WritableStream)
-        spin.stop()
-        success('Backup restored successfully')
+        success(`Backup saved to ${outPath}`)
+        info('The archive contains credentials — store it accordingly.')
+      } else {
+        // `openclaw backup restore` does not exist on the OpenClaw line this clawops
+        // release supports — 2026.7.1 ships `backup create` and `backup verify` only.
+        // Restore arrived with OpenClaw 2.0. The previous implementation piped an
+        // archive into `openclaw-ctl backup restore --stdin`: neither the binary nor
+        // the subcommand exists, so it never restored anything.
+        //
+        // Failing with an explanation beats a hand-rolled untar into a live state
+        // directory, which is how backups get turned into corruption.
+        throw new UsageError(
+          'Restore is not available on this clawops release.\n' +
+            'OpenClaw up to 2026.7.1-2 provides `backup create` and `backup verify` only; ' +
+            'restore arrived in OpenClaw 2.0 and will be supported by clawops 2.x.\n' +
+            'To recover manually: copy the archive to the host, then extract it into the ' +
+            'gateway container with the gateway stopped.',
+        )
       }
     } finally {
       release()
