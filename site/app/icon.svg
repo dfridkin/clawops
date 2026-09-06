@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="clawops">
+  <!--
+    A terminal prompt, not a lobster.
+
+    The claw imagery belongs to OpenClaw; borrowing it would imply an affiliation the
+    site's footer explicitly disclaims. A prompt says what clawops actually is — a CLI —
+    and survives being rendered at 16px, which a pincer silhouette would not.
+
+    Solid dark ground so it holds up in both light and dark browser chrome.
+  -->
+  <rect width="32" height="32" rx="7" fill="#141D24"/>
+  <path d="M9 10.5 L14.5 16 L9 21.5"
+        fill="none" stroke="#4FB5AE" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="17" y="19.5" width="7" height="2.6" rx="1.3" fill="#4FB5AE"/>
+</svg>
