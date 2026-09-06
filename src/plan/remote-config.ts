@@ -3,7 +3,9 @@
 // Extracted so the MCP config handler and plan layer share one implementation.
 
 import type { SshSession, SshExecResult } from '../transport/ssh.js'
-import { GATEWAY_PORT, gatewayRunCommand } from '../openclaw/run-flags.js'
+import {
+  GATEWAY_PORT, gatewayRunCommand, IMAGE_INSPECT_CMD, imageForRestart,
+} from '../openclaw/run-flags.js'
 
 export const OPENCLAW_CONFIG_LINUX = '/home/clawops/openclaw.json'
 export const OPENCLAW_CONFIG_MACOS = '~/.config/openclaw/config.json'
@@ -120,11 +122,13 @@ export async function restartGateway(
     ? 'export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH" && '
     : ''
 
-  const imgCmd = `${pathPrefix}docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo 'ghcr.io/openclaw/openclaw:latest'`
+  const imgCmd = `${pathPrefix}${IMAGE_INSPECT_CMD}`
   const imgResult = os === 'Darwin'
     ? await session.exec(imgCmd, signal)
     : await execWithFallbackSudo(session, imgCmd, signal)
-  const image = imgResult.stdout.trim()
+  const resolved = imageForRestart(imgResult.stdout)
+  if (!resolved.ok) throw new Error(resolved.error)
+  const image = resolved.value
 
   // The token comes from the env file the bootstrap writes, not from config and not
   // from argv. Reading it out of openclaw.json stopped working when v1.7.2 moved the

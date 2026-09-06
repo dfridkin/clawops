@@ -1,3 +1,5 @@
+import { type Result, ok, err } from '../types/result.js'
+
 // Shared fragments for the `docker run` invocations that start OpenClaw.
 //
 // These are constants, not a command builder. Consolidating the seven hand-written
@@ -58,8 +60,46 @@ export interface GatewayRunOpts {
   pathPrefix?: string
 }
 
+/** Reads the image tag off the running container. Deliberately has no `|| echo` fallback. */
+export const IMAGE_INSPECT_CMD = `docker inspect openclaw --format '{{.Config.Image}}'`
+
 /**
- * The one place a gateway container is started.
+ * Resolve the image a restart should reuse.
+ *
+ * Restart paths reuse whatever the host already runs rather than a version from
+ * config, which is right — a restart should not change the deployed version. But
+ * every one of them used to fall back to `:stable` or `:latest` when `docker inspect`
+ * found no container, and both tags now resolve to OpenClaw 2.0, which this release
+ * line refuses to deploy and cannot run. That fallback ran *after* the version guard,
+ * so it pushed an unsupported version past the exact check meant to stop it.
+ *
+ * When there is no container there is nothing to reuse. Say so instead of guessing.
+ */
+export function imageForRestart(inspectStdout: string): Result<string, string> {
+  const image = inspectStdout.trim()
+  if (!image || image.includes('Error') || !image.includes(':')) {
+    return err(
+      'No running OpenClaw container found, so there is no image version to reuse. ' +
+        'Deploy one with `clawops up --openclaw-version <version>`. ' +
+        'clawops does not fall back to `latest` or `stable` here: both now point at ' +
+        'OpenClaw 2.0, which this release line does not support.',
+    )
+  }
+  return ok(image)
+}
+
+/** The version segment of an image reference, for display. */
+export function versionOf(image: string): string {
+  return image.split(':')[1] ?? 'unknown'
+}
+
+/**
+ * The one place a gateway container is started, across the CLI and the MCP server.
+ *
+ * (`src/pulumi/components/gateway.ts` also hand-writes a run command, but nothing
+ * constructs it — only its own test does — so it starts no real container. It is
+ * fixed or removed under WO-38; leaving it as a working-looking trap is the risk
+ * there, not a live defect.)
  *
  * Every restart path previously built this string by hand, and they had drifted:
  * `gateway restart`, `gateway update` and `config set` passed no command at all, so

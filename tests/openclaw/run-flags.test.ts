@@ -78,12 +78,43 @@ describe('every run site delivers the config', () => {
     }
   })
 
-  it('the shell template and MCP tool still carry the flags inline', () => {
-    // These two build their command as text, so a source check is the only option.
-    for (const path of ['src/providers/local/bootstrap.sh.tmpl', 'src/mcp/tools/cli/gateway.ts']) {
-      const src = read(path)
-      expect(src, path).toContain('OPENCLAW_CONFIG_PATH=/app/config.json')
-      expect(src, path).toContain('host.docker.internal:host-gateway')
+  it('the shell template still carries the flags inline', () => {
+    // Provisioning is a shell template, not TypeScript, so a source check is the only
+    // option there. It is the one remaining place these strings are written by hand.
+    const src = read('src/providers/local/bootstrap.sh.tmpl')
+    expect(src).toContain('OPENCLAW_CONFIG_PATH=/app/config.json')
+    expect(src).toContain('host.docker.internal:host-gateway')
+  })
+
+  it('no site builds its own gateway `docker run`', () => {
+    // v1.7.5 consolidated three restart paths and claimed this was already true. It
+    // was not: the MCP tool hand-wrote its own, so `clawops_gateway_restart` still
+    // started a container with no gateway command — the very bug that was fixed.
+    //
+    // src/pulumi/components/gateway.ts is excluded knowingly: nothing constructs it,
+    // so it starts no container. It is fixed or deleted under WO-38.
+    const handRolled = /docker run -d --name openclaw/
+    for (const path of [
+      'src/mcp/tools/cli/gateway.ts',
+      'src/cli/commands/gateway.ts',
+      'src/cli/commands/config.ts',
+      'src/plan/remote-config.ts',
+    ]) {
+      expect(read(path), path).not.toMatch(handRolled)
+    }
+  })
+
+  it('no restart path falls back to a moving tag', () => {
+    // `latest` and `stable` both resolve to OpenClaw 2.0, which this line refuses to
+    // deploy. Falling back to one ran *after* the version guard, pushing an
+    // unsupported version past the check written to stop it.
+    const movingFallback = /\|\|\s*echo\s*'[^']*openclaw:(latest|stable)'/
+    for (const path of [
+      'src/mcp/tools/cli/gateway.ts',
+      'src/cli/commands/gateway.ts',
+      'src/plan/remote-config.ts',
+    ]) {
+      expect(read(path), path).not.toMatch(movingFallback)
     }
   })
 
