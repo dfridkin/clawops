@@ -31,9 +31,9 @@ export default function Home() {
           claw<span>ops</span>
         </a>
         <div className={styles.navLinks}>
-          <a href="#quickstart">Quickstart</a>
           <a href="#how">How it works</a>
           <a href="#providers">Providers</a>
+          <a href="/docs">Docs</a>
           <a href={GITHUB}>GitHub</a>
         </div>
       </nav>
@@ -50,8 +50,8 @@ export default function Home() {
         </div>
 
         <div className={styles.heroLinks}>
-          <a className={styles.heroLink} href="#quickstart">
-            Quickstart
+          <a className={styles.heroLink} href="/docs">
+            Read the docs
           </a>
           <a className={styles.heroLink} href={GITHUB}>
             GitHub
@@ -131,7 +131,9 @@ export default function Home() {
           <h2 className={styles.sectionTitle}>Quickstart</h2>
         </div>
         <p className={styles.lede}>
-          The local path needs a Linux box you can SSH into. No cloud account required to try it.
+          The local path needs a Linux box you can SSH into — no cloud account required to try it.
+          The <a href="/docs/quickstart">full quickstart</a> covers cloud providers and day-two
+          operations.
         </p>
 
         <div className={styles.flow}>
@@ -312,7 +314,8 @@ clawops doctor`}</pre>
 
       <footer className={styles.footer}>
         <span>
-          MPL-2.0 &middot; <a href={GITHUB}>GitHub</a> &middot; <a href={NPM}>npm</a>
+          MPL-2.0 &middot; <a href="/docs">Docs</a> &middot; <a href={GITHUB}>GitHub</a> &middot;{' '}
+          <a href={NPM}>npm</a>
         </span>
         <span>
           Not affiliated with OpenClaw. <code>clawctl.com</code> is an unrelated project.
