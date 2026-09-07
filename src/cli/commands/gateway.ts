@@ -5,16 +5,16 @@ import { printJson, jsonOk } from '../../output/json.js'
 import { renderTable } from '../../output/table.js'
 import { IMAGE_INSPECT_CMD, imageForRestart, versionOf } from '../../openclaw/run-flags.js'
 import {
-  gatewayRunCommand, PUBLISH_INSPECT_CMD, publishForRestart,
+  gatewayRunCommand, PUBLISH_INSPECT_CMD, publishForRestart, STATE_DIR_HOST_LINUX,
 } from '../../openclaw/runtime.js'
 
-const OPENCLAW_CONFIG = '/home/clawops/openclaw.json'
+
 
 /** Shared docker stop → rm → run command. Exported for tests. */
 export function dockerRunCmd(version: string, publish: 'loopback' | 'all' = 'loopback'): string {
   return gatewayRunCommand({
     image: `ghcr.io/openclaw/openclaw:${version}`,
-    configPath: OPENCLAW_CONFIG,
+    stateDir: STATE_DIR_HOST_LINUX,
     publish,
   })
 }

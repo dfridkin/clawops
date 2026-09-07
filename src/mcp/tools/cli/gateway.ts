@@ -7,8 +7,7 @@ import { buildContext } from '../../../cli/context.js'
 import { acquireSession, drainPool } from '../../../transport/pool.js'
 import { resolveConn, okText, errText } from '../_conn.js'
 import { IMAGE_INSPECT_CMD, imageForRestart } from '../../../openclaw/run-flags.js'
-import { gatewayRunCommand } from '../../../openclaw/runtime.js'
-import { OPENCLAW_CONFIG } from '../../../plan/remote-config.js'
+import { gatewayRunCommand, STATE_DIR_HOST_LINUX } from '../../../openclaw/runtime.js'
 
 export async function handleGatewayRestart(input: GatewayRestartInput, server: McpServer): Promise<CallToolResult> {
   // R19: always elicit
@@ -37,7 +36,7 @@ export async function handleGatewayRestart(input: GatewayRestartInput, server: M
     if (!image.ok) return errText(image.error)
 
     const result = await session.exec(
-      gatewayRunCommand({ image: image.value, configPath: OPENCLAW_CONFIG }),
+      gatewayRunCommand({ image: image.value, stateDir: STATE_DIR_HOST_LINUX }),
     )
     if (result.code !== 0) {
       return errText(`Gateway restart failed: ${result.stderr}`)

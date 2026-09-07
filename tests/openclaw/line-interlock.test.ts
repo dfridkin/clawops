@@ -58,7 +58,7 @@ describe('release line interlock', () => {
 
     // SP-10 §1: without gateway.mode the gateway exits 78. Passing
     // --allow-unconfigured instead bypasses upstream's clobbered-config check.
-    const cmd = gatewayRunCommand({ image: 'img:tag', configPath: '/tmp/c.json' })
+    const cmd = gatewayRunCommand({ image: 'img:tag', stateDir: '/var/lib/clawops/openclaw' })
     expect(cmd, 'the 2.x line must not depend on --allow-unconfigured').not.toContain(
       '--allow-unconfigured',
     )

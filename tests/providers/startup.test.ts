@@ -64,11 +64,15 @@ describe('makeStartupScript — universal invariants', () => {
     expect(script).toContain('--allow-unconfigured')
   })
 
-  it('mounts the config file as read-only (:ro)', () => {
+  it('mounts the state directory writable, not the config file read-only', () => {
     const script = makeStartupScript({ openclawVersion: 'latest', os: 'ubuntu' })
-    // The -v flag mounts $OPENCLAW_CONFIG into /app/config.json:ro
-    expect(script).toContain('/app/config.json:ro')
-    // OPENCLAW_CONFIG points to the openclaw.json path
+    // Inverted by WO-39. OpenClaw writes its config by atomic rename, which fails EBUSY
+    // over a bind-mounted file whether :ro or rw — that blocked `plugins install`
+    // entirely. Mounting the parent directory is the fix, and it is also what makes the
+    // SQLite state survive a container replacement.
+    expect(script).toContain(':/home/node/.openclaw')
+    expect(script).not.toContain('/app/config.json')
+    expect(script).not.toContain(':ro')
     expect(script).toContain('openclaw.json')
   })
 
@@ -83,9 +87,24 @@ describe('makeStartupScript — universal invariants', () => {
     expect(script).toContain('docker rm   openclaw')
   })
 
-  it('chowns openclaw.json to clawops after creating it', () => {
+  it('chowns the state directory NUMERICALLY, never to clawops', () => {
     const script = makeStartupScript({ openclawVersion: 'latest', os: 'ubuntu' })
-    expect(script).toContain('chown clawops:clawops "${OPENCLAW_CONFIG}"')
+    // useradd clawops gets uid 1001 on Ubuntu 24.04 because the ubuntu user already holds
+    // 1000, and the container runs as 1000. A 1001-owned state dir makes the gateway exit
+    // 1 with EACCES on its own SQLite WAL — verified on a native Linux bind mount, SP-11.
+    expect(script).toContain('chown -R 1000:1000 "${OPENCLAW_STATE_DIR}"')
+    expect(script).not.toMatch(/chown[^\n]*clawops:clawops[^\n]*OPENCLAW_STATE_DIR/)
+  })
+
+  it('migrates a pre-2.0 config file into the state directory', () => {
+    const script = makeStartupScript({ openclawVersion: 'latest', os: 'ubuntu' })
+    // Without this an in-place upgrade comes up with no configuration at all: the config
+    // used to be a bare file in the service user's home.
+    expect(script).toContain('OPENCLAW_LEGACY_CONFIG=/home/clawops/openclaw.json')
+    expect(script).toMatch(/cp -p "\$\{OPENCLAW_LEGACY_CONFIG\}" "\$\{OPENCLAW_CONFIG\}"/)
+    // Guarded both ways: only when a legacy file exists AND the target does not, so
+    // re-running provisioning never clobbers a later edit.
+    expect(script).toMatch(/\[ -f "\$\{OPENCLAW_LEGACY_CONFIG\}" \] && \[ ! -f "\$\{OPENCLAW_CONFIG\}" \]/)
   })
 })
 

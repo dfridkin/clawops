@@ -2,7 +2,9 @@
 // All three providers (AWS, GCP, Azure) use this to ensure consistent
 // Docker installation, user setup, and OpenClaw container launch.
 
-import { gatewayRunCommand } from '../openclaw/runtime.js'
+import {
+  gatewayRunCommand, STATE_DIR_HOST_LINUX, CONFIG_FILENAME, CONTAINER_UID,
+} from '../openclaw/runtime.js'
 
 export interface StartupScriptOpts {
   openclawVersion: string
@@ -91,20 +93,40 @@ if [ ! -s "\${OPENCLAW_ENV_FILE}" ]; then
   chown clawops:clawops "\${OPENCLAW_ENV_FILE}"
 fi
 
+# ── State directory ──────────────────────────────────────────────────────────
+# One directory holds config, the SQLite state and any plugins installed below.
+# Owned NUMERICALLY by the uid the container runs as: useradd clawops gets 1001 on
+# Ubuntu 24.04 (the ubuntu user already holds 1000), and a 1001-owned state dir makes the
+# gateway exit 1 with EACCES on its own SQLite WAL. There is no degraded mode.
+OPENCLAW_STATE_DIR=${STATE_DIR_HOST_LINUX}
+OPENCLAW_CONFIG="\${OPENCLAW_STATE_DIR}/${CONFIG_FILENAME}"
+mkdir -p "\${OPENCLAW_STATE_DIR}"
+
+# Migrate a pre-2.0 deployment: the config used to be a bare file in the service user's
+# home. Without this an in-place upgrade comes up with no configuration at all. Guarded on
+# the target being absent, so re-running provisioning never clobbers a later edit.
+OPENCLAW_LEGACY_CONFIG=/home/clawops/openclaw.json
+if [ -f "\${OPENCLAW_LEGACY_CONFIG}" ] && [ ! -f "\${OPENCLAW_CONFIG}" ]; then
+  cp -p "\${OPENCLAW_LEGACY_CONFIG}" "\${OPENCLAW_CONFIG}"
+  mv "\${OPENCLAW_LEGACY_CONFIG}" "\${OPENCLAW_LEGACY_CONFIG}.migrated"
+  echo "clawops: migrated config from \${OPENCLAW_LEGACY_CONFIG}"
+fi
+
 # ── Default config (apply.ts will overwrite with plan overlay) ───────────────
-OPENCLAW_CONFIG=/home/clawops/openclaw.json
 if [ ! -f "\${OPENCLAW_CONFIG}" ]; then
   cat > "\${OPENCLAW_CONFIG}" <<'OPENCLAWJSON'
-{"meta":{"lastTouchedVersion":"2026.4"},"gateway":{"port":18789,"auth":{"mode":"token"}},"models":{},"channels":{}}
+{"meta":{"lastTouchedVersion":"2026.9"},"gateway":{"mode":"local","port":18789,"auth":{"mode":"token"}},"models":{},"channels":{}}
 OPENCLAWJSON
-  chown clawops:clawops "\${OPENCLAW_CONFIG}"
 fi
+
+# Numeric, and last, so it covers the config and anything migrated above.
+chown -R ${CONTAINER_UID}:${CONTAINER_UID} "\${OPENCLAW_STATE_DIR}"
 
 # ── Start OpenClaw container ─────────────────────────────────────────────────
 # Built by src/openclaw/runtime.ts, so this cannot drift from the restart paths.
 ${gatewayRunCommand({
   image: 'ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}',
-  configPath: '"${OPENCLAW_CONFIG}"',
+  stateDir: '"${OPENCLAW_STATE_DIR}"',
   envFilePath: '"${OPENCLAW_ENV_FILE}"',
   extraArgs: bedrockEnvBlock.trim(),
   publish: publishGateway,

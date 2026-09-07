@@ -115,7 +115,7 @@ describe('config command', () => {
       const cmd = await getCmd()
       await (cmd.run as AnyRunFn)({ args: { _: ['set', 'gateway.auth.mode', 'none'], stack: undefined, restart: false, json: false } })
 
-      expect(execCommands[0]).toContain('cat /home/clawops/openclaw.json')
+      expect(execCommands[0]).toContain('cat /var/lib/clawops/openclaw/openclaw.json')
       expect(execCommands[1]).toContain('base64 -d')
       expect(execCommands[1]).toContain('openclaw.json')
     })
@@ -154,7 +154,7 @@ describe('config command', () => {
       const cmd = await getCmd()
       await (cmd.run as AnyRunFn)({ args: { _: ['unset', 'models'], stack: undefined, restart: false, json: false } })
 
-      expect(execCommands[0]).toContain('cat /home/clawops/openclaw.json')
+      expect(execCommands[0]).toContain('cat /var/lib/clawops/openclaw/openclaw.json')
       // The written config should not have the 'models' key
       const b64Match = execCommands[1]?.match(/echo '([A-Za-z0-9+/=]+)'/)
       if (b64Match) {
