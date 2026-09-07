@@ -56,7 +56,7 @@ export function renderScript(openclawVersion: string): string {
   // (the macOS branch still carried a duplicated --env-file).
   const shared = {
     image: 'ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}',
-    configPath: '"${OPENCLAW_CONFIG}"',
+    stateDir: '"${OPENCLAW_STATE_DIR}"',
     envFilePath: '"${OPENCLAW_ENV_FILE}"',
     port: '${OPENCLAW_PORT}',
   }

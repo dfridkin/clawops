@@ -7,13 +7,15 @@ import { gatewayRunCommand, gatewayRunArgs, SECURITY_FLAGS } from '../../src/ope
 
 const base = {
   image: 'ghcr.io/openclaw/openclaw:2026.7.1',
-  configPath: '/home/clawops/openclaw.json',
+  stateDir: '/var/lib/clawops/openclaw',
 }
 
 describe('gatewayRunArgs', () => {
   it('carries everything the gateway needs to start', () => {
     const cmd = gatewayRunArgs(base)
-    expect(cmd).toContain('-e OPENCLAW_CONFIG_PATH=/app/config.json')   // config is read
+    // No OPENCLAW_CONFIG_PATH: the mount point IS OpenClaw's default config location,
+    // so setting it would be one more thing to keep in sync. SP-11 §B.
+    expect(cmd).not.toContain('OPENCLAW_CONFIG_PATH')
     expect(cmd).toContain('--add-host=host.docker.internal:host-gateway') // host-local models
     expect(cmd).toContain('--port 18789')                                 // argv beats config
     expect(cmd).toContain('gateway run --allow-unconfigured')             // not the bare CMD
@@ -66,14 +68,14 @@ describe('gatewayRunArgs', () => {
   it('accepts shell expressions for a template caller', () => {
     const cmd = gatewayRunArgs({
       image: 'ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}',
-      configPath: '${OPENCLAW_CONFIG}',
+      stateDir: '${OPENCLAW_STATE_DIR}',
       port: '${OPENCLAW_PORT}',
       envFilePath: '${OPENCLAW_ENV_FILE}',
       supervisor: 'systemd',
     })
     expect(cmd).toContain('-p 127.0.0.1:${OPENCLAW_PORT}:${OPENCLAW_PORT}')
     expect(cmd).toContain('--port ${OPENCLAW_PORT}')
-    expect(cmd).toContain('-v ${OPENCLAW_CONFIG}:/app/config.json:ro')
+    expect(cmd).toContain('-v ${OPENCLAW_STATE_DIR}:/home/node/.openclaw')
   })
 
   it('attaches the env file conditionally, so a pre-v1.7.2 host still starts', () => {

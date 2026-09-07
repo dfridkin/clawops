@@ -25,17 +25,20 @@ case "$OS" in
       exit 1
     fi
     OPENCLAW_USER=clawops
-    OPENCLAW_CONFIG=/home/${OPENCLAW_USER}/openclaw.json
+    OPENCLAW_STATE_DIR=/var/lib/clawops/openclaw
+    OPENCLAW_CONFIG="${OPENCLAW_STATE_DIR}/openclaw.json"
+    OPENCLAW_LEGACY_CONFIG=/home/${OPENCLAW_USER}/openclaw.json
     ;;
   Darwin)
     PKG_MANAGER=darwin
     # When invoked via sudo the script runs as root but SUDO_USER is the real caller.
     # Fall back to id -un for passwordless (non-sudo) invocations.
     OPENCLAW_USER="${SUDO_USER:-$(id -un)}"
-    OPENCLAW_CONFIG="${HOME}/.config/openclaw/config.json"
-    mkdir -p "${HOME}/.config/openclaw"
+    OPENCLAW_STATE_DIR="${HOME}/.clawops/openclaw"
+    OPENCLAW_CONFIG="${OPENCLAW_STATE_DIR}/openclaw.json"
+    OPENCLAW_LEGACY_CONFIG="${HOME}/.config/openclaw/config.json"
     # Fix ownership so subsequent non-sudo SSH writes (atomicWriteConfig) can overwrite.
-    chown "${OPENCLAW_USER}" "${HOME}/.config/openclaw" 2>/dev/null || true
+    chown "${OPENCLAW_USER}" "${OPENCLAW_STATE_DIR}" 2>/dev/null || true
     # sudo resets PATH; add common Docker install locations so `command -v docker` works.
     # Covers: Docker Desktop (Intel + AS), Homebrew (AS), Colima.
     export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"
@@ -140,17 +143,36 @@ if [ ! -s "${OPENCLAW_ENV_FILE}" ]; then
   chown "${OPENCLAW_USER}" "${OPENCLAW_ENV_FILE}" 2>/dev/null || true
 fi
 
+# ── State directory ───────────────────────────────────────────────────────────
+# One directory holds config, the SQLite state and any plugins installed into it, so a
+# container replacement no longer destroys sessions and credentials.
+mkdir -p "${OPENCLAW_STATE_DIR}"
+
+# Migrate a pre-2.0 deployment. The config used to be a bare file elsewhere; without this
+# an in-place upgrade comes up with no configuration at all. Guarded on the target being
+# absent, so re-running the bootstrap never clobbers a later edit.
+if [ -f "${OPENCLAW_LEGACY_CONFIG}" ] && [ ! -f "${OPENCLAW_CONFIG}" ]; then
+  cp -p "${OPENCLAW_LEGACY_CONFIG}" "${OPENCLAW_CONFIG}"
+  mv "${OPENCLAW_LEGACY_CONFIG}" "${OPENCLAW_LEGACY_CONFIG}.migrated"
+  echo "clawops: migrated config from ${OPENCLAW_LEGACY_CONFIG}"
+fi
+
 # ── Write default openclaw.json if absent ─────────────────────────────────────
 # clawops up --config will overwrite this with the plan config overlay.
 if [ ! -f "${OPENCLAW_CONFIG}" ]; then
   cat > "${OPENCLAW_CONFIG}" <<'OPENCLAWJSON'
-{"meta":{"lastTouchedVersion":"2026.4"},"gateway":{"port":18789,"auth":{"mode":"token"}},"models":{},"channels":{}}
+{"meta":{"lastTouchedVersion":"2026.9"},"gateway":{"mode":"local","port":18789,"auth":{"mode":"token"}},"models":{},"channels":{}}
 OPENCLAWJSON
-  if [ "$OS" = "Linux" ]; then
-    chown "${OPENCLAW_USER}:${OPENCLAW_USER}" "${OPENCLAW_CONFIG}"
-  else
-    chown "${OPENCLAW_USER}" "${OPENCLAW_CONFIG}" 2>/dev/null || true
-  fi
+fi
+
+# Ownership last, so it covers the config and anything migrated above.
+if [ "$OS" = "Linux" ]; then
+  # NUMERIC, never clawops:clawops. useradd gets uid 1001 on Ubuntu 24.04 because the
+  # ubuntu user already holds 1000, and the container runs as 1000 — a 1001-owned state
+  # dir makes the gateway exit 1 with EACCES on its own SQLite WAL.
+  chown -R 1000:1000 "${OPENCLAW_STATE_DIR}"
+else
+  chown -R "${OPENCLAW_USER}" "${OPENCLAW_STATE_DIR}" 2>/dev/null || true
 fi
 
 # ── Start service ─────────────────────────────────────────────────────────────

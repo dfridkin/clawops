@@ -1,16 +1,20 @@
 import { defineCommand } from 'citty'
-import { gatewayRunCommand } from '../../openclaw/runtime.js'
+import {
+  gatewayRunCommand, STATE_DIR_HOST_LINUX, configPathForOS, CONTAINER_UID,
+} from '../../openclaw/runtime.js'
 import process from 'node:process'
 import { success, failure, warn, info } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
 import { validateOpenclawConfig } from '../../mcp/tools/cli/config.js'
 
-const OPENCLAW_CONFIG = '/home/clawops/openclaw.json'
+// One definition, in runtime.ts. This file used to carry its own copy of the path,
+// as did gateway.ts and monitor.ts — the same drift WO-38 ended for the run command.
+const OPENCLAW_CONFIG = configPathForOS('Linux')
 const OPENCLAW_TMP = '/tmp/clawops-config.json.tmp'
 
 /** docker stop + rm + run with the given full image reference and config mount. */
 export function dockerRunCmd(image: string): string {
-  return gatewayRunCommand({ image, configPath: OPENCLAW_CONFIG })
+  return gatewayRunCommand({ image, stateDir: STATE_DIR_HOST_LINUX })
 }
 
 /** Read a nested value from obj using dot-notation key. */
@@ -156,7 +160,7 @@ export default defineCommand({
       const writeCmd =
         `echo '${b64}' | base64 -d > ${OPENCLAW_TMP} && ` +
         `mv ${OPENCLAW_TMP} ${OPENCLAW_CONFIG} && ` +
-        `chown clawops:clawops ${OPENCLAW_CONFIG}`
+        `chown ${CONTAINER_UID}:${CONTAINER_UID} ${OPENCLAW_CONFIG}`
 
       const writeResult = await session.exec(writeCmd, abortController.signal)
       if (writeResult.code !== 0) {

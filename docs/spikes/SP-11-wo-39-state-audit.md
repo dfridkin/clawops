@@ -123,3 +123,76 @@ and the migration step, which the work order did not mention.
 **Riskiest step:** the migration. The numeric chown is now fully verified, and its failure is
 loud. Moving an existing config *file* into a new directory is the step with no verification
 harness and a deployment's configuration riding on it.
+
+---
+
+# Tier 3 — real EC2, and an unrelated defect it exposed
+
+**Ubuntu 24.04 spot `t3.small`, us-east-1, 2026-09-07. Cost: ~$0.01. Torn down; 0 resources remain.**
+
+## WO-39 verified on a genuine cloud image
+
+```
+ubuntu uid : 1000        clawops uid: 1001      ← the exact G25 environment
+state dir  : /var/lib/clawops/openclaw  owner=1000:1000 mode=755
+config     : owner=1000:1000 mode=644
+container  : running exit=0 restarts=0
+ports      : {"18789/tcp":[{"HostIp":"127.0.0.1",...}]}
+sqlite     : openclaw.sqlite, -shm, -wal   (on the host)
+health     : 200 on 127.0.0.1
+```
+
+Loopback publishing confirmed **independently of the firewall** — from the host itself,
+against its own NIC:
+
+```
+via 127.0.0.1        : 200
+via 172.31.86.124    : REFUSED       ← not listening on the interface at all
+```
+
+State survived a real stop/rm/run: fingerprint identical.
+
+## The defect tier 3 was for
+
+**Every day-2 command that touches Docker is broken on AWS, and has been.** Not caused by
+WO-39.
+
+`clawops` connects to AWS as **`ubuntu`** (`aws/program.ts: sshUser: 'ubuntu'`), but
+provisioning only runs `usermod -aG docker clawops`. So:
+
+```
+ssh user: ubuntu   groups: ubuntu adm cdrom sudo dip lxd
+docker group members: clawops
+
+docker inspect openclaw            -> permission denied on /var/run/docker.sock
+sudo -n bash -c 'docker inspect …' -> ghcr.io/openclaw/openclaw:2026.9.2
+```
+
+GCP and Azure connect as `clawops`, which *is* in the group — so only AWS is affected,
+which is why this survived.
+
+**A second failure hides behind the first.** The token env file lives at
+`/home/clawops/openclaw.env` inside a `750 clawops:clawops` directory. The restart
+command's `$([ -s … ] && echo --env-file …)` test therefore evaluates **false** for
+`ubuntu` — so even with Docker access, the gateway would start with no token and exit 78:
+
+```
+Refusing to bind gateway to auto without auth.
+```
+
+Under `sudo` both problems vanish: `status=running exit=0 restarts=0`, `health: 200`.
+
+**Why it was missed, including by me.** `remote-config.ts` already has
+`execWithFallbackSudo`, with a comment naming this exact AWS case — so the bug was found
+once and fixed *in that one file*. Nine others still call Docker directly:
+`cli/commands/{gateway,config,logs,monitor,backup,agents,doctor}.ts` and
+`mcp/tools/cli/{logs,agents}.ts`.
+
+The same shape as G32: a fix applied where the bug was reported rather than across the
+surface. And my own v1.7.5/v1.7.6 EC2 verification ran every probe under `sudo`, which is
+precisely why it looked healthy — the product does not.
+
+**Recommended fix:** promote `execWithFallbackSudo` into the transport layer and route
+every remote Docker invocation through it. Adding `ubuntu` to the docker group would be a
+one-line alternative, but it only helps newly-provisioned hosts and grants the SSH user
+root-equivalent access that sudo already provides more narrowly.

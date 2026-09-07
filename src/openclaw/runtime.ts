@@ -15,8 +15,52 @@ import { GATEWAY_PORT } from './run-flags.js'
 
 export { GATEWAY_PORT }
 
-/** Container-side path clawops mounts its config to. */
-export const CONFIG_MOUNT_PATH = '/app/config.json'
+/**
+ * The container-side state directory — config, SQLite, and installed plugins, all in one.
+ *
+ * This is OpenClaw's own default (`openclaw config file` resolves to
+ * `<here>/openclaw.json` with no env set), which is why clawops no longer passes
+ * `OPENCLAW_CONFIG_PATH`: mounting the standard path *is* the configuration.
+ *
+ * Measured on 2026.9.2 — one mount covers everything that must survive a container
+ * replacement: `state/openclaw.sqlite` (+ `-wal`, `-shm`), `extensions/` for plugins
+ * installed at provisioning, `openclaw.json`, and the config journal fingerprint.
+ * See docs/spikes/SP-11-wo-39-state-audit.md.
+ */
+export const STATE_DIR_CONTAINER = '/home/node/.openclaw'
+
+/** Host directory bind-mounted at STATE_DIR_CONTAINER on Linux. */
+export const STATE_DIR_HOST_LINUX = '/var/lib/clawops/openclaw'
+
+/** Host directory on macOS hosts, which have no /var/lib convention for this. */
+export const STATE_DIR_HOST_MACOS = '${HOME}/.clawops/openclaw'
+
+/** The config file, inside the state directory. */
+export const CONFIG_FILENAME = 'openclaw.json'
+
+/**
+ * The uid the OpenClaw container runs as — `User=node`, uid/gid 1000, no root entrypoint.
+ *
+ * Ownership of the host state directory MUST be set numerically to this. `chown
+ * clawops:clawops` is wrong: on Ubuntu 24.04 the `ubuntu` user already holds 1000, so
+ * `useradd clawops` gets **1001**, and the gateway then exits 1 with
+ * `EACCES … stat '<state>/state/openclaw.sqlite-wal'` — verified on a native Linux bind
+ * mount. Under `--restart unless-stopped` that is a permanent crash-loop, so there is no
+ * degraded mode to fall back on. (G25)
+ */
+export const CONTAINER_UID = 1000
+
+/** Config path inside the container. */
+export const CONFIG_MOUNT_PATH = `${STATE_DIR_CONTAINER}/${CONFIG_FILENAME}`
+
+/** Host config path for an OS, for the SSH-side readers and writers. */
+export function stateDirForOS(os: 'Linux' | 'Darwin'): string {
+  return os === 'Darwin' ? STATE_DIR_HOST_MACOS : STATE_DIR_HOST_LINUX
+}
+
+export function configPathForOS(os: 'Linux' | 'Darwin'): string {
+  return `${stateDirForOS(os)}/${CONFIG_FILENAME}`
+}
 
 /** Host path to the env file holding OPENCLAW_GATEWAY_TOKEN. */
 export const ENV_FILE_PATH = '/home/clawops/openclaw.env'
@@ -47,8 +91,15 @@ export type PublishScope = 'loopback' | 'all'
 export interface GatewayRunSpec {
   /** Full image reference including tag, e.g. `ghcr.io/openclaw/openclaw:2026.7.1`. */
   image: string
-  /** Host path to the config. */
-  configPath: string
+  /**
+   * Host path to the STATE DIRECTORY — not the config file.
+   *
+   * OpenClaw writes its config by atomic rename, and renaming over a bind-mounted *file*
+   * fails EBUSY whether the mount is :ro or rw, which blocks `plugins install` outright.
+   * Mounting the parent directory is the fix, and it is also what makes SQLite state and
+   * installed plugins survive a container replacement. SP-10b §4, SP-11 §B.
+   */
+  stateDir: string
   /** Port to publish and pin. String so shell templates can pass a variable. */
   port?: string | number
   /** Host path to the token env file. Attached only if non-empty at runtime. */
@@ -92,7 +143,7 @@ function publishFlag(port: string | number, scope: PublishScope): string {
 export function gatewayRunArgs(spec: GatewayRunSpec): string {
   const {
     image,
-    configPath,
+    stateDir,
     port = GATEWAY_PORT,
     envFilePath = ENV_FILE_PATH,
     supervisor = 'docker',
@@ -121,10 +172,12 @@ export function gatewayRunArgs(spec: GatewayRunSpec): string {
     publishFlag(port, publish),
     SECURITY_FLAGS,
     capacity,
-    `-e OPENCLAW_CONFIG_PATH=${CONFIG_MOUNT_PATH}`,
+    // No OPENCLAW_CONFIG_PATH: STATE_DIR_CONTAINER is OpenClaw's own default, so mounting
+    // it there *is* the configuration. One fewer thing to keep in sync.
     ADD_HOST_FLAG,
     envFileArg,
-    `-v ${configPath}:${CONFIG_MOUNT_PATH}:ro`,
+    // The directory, writable. Never the file, and never :ro — see GatewayRunSpec.stateDir.
+    `-v ${stateDir}:${STATE_DIR_CONTAINER}`,
     spec.extraArgs?.trim() ?? '',
     image,
     `node openclaw.mjs gateway run --allow-unconfigured --port ${port}`,

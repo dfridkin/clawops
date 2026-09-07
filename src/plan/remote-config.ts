@@ -6,20 +6,19 @@ import type { SshSession, SshExecResult } from '../transport/ssh.js'
 import { GATEWAY_PORT, IMAGE_INSPECT_CMD, imageForRestart } from '../openclaw/run-flags.js'
 import {
   gatewayRunCommand, PUBLISH_INSPECT_CMD, publishForRestart,
+  configPathForOS, stateDirForOS, CONTAINER_UID,
 } from '../openclaw/runtime.js'
 
-export const OPENCLAW_CONFIG_LINUX = '/home/clawops/openclaw.json'
-export const OPENCLAW_CONFIG_MACOS = '~/.config/openclaw/config.json'
+// Re-exported from runtime.ts, which owns these now. Before WO-39 the path was defined
+// five times across three TS files and two shell templates.
+export const OPENCLAW_CONFIG_LINUX = configPathForOS('Linux')
+export const OPENCLAW_CONFIG_MACOS = configPathForOS('Darwin')
 export const OPENCLAW_CONFIG = OPENCLAW_CONFIG_LINUX  // kept for back-compat
 export const OPENCLAW_TMP = '/tmp/clawops-config.json.tmp'
 
 async function detectOS(session: SshSession, signal?: AbortSignal): Promise<'Linux' | 'Darwin'> {
   const result = await session.exec('uname -s', signal)
   return result.stdout.trim() === 'Darwin' ? 'Darwin' : 'Linux'
-}
-
-function configPathForOS(os: 'Linux' | 'Darwin'): string {
-  return os === 'Darwin' ? OPENCLAW_CONFIG_MACOS : OPENCLAW_CONFIG_LINUX
 }
 
 /**
@@ -94,7 +93,12 @@ export async function atomicWriteConfig(
   const configPath = configPathForOS(os)
   const json = JSON.stringify(cfg, null, 2)
   const b64 = Buffer.from(json, 'utf-8').toString('base64')
-  const chown = os === 'Linux' ? ` && chown clawops:clawops ${configPath}` : ''
+  // Numeric, never `clawops:clawops`. On Ubuntu 24.04 `useradd clawops` gets uid 1001
+  // while the container runs as 1000, and the gateway then exits 1 with EACCES on its
+  // own SQLite WAL. Verified on a native Linux bind mount — SP-11 §C. (G25)
+  const chown = os === 'Linux'
+    ? ` && chown ${CONTAINER_UID}:${CONTAINER_UID} ${configPath}`
+    : ''
   const cmd =
     `echo '${b64}' | base64 -d > ${OPENCLAW_TMP} && ` +
     `mv ${OPENCLAW_TMP} ${configPath}` +
@@ -115,7 +119,6 @@ export async function restartGateway(
   signal?: AbortSignal,
 ): Promise<void> {
   const os = await detectOS(session, signal)
-  const configPath = configPathForOS(os)
 
   // Non-interactive SSH sessions get a minimal PATH on macOS (Docker Desktop /
   // Homebrew install outside /usr/bin). Linux always has /usr/bin/docker in PATH.
@@ -142,7 +145,7 @@ export async function restartGateway(
 
   const restartCmd = gatewayRunCommand({
     image,
-    configPath,
+    stateDir: stateDirForOS(os),
     pathPrefix,
     publish: publishForRestart(pubResult.stdout),
   })

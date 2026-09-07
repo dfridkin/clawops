@@ -21,8 +21,11 @@ const ROOT = join(__dirname, '../..')
 const read = (p: string): string => readFileSync(join(ROOT, p), 'utf-8')
 
 describe('run flags', () => {
-  it('points OpenClaw at the mounted config', () => {
-    expect(CONFIG_PATH_ENV).toBe('-e OPENCLAW_CONFIG_PATH=/app/config.json')
+  it('still defines the legacy config-path env, unused by the builder', () => {
+    // WO-39 stopped setting this: the state directory is mounted at OpenClaw's own
+    // default location, so the mount point IS the configuration. Kept as a constant
+    // because the 1.x line still needs it and the two lines share this file.
+    expect(CONFIG_PATH_ENV).toContain('OPENCLAW_CONFIG_PATH')
   })
 
   it('makes host.docker.internal resolvable for host-local model runtimes', () => {
@@ -34,7 +37,6 @@ describe('run flags', () => {
   })
 
   it('bundles the flags every config-mounting site needs', () => {
-    expect(COMMON_RUN_FLAGS).toContain('OPENCLAW_CONFIG_PATH')
     expect(COMMON_RUN_FLAGS).toContain('add-host')
   })
 })
@@ -52,8 +54,14 @@ describe('every run site delivers the config', () => {
   ]
 
   for (const [label, cmd] of rendered) {
-    it(`${label} sets OPENCLAW_CONFIG_PATH`, () => {
-      expect(cmd).toContain('OPENCLAW_CONFIG_PATH=/app/config.json')
+    it(`${label} mounts the state directory, writable`, () => {
+      // Replaces the OPENCLAW_CONFIG_PATH check. Config delivery is now the mount point
+      // itself, and the mount must be a DIRECTORY and must not be :ro — OpenClaw writes
+      // its config by atomic rename, which fails EBUSY over a bind-mounted file and
+      // blocks `plugins install` outright. SP-10b §4.
+      expect(cmd).toContain(':/home/node/.openclaw')
+      expect(cmd).not.toMatch(/:\/home\/node\/\.openclaw:ro/)
+      expect(cmd).not.toContain('/app/config.json')
     })
 
     it(`${label} makes host.docker.internal resolvable`, () => {
@@ -84,7 +92,7 @@ describe('every run site delivers the config', () => {
     // src/openclaw/runtime.ts, which is the whole point: there is nothing left to drift.
     const { renderScript } = await import('../../src/providers/local/bootstrap.js')
     const script = renderScript('2026.7.1')
-    expect(script).toContain('OPENCLAW_CONFIG_PATH=/app/config.json')
+    expect(script).toContain(':/home/node/.openclaw')
     expect(script).toContain('host.docker.internal:host-gateway')
     expect(script).toContain('gateway run --allow-unconfigured')
     // Both branches — systemd foreground and the macOS detached path — get built.
@@ -154,15 +162,17 @@ describe('rendered commands', () => {
   it('the cloud startup script pins the port', () => {
     const script = makeStartupScript({ openclawVersion: '2026.7.1', os: 'ubuntu' })
     expect(script).toContain('--port 18789')
-    expect(script).toContain('OPENCLAW_CONFIG_PATH=/app/config.json')
+    expect(script).toContain(':/home/node/.openclaw')
     expect(script).toContain('host.docker.internal:host-gateway')
   })
 
   it('the CLI restart command carries the flags', () => {
     const cmd = dockerRunCmd('2026.7.1')
-    expect(cmd).toContain('OPENCLAW_CONFIG_PATH=/app/config.json')
+    expect(cmd).toContain(':/home/node/.openclaw')
     expect(cmd).toContain('host.docker.internal:host-gateway')
-    expect(cmd).toContain('/app/config.json:ro')
+    // The state DIRECTORY, writable — not a read-only config file.
+    expect(cmd).toContain('/var/lib/clawops/openclaw:/home/node/.openclaw')
+    expect(cmd).not.toContain(':ro')
   })
 })
 
