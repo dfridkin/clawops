@@ -29,10 +29,17 @@ support:
 # See docs/spikes/SP-10-openclaw-2.0-startup-contract.md for how each was observed.
 # WO-38 consumes this; today nothing reads it.
 runtime:
-  targetMin: "2026.9.1"
+  # 2026.9.2, not 2026.9.1: the official Bedrock provider plugin declares
+  # "requires plugin API >=2026.9.2" and refuses to install on 9.1. SP-10b §3.
+  targetMin: "2026.9.2"
   image: "ghcr.io/openclaw/openclaw"
   variants: [standard, slim, browser]   # `-slim`, `-browser` tag suffixes
-  configPath: "/app/config.json"        # via OPENCLAW_CONFIG_PATH
+  # Mount the config DIRECTORY, never the file. OpenClaw writes config by atomic
+  # rename, and renaming over a bind-mounted file fails EBUSY regardless of :ro.
+  # Verified — `plugins install` cannot record a plugin against a file mount. SP-10b §4.
+  configDir: "/cfg"
+  configPath: "/cfg/config.json"        # via OPENCLAW_CONFIG_PATH
+  configMount: directory
   gatewayPort: 18789
   env:
     configPath: OPENCLAW_CONFIG_PATH
@@ -53,8 +60,19 @@ runtime:
   # on every container replacement, which is what clawops's restart path does.
   plugins:
     bundledSourceRoot: "/app/dist/extensions"
-    installedPath: "/app/npm/projects"
-    convergenceRestartRequired: true
+    # Two different paths, and the difference matters. An explicit
+    # `openclaw plugins install` lands beside the config, so it persists with the
+    # config directory clawops already keeps as host state — no extra volume. The
+    # startup auto-install instead writes to the container's writable layer, which is
+    # lost on every container replacement. Pre-install; do not rely on auto-install.
+    installedPath: "<configDir>/extensions"
+    autoInstallPath: "/app/npm/projects"   # ephemeral — container layer
+    convergenceRestartRequired: true       # only when auto-installing at startup
+    # Reconcile configured providers against loaded plugins. `plugins doctor` is NOT
+    # usable for this: it never names a missing provider and exits 1 on duplicate-id
+    # warnings during normal operation. SP-10b §1-2.
+    verifyCommand: "openclaw plugins list --json"
+    verifyField: providerIds
     providers:
       amazon-bedrock:
         bundled: false
