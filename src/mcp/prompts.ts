@@ -114,7 +114,7 @@ clawops_gateway_restart({ stackName: "${s}" })
 ### Agents not running
 \`\`\`
 clawops_agents_list({ stackName: "${s}" })
-clawops_agents_restart({ stackName: "${s}" })
+clawops_gateway_restart({ stackName: "${s}" })
 \`\`\`
 
 ### Bootstrap failed or incomplete

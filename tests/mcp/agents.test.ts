@@ -60,36 +60,26 @@ describe('handleAgentsList', () => {
   })
 })
 
-describe('handleAgentsRestart', () => {
-  it('returns cancelled when elicitation is declined', async () => {
-    const server = makeServer('decline')
-    const { handleAgentsRestart } = await import('../../src/mcp/tools/cli/agents.js')
-    const result = await handleAgentsRestart({ stackName: 'default', agentId: 'agent-1' }, server)
-    const text = (result.content[0] as { type: 'text'; text: string }).text
-    expect(text).toMatch(/cancel/)
+describe('clawops_agents_restart is gone', () => {
+  it('is not declared in spec/mcp-tools.yaml', async () => {
+    // Removed rather than widened: OpenClaw 2.0 has no per-agent restart, and the
+    // gateway-wide one is already clawops_gateway_restart. A destructiveHint tool whose
+    // name implies agent scope but restarts every agent on the host is the sharp edge
+    // here — a human reads a deprecation notice, an agent routinely does not.
+    //
+    // Asserted against the spec because spec/mcp-tools.yaml is the source of truth and
+    // _generated.ts is built from it (R-meta-1).
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const spec = readFileSync(resolve(import.meta.dirname, '../../spec/mcp-tools.yaml'), 'utf8')
+    expect(spec).not.toContain('name: clawops_agents_restart')
+    expect(spec).toContain('name: clawops_gateway_restart')
   })
 
-  it('calls exec with agentId when accepted', async () => {
-    const session = new FakeSshSession()
-    const execSpy = vi.fn().mockResolvedValue({ stdout: 'restarted', stderr: '', code: 0 })
-    session.onExec(execSpy)
-    const { acquireSession } = await getMocks()
-    acquireSession.mockResolvedValue({ session, release: vi.fn() })
-
-    const { handleAgentsRestart } = await import('../../src/mcp/tools/cli/agents.js')
-    await handleAgentsRestart({ stackName: 'default', agentId: 'agent-1' }, makeServer())
-
-    expect(execSpy).toHaveBeenCalledWith(expect.stringContaining('agent-1'))
-  })
-
-  it('returns errText when exec exits non-zero', async () => {
-    const session = new FakeSshSession()
-    session.onExec(() => ({ stdout: '', stderr: 'not found', code: 1 }))
-    const { acquireSession } = await getMocks()
-    acquireSession.mockResolvedValue({ session, release: vi.fn() })
-
-    const { handleAgentsRestart } = await import('../../src/mcp/tools/cli/agents.js')
-    const result = await handleAgentsRestart({ stackName: 'default', agentId: 'x' }, makeServer())
-    expect(result.isError).toBe(true)
+  it('has no generated schema and no handler', async () => {
+    const generated = await import('../../src/mcp/tools/_generated.js')
+    expect(generated).not.toHaveProperty('clawops_agents_restartSchema')
+    const handlers = await import('../../src/mcp/tools/cli/agents.js')
+    expect(handlers).not.toHaveProperty('handleAgentsRestart')
   })
 })

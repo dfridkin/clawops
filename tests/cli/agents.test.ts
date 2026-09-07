@@ -1,4 +1,4 @@
-// Unit tests for the `agents` command (list / restart / logs).
+// Unit tests for the `agents` command (list / logs; restart was removed in 2.0).
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { FakeSshSession, fakeReadable } from '../helpers/ssh.js'
@@ -101,8 +101,11 @@ describe('agents command', () => {
     })
   })
 
-  describe('restart', () => {
-    it('restarts all agents when no name given', async () => {
+  describe('restart (removed)', () => {
+    it('refuses with an explanation instead of restarting the whole gateway', async () => {
+      // OpenClaw 2.0 has no per-agent restart. The only restart it offers is
+      // gateway-wide and drops every agent on the host, so this exits rather than
+      // quietly doing something larger than the command name promises.
       const execCommands: string[] = []
       const session = new FakeSshSession()
       session.onExec((cmd) => { execCommands.push(cmd); return { stdout: '', stderr: '', code: 0 } })
@@ -111,27 +114,27 @@ describe('agents command', () => {
       buildContext.mockReturnValue(makeFakeContext())
       acquireSession.mockImplementation(wireSession(session))
 
-      const cmd = await getCmd()
-      await (cmd.run as AnyRunFn)({ args: { _: ['restart'], stack: undefined, json: false } })
-
-      expect(execCommands[0]).toContain('agents restart')
-      // No agent name appended when name is omitted
-      expect(execCommands[0]).not.toMatch(/restart\s+\S+$/)
-    })
-
-    it('restarts named agent when name is given', async () => {
-      const execCommands: string[] = []
-      const session = new FakeSshSession()
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: '', stderr: '', code: 0 } })
-
-      const { buildContext, acquireSession } = await getMocks()
-      buildContext.mockReturnValue(makeFakeContext())
-      acquireSession.mockImplementation(wireSession(session))
+      const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('exit')
+      }) as never)
+      const errs: string[] = []
+      const stderr = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => {
+        errs.push(a.map(String).join(' '))
+      })
 
       const cmd = await getCmd()
-      await (cmd.run as AnyRunFn)({ args: { _: ['restart', 'claude'], stack: undefined, json: false } })
+      await expect(
+        (cmd.run as AnyRunFn)({ args: { _: ['restart'], stack: undefined, json: false } }),
+      ).rejects.toThrow('exit')
 
-      expect(execCommands[0]).toContain('agents restart claude')
+      expect(exit).toHaveBeenCalledWith(2)
+      const text = errs.join('')
+      expect(text).toMatch(/removed in clawops 2\.0/)
+      expect(text).toMatch(/clawops gateway restart/)
+      // The point of the removal: it must not reach the host at all.
+      expect(execCommands).toEqual([])
+
+      exit.mockRestore(); stderr.mockRestore()
     })
   })
 

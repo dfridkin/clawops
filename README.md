@@ -273,7 +273,7 @@ clawops down --yes          # Destroy local-provider stack
 | `logs` | Stream OpenClaw logs (`-f`, `--tail N`, `--since 5m`) |
 | `tunnel` | Local port-forward to gateway UI over SSH |
 | `config` | Get/set remote OpenClaw config values (`--dry-run` shows would-write JSON) |
-| `agents` | List or restart OpenClaw agents |
+| `agents` | List OpenClaw agents, or stream one agent's logs |
 | `gateway` | Restart the OpenClaw gateway service |
 | `backup` | Create an OpenClaw state backup (`restore` returns in clawops 2.x — see [limitations](docs/limitations.md#backup-and-restore)) |
 | `stacks` | List named stacks and their state |

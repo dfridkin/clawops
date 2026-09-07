@@ -1,13 +1,13 @@
 import { defineCommand } from 'citty'
 import process from 'node:process'
-import { success, failure, info } from '../../output/human.js'
+import { failure, info } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
 import { renderTable } from '../../output/table.js'
 
 export default defineCommand({
   meta: {
     name: 'agents',
-    description: 'Manage OpenClaw agents (list | restart [name] | logs <name>)',
+    description: 'Manage OpenClaw agents (list | logs <name>)',
   },
   args: {
     stack: { type: 'string', description: 'Target stack name' },
@@ -20,8 +20,21 @@ export default defineCommand({
 
     const [action, name] = (args._ ?? []) as string[]
 
-    if (!action || !['list', 'restart', 'logs'].includes(action)) {
-      failure('Usage: clawops agents <list | restart [name] | logs <name>>')
+    if (action === 'restart') {
+      // Removed rather than widened. OpenClaw 2.0 has no per-agent restart — only
+      // `gateway restart`, which drops every agent on the host. Silently turning a
+      // one-agent restart into a whole-gateway restart is a surprise with an outage
+      // in it, so this says what happened instead of doing something bigger.
+      failure(
+        'clawops agents restart was removed in clawops 2.0.\n' +
+          '  OpenClaw 2.0 has no per-agent restart; the only restart it offers is\n' +
+          '  gateway-wide and interrupts every agent on the host.\n' +
+          '  Run `clawops gateway restart` if that is what you want.',
+      )
+      process.exit(2)
+    }
+    if (!action || !['list', 'logs'].includes(action)) {
+      failure('Usage: clawops agents <list | logs <name>>')
       process.exit(2)
     }
     if (action === 'logs' && !name) {
@@ -83,16 +96,6 @@ export default defineCommand({
               '\n\n',
           )
         }
-      } else if (action === 'restart') {
-        const cmd = name
-          ? `docker exec openclaw openclaw agents restart ${name}`
-          : 'docker exec openclaw openclaw agents restart'
-        const result = await session.exec(cmd, abortController.signal)
-        if (result.code !== 0) {
-          failure(`Restart failed: ${result.stderr}`)
-          process.exit(1)
-        }
-        success(name ? `Agent '${name}' restarted.` : 'All agents restarted.')
       } else {
         // logs <name>
         const logStream = await session.stream(

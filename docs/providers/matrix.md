@@ -35,7 +35,7 @@ current implementation — not aspirational claims.
 | `clawops ssh` | ✓ | ✓ | ✓ | ✓ |
 | `clawops tunnel` | ✓ | ✓ | ✓ | ✓ |
 | `clawops config get/set` | ✓ | ✓ | ✓ | ✓ |
-| `clawops agents list/restart` | ✓ | ✓ | ✓ | ✓ |
+| `clawops agents list/logs` | ✓ | ✓ | ✓ | ✓ |
 | `clawops gateway restart` | ✓ | ✓ | ✓ | ✓ |
 | `clawops backup create` | ✓ | ✓ | ✓ | ✓ |
 | `clawops backup restore` | — | — | — | — |
