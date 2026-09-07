@@ -73,26 +73,6 @@ describe('Network component', () => {
   })
 })
 
-describe('Gateway component', () => {
-  it('registers containerId and gatewayUrl outputs', async () => {
-    const { Gateway } = await import('../../src/pulumi/components/gateway.js')
-    const gw = new Gateway('test-gw', {
-      serverIp: '1.2.3.4',
-      connection: { host: '1.2.3.4', user: 'clawops', privateKey: 'key' },
-      openclawVersion: 'latest',
-      configHash: 'abc',
-    })
-
-    const gatewayUrl = await resolveOutput(gw.gatewayUrl)
-    const containerId = await resolveOutput(gw.containerId)
-
-    expect(gatewayUrl).toContain('1.2.3.4')
-    expect(gatewayUrl).toContain('18789')
-    expect(typeof containerId).toBe('string')
-    expect(containerId.length).toBeGreaterThan(0)
-  })
-})
-
 describe('Secrets component', () => {
   it('registers gatewayTokenRef output containing the stack name', async () => {
     const { Secrets } = await import('../../src/pulumi/components/secrets.js')

@@ -10,7 +10,7 @@ import process from 'node:process'
 // ── Mock SSH pool ──────────────────────────────────────────────────────────────
 let execResult = { stdout: 'clawops: bootstrap complete\n', stderr: '', code: 0 }
 const mockSession = {
-  exec: vi.fn(async () => execResult),
+  exec: vi.fn(async (_cmd: string) => execResult),
   close: vi.fn(),
 }
 const mockRelease = vi.fn()
@@ -108,17 +108,26 @@ describe('localBootstrap()', () => {
     expect(mockRelease).toHaveBeenCalledTimes(1)
   })
 
-  it('polls /health when noWait is false', async () => {
-    mockFetch.mockResolvedValue({ ok: true })
-    await localBootstrap({ ...BASE_OPTS, noWait: false })
-    expect(mockFetch).toHaveBeenCalledWith(
-      'http://10.0.0.1:18789/health',
-      expect.anything(),
+  it('probes the gateway over SSH, on the host loopback', async () => {
+    // WO-38 publishes on 127.0.0.1 only, so a fetch() from the operator's machine would
+    // fail against every healthy deployment. The probe runs on the host instead.
+    mockSession.exec.mockImplementation(async (cmd: string) =>
+      cmd.includes('/health')
+        ? { stdout: '200', stderr: '', code: 0 }
+        : { stdout: 'clawops: bootstrap complete\n', stderr: '', code: 0 },
     )
+    await localBootstrap({ ...BASE_OPTS, noWait: false })
+
+    const cmds = mockSession.exec.mock.calls.map((c) => String(c[0]))
+    const probe = cmds.find((c) => c.includes('/health'))
+    expect(probe, 'expected a health probe over the session').toBeDefined()
+    expect(probe).toContain('127.0.0.1:18789/health')
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it('skips /health poll when noWait is true', async () => {
+  it('skips the probe when noWait is true', async () => {
     await localBootstrap({ ...BASE_OPTS, noWait: true })
-    expect(mockFetch).not.toHaveBeenCalled()
+    const cmds = mockSession.exec.mock.calls.map((c) => String(c[0]))
+    expect(cmds.some((c) => c.includes('/health'))).toBe(false)
   })
 })

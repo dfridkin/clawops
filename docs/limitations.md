@@ -56,6 +56,12 @@ address accordingly. The runtime must also listen on an address the container ca
 
 ## Networking and TLS
 
+**The gateway is published on the host's loopback only.** Since clawops 2.0 the container
+publishes `127.0.0.1:18789`, not `0.0.0.0:18789`, so the port is not reachable from the network
+even if a security group allows it. Reach it with `clawops tunnel` (which forwards to the host's
+loopback) or a reverse proxy running on the host. This closes the gap where a permissive firewall
+rule silently exposed an HTTP gateway.
+
 **No TLS or domain automation in the current release.** The gateway runs on port 18789 without
 TLS termination. Bring your own reverse proxy (nginx, Caddy, Cloudflare Tunnel) for HTTPS. TLS
 automation is tracked in the roadmap.

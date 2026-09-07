@@ -3,9 +3,8 @@
 // Extracted so the MCP config handler and plan layer share one implementation.
 
 import type { SshSession, SshExecResult } from '../transport/ssh.js'
-import {
-  GATEWAY_PORT, gatewayRunCommand, IMAGE_INSPECT_CMD, imageForRestart,
-} from '../openclaw/run-flags.js'
+import { GATEWAY_PORT, IMAGE_INSPECT_CMD, imageForRestart } from '../openclaw/run-flags.js'
+import { gatewayRunCommand } from '../openclaw/runtime.js'
 
 export const OPENCLAW_CONFIG_LINUX = '/home/clawops/openclaw.json'
 export const OPENCLAW_CONFIG_MACOS = '~/.config/openclaw/config.json'

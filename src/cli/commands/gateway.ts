@@ -3,9 +3,8 @@ import process from 'node:process'
 import { spinner, success, failure } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
 import { renderTable } from '../../output/table.js'
-import {
-  gatewayRunCommand, IMAGE_INSPECT_CMD, imageForRestart, versionOf,
-} from '../../openclaw/run-flags.js'
+import { IMAGE_INSPECT_CMD, imageForRestart, versionOf } from '../../openclaw/run-flags.js'
+import { gatewayRunCommand } from '../../openclaw/runtime.js'
 
 const OPENCLAW_CONFIG = '/home/clawops/openclaw.json'
 

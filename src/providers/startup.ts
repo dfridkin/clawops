@@ -2,6 +2,8 @@
 // All three providers (AWS, GCP, Azure) use this to ensure consistent
 // Docker installation, user setup, and OpenClaw container launch.
 
+import { gatewayRunCommand } from '../openclaw/runtime.js'
+
 export interface StartupScriptOpts {
   openclawVersion: string
   /** OS family — controls which Docker apt source is used. */
@@ -90,17 +92,13 @@ OPENCLAWJSON
 fi
 
 # ── Start OpenClaw container ─────────────────────────────────────────────────
-docker stop openclaw 2>/dev/null || true
-docker rm   openclaw 2>/dev/null || true
-docker run -d \\
-  --name openclaw \\
-  --restart unless-stopped \\
-  -p 18789:18789 \\
-  -e OPENCLAW_CONFIG_PATH=/app/config.json --add-host=host.docker.internal:host-gateway \\
-  --env-file "\${OPENCLAW_ENV_FILE}" \\
-  -v "\${OPENCLAW_CONFIG}":/app/config.json:ro \\
-${bedrockEnvBlock}  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION} \\
-  node openclaw.mjs gateway run --allow-unconfigured --port 18789
+# Built by src/openclaw/runtime.ts, so this cannot drift from the restart paths.
+${gatewayRunCommand({
+  image: 'ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}',
+  configPath: '"${OPENCLAW_CONFIG}"',
+  envFilePath: '"${OPENCLAW_ENV_FILE}"',
+  extraArgs: bedrockEnvBlock.trim(),
+})}
 `
 }
 
