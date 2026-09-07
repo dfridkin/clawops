@@ -399,28 +399,6 @@ tools:
       valid: { type: boolean }
       issues: { type: array, items: { type: string } }
 
-  - name: clawops_agents_restart
-    toolset: [cli]
-    description: |
-      Restart a specific OpenClaw agent on the remote gateway.
-
-      Use when: the user reports an agent is stuck, errored, or unresponsive;
-      or after a config change that the agent needs to pick up.
-
-      Do NOT use when: the issue is gateway-wide — use clawops_gateway_restart.
-    annotations:
-      title: Restart OpenClaw Agent
-      readOnlyHint: false
-      destructiveHint: true
-      idempotentHint: true
-      openWorldHint: true
-    input:
-      stackName: { type: string, optional: true }
-      agentId: { type: string }
-    output:
-      previousStatus: { type: string }
-      newStatus: { type: string }
-
   - name: clawops_gateway_restart
     toolset: [cli]
     description: |
@@ -429,8 +407,8 @@ tools:
       Use when: a gateway-wide config change requires reload, or the gateway is
       reported as unresponsive.
 
-      Do NOT use when: only a specific agent is affected — use
-      clawops_agents_restart. Brief downtime (~10s).
+      Note: OpenClaw 2.0 removed per-agent restart; `gateway restart` is the only
+      restart it offers, and it affects every agent on the host. Brief downtime (~10s).
     annotations:
       title: Restart Gateway Daemon
       readOnlyHint: false

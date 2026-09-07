@@ -161,9 +161,9 @@ publishing from `1.x` must pass `--tag v1` or it will steal `latest` back from 2
 All 30 files read against the measured contract. Two results change Phase 1: **WO-38 grows** (the
 config mount must become a directory across four sites — a shape change, not a value change), and
 **WO-39 does not shrink** (state persistence is absent everywhere, not partial). One prerequisite is
-outstanding: **`clawops agents restart` and `clawops agents logs` break outright** — 2.0 removed
-both subcommands, and the only replacements are gateway-wide, so this needs a product decision
-rather than a port.
+resolved: **`clawops agents restart` and its MCP tool are removed** (2.0 has no per-agent restart
+at all), while **`clawops agents logs` is kept** and re-points at `openclaw audit --agent`, which is
+where per-agent scoping moved. Re-pointing is WO-38 work.
 
 30 files reference `openclaw`; the spikes covered the runtime and config surfaces. Read the rest
 against the 2.0 contract. **Phase 1 is not scoped until this lands.**

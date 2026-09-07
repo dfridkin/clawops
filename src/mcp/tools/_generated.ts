@@ -245,24 +245,6 @@ export const clawops_config_validateAnnotations = {
 
 export type ConfigValidateInput = z.infer<typeof clawops_config_validateSchema>
 
-// ── clawops_agents_restart ──────────────────────────────────────────────────
-
-export const clawops_agents_restartSchema = z.object({
-  stackName: z.string().optional(),
-  agentId: z.string(),
-})
-
-export const clawops_agents_restartAnnotations = {
-  title: "Restart OpenClaw Agent",
-  readOnlyHint: false,
-  destructiveHint: true,
-  idempotentHint: true,
-  openWorldHint: true,
-  toolsets: ["cli"] as const,
-} as const
-
-export type AgentsRestartInput = z.infer<typeof clawops_agents_restartSchema>
-
 // ── clawops_gateway_restart ─────────────────────────────────────────────────
 
 export const clawops_gateway_restartSchema = z.object({
@@ -350,7 +332,6 @@ export const TOOLSETS: Record<Toolset, string[]> = {
     'clawops_config_set',
     'clawops_config_unset',
     'clawops_config_validate',
-    'clawops_agents_restart',
     'clawops_gateway_restart',
     'clawops_task_status',
   ],

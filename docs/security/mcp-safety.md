@@ -38,7 +38,7 @@ block.
 
 Enables all **17 tools**, including the 8 destructive ones: `clawops_up`,
 `clawops_destroy`, `clawops_apply`, `clawops_config_set`, `clawops_config_unset`,
-`clawops_agents_restart`, `clawops_gateway_restart`, `clawops_workflow_deploy_app`.
+`clawops_gateway_restart`, `clawops_workflow_deploy_app`.
 
 Destructive tools still require `yes: true` in the tool call — without it, the
 server issues a confirmation prompt. This is a safeguard against accidental

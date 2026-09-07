@@ -248,7 +248,7 @@ clawops agents list
 # my-agent    running   12m
 
 # Restart an agent
-clawops agents restart my-agent
+clawops gateway restart   # per-agent restart was removed in OpenClaw 2.0
 # ✓ Agent my-agent restarted
 ```
 

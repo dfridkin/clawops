@@ -72,15 +72,19 @@ OpenClaw agents are long-running processes managed inside the OpenClaw container
 clawops agents list
 clawops agents list --json            # machine-readable
 
-# Restart all agents
-clawops agents restart
-
-# Restart a specific agent
-clawops agents restart slack-bot
-
 # Stream logs for a specific agent (Ctrl-C to stop)
 clawops agents logs slack-bot
 ```
+
+There is no per-agent restart. OpenClaw 2.0 removed the subcommand, and the only restart
+it offers is gateway-wide:
+
+```bash
+clawops gateway restart          # interrupts every agent on the host
+```
+
+`clawops agents restart` exits with that explanation rather than quietly restarting
+everything — the scope difference matters on a host running several agents.
 
 `agents list` output:
 

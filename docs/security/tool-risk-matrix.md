@@ -26,7 +26,6 @@ All 15 clawops MCP tools, their risk classification, and which safety mode inclu
 | `clawops_config_validate` | cli / read | Read-only | ✅ | ✅ | ✅ |
 | `clawops_config_set` | cli | Medium | ❌ | ❌ | ✅ |
 | `clawops_config_unset` | cli | Medium | ❌ | ❌ | ✅ |
-| `clawops_agents_restart` | cli | Medium | ❌ | ❌ | ✅ |
 | `clawops_gateway_restart` | cli | Medium | ❌ | ❌ | ✅ |
 | `clawops_up` | cli | High | ❌ | ❌ | ✅ |
 | `clawops_destroy` | cli | High | ❌ | ❌ | ✅ |

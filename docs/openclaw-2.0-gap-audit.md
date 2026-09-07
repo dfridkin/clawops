@@ -98,11 +98,43 @@ This breaks two shipped commands and one MCP tool:
 - `cli/commands/agents.ts` — `clawops agents restart`, `clawops agents logs`
 - `mcp/tools/cli/agents.ts` — `clawops_agents_restart` (and its `spec/mcp-tools.yaml` entry)
 
-**This needs a product decision, not just a port.** Either these narrow to gateway-wide
-operations — in which case `clawops agents restart` is a misleading name for
-`gateway restart` and should probably be removed rather than silently widened — or they
-are dropped. Silently turning a per-agent restart into a whole-gateway restart is the
-worst option: it is a surprise with an outage in it.
+### 8b. Per-agent scoping is not gone — it moved to `audit`
+
+The table above was the first answer, and it was incomplete. `openclaw audit` — "Inspect
+activity records and exact-run identity context" — carries exactly the scoping `logs` lost:
+
+```
+--agent <id>       Filter by agent id
+--session <key>    Filter by exact session key
+--run <id>         Filter by run id
+--kind <kind>      agent_run | tool_action | message
+--status <status>  started | succeeded | failed | cancelled | timed_out | blocked
+--json             Output a bounded JSON page
+--cursor <seq>     Continue from a previous result cursor
+```
+
+`openclaw logs` has **no** filter flags at all, and its envelope
+(`type, time, level, subsystem, message, raw, module`) carries no agent key — so filtering
+its output would mean substring-matching `message`/`raw`. `audit` is the structured
+per-agent surface, with `--cursor` for the follow case.
+
+**Decision taken:**
+
+| Command | Outcome | Why |
+|---|---|---|
+| `clawops agents list` | unchanged | `agents list --json` survives |
+| `clawops agents logs <name>` | **kept**, re-point at `openclaw audit --agent <id> --json` | the capability exists upstream; removing it would discard something available |
+| `clawops agents restart` | **removed** | no per-agent restart exists anywhere in 2.0 — only `gateway restart` and `daemon restart`, both host-wide |
+
+Restart is removed rather than aliased because the substitute has a different blast radius:
+on a host running several isolated agents, `gateway restart` interrupts the ones you were
+not touching. `clawops gateway restart` already offers that under a name that says so. The
+MCP tool `clawops_agents_restart` is dropped for the same reason and more sharply — it is
+`destructiveHint: true`, and a deprecation notice is a safeguard a human reads and an agent
+routinely does not.
+
+Re-pointing `agents logs` at `audit` is WO-38 implementation work; the verb stays in the
+meantime.
 
 ### 9. 2.0 replaces three of clawops's shell workarounds with real commands
 
@@ -142,8 +174,8 @@ where the SP-10b provider reconcile (`plugins list --json`, compare `providerIds
    file to a directory across four sites, which is a shape change to the run command.
 2. **WO-39 does not shrink.** State persistence is absent rather than partial, so there is
    no existing behaviour to preserve or migrate around.
-3. **Two shipped commands and one MCP tool break outright.** `clawops agents restart` and
-   `clawops agents logs` call subcommands 2.0 removed. That is a product decision (narrow to
-   gateway-wide, or drop) rather than a port, and it should be made before WO-38 is estimated.
+3. **Decided (§8b).** `clawops agents restart` and its MCP tool are removed — no per-agent
+   restart exists in 2.0. `clawops agents logs` is kept and re-points at
+   `openclaw audit --agent`, which is where per-agent scoping actually went.
 4. **WO-38 should build on 2.0's own CLI**, not around it — `logs`, `health` and
    `gateway probe` replace the journalctl/curl/docker-inspect workarounds.
