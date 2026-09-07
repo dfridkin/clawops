@@ -430,7 +430,12 @@ export default defineCommand({
           secrets,
           network: {
             allowedSshCidrs: [stackAnswers.sshCidr ?? '0.0.0.0/0'],
-            allowedGatewayCidrs: [stackAnswers.sshCidr ?? '0.0.0.0/0'],
+            // Empty, not the SSH CIDR. Reusing it opened a plaintext HTTP dashboard to
+            // whatever network the operator picked for shell access — two very different
+            // risks answered by one question. The gateway is reached with
+            // `clawops tunnel`; exposing it is an explicit choice (network.publishGateway).
+            allowedGatewayCidrs: [],
+            publishGateway: 'loopback' as const,
           },
           ssh: { publicKey: sshPublicKey },
           ...(stackAnswers.stateBucket ? { stateBucket: stackAnswers.stateBucket } : {}),

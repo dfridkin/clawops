@@ -4,7 +4,9 @@
 
 import type { SshSession, SshExecResult } from '../transport/ssh.js'
 import { GATEWAY_PORT, IMAGE_INSPECT_CMD, imageForRestart } from '../openclaw/run-flags.js'
-import { gatewayRunCommand } from '../openclaw/runtime.js'
+import {
+  gatewayRunCommand, PUBLISH_INSPECT_CMD, publishForRestart,
+} from '../openclaw/runtime.js'
 
 export const OPENCLAW_CONFIG_LINUX = '/home/clawops/openclaw.json'
 export const OPENCLAW_CONFIG_MACOS = '~/.config/openclaw/config.json'
@@ -132,10 +134,17 @@ export async function restartGateway(
   // The token comes from the env file the bootstrap writes, not from config and not
   // from argv. Reading it out of openclaw.json stopped working when v1.7.2 moved the
   // token to an env file, and passing it on the command line exposed it in `ps`.
+  // A restart preserves reachability as well as version — see publishForRestart.
+  const pubCmd = `${pathPrefix}${PUBLISH_INSPECT_CMD}`
+  const pubResult = os === 'Darwin'
+    ? await session.exec(pubCmd, signal)
+    : await execWithFallbackSudo(session, pubCmd, signal)
+
   const restartCmd = gatewayRunCommand({
     image,
     configPath,
     pathPrefix,
+    publish: publishForRestart(pubResult.stdout),
   })
 
   const result = os === 'Darwin'

@@ -99,3 +99,50 @@ describe('gatewayRunCommand', () => {
     expect(chain).toContain(args)
   })
 })
+
+describe('publishForRestart', () => {
+  it('preserves a deliberately exposed deployment', async () => {
+    const { publishForRestart } = await import('../../src/openclaw/runtime.js')
+    // A restart must not narrow reachability any more than it may widen the version.
+    expect(publishForRestart('{"18789/tcp":[{"HostIp":"0.0.0.0","HostPort":"18789"}]}')).toBe('all')
+    expect(publishForRestart('{"18789/tcp":[{"HostIp":"","HostPort":"18789"}]}')).toBe('all')
+    expect(publishForRestart('{"18789/tcp":[{"HostIp":"::","HostPort":"18789"}]}')).toBe('all')
+  })
+
+  it('preserves a loopback deployment', async () => {
+    const { publishForRestart } = await import('../../src/openclaw/runtime.js')
+    expect(publishForRestart('{"18789/tcp":[{"HostIp":"127.0.0.1","HostPort":"18789"}]}')).toBe('loopback')
+  })
+
+  it('falls back to the safe scope rather than guessing wide', async () => {
+    const { publishForRestart } = await import('../../src/openclaw/runtime.js')
+    for (const junk of ['', 'null', 'not json', '{}', '{"18789/tcp":null}']) {
+      expect(publishForRestart(junk), junk).toBe('loopback')
+    }
+  })
+})
+
+describe('exposure is an explicit choice', () => {
+  it('the wizard no longer opens the gateway to the SSH CIDR', async () => {
+    // It used to set allowedGatewayCidrs to whatever the operator gave for SSH, which
+    // opened a plaintext HTTP dashboard to their whole office range. Two different risks
+    // were being answered by one question.
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const src = readFileSync(resolve(import.meta.dirname, '../../src/cli/commands/setup.ts'), 'utf8')
+    expect(src).not.toMatch(/allowedGatewayCidrs:\s*\[stackAnswers\.sshCidr/)
+    expect(src).toMatch(/allowedGatewayCidrs:\s*\[\]/)
+  })
+
+  it('the plan schema defaults publishGateway to loopback', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const schema = JSON.parse(
+      readFileSync(resolve(import.meta.dirname, '../../spec/deploy-plan.schema.json'), 'utf8'),
+    ) as { properties: Record<string, never> }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const net = (schema as any).properties.spec.properties.network.properties.publishGateway
+    expect(net.default).toBe('loopback')
+    expect(net.enum).toEqual(['loopback', 'all'])
+  })
+})

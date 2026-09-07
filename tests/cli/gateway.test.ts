@@ -102,8 +102,16 @@ describe('gateway command', () => {
     it('reads current version from docker inspect, then runs docker restart', async () => {
       const execCommands: string[] = []
       const session = new FakeSshSession()
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: 'ghcr.io/openclaw/openclaw:stable', stderr: '', code: 0 } })
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: '', stderr: '', code: 0 } })
+      // Command-driven rather than positional: the restart path makes two inspect calls
+      // now (image, then port bindings), and a queue keyed on call order breaks whenever
+      // a step is added.
+      session.onExec(function handler(cmd: string) {
+        execCommands.push(cmd)
+        session.onExec(handler)
+        if (cmd.includes('PortBindings')) return { stdout: '{"18789/tcp":[{"HostIp":"127.0.0.1"}]}', stderr: '', code: 0 }
+        if (cmd.includes('docker inspect')) return { stdout: 'ghcr.io/openclaw/openclaw:stable', stderr: '', code: 0 }
+        return { stdout: '', stderr: '', code: 0 }
+      })
 
       const { buildContext, acquireSession } = await getMocks()
       buildContext.mockReturnValue(makeFakeContext())
@@ -113,15 +121,23 @@ describe('gateway command', () => {
       await (cmd.run as AnyRunFn)({ args: { _: ['restart'], stack: undefined, channel: undefined, json: false } })
 
       expect(execCommands[0]).toContain('docker inspect openclaw')
-      expect(execCommands[1]).toContain('docker run')
-      expect(execCommands[1]).toContain('stable')
+      // Second inspect reads the port bindings: a restart preserves reachability as well
+      // as version, so it can neither widen nor narrow who may reach the gateway.
+      expect(execCommands[1]).toContain('PortBindings')
+      expect(execCommands[2]).toContain('docker run')
+      expect(execCommands[2]).toContain('stable')
     })
 
     it('preserves the image version (not hardcoded to stable)', async () => {
       const execCommands: string[] = []
       const session = new FakeSshSession()
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: 'ghcr.io/openclaw/openclaw:2026.4.5', stderr: '', code: 0 } })
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: '', stderr: '', code: 0 } })
+      session.onExec(function handler(cmd: string) {
+        execCommands.push(cmd)
+        session.onExec(handler)
+        if (cmd.includes('PortBindings')) return { stdout: '{"18789/tcp":[{"HostIp":"127.0.0.1"}]}', stderr: '', code: 0 }
+        if (cmd.includes('docker inspect')) return { stdout: 'ghcr.io/openclaw/openclaw:2026.4.5', stderr: '', code: 0 }
+        return { stdout: '', stderr: '', code: 0 }
+      })
 
       const { buildContext, acquireSession } = await getMocks()
       buildContext.mockReturnValue(makeFakeContext())
@@ -130,7 +146,7 @@ describe('gateway command', () => {
       const cmd = await getCmd()
       await (cmd.run as AnyRunFn)({ args: { _: ['restart'], stack: undefined, channel: undefined, json: false } })
 
-      expect(execCommands[1]).toContain('2026.4.5')
+      expect(execCommands[2]).toContain('2026.4.5')
     })
   })
 
@@ -138,8 +154,12 @@ describe('gateway command', () => {
     it('pulls new image then runs container with new version', async () => {
       const execCommands: string[] = []
       const session = new FakeSshSession()
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: '', stderr: '', code: 0 } })
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: '', stderr: '', code: 0 } })
+      session.onExec(function handler(cmd: string) {
+        execCommands.push(cmd)
+        session.onExec(handler)
+        if (cmd.includes('PortBindings')) return { stdout: '{"18789/tcp":[{"HostIp":"127.0.0.1"}]}', stderr: '', code: 0 }
+        return { stdout: '', stderr: '', code: 0 }
+      })
 
       const { buildContext, acquireSession } = await getMocks()
       buildContext.mockReturnValue(makeFakeContext())
@@ -148,10 +168,14 @@ describe('gateway command', () => {
       const cmd = await getCmd()
       await (cmd.run as AnyRunFn)({ args: { _: ['update', 'dev'], stack: undefined, channel: undefined, json: false } })
 
-      expect(execCommands[0]).toContain('docker pull')
-      expect(execCommands[0]).toContain('dev')
-      expect(execCommands[1]).toContain('docker run')
-      expect(execCommands[1]).toContain('dev')
+      const pull = execCommands.find((c) => c.includes('docker pull'))
+      const run = execCommands.find((c) => c.includes('docker run'))
+      expect(pull).toContain('dev')
+      // An update changes the version by request; it must not change reachability, so it
+      // reads the current port bindings first.
+      expect(execCommands.some((c) => c.includes('PortBindings'))).toBe(true)
+      expect(run).toContain('dev')
+      expect(run).toContain('127.0.0.1:18789')
     })
 
     it('uses --channel when no positional version given', async () => {

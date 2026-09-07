@@ -3,6 +3,7 @@ import process from 'node:process'
 import { accessSync, mkdirSync, constants } from 'node:fs'
 import path from 'node:path'
 import { success, failure, warn, info, REPO_URL } from '../../output/human.js'
+import { PUBLISH_INSPECT_CMD, publishForRestart } from '../../openclaw/runtime.js'
 
 export default defineCommand({
   meta: {
@@ -217,6 +218,21 @@ export default defineCommand({
                   }
                 }
               }
+            }
+
+            // Reachability — the one property a green healthcheck says nothing about.
+            // A gateway published on 0.0.0.0 serves plaintext HTTP to anyone the firewall
+            // admits; on loopback it is reachable only via `clawops tunnel` or a proxy on
+            // the host.
+            const pubResult = await session.exec(PUBLISH_INSPECT_CMD, ac.signal)
+            if (publishForRestart(pubResult.stdout) === 'all') {
+              warn(
+                'Published    0.0.0.0 — the gateway port is open on every interface. ' +
+                  'It serves plaintext HTTP; front it with TLS, or set ' +
+                  'network.publishGateway to "loopback" and use `clawops tunnel`.',
+              )
+            } else {
+              success('Published    127.0.0.1 only (reach it with `clawops tunnel`)')
             }
 
             // Docker healthcheck

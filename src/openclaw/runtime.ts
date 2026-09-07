@@ -150,3 +150,38 @@ export function gatewayRunCommand(spec: GatewayRunSpec): string {
     ].join(' && ')
   )
 }
+
+/** Reads the host port bindings off the running container. */
+export const PUBLISH_INSPECT_CMD =
+  `docker inspect openclaw --format '{{json .HostConfig.PortBindings}}'`
+
+/**
+ * Work out which publish scope a restart should reuse.
+ *
+ * A restart must not change reachability, for the same reason it must not change the
+ * deployed version: the operator asked for a restart, not a reconfiguration. v1.7.6 fixed
+ * the version half of this — a fallback that silently *widened* the version. This is the
+ * mirror case: without it, restarting a deliberately exposed deployment would silently
+ * narrow it to loopback and look like an outage.
+ *
+ * Unparseable or absent output falls back to the safe default rather than guessing wide.
+ */
+export function publishForRestart(inspectStdout: string): PublishScope {
+  try {
+    const bindings = JSON.parse(inspectStdout.trim()) as Record<
+      string,
+      { HostIp?: string }[] | null
+    > | null
+    if (!bindings) return 'loopback'
+    for (const hostPorts of Object.values(bindings)) {
+      for (const binding of hostPorts ?? []) {
+        const ip = binding.HostIp ?? ''
+        // '' and 0.0.0.0 both mean every interface.
+        if (ip === '' || ip === '0.0.0.0' || ip === '::') return 'all'
+      }
+    }
+  } catch {
+    // fall through
+  }
+  return 'loopback'
+}

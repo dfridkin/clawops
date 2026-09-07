@@ -25,6 +25,10 @@ export const gcpProgram: PulumiFn = async () => {
   const instanceType = cfg.get('instanceType') ?? 'e2-standard-2'
   const region = cfg.get('region') ?? 'us-central1'
   const openclawVersion = cfg.get('openclawVersion') ?? 'latest'
+  // Exposure is an explicit choice, never inferred from allowedGatewayCidrs — the
+  // wizard fills that from the SSH CIDR, so inferring would publish plaintext HTTP
+  // to whatever network someone picked for shell access.
+  const publishGateway = cfg.get('publishGateway') === 'all' ? 'all' : 'loopback'
   const zone = cfg.get('zone') ?? `${region}-a`
   const accessMode = cfg.get('accessMode') ?? 'restricted'
   const allowedCidrs = cfg.get('allowedCidrs') ?? ''
@@ -114,7 +118,7 @@ export const gcpProgram: PulumiFn = async () => {
     metadata: {
       // GCP guest agent reads 'ssh-keys' and populates /home/<user>/.ssh/authorized_keys
       'ssh-keys': `clawops:${sshPublicKey}`,
-      'startup-script': makeStartupScript({ openclawVersion, os: 'debian' }),
+      'startup-script': makeStartupScript({ openclawVersion, os: 'debian', publishGateway }),
     },
     serviceAccount: {
       scopes: ['https://www.googleapis.com/auth/cloud-platform'],

@@ -14,11 +14,23 @@ of the local bootstrap still carried a duplicated `--env-file`. Three incidents,
 The systemd ExecStart line and the detached path are now provably the same command with
 different supervision rather than two strings that merely look alike.
 
-**The gateway is now published on the host's loopback only** — `127.0.0.1:18789`, not
-`0.0.0.0:18789`. It is reached with `clawops tunnel` (which forwards to the host's
-loopback and is unaffected) or a reverse proxy on the host. Previously a permissive
-firewall rule would silently expose an HTTP gateway with no TLS. If you deliberately front
-the gateway from another machine, that deployment now needs a proxy on the host.
+**The gateway is now published on the host's loopback by default** — `127.0.0.1:18789`,
+not `0.0.0.0:18789`. Reach it with `clawops tunnel` (which forwards to the host's loopback
+and is unaffected) or a reverse proxy on the host.
+
+To bind `0.0.0.0`, set `network.publishGateway: "all"` in the plan. Exposure is
+deliberately its own choice rather than inferred from `allowedGatewayCidrs`: the wizard
+populated that field from the CIDR you gave for **SSH**, so a plaintext HTTP dashboard was
+opened to your whole shell-access network as a side effect of one unrelated answer. The
+wizard no longer does that — it leaves the gateway CIDR empty.
+
+`clawops doctor` reports the scope, `clawops plan` prints it, and `gateway restart` /
+`gateway update` preserve it: a restart changes neither the deployed version nor who can
+reach it.
+
+Affected: a client or reverse proxy on **another machine**, external monitoring hitting
+`/health`, or a proxy running **in a container** on the host (which needs `--network host`
+or `host.docker.internal`). A proxy running directly on the host is unaffected.
 
 **Container hardening**, adopted from the profile SP-06 observed on a live `openclaw fleet`
 cell — a configuration upstream already runs OpenClaw under: `--cap-drop=ALL`,

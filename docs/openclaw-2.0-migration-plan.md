@@ -255,6 +255,16 @@ template literal it replaced) emitted `\${VAR}`, which bash reads as an escaped 
 expands. It rendered plausibly and would have failed on the host. There is now a test asserting no
 generated script contains `\${`.
 
+Loopback is a **default**, not a lock: `network.publishGateway: 'loopback' | 'all'` makes exposure
+an explicit choice. It is deliberately **not** derived from `allowedGatewayCidrs` — the plan
+originally said WO-41 would couple them, and that was wrong. The wizard filled that field from the
+CIDR given for *SSH*, so coupling would have re-opened a plaintext HTTP dashboard to someone's
+shell-access network, silently, on the default path. The wizard now leaves it empty.
+
+Restart paths preserve the scope by inspecting the running container's port bindings, the same way
+they preserve the image version — the mirror of the v1.7.6 bug, where a restart silently *widened*
+the version.
+
 *Original text follows.*
 
 `src/openclaw/runtime.ts` owns image ref, paths, ports, env names, and a single command builder driven

@@ -13,6 +13,15 @@ export interface StartupScriptOpts {
    * an IMDSv2-compliant two-step curl. Only meaningful on AWS EC2.
    */
   bedrockEnabled?: boolean
+  /**
+   * Interface the gateway publishes on. Defaults to loopback.
+   *
+   * Deliberately NOT derived from `allowedGatewayCidrs`. The wizard populates that field
+   * from the CIDR the user gave for SSH, so inferring exposure from it would open a
+   * plaintext HTTP dashboard to whatever network someone chose for shell access. A
+   * firewall rule says who may connect; this says whether the port listens at all.
+   */
+  publishGateway?: 'loopback' | 'all'
 }
 
 /**
@@ -30,7 +39,7 @@ export interface StartupScriptOpts {
  * works on instances with httpTokens=required.
  */
 export function makeStartupScript(opts: StartupScriptOpts): string {
-  const { openclawVersion, os, bedrockEnabled = false } = opts
+  const { openclawVersion, os, bedrockEnabled = false, publishGateway = 'loopback' } = opts
   const dockerDistro = os === 'ubuntu' ? 'ubuntu' : 'debian'
   const bedrockEnvBlock = bedrockEnabled ? makeBedrockEnvBlock() : ''
 
@@ -98,6 +107,7 @@ ${gatewayRunCommand({
   configPath: '"${OPENCLAW_CONFIG}"',
   envFilePath: '"${OPENCLAW_ENV_FILE}"',
   extraArgs: bedrockEnvBlock.trim(),
+  publish: publishGateway,
 })}
 `
 }

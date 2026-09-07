@@ -20,6 +20,10 @@ export const awsProgram: PulumiFn = async () => {
   const instanceType = cfg.get('instanceType') ?? 't3.small'
   const region = cfg.get('region') ?? 'us-east-1'
   const openclawVersion = cfg.get('openclawVersion') ?? 'latest'
+  // Exposure is an explicit choice, never inferred from allowedGatewayCidrs — the
+  // wizard fills that from the SSH CIDR, so inferring would publish plaintext HTTP
+  // to whatever network someone picked for shell access.
+  const publishGateway = cfg.get('publishGateway') === 'all' ? 'all' : 'loopback'
   const accessMode = cfg.get('accessMode') ?? 'restricted'
   const allowedCidrs = cfg.get('allowedCidrs') ?? ''
   const sshCidrs = cfg.get('sshCidrs') ?? ''
@@ -204,7 +208,7 @@ export const awsProgram: PulumiFn = async () => {
     vpcSecurityGroupIds: [sg.id],
     iamInstanceProfile: instanceProfile.name,
     keyName: keyPair.keyName,
-    userData: makeStartupScript({ openclawVersion, os: 'ubuntu', bedrockEnabled }),
+    userData: makeStartupScript({ openclawVersion, os: 'ubuntu', bedrockEnabled, publishGateway }),
     // IMDSv2 with hopLimit=2 so Docker containers on this host can reach IMDS
     // and obtain the instance role credentials (required for Bedrock access).
     metadataOptions: {
