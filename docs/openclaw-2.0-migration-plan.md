@@ -232,6 +232,14 @@ setting `line: "2.x"` fails CI until the runtime writes `gateway.mode` and stops
 `--allow-unconfigured`. Verified by flipping it — the suite fails with *"the 2.x line must not depend
 on --allow-unconfigured"* — and restoring.
 
+**WO-59 — Privilege-correct remote execution** *(M — new, found by SP-11 tier 3)*
+Every day-2 command that touches Docker is broken on AWS and has been: clawops connects as `ubuntu`,
+provisioning only adds `clawops` to the docker group, and only `remote-config.ts` uses the sudo
+fallback. Nine other files call Docker directly. A second failure hides behind it — the token env
+file sits in a `750 clawops` directory, so the `[ -s … ]` env-file test is false for `ubuntu` and the
+gateway starts with no token. GCP and Azure connect as `clawops`, which is why only AWS is affected.
+Promote `execWithFallbackSudo` into the transport layer and route every remote Docker call through it.
+
 ### Phase 1 — runtime contract
 
 **WO-38 — One runtime contract, one builder** *(L — the critical path)* — ✅ **done**
