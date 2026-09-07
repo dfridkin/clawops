@@ -140,7 +140,14 @@ Sizes are T-shirts (S / M / L), not estimates. **v2.0.0 ships Phases 0–3 plus 
 
 ### Phase 0 — ground truth and release structure
 
-**WO-50 — Cut the two release lines** *(D1 — M)*
+**WO-50 — Cut the two release lines** *(D1 — M)* — ✅ **done**
+Branched `1.x` at **v1.7.7**. Dist-tag is **`legacy`**, not `v1`: npm refuses any dist-tag that
+parses as a SemVer range, and `v1`, `v1.x` and `1.x` all parse as `>=1.0.0 <2.0.0-0`. One
+`release.yml` serves both branches; MCP registry publishing is restricted to `main`, since the
+registry serves one current version per server. EOL **2027-03-31** recorded in `SECURITY.md` and
+`docs/support-matrix.md`. Original text follows.
+
+
 Branch `1.x` from v1.7.2; `main` becomes 2.x. Dist-tags `latest` → 2.x, `v1` → 1.x. Decide three
 things rather than gesture at them: the **EOL date — decided: 2027-03-31 (end of Q1 2027)**,
 recorded as a date in `SECURITY.md` and `docs/support-matrix.md` rather than a duration; backport scope (security + provider-adapter fixes only), and **which gaps apply to `1.x`** —
@@ -173,9 +180,34 @@ and asking which lacked the command — not by reading the diff of the previous 
 missed them because it followed the three paths a bug report named. Enumerate the surface, then
 check each element; do not follow the trail of the last defect.
 
-**WO-36 — Capture and normalise the config schema** *(S)*
-`openclaw config schema` from the pinned image → rebase the 9 dangling `$defs` refs (G26) → commit as
-`spec/openclaw-2.0.config.schema.json` with a CI drift check and a test that it compiles.
+**WO-36 — Capture and normalise the config schema** *(S)* — ✅ **done**
+Captured from `2026.9.1`. G26 confirmed: 9 refs, 7 distinct targets, **no root `$defs` at all**, and
+ajv refuses the document outright (`can't resolve reference #/$defs/account from id #`).
+
+The diagnosis is narrower than "dangling refs". The definitions **do** exist — nested under the two
+plugins that own them (`plugins.entries.imap.config.$defs`, `…webhooks.config.$defs`). Upstream
+inlines each plugin's schema into the parent without hoisting its `$defs` or rewriting the pointers
+inside it, so root-relative refs point at definitions several levels down.
+
+`scripts/openclaw/normalise-schema.mjs` rebases each ref onto the **nearest ancestor** that defines
+it, rather than hoisting to a shared root `$defs`. On 2026.9.1 the two shared names (`secretRef`,
+`secretInput`) are byte-identical between the plugins, so hoisting would work today — and would
+silently merge them the first release they diverge, pointing each plugin's refs at the other's
+shape. The script refuses rather than guesses when a ref matches no ancestor.
+
+987 KB minified, compiles in ~0.9 s, idempotent. Drift is a weekly workflow, not a PR check: the
+image is 3.2 GB.
+
+**The schema is necessary, not sufficient — and this is the load-bearing result.** A config with no
+`gateway.mode` passes this schema *and* passes `openclaw config validate`, then exits **78** on
+startup:
+
+> Gateway start blocked: existing config is missing gateway.mode. Treat this as suspicious or
+> clobbered config. Re-run `openclaw onboard --mode local` or `openclaw setup`, set
+> gateway.mode=local manually, or pass `--allow-unconfigured`.
+
+All three observed on 2026.9.1. So schema validation cannot be promoted into a startup guarantee,
+and a test asserts that so nobody does.
 
 **WO-37 — Rewrite `spec/openclaw-versions.yaml`** *(S)*
 `support.min: "2026.9.1"` (G27), `incompatible` below it, a `runtime:` block (image, paths, ports, env
@@ -199,6 +231,12 @@ proved identity mapping unnecessary here, and the standard path matches upstream
 *Exception:* when sandboxing is enabled the state dir **must** be identity-mapped (SP-04) — see WO-53.
 
 **WO-40 — Auth and startup posture** *(G1′, G5, G6, G7, G13 — M)*
+**Write `gateway.mode: "local"` and stop passing `--allow-unconfigured`.** Measured on 2026.9.1:
+with `mode` present the gateway starts *without* the flag; with the flag it starts regardless of
+what the config says. Today clawops writes no `mode` and passes the flag, so it depends on the
+escape hatch permanently — and that hatch exists to bypass a check upstream describes as detecting
+"suspicious or clobbered config". Keeping it means clawops can never notice a clobbered config.
+
 **The token is the fix, not the bind mode.** Supply it via `OPENCLAW_GATEWAY_TOKEN`, never argv.
 Write `gateway.mode: "local"` into the config the gateway actually reads; drop `--allow-unconfigured`
 from the steady state. **Pin `--port` on argv** so config can never move the listener. Fix the
