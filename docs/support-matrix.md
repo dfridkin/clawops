@@ -142,15 +142,18 @@ deploy both correctly, so there are two, each pinned to the OpenClaw range it ca
 | Line | npm dist-tag | Branch | OpenClaw range | Status |
 |---|---|---|---|---|
 | **2.x** | `latest` | `main` | `>= 2026.9.1` | current |
-| **1.x** | `v1` | `1.x` | `<= 2026.7.1-2` | maintenance until **2027-03-31** |
+| **1.x** | `legacy` | `1.x` | `<= 2026.7.1-2` | maintenance until **2027-03-31** |
 
 ```bash
 npm install -g @clawops/cli          # 2.x — the current line
-npm install -g @clawops/cli@v1       # 1.x — maintenance
+npm install -g @clawops/cli@legacy   # 1.x — maintenance
 ```
 
 Pin the tag in CI. `latest` moves to 2.x, so a pipeline installing `@clawops/cli` unpinned will
 change lines and start refusing the OpenClaw version it deploys today.
+
+The tag is `legacy` rather than `v1` because npm refuses any dist-tag that parses as a SemVer
+range, and `v1`, `v1.x` and `1.x` all parse as `>=1.0.0 <2.0.0-0`.
 
 ### What 1.x receives
 
