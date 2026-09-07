@@ -49,16 +49,8 @@ export const COMMON_RUN_FLAGS = `${CONFIG_PATH_ENV} ${ADD_HOST_FLAG}`
 /** Host path to the env file holding OPENCLAW_GATEWAY_TOKEN. */
 export const ENV_FILE_PATH = '/home/clawops/openclaw.env'
 
-export interface GatewayRunOpts {
-  /** Full image reference, e.g. `ghcr.io/openclaw/openclaw:2026.7.1`. */
-  image: string
-  /** Host path to openclaw.json. */
-  configPath: string
-  /** Host path to the token env file. */
-  envFilePath?: string
-  /** Prefix for hosts where docker is not on a non-interactive PATH (macOS). */
-  pathPrefix?: string
-}
+// The command builder moved to ./runtime.ts — see the comment at the top of that file
+// for why sharing constants was not enough to stop the six run sites drifting.
 
 /** Reads the image tag off the running container. Deliberately has no `|| echo` fallback. */
 export const IMAGE_INSPECT_CMD = `docker inspect openclaw --format '{{.Config.Image}}'`
@@ -66,12 +58,12 @@ export const IMAGE_INSPECT_CMD = `docker inspect openclaw --format '{{.Config.Im
 /**
  * Resolve the image a restart should reuse.
  *
- * Restart paths reuse whatever the host already runs rather than a version from
- * config, which is right — a restart should not change the deployed version. But
- * every one of them used to fall back to `:stable` or `:latest` when `docker inspect`
- * found no container, and both tags now resolve to OpenClaw 2.0, which this release
- * line refuses to deploy and cannot run. That fallback ran *after* the version guard,
- * so it pushed an unsupported version past the exact check meant to stop it.
+ * Restart paths reuse whatever the host already runs rather than a version from config,
+ * which is right — a restart should not change the deployed version. But every one of them
+ * used to fall back to `:stable` or `:latest` when `docker inspect` found no container, and
+ * both tags now resolve to OpenClaw 2.0, which this release line refuses to deploy. That
+ * fallback ran *after* the version guard, so it pushed an unsupported version past the exact
+ * check meant to stop it.
  *
  * When there is no container there is nothing to reuse. Say so instead of guessing.
  */
@@ -91,38 +83,4 @@ export function imageForRestart(inspectStdout: string): Result<string, string> {
 /** The version segment of an image reference, for display. */
 export function versionOf(image: string): string {
   return image.split(':')[1] ?? 'unknown'
-}
-
-/**
- * The one place a gateway container is started, across the CLI and the MCP server.
- *
- * (`src/pulumi/components/gateway.ts` also hand-writes a run command, but nothing
- * constructs it — only its own test does — so it starts no real container. It is
- * fixed or removed under WO-38; leaving it as a working-looking trap is the risk
- * there, not a live defect.)
- *
- * Every restart path previously built this string by hand, and they had drifted:
- * `gateway restart`, `gateway update` and `config set` passed no command at all, so
- * the container fell back to the image's bare CMD — losing `--allow-unconfigured`,
- * the port pin and the token, and dying with "existing config is missing
- * gateway.mode". Verified on 2026.7.1.
- *
- * The env file is attached through a shell test rather than unconditionally, so a
- * deployment created before v1.7.2 — which has no env file — still starts instead of
- * failing on a missing `--env-file` target.
- */
-export function gatewayRunCommand(opts: GatewayRunOpts): string {
-  const { image, configPath, envFilePath = ENV_FILE_PATH, pathPrefix = '' } = opts
-  const envFileArg = `$([ -s ${envFilePath} ] && echo --env-file ${envFilePath})`
-  return (
-    pathPrefix +
-    [
-      'docker stop openclaw 2>/dev/null || true',
-      'docker rm   openclaw 2>/dev/null || true',
-      `docker run -d --name openclaw --restart unless-stopped ` +
-        `-p ${GATEWAY_PORT}:${GATEWAY_PORT} ${COMMON_RUN_FLAGS} ${envFileArg} ` +
-        `-v ${configPath}:${CONFIG_MOUNT_PATH}:ro ${image} ` +
-        `node openclaw.mjs gateway run --allow-unconfigured ${PORT_PIN}`,
-    ].join(' && ')
-  )
 }

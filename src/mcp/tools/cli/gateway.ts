@@ -6,7 +6,8 @@ import type { GatewayRestartInput } from '../_generated.js'
 import { buildContext } from '../../../cli/context.js'
 import { acquireSession, drainPool } from '../../../transport/pool.js'
 import { resolveConn, okText, errText } from '../_conn.js'
-import { IMAGE_INSPECT_CMD, imageForRestart, gatewayRunCommand } from '../../../openclaw/run-flags.js'
+import { IMAGE_INSPECT_CMD, imageForRestart } from '../../../openclaw/run-flags.js'
+import { gatewayRunCommand } from '../../../openclaw/runtime.js'
 import { OPENCLAW_CONFIG } from '../../../plan/remote-config.js'
 
 export async function handleGatewayRestart(input: GatewayRestartInput, server: McpServer): Promise<CallToolResult> {

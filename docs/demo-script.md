@@ -75,11 +75,12 @@ After confirming deploy, the wizard bootstraps the host:
   [3/4] Pulling OpenClaw image...      ✓
   [4/4] Starting OpenClaw service...   ✓
 
-  ✓ OpenClaw is running at http://192.168.1.50:18789
+  ✓ OpenClaw is running on the host's loopback (127.0.0.1:18789)
     Gateway token: clawops-abc123def456
 
   Open your gateway dashboard:
-    http://192.168.1.50:18789?token=clawops-abc123def456
+    clawops tunnel          # forwards localhost:18789 to the host
+    http://localhost:18789?token=clawops-abc123def456
 
   MCP config written to:
     ~/.claude.json (Claude Code)
