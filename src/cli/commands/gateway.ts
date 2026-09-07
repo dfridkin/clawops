@@ -7,6 +7,7 @@ import { IMAGE_INSPECT_CMD, imageForRestart, versionOf } from '../../openclaw/ru
 import {
   gatewayRunCommand, PUBLISH_INSPECT_CMD, publishForRestart, STATE_DIR_HOST_LINUX,
 } from '../../openclaw/runtime.js'
+import { execPrivileged } from '../../transport/privileged.js'
 
 
 
@@ -99,18 +100,19 @@ export default defineCommand({
         }
       } else if (action === 'restart') {
         // Reuse the version the host already runs — a restart must not change it.
-        const imgResult = await session.exec(IMAGE_INSPECT_CMD, abortController.signal)
+        const imgResult = await execPrivileged(session, IMAGE_INSPECT_CMD, abortController.signal)
         const image = imageForRestart(imgResult.stdout)
         if (!image.ok) {
           failure(image.error)
           process.exit(1)
         }
         const version = versionOf(image.value)
-        const pub = await session.exec(PUBLISH_INSPECT_CMD, abortController.signal)
+        const pub = await execPrivileged(session, PUBLISH_INSPECT_CMD, abortController.signal)
         const publish = publishForRestart(pub.stdout)
 
         const spin = spinner('Restarting gateway...')
-        const result = await session.exec(
+        const result = await execPrivileged(
+          session,
           dockerRunCmd(version, publish),
           abortController.signal,
         )
@@ -127,7 +129,7 @@ export default defineCommand({
 
         const spin = spinner(`Updating gateway to ${version}...`)
 
-        const pullResult = await session.exec(
+        const pullResult = await execPrivileged(session, 
           `docker pull ghcr.io/openclaw/openclaw:${version}`,
           abortController.signal,
         )
@@ -139,8 +141,9 @@ export default defineCommand({
 
         // An update changes the version by request; it must not also change who can
           // reach the gateway.
-          const pubU = await session.exec(PUBLISH_INSPECT_CMD, abortController.signal)
-          const runResult = await session.exec(
+          const pubU = await execPrivileged(session, PUBLISH_INSPECT_CMD, abortController.signal)
+          const runResult = await execPrivileged(
+            session,
             dockerRunCmd(version, publishForRestart(pubU.stdout)),
             abortController.signal,
           )

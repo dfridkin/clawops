@@ -3,6 +3,7 @@ import process from 'node:process'
 import { failure, info } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
 import { renderTable } from '../../output/table.js'
+import { execPrivileged, streamPrivileged } from '../../transport/privileged.js'
 
 export default defineCommand({
   meta: {
@@ -70,7 +71,7 @@ export default defineCommand({
 
     try {
       if (action === 'list') {
-        const result = await session.exec(
+        const result = await execPrivileged(session, 
           "docker exec openclaw openclaw agents list --json 2>/dev/null || echo '[]'",
           abortController.signal,
         )
@@ -98,7 +99,7 @@ export default defineCommand({
         }
       } else {
         // logs <name>
-        const logStream = await session.stream(
+        const logStream = await streamPrivileged(session, 
           `docker exec -t openclaw openclaw agents logs ${name!} --follow`,
           abortController.signal,
         )

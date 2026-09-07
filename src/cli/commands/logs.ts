@@ -1,6 +1,7 @@
 import { defineCommand } from 'citty'
 import process from 'node:process'
 import { spinner, failure } from '../../output/human.js'
+import { execPrivileged, streamPrivileged } from '../../transport/privileged.js'
 
 export default defineCommand({
   meta: {
@@ -74,7 +75,7 @@ export default defineCommand({
     try {
       if (follow) {
         // Streaming: pipe with backpressure (Issue 16 — Option A)
-        const logStream = await session.stream(command, abortController.signal)
+        const logStream = await streamPrivileged(session, command, abortController.signal)
         logStream.pipe(process.stdout)
 
         await new Promise<void>((resolve) => {
@@ -83,7 +84,7 @@ export default defineCommand({
           abortController.signal.addEventListener('abort', () => resolve(), { once: true })
         })
       } else {
-        const result = await session.exec(command, abortController.signal)
+        const result = await execPrivileged(session, command, abortController.signal)
         process.stdout.write(result.stdout)
         if (result.stderr) process.stderr.write(result.stderr)
       }

@@ -2,6 +2,7 @@ import { defineCommand } from 'citty'
 import process from 'node:process'
 import { chalk, failure } from '../../output/human.js'
 import type { SshSession } from '../../transport/ssh.js'
+import { execPrivileged } from '../../transport/privileged.js'
 
 const GATEWAY_PORT = 18789
 
@@ -49,11 +50,11 @@ export async function gatherSnapshot(
   const DOCKER = 'PATH=/usr/local/bin:/opt/homebrew/bin:$PATH docker'
 
   const [inspectRaw, statsRaw, healthRaw, configRaw, diskRaw, logsRaw] = await Promise.all([
-    session.exec(
+    execPrivileged(session, 
       `${DOCKER} inspect openclaw --format '{{.State.Status}}|{{.Config.Image}}|{{.State.StartedAt}}|{{.RestartCount}}' 2>/dev/null || echo 'not found|||0'`,
       signal,
     ),
-    session.exec(
+    execPrivileged(session, 
       `${DOCKER} stats openclaw --no-stream --format '{{.MemUsage}}|{{.CPUPerc}}' 2>/dev/null || echo '—|—'`,
       signal,
     ),
@@ -69,7 +70,7 @@ export async function gatherSnapshot(
       `df -h /home/clawops 2>/dev/null | awk 'NR==2{print $5" used ("$3" of "$2")"}'`,
       signal,
     ),
-    session.exec(
+    execPrivileged(session, 
       `${DOCKER} logs openclaw -n ${tailLines} 2>&1 || echo '(no logs)'`,
       signal,
     ),

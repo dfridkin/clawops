@@ -2,8 +2,9 @@
 // Used by apply.ts (cloud post-provisioning) and up.ts (local --config).
 // Extracted so the MCP config handler and plan layer share one implementation.
 
-import type { SshSession, SshExecResult } from '../transport/ssh.js'
+import type { SshSession } from '../transport/ssh.js'
 import { GATEWAY_PORT, IMAGE_INSPECT_CMD, imageForRestart } from '../openclaw/run-flags.js'
+import { execPrivileged } from '../transport/privileged.js'
 import {
   gatewayRunCommand, PUBLISH_INSPECT_CMD, publishForRestart,
   configPathForOS, stateDirForOS, CONTAINER_UID,
@@ -21,23 +22,6 @@ async function detectOS(session: SshSession, signal?: AbortSignal): Promise<'Lin
   return result.stdout.trim() === 'Darwin' ? 'Darwin' : 'Linux'
 }
 
-/**
- * Run cmd directly; if it fails, retry under `sudo -n` (non-interactive).
- * This handles cloud VMs where the SSH user (e.g. AWS "ubuntu") is not the
- * "clawops" service user but has passwordless sudo configured.
- * On GCP/Azure where SSH connects as "clawops", the direct attempt succeeds.
- */
-async function execWithFallbackSudo(
-  session: SshSession,
-  cmd: string,
-  signal?: AbortSignal,
-): Promise<SshExecResult> {
-  const result = await session.exec(cmd, signal)
-  if (result.code === 0) return result
-  // Wrap in double-quotes: base64 alphabet and our path strings contain no
-  // double-quote or $ characters, and inner single-quotes are literal inside "".
-  return session.exec(`sudo -n bash -c "${cmd}"`, signal)
-}
 
 /** Read and parse openclaw.json from the remote host. */
 export async function readRemoteConfig(
@@ -50,7 +34,7 @@ export async function readRemoteConfig(
   // Fall back to sudo -n so the read succeeds regardless of file permissions.
   const result = os === 'Darwin'
     ? await session.exec(`cat ${configPath}`, signal)
-    : await execWithFallbackSudo(session, `cat ${configPath}`, signal)
+    : await execPrivileged(session, `cat ${configPath}`, signal)
   if (result.code !== 0) {
     throw new Error(`Cannot read ${configPath}: ${result.stderr}`)
   }
@@ -107,7 +91,7 @@ export async function atomicWriteConfig(
   // from "clawops" (e.g. AWS "ubuntu"), so fall back to sudo -n.
   const result = os === 'Darwin'
     ? await session.exec(cmd, signal)
-    : await execWithFallbackSudo(session, cmd, signal)
+    : await execPrivileged(session, cmd, signal)
   if (result.code !== 0) {
     throw new Error(`Failed to write config: ${result.stderr}`)
   }
@@ -129,7 +113,7 @@ export async function restartGateway(
   const imgCmd = `${pathPrefix}${IMAGE_INSPECT_CMD}`
   const imgResult = os === 'Darwin'
     ? await session.exec(imgCmd, signal)
-    : await execWithFallbackSudo(session, imgCmd, signal)
+    : await execPrivileged(session, imgCmd, signal)
   const resolved = imageForRestart(imgResult.stdout)
   if (!resolved.ok) throw new Error(resolved.error)
   const image = resolved.value
@@ -141,7 +125,7 @@ export async function restartGateway(
   const pubCmd = `${pathPrefix}${PUBLISH_INSPECT_CMD}`
   const pubResult = os === 'Darwin'
     ? await session.exec(pubCmd, signal)
-    : await execWithFallbackSudo(session, pubCmd, signal)
+    : await execPrivileged(session, pubCmd, signal)
 
   const restartCmd = gatewayRunCommand({
     image,
@@ -152,7 +136,7 @@ export async function restartGateway(
 
   const result = os === 'Darwin'
     ? await session.exec(restartCmd, signal)
-    : await execWithFallbackSudo(session, restartCmd, signal)
+    : await execPrivileged(session, restartCmd, signal)
   if (result.code !== 0) {
     throw new Error(`Gateway restart failed: ${result.stderr}`)
   }

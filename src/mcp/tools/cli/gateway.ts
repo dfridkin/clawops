@@ -8,6 +8,7 @@ import { acquireSession, drainPool } from '../../../transport/pool.js'
 import { resolveConn, okText, errText } from '../_conn.js'
 import { IMAGE_INSPECT_CMD, imageForRestart } from '../../../openclaw/run-flags.js'
 import { gatewayRunCommand, STATE_DIR_HOST_LINUX } from '../../../openclaw/runtime.js'
+import { execPrivileged } from '../../../transport/privileged.js'
 
 export async function handleGatewayRestart(input: GatewayRestartInput, server: McpServer): Promise<CallToolResult> {
   // R19: always elicit
@@ -31,11 +32,12 @@ export async function handleGatewayRestart(input: GatewayRestartInput, server: M
     // shared builder by accident of history: it hand-wrote its own run command and
     // so missed the v1.7.5 fix, leaving an agent calling clawops_gateway_restart
     // able to break a working deployment exactly as the CLI once did.
-    const imgResult = await session.exec(IMAGE_INSPECT_CMD)
+    const imgResult = await execPrivileged(session, IMAGE_INSPECT_CMD)
     const image = imageForRestart(imgResult.stdout)
     if (!image.ok) return errText(image.error)
 
-    const result = await session.exec(
+    const result = await execPrivileged(
+      session,
       gatewayRunCommand({ image: image.value, stateDir: STATE_DIR_HOST_LINUX }),
     )
     if (result.code !== 0) {

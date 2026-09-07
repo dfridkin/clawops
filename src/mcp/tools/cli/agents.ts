@@ -10,13 +10,14 @@ import type { AgentsListInput } from '../_generated.js'
 import { buildContext } from '../../../cli/context.js'
 import { acquireSession, drainPool } from '../../../transport/pool.js'
 import { resolveConn, okText } from '../_conn.js'
+import { execPrivileged } from '../../../transport/privileged.js'
 
 export async function handleAgentsList(input: AgentsListInput, _server: McpServer): Promise<CallToolResult> {
   const ctx = buildContext({ stack: input.stackName })
   const conn = await resolveConn(ctx)
   const { session, release } = await acquireSession(conn)
   try {
-    const result = await session.exec('docker exec openclaw openclaw agents list --json 2>&1 || echo "[]"')
+    const result = await execPrivileged(session, 'docker exec openclaw openclaw agents list --json 2>&1 || echo "[]"')
     return okText(result.stdout.trim())
   } finally {
     release()

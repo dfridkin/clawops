@@ -4,6 +4,7 @@ import { pipeline } from 'node:stream/promises'
 import process from 'node:process'
 import { success, failure, info, spinner } from '../../output/human.js'
 import { UsageError } from '../../errors/index.js'
+import { execPrivileged, streamPrivileged } from '../../transport/privileged.js'
 
 export default defineCommand({
   meta: {
@@ -90,7 +91,7 @@ export default defineCommand({
         // The previous implementation invoked `openclaw-ctl backup create --stdout`:
         // that binary does not exist, and neither does that flag.
         const remoteArchive = '/tmp/clawops-backup.tar.gz'
-        const createResult = await session.exec(
+        const createResult = await execPrivileged(session, 
           `docker exec openclaw sh -lc 'rm -f ${remoteArchive} && ` +
             `openclaw backup create --output ${remoteArchive} --verify --json'`,
           abortController.signal,
@@ -100,14 +101,14 @@ export default defineCommand({
           throw new Error(`Backup failed on the remote host: ${createResult.stderr.slice(0, 300)}`)
         }
 
-        const backupStream = await session.stream(
+        const backupStream = await streamPrivileged(session, 
           `docker exec openclaw cat ${remoteArchive}`,
           abortController.signal,
         )
         spin.stop()
         const fileStream = createWriteStream(outPath)
         await pipeline(backupStream, fileStream)
-        await session.exec(
+        await execPrivileged(session, 
           `docker exec openclaw rm -f ${remoteArchive}`,
           abortController.signal,
         )
