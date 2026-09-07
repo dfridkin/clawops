@@ -36,10 +36,10 @@ runtimes. See [`docs/support-matrix.md`](docs/support-matrix.md) for the full po
 | Line | npm dist-tag | OpenClaw versions | Security patches until |
 |---|---|---|---|
 | **2.x** (`main`) | `latest` | `>= 2026.9.1` | current line — no end date |
-| **1.x** (maintenance) | `v1` | `<= 2026.7.1-2` | **2027-03-31** |
+| **1.x** (maintenance) | `legacy` | `<= 2026.7.1-2` | **2027-03-31** |
 | Anything older | — | — | not supported |
 
-Install a specific line with `npm install -g @clawops/cli@v1` or `@latest`.
+Install a specific line with `npm install -g @clawops/cli@legacy` or `@latest`.
 
 **What gets backported to 1.x:** security fixes, and provider-adapter fixes for breakage caused
 by a cloud provider changing its API. Nothing else — not features, not refactors, not
