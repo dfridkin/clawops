@@ -209,10 +209,21 @@ startup:
 All three observed on 2026.9.1. So schema validation cannot be promoted into a startup guarantee,
 and a test asserts that so nobody does.
 
-**WO-37 — Rewrite `spec/openclaw-versions.yaml`** *(S)*
-`support.min: "2026.9.1"` (G27), `incompatible` below it, a `runtime:` block (image, paths, ports, env
-names) as WO-38's machine-readable source, and per-plugin minimum runtimes (G28). Retire the obsolete
-Bedrock quirk.
+**WO-37 — Rewrite `spec/openclaw-versions.yaml`** *(S)* — ✅ **done, with one deliberate deviation**
+Added the `runtime:` block (image, variants, paths, ports, env names, startup contract, per-provider
+plugin facts) as WO-38's machine-readable source, rewrote `incompatible` from measurements, and
+retired the obsolete Bedrock/systemd quirk in favour of the 2.0 plugin-install quirk.
+
+**`support.min` was NOT flipped to 2026.9.1, and must not be until WO-40.** The work order as written
+would have inverted the guard. `support.min`/`max`/`recommended` are enforced live by `up`, `plan`,
+`apply` and `doctor`; the runtime code is still 1.x-shaped. Flipping now makes clawops refuse
+`2026.7.1-2` — the only version it can deploy correctly — and accept `2026.9.1+`, which it would
+deploy with the 1.x contract and crash-loop. Exactly the failure the guard exists to prevent.
+
+Instead the file carries `line: "1.x"`, and `tests/openclaw/line-interlock.test.ts` gates the flip:
+setting `line: "2.x"` fails CI until the runtime writes `gateway.mode` and stops passing
+`--allow-unconfigured`. Verified by flipping it — the suite fails with *"the 2.x line must not depend
+on --allow-unconfigured"* — and restoring.
 
 ### Phase 1 — runtime contract
 
@@ -224,6 +235,9 @@ Fleet's profile, **validated against a live cell** (SP-06): loopback publishing,
 effort.
 
 **WO-39 — Persist state** *(G2, G3, G25 — M)*
+Scope now includes `/app/npm/projects` — installed provider plugins live there, in the container's
+writable layer, and are lost on every container replacement (SP-10 §5).
+
 Host `/var/lib/clawops/openclaw` at the **standard** container path `/home/node/.openclaw` — SP-01
 proved identity mapping unnecessary here, and the standard path matches upstream and Fleet. Drop
 `:ro`, drop `--rm`, mount the auth-profile secret dir and a persistent `/home/node`.
@@ -399,8 +413,24 @@ WO-38, WO-43, WO-52 — plus WO-49, which is documentation.
 
 v2.0.0 would otherwise rewrite the runtime contract *and* take on a permanently maintained container
 image for a feature that ships off by default. The emergency is: deployments work again, and existing
-users can get across. **Note WO-43 is *not* deferred** — provider plugins are startup-blocking, so
-they are v2.0.0 work.
+users can get across. **Note WO-43 is *not* deferred** — but the reason has changed.
+
+**Correction (SP-10).** "Provider plugins are install-gated; a configured but uninstalled provider
+prevents startup entirely" was recorded from 2026.8.1. On 2026.9.1 the behaviour is worse, not
+better, because it is quieter:
+
+| Egress | Result |
+|---|---|
+| available | plugin auto-installed from ClawHub → gateway **exits 1** ("startup convergence") → next boot converges, `restarts=1` |
+| denied | gateway starts **healthy, without the provider** — no error, no failed health check |
+
+clawops defaults to deny-all egress, so the silent case is the default one. And the install lands in
+the container's writable layer, so **every** `gateway restart`/`update`/`config set` — all of which
+`docker rm` the container — refetches it and pays another convergence restart. Measured.
+
+WO-43 stays in v2.0.0: pre-install provider plugins at provisioning time, persist
+`/app/npm/projects` as state (WO-39), and verify the provider after deploy rather than trusting a
+green health check.
 
 v2.0.0 ships against a gateway advertising sandboxing, roles and observability that clawops cannot
 configure. The docs must name that (§8.3); silence reads as a bug.
