@@ -157,7 +157,14 @@ survey: **G3 was fixed in v1.7.2** (config delivery); **G7 survives only in the 
 v1.7.6 both fixed live defects. The npm OIDC publish path is fussy; budget for it, and note that
 publishing from `1.x` must pass `--tag v1` or it will steal `latest` back from 2.x.
 
-**WO-58 — Systematic gap audit** *(M)* — **in progress**
+**WO-58 — Systematic gap audit** *(M)* — ✅ **done** → [`docs/openclaw-2.0-gap-audit.md`](openclaw-2.0-gap-audit.md)
+All 30 files read against the measured contract. Two results change Phase 1: **WO-38 grows** (the
+config mount must become a directory across four sites — a shape change, not a value change), and
+**WO-39 does not shrink** (state persistence is absent everywhere, not partial). One prerequisite is
+outstanding: **`clawops agents restart` and `clawops agents logs` break outright** — 2.0 removed
+both subcommands, and the only replacements are gateway-wide, so this needs a product decision
+rather than a port.
+
 30 files reference `openclaw`; the spikes covered the runtime and config surfaces. Read the rest
 against the 2.0 contract. **Phase 1 is not scoped until this lands.**
 
