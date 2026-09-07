@@ -288,10 +288,11 @@ required here. And an in-place upgrade needs a **migration step**: today's confi
 `/home/clawops/openclaw.json`; without moving it into the new directory, an upgraded deployment
 comes up with no configuration.
 
-G25 is verified as a chain — `useradd clawops` gets uid **1001** on Ubuntu 24.04 (the `ubuntu` user
-holds 1000), the container writes as uid 1000 with no root entrypoint, and uid 1000 cannot write a
-1001-owned mode-700 directory. The end-to-end bind-mount reproduction needs a Linux host; macOS
-Docker Desktop virtualizes that ownership. **Confirm it there before calling WO-39 done.**
+G25 is **verified end to end** on real Linux (Docker-in-Docker, so the mount is a native bind
+mount): `useradd clawops` gets uid 1001 on Ubuntu 24.04, the gateway writes as uid 1000, and a
+1001-owned state dir makes it exit 1 with `EACCES … openclaw.sqlite-wal`. Numeric `chown 1000:1000`
+runs clean. The failure is loud rather than silent — but under `--restart unless-stopped` it is a
+permanent crash-loop, so provisioning has to get it right first time.
 
 Original text follows.
 

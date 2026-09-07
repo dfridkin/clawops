@@ -55,7 +55,7 @@ locked-down host never reaches for ClawHub.
 With the directory mounted at the standard location, `openclaw config file` already resolves
 to `/home/node/.openclaw/openclaw.json`. The env var can go — one less thing to keep in sync.
 
-## C. G25 (ownership) — a verified chain with one unverified link
+## C. G25 (ownership) — verified end to end
 
 1. **Ubuntu 24.04 gives `clawops` uid 1001.** The `ubuntu` user already holds 1000, so
    `useradd -m clawops` — what `providers/startup.ts` runs — gets **1001**. Measured.
@@ -66,17 +66,35 @@ to `/home/node/.openclaw/openclaw.json`. The env var can go — one less thing t
 So `chown clawops:clawops` on the host state dir hands it to 1001 and the gateway cannot
 write its own database. Ownership must be numeric — `chown 1000:1000`.
 
-**The unverified link:** I could not reproduce this end to end. macOS Docker Desktop
-virtualizes bind-mount ownership, and there is no Lima/Colima/multipass on this machine.
+4. **Verified end to end on real Linux**, via Docker-in-Docker (`docker:dind`, kernel
+   6.12, Docker 29.8) so the mount is a native Linux bind mount rather than a Docker Desktop
+   translation.
 
-Worse, my first attempt *appeared to disprove it*: a named volume chowned to 1001 came back
-as 1000 and worked fine. That is Docker re-initializing an **empty named volume** from the
-image path — a behaviour bind mounts do not have. The test was invalid, not the hypothesis.
-Recording it because a green result from the wrong mount type is exactly how this would get
-waved through.
+   A bind mount passes ownership through unchanged — `seen in container: 1001:1001` — and:
 
-**Confirm on a Linux host during WO-39 verification.** The three measured steps make the
-conclusion near-certain; the end-to-end run is what remains.
+   | State dir owner | Gateway result |
+   |---|---|
+   | **1001** (what `chown clawops:clawops` produces) | `exited exit=1`, `EACCES: permission denied, stat '/home/node/.openclaw/state/openclaw.sqlite-wal'`, nothing written |
+   | **1000** (numeric) | `running exit=0`, full state tree written |
+
+   Run with WO-38's hardening applied (`--cap-drop=ALL`, `no-new-privileges`, `--init`,
+   `--pids-limit 512`), so the controls do not interfere.
+
+**The failure mode matters as much as the failure.** It is a hard, immediate exit with a
+legible error, not silent corruption — so a health gate catches it and the message names
+the cause. But under `--restart unless-stopped` it becomes a permanent crash-loop that
+looks exactly like G30. Provisioning must get the chown right the first time; there is no
+degraded mode to fall back to.
+
+**A false negative worth recording.** My first attempt appeared to *disprove* this: a named
+volume chowned to 1001 came back as 1000 and worked fine. That is Docker re-initializing an
+**empty named volume** from the image path — a behaviour bind mounts do not have. The test
+was invalid, not the hypothesis. A green result from the wrong mount type is exactly how
+this would otherwise get waved through.
+
+**Still worth doing at WO-39 completion:** a real Ubuntu 24.04 VM. Tiers above verify the
+*mechanism*; only a cloud host exercises the provisioning script itself — `useradd` ordering,
+a chown that runs before its mkdir, a missing `-R`.
 
 ## D. Migration is the real work
 
@@ -102,4 +120,6 @@ than re-pointed.
 **Larger than planned:** consolidating the config path to one definition (five sites today),
 and the migration step, which the work order did not mention.
 
-**Riskiest step:** the numeric chown — well-evidenced, not yet reproduced end to end.
+**Riskiest step:** the migration. The numeric chown is now fully verified, and its failure is
+loud. Moving an existing config *file* into a new directory is the step with no verification
+harness and a deployment's configuration riding on it.
