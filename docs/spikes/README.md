@@ -39,6 +39,7 @@ the plan are **not** valid on Docker Desktop.
 | SP-08 | Bedrock works — **only on ≥2026.9.1**. Floor moved. |
 | SP-09 | **No published image needed** — Docker's static CLI mounted into the unmodified official image drives the sandbox backend |
 | SP-10 | The 2.0 startup contract, measured | [SP-10](SP-10-openclaw-2.0-startup-contract.md) | `gateway.mode` gate, plugin auto-install + convergence restart, silent absence without egress |
+| SP-11 | WO-39 audit: persisting state | [SP-11](SP-11-wo-39-state-audit.md) | one mount suffices; G25 verified as a chain; migration step required |
 
 **Two P0s refuted, four new gaps found (G25, G26, plugin-gated providers, plugin/runtime skew),
 one version floor moved.**

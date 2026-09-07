@@ -273,7 +273,29 @@ Fleet's profile, **validated against a live cell** (SP-06): loopback publishing,
 `--init`, pids/memory/cpu limits, a dedicated bridge network. Roughly 60% of the value for 15% of the
 effort.
 
-**WO-39 — Persist state** *(G2, G3, G25 — M)*
+**WO-39 — Persist state** *(G2, G3, G25 — M)* — audited, not yet implemented →
+[`SP-11`](spikes/SP-11-wo-39-state-audit.md)
+
+Audit changes the shape. **One bind mount of `/home/node/.openclaw` covers config, SQLite state
+and installed plugins** — not the three mounts this work order assumed — and `OPENCLAW_CONFIG_PATH`
+can be deleted rather than re-pointed, because the standard path is already the default. Verified:
+state survives container replacement, and a plugin pre-installed at provisioning loads with
+`--network none`, no refetch, no convergence restart.
+
+Two things the work order did not account for. The config path has **five definitions** across three
+TS files and two shell templates, so the same consolidation WO-38 did for the run command is
+required here. And an in-place upgrade needs a **migration step**: today's config is a *file* at
+`/home/clawops/openclaw.json`; without moving it into the new directory, an upgraded deployment
+comes up with no configuration.
+
+G25 is **verified end to end** on real Linux (Docker-in-Docker, so the mount is a native bind
+mount): `useradd clawops` gets uid 1001 on Ubuntu 24.04, the gateway writes as uid 1000, and a
+1001-owned state dir makes it exit 1 with `EACCES … openclaw.sqlite-wal`. Numeric `chown 1000:1000`
+runs clean. The failure is loud rather than silent — but under `--restart unless-stopped` it is a
+permanent crash-loop, so provisioning has to get it right first time.
+
+Original text follows.
+
 Mount the **config directory**, not the config file — atomic rename over a bind-mounted file fails
 `EBUSY`, which blocks `plugins install` outright (SP-10b §4). Pre-installed plugins then persist
 inside that directory, so no separate plugin volume is required (SP-10b §5).
