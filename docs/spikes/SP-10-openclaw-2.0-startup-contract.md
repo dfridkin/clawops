@@ -87,3 +87,79 @@ on ClawHub being reachable.
 It rejected a real mistake before startup — a Bedrock model entry with `id` but no
 `name` — with `/models/providers/amazon-bedrock/models/0 must have required property
 'name'`. The gateway's own answer to the same config was exit 78.
+
+---
+
+# SP-10b — Designing the fix (2026.9.2)
+
+Follow-up run to validate the remedy for §4's silent case. Three of my own earlier
+conclusions did not survive it.
+
+## 1. `plugins doctor` cannot be the check
+
+It never mentions the missing provider and never says "missing" — 64 lines, 0 matches for
+`bedrock`. Worse, it **exits 1 during normal operation** whenever a config is mounted,
+because it reports "duplicate plugin id detected" for every bundled plugin. A gate that
+fails when nothing is wrong and stays quiet when something is, is worse than no gate.
+
+## 2. `plugins list --json` is the check
+
+61 entries, each carrying `providerIds`:
+
+| Case | `amazon-bedrock` |
+|---|---|
+| egress denied | **absent** |
+| converged with egress | `{enabled: true, status: "loaded", providerIds: ["amazon-bedrock"]}` |
+
+Reconcile on `providerIds`, not plugin `id` — the `google` plugin exposes
+`["google","google-gemini-cli","google-vertex"]`, so a config naming `google-vertex`
+matches a plugin called `google`. 20 of 61 plugins expose provider ids.
+
+**Invariant:** every key of `models.providers` must appear in the union of `providerIds`
+over plugins where `enabled && status === "loaded"`. Anything missing is an error.
+
+## 3. The floor must be 2026.9.2, not 2026.9.1
+
+```
+Plugin "@openclaw/amazon-bedrock-provider" requires plugin API >=2026.9.2,
+but this OpenClaw runtime exposes 2026.9.1.
+```
+
+The official Bedrock plugin will not install on the version the plan picked as its floor.
+Startup auto-install on 9.1 resolved *some* compatible build, but an explicit install —
+which is what provisioning would do — fails outright. AWS + Bedrock is clawops's flagship
+path, so the 2.x floor is **2026.9.2**.
+
+## 4. The config must be mounted as a directory, not a file
+
+`plugins install` writes the config to record the plugin. Against a bind-mounted *file* it
+fails, `:ro` or `rw` alike:
+
+```
+EBUSY: resource busy or locked, rename '/app/config.json.14.<uuid>.tmp' -> '/app/config.json'
+```
+
+OpenClaw writes config by atomic rename, and you cannot rename over a mountpoint. Mounting
+the parent directory works. This is a hard constraint on WO-38/WO-39, not a preference.
+
+## 5. Plugins install beside the config — so they persist for free
+
+Explicit install lands in `<config-dir>/extensions/amazon-bedrock`, **not**
+`/app/npm/projects` (which is where the startup auto-install put it). Since clawops
+already keeps the config directory as host state, pre-installed plugins survive container
+replacement with no extra volume. My earlier recommendation to persist `/app/npm/projects`
+was aimed at the wrong path.
+
+The config also records it: `plugins.entries["amazon-bedrock"].enabled = true`.
+
+## 6. End to end
+
+Pre-install at provisioning, then boot with `--network none`:
+
+```
+container: running exit=0 restarts=0
+bedrock:   {"enabled":true,"status":"loaded","providerIds":["amazon-bedrock"]}
+fetched at boot: 0
+```
+
+No egress, no convergence restart, provider loaded. This is the shape WO-43 should build.

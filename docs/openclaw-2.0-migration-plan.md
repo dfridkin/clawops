@@ -235,8 +235,9 @@ Fleet's profile, **validated against a live cell** (SP-06): loopback publishing,
 effort.
 
 **WO-39 — Persist state** *(G2, G3, G25 — M)*
-Scope now includes `/app/npm/projects` — installed provider plugins live there, in the container's
-writable layer, and are lost on every container replacement (SP-10 §5).
+Mount the **config directory**, not the config file — atomic rename over a bind-mounted file fails
+`EBUSY`, which blocks `plugins install` outright (SP-10b §4). Pre-installed plugins then persist
+inside that directory, so no separate plugin volume is required (SP-10b §5).
 
 Host `/var/lib/clawops/openclaw` at the **standard** container path `/home/node/.openclaw` — SP-01
 proved identity mapping unnecessary here, and the standard path matches upstream and Fleet. Drop
@@ -428,9 +429,28 @@ clawops defaults to deny-all egress, so the silent case is the default one. And 
 the container's writable layer, so **every** `gateway restart`/`update`/`config set` — all of which
 `docker rm` the container — refetches it and pays another convergence restart. Measured.
 
-WO-43 stays in v2.0.0: pre-install provider plugins at provisioning time, persist
-`/app/npm/projects` as state (WO-39), and verify the provider after deploy rather than trusting a
-green health check.
+WO-43 stays in v2.0.0, and SP-10b settles its design — correcting two things this plan said an
+hour earlier:
+
+1. **Pre-install at provisioning**, into the config directory. Plugins installed explicitly land in
+   `<configDir>/extensions/`, not `/app/npm/projects`, so they persist with the config directory
+   clawops already keeps as host state. **No extra volume is needed** — the earlier note to persist
+   `/app/npm/projects` aimed at the path the *startup auto-install* uses, which is the mechanism we
+   are avoiding.
+2. **Verify with `plugins list --json`, reconciling `providerIds`.** Not `plugins doctor`: it never
+   names a missing provider and exits 1 on duplicate-id warnings during normal operation, so it
+   fails when nothing is wrong and stays quiet when something is.
+
+Measured end to end — pre-installed, then booted with `--network none`: `restarts=0`, bedrock
+`status: loaded`, nothing fetched at boot.
+
+**Two constraints fall out of this and bind WO-38/39:**
+
+- **The floor is `2026.9.2`, not `2026.9.1`.** The official Bedrock plugin declares
+  `requires plugin API >=2026.9.2` and refuses to install on 9.1.
+- **Mount the config directory, never the config file.** OpenClaw writes config by atomic rename,
+  and renaming over a bind-mounted file fails `EBUSY` whether mounted `:ro` or `rw`. clawops mounts
+  the file today, so `plugins install` cannot work at all until this changes.
 
 v2.0.0 ships against a gateway advertising sandboxing, roles and observability that clawops cannot
 configure. The docs must name that (§8.3); silence reads as a bug.

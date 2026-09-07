@@ -23,7 +23,11 @@ const read = (p: string) => readFileSync(resolve(root, p), 'utf8')
 interface VersionSpec {
   line: string
   support: { min: string; max?: string; recommended?: string }
-  runtime: { targetMin: string; startup: { gatewayMode: string; allowUnconfigured: boolean } }
+  runtime: {
+    targetMin: string
+    configMount: string
+    startup: { gatewayMode: string; allowUnconfigured: boolean }
+  }
 }
 
 const spec = load(read('spec/openclaw-versions.yaml')) as VersionSpec
@@ -65,5 +69,13 @@ describe('release line interlock', () => {
       .map(read)
       .every((src) => /"mode"\s*:\s*"local"/.test(src))
     expect(writesMode, 'provisioning must write gateway.mode=local').toBe(true)
+
+    // SP-10b §4: OpenClaw writes its config by atomic rename, which fails EBUSY over a
+    // bind-mounted file whether it is :ro or rw. Mounting the file blocks
+    // `plugins install` outright, so the 2.x line must mount the directory.
+    expect(cmd, 'the 2.x line must not mount the config file read-only').not.toMatch(
+      /-v\s+\S+config\S*\.json:\S+:ro/,
+    )
+    expect(spec.runtime.configMount).toBe('directory')
   })
 })
