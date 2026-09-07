@@ -16,6 +16,12 @@ Please include:
 - Potential impact
 - Suggested fix (if any)
 
+## Advisories
+
+| Advisory | Applies to | Fixed in |
+|---|---|---|
+| [Gateway port may be reachable from your network](docs/security/advisories/2026-09-gateway-network-exposure.md) | 1.x (all releases) | 2.x |
+
 ## Disclosure Process
 
 1. **Acknowledgment** — within 72 hours of report
