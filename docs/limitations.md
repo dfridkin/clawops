@@ -56,6 +56,11 @@ address accordingly. The runtime must also listen on an address the container ca
 
 ## Networking and TLS
 
+> **Security advisory:** the gateway port may be reachable from the CIDR you gave the wizard for
+> SSH. See [advisories/2026-09-gateway-network-exposure.md](security/advisories/2026-09-gateway-network-exposure.md)
+> for how to check and how to narrow it. Fixed in clawops 2.x.
+
+
 **No TLS or domain automation in the current release.** The gateway runs on port 18789 without
 TLS termination. Bring your own reverse proxy (nginx, Caddy, Cloudflare Tunnel) for HTTPS. TLS
 automation is tracked in the roadmap.
