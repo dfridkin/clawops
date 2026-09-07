@@ -65,6 +65,16 @@ denied`. A second failure hid behind it: the token env file sits in a `750` dire
 the gateway would have started with no token and exited 78 even with Docker access. Both
 are fixed.
 
+## The gateway starts on its own terms now
+
+clawops passed `--allow-unconfigured` on every start. That flag suppresses a check upstream
+describes as detecting "suspicious or clobbered config", so clawops could never notice one —
+a clobbered config started silently on defaults instead of failing.
+
+Provisioning now writes `gateway.mode: "local"`, which is what the check actually wants, and
+the flag is gone. A deployment upgrading from 1.x has its config normalised during migration
+using OpenClaw's own `config set`, which also applies OpenClaw's internal config migrations.
+
 ## Removed
 
 **`clawops agents restart`** and the `clawops_agents_restart` MCP tool. OpenClaw 2.0 has no
@@ -76,7 +86,9 @@ agents you weren't touching. Use `clawops gateway restart`, or stay on `@clawops
 
 ## Also
 
-- `clawops backup restore` returns, built on OpenClaw 2.0's own restore
+- the gateway no longer self-updates out from under the version you pinned
+  (`OPENCLAW_SUPERVISOR_MODE=external`)
+
 - provider plugins that aren't bundled (Bedrock) are installed at provisioning, so a
   locked-down host never reaches for ClawHub at boot
 - the OpenClaw 2.0 config schema ships in `spec/`, and clawops validates against it

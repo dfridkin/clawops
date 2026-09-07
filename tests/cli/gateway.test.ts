@@ -135,7 +135,7 @@ describe('gateway command', () => {
         execCommands.push(cmd)
         session.onExec(handler)
         if (cmd.includes('PortBindings')) return { stdout: '{"18789/tcp":[{"HostIp":"127.0.0.1"}]}', stderr: '', code: 0 }
-        if (cmd.includes('docker inspect')) return { stdout: 'ghcr.io/openclaw/openclaw:2026.4.5', stderr: '', code: 0 }
+        if (cmd.includes('docker inspect')) return { stdout: 'ghcr.io/openclaw/openclaw:2026.9.2', stderr: '', code: 0 }
         return { stdout: '', stderr: '', code: 0 }
       })
 
@@ -146,7 +146,7 @@ describe('gateway command', () => {
       const cmd = await getCmd()
       await (cmd.run as AnyRunFn)({ args: { _: ['restart'], stack: undefined, channel: undefined, json: false } })
 
-      expect(execCommands[2]).toContain('2026.4.5')
+      expect(execCommands[2]).toContain('2026.9.2')
     })
   })
 

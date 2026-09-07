@@ -18,7 +18,7 @@ function makeSession(probeAnswers: string[]): { session: SshSession; probes: () 
   const session = {
     exec: vi.fn(async (cmd: string): Promise<SshExecResult> => {
       if (cmd.includes('uname')) return exec('Linux')
-      if (cmd.includes('docker inspect')) return exec('ghcr.io/openclaw/openclaw:2026.7.1')
+      if (cmd.includes('docker inspect')) return exec('ghcr.io/openclaw/openclaw:2026.9.2')
       if (cmd.includes('cat /home/clawops/openclaw.json')) {
         return exec(JSON.stringify({ gateway: { auth: { token: 'tok' } } }))
       }
@@ -75,7 +75,7 @@ describe('restartGateway health gate', () => {
     const session = {
       exec: vi.fn(async (cmd: string): Promise<SshExecResult> => {
         if (cmd.includes('uname')) return exec('Linux')
-        if (cmd.includes('docker inspect')) return exec('ghcr.io/openclaw/openclaw:2026.7.1')
+        if (cmd.includes('docker inspect')) return exec('ghcr.io/openclaw/openclaw:2026.9.2')
         if (cmd.includes('cat ')) return exec('{}')
         return exec('', 1) // the restart command itself fails
       }),

@@ -72,7 +72,7 @@ describe('generatePlan()', () => {
     // Default is a concrete pin from the support matrix, not a moving tag:
     // `latest` and `stable` both now resolve to OpenClaw 2.0, which this line
     // cannot deploy. See docs/spikes/SP-01-container-profile.md.
-    expect(plan.spec.openclaw.version).toBe('2026.7.1-2')
+    expect(plan.spec.openclaw.version).toBe('2026.9.2')
   })
 
   it('validates the plan against the JSON schema', async () => {
@@ -137,7 +137,7 @@ describe('generatePlan()', () => {
     // Default is a concrete pin from the support matrix, not a moving tag:
     // `latest` and `stable` both now resolve to OpenClaw 2.0, which this line
     // cannot deploy. See docs/spikes/SP-01-container-profile.md.
-    expect(plan.spec.openclaw.version).toBe('2026.7.1-2')
+    expect(plan.spec.openclaw.version).toBe('2026.9.2')
   })
 
   it('returns plan even when preview throws (non-fatal)', async () => {
@@ -157,10 +157,10 @@ describe('generatePlan()', () => {
       provider: 'aws',
       region: 'eu-west-1',
       instanceType: 'medium',
-      openclawVersion: '2026.4.5',
+      openclawVersion: '2026.9.2',
     })
     expect(mockSetConfig).toHaveBeenCalledWith('instanceType', { value: 'medium' })
     expect(mockSetConfig).toHaveBeenCalledWith('region', { value: 'eu-west-1' })
-    expect(mockSetConfig).toHaveBeenCalledWith('openclawVersion', { value: '2026.4.5' })
+    expect(mockSetConfig).toHaveBeenCalledWith('openclawVersion', { value: '2026.9.2' })
   })
 })

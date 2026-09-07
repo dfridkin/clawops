@@ -50,10 +50,10 @@ rather than deploying something that cannot work.
 
 | OpenClaw Version | Support |
 |---|---|
-| 2026.7.1-2 | ✅ Recommended |
-| 2026.4.5 – 2026.7.1-2 | ✅ Supported |
-| < 2026.4.5 | ❌ Different config schemas and channel registration semantics |
-| **>= 2026.8.1** | ❌ **Not supported on the clawops 1.x line** — use clawops 2.x |
+| 2026.9.2 | ✅ Recommended — the floor this line was built against |
+| >= 2026.9.2 | ✅ Supported, no upper bound |
+| 2026.8.x – 2026.9.1 | ❌ 2.0 runtime, but the official Bedrock plugin requires >= 2026.9.2 |
+| **<= 2026.7.1-2** | ❌ **Pre-2.0 contract** — use `@clawops/cli@legacy` |
 
 ### OpenClaw 2.0 (2026.8.1 and later)
 

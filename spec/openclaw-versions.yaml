@@ -11,19 +11,21 @@ version: 1
 # Which release line this checkout is. Flipping this to "2.x" is gated by a test
 # (tests/openclaw/line-interlock.test.ts) that fails until the runtime actually
 # implements the 2.0 contract — see `runtime` below.
-line: "1.x"
+line: "2.x"
 
 # Minimum and maximum versions clawops supports.
 #
-# Still the 1.x range, deliberately. main is becoming the 2.x line, but until
-# WO-38/39/40 land it can only deploy the pre-2.0 contract correctly. Flipping the
-# range before the runtime work would invert this guard: it would refuse 2026.7.1-2,
-# the only thing the code can actually deploy, and accept 2026.9.1+, which it would
-# deploy with the 1.x contract and crash-loop. The flip lands with WO-40.
+# Flipped to the 2.x range by WO-40, once the runtime could actually honour it: the
+# config directory is mounted writable, provisioning writes gateway.mode, and
+# --allow-unconfigured is gone. tests/openclaw/line-interlock.test.ts holds those
+# together — setting `line: "2.x"` fails until each is true.
+#
+# The floor is 2026.9.2 rather than 2026.9.1 because the official Bedrock provider
+# plugin declares "requires plugin API >=2026.9.2" and refuses to install on 9.1.
 support:
-  min: "2026.4.5"
-  max: "2026.7.1-2"   # last release before the 2.0 runtime contract
-  recommended: "2026.7.1-2"
+  min: "2026.9.2"
+  max: ""              # no upper bound: this line tracks the 2.x runtime contract
+  recommended: "2026.9.2"
 
 # The 2.0 runtime contract, measured against ghcr.io/openclaw/openclaw:2026.9.1.
 # See docs/spikes/SP-10-openclaw-2.0-startup-contract.md for how each was observed.

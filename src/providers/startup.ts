@@ -110,6 +110,7 @@ if [ -f "\${OPENCLAW_LEGACY_CONFIG}" ] && [ ! -f "\${OPENCLAW_CONFIG}" ]; then
   cp -p "\${OPENCLAW_LEGACY_CONFIG}" "\${OPENCLAW_CONFIG}"
   mv "\${OPENCLAW_LEGACY_CONFIG}" "\${OPENCLAW_LEGACY_CONFIG}.migrated"
   echo "clawops: migrated config from \${OPENCLAW_LEGACY_CONFIG}"
+  OPENCLAW_MIGRATED=1
 fi
 
 # ── Default config (apply.ts will overwrite with plan overlay) ───────────────
@@ -121,6 +122,18 @@ fi
 
 # Numeric, and last, so it covers the config and anything migrated above.
 chown -R ${CONTAINER_UID}:${CONTAINER_UID} "\${OPENCLAW_STATE_DIR}"
+
+# A 1.x config has no gateway.mode, and clawops no longer passes --allow-unconfigured —
+# so a migrated deployment would exit 78 with "existing config is missing gateway.mode".
+# Normalised with OpenClaw's own tooling rather than by editing JSON in shell: it is
+# schema-aware, writes atomically, and applies OpenClaw's internal config migrations at the
+# same time. Runs after the chown so the container can write.
+if [ "\${OPENCLAW_MIGRATED:-0}" = "1" ]; then
+  docker run --rm -v "\${OPENCLAW_STATE_DIR}":/home/node/.openclaw \\
+    ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION} \\
+    openclaw config set gateway.mode local || \\
+    echo "clawops: WARNING could not set gateway.mode; gateway may refuse to start" >&2
+fi
 
 # ── Start OpenClaw container ─────────────────────────────────────────────────
 # Built by src/openclaw/runtime.ts, so this cannot drift from the restart paths.

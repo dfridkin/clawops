@@ -82,6 +82,20 @@ export const SECURITY_FLAGS = [
   '--pids-limit 512',
 ].join(' ')
 
+/**
+ * Tells OpenClaw that something else owns its lifecycle.
+ *
+ * clawops starts, stops and replaces the container, so OpenClaw must not also try to
+ * manage the service or update itself. Verified in the image's own
+ * `gateway-supervision` module: with this set it reports "OpenClaw self-update is disabled
+ * while gateway lifecycle is managed by an external supervisor" and redirects lifecycle
+ * actions to the supervisor.
+ *
+ * Without it, a self-update would drift the running version away from the one the plan
+ * pinned — defeating the version guard from the inside.
+ */
+export const SUPERVISOR_ENV = '-e OPENCLAW_SUPERVISOR_MODE=external'
+
 /** Makes `host.docker.internal` resolvable for host-local model runtimes (Ollama, LM Studio). */
 export const ADD_HOST_FLAG = '--add-host=host.docker.internal:host-gateway'
 
@@ -175,12 +189,19 @@ export function gatewayRunArgs(spec: GatewayRunSpec): string {
     // No OPENCLAW_CONFIG_PATH: STATE_DIR_CONTAINER is OpenClaw's own default, so mounting
     // it there *is* the configuration. One fewer thing to keep in sync.
     ADD_HOST_FLAG,
+    SUPERVISOR_ENV,
     envFileArg,
     // The directory, writable. Never the file, and never :ro — see GatewayRunSpec.stateDir.
     `-v ${stateDir}:${STATE_DIR_CONTAINER}`,
     spec.extraArgs?.trim() ?? '',
     image,
-    `node openclaw.mjs gateway run --allow-unconfigured --port ${port}`,
+    // No --allow-unconfigured. That flag bypasses a check upstream describes as detecting
+    // "suspicious or clobbered config", and clawops passed it permanently — meaning a
+    // clobbered config would have started silently on defaults instead of failing.
+    // Provisioning writes `gateway.mode: "local"`, which is what the check actually wants.
+    // Measured on 2026.9.2: with the mode present the gateway starts without the flag; a
+    // config lacking it exits 78, which is the signal we want rather than one we suppress.
+    `node openclaw.mjs gateway run --port ${port}`,
   ]
     .filter(Boolean)
     .join(' ')

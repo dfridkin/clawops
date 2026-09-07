@@ -1,6 +1,6 @@
 // Config delivery (v1.7.2). Every `docker run` site must tell OpenClaw where its
 // config is; without OPENCLAW_CONFIG_PATH the mounted file is read by nothing.
-// Verified on 2026.7.1 and 2026.8.1 — see docs/spikes/SP-01-container-profile.md.
+// Verified on 2026.9.2 and 2026.8.1 — see docs/spikes/SP-01-container-profile.md.
 
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -48,9 +48,9 @@ describe('every run site delivers the config', () => {
   // and it would equally have passed on a site that built the string wrongly.
 
   const rendered: Array<[string, string]> = [
-    ['gateway restart / update (CLI)', gatewayDockerRunCmd('2026.7.1')],
-    ['config set (CLI)', configDockerRunCmd('ghcr.io/openclaw/openclaw:2026.7.1')],
-    ['cloud VM startup script', makeStartupScript({ openclawVersion: '2026.7.1', os: 'ubuntu' })],
+    ['gateway restart / update (CLI)', gatewayDockerRunCmd('2026.9.2')],
+    ['config set (CLI)', configDockerRunCmd('ghcr.io/openclaw/openclaw:2026.9.2')],
+    ['cloud VM startup script', makeStartupScript({ openclawVersion: '2026.9.2', os: 'ubuntu' })],
   ]
 
   for (const [label, cmd] of rendered) {
@@ -69,11 +69,16 @@ describe('every run site delivers the config', () => {
     })
 
     it(`${label} passes the gateway command with its flags`, () => {
-      // Omitting this is what broke `gateway restart`: the container fell back to the
-      // image CMD and died with "existing config is missing gateway.mode".
+      // Omitting the command is what broke `gateway restart`: the container fell back to
+      // the image CMD and died with "existing config is missing gateway.mode".
       expect(cmd).toContain('gateway run')
-      expect(cmd).toContain('--allow-unconfigured')
       expect(cmd).toContain('--port 18789')
+      // WO-40 dropped --allow-unconfigured. It suppressed the very check that catches a
+      // clobbered config; provisioning writes gateway.mode instead, which is what the
+      // check wants. Verified on 2026.9.2: with the mode present the gateway starts
+      // without the flag.
+      expect(cmd).not.toMatch(/gateway run[^\n]*--allow-unconfigured/)
+      expect(cmd).toContain('OPENCLAW_SUPERVISOR_MODE=external')
     })
   }
 
@@ -91,10 +96,11 @@ describe('every run site delivers the config', () => {
     // these strings — WO-38 replaced both of its run commands with placeholders filled by
     // src/openclaw/runtime.ts, which is the whole point: there is nothing left to drift.
     const { renderScript } = await import('../../src/providers/local/bootstrap.js')
-    const script = renderScript('2026.7.1')
+    const script = renderScript('2026.9.2')
     expect(script).toContain(':/home/node/.openclaw')
     expect(script).toContain('host.docker.internal:host-gateway')
-    expect(script).toContain('gateway run --allow-unconfigured')
+    expect(script).toContain('gateway run')
+      expect(script).not.toMatch(/gateway run[^\n]*--allow-unconfigured/)
     // Both branches — systemd foreground and the macOS detached path — get built.
     expect(script).not.toContain('{{GATEWAY_RUN')
   })
@@ -104,7 +110,7 @@ describe('every run site delivers the config', () => {
     // (rather than a template literal) emitted \${VAR}, which bash reads as an escaped
     // dollar and never expands. The command looked right in review and would have failed
     // on the host.
-    const script = makeStartupScript({ openclawVersion: '2026.7.1', os: 'ubuntu' })
+    const script = makeStartupScript({ openclawVersion: '2026.9.2', os: 'ubuntu' })
     expect(script).not.toContain('\\${')
   })
 
@@ -160,14 +166,14 @@ describe('every run site delivers the config', () => {
 
 describe('rendered commands', () => {
   it('the cloud startup script pins the port', () => {
-    const script = makeStartupScript({ openclawVersion: '2026.7.1', os: 'ubuntu' })
+    const script = makeStartupScript({ openclawVersion: '2026.9.2', os: 'ubuntu' })
     expect(script).toContain('--port 18789')
     expect(script).toContain(':/home/node/.openclaw')
     expect(script).toContain('host.docker.internal:host-gateway')
   })
 
   it('the CLI restart command carries the flags', () => {
-    const cmd = dockerRunCmd('2026.7.1')
+    const cmd = dockerRunCmd('2026.9.2')
     expect(cmd).toContain(':/home/node/.openclaw')
     expect(cmd).toContain('host.docker.internal:host-gateway')
     // The state DIRECTORY, writable — not a read-only config file.
@@ -205,9 +211,9 @@ describe('normaliseGatewayPort', () => {
 describe('gateway auth token', () => {
   // OpenClaw refuses a non-loopback bind without auth, and in a container it always
   // binds 0.0.0.0. The bootstrap never supplied a token, so a fresh local deployment
-  // exited 78 and systemd restart-looped. Verified on 2026.7.1 before and after.
+  // exited 78 and systemd restart-looped. Verified on 2026.9.2 before and after.
   const tmpl = read('src/providers/local/bootstrap.sh.tmpl')
-  const startup = makeStartupScript({ openclawVersion: '2026.7.1', os: 'ubuntu' })
+  const startup = makeStartupScript({ openclawVersion: '2026.9.2', os: 'ubuntu' })
 
   it('the local bootstrap generates a token', () => {
     expect(tmpl).toContain('OPENCLAW_GATEWAY_TOKEN=')
@@ -221,7 +227,7 @@ describe('gateway auth token', () => {
 
   it('passes the token by env-file, never on argv', async () => {
     const { renderScript } = await import('../../src/providers/local/bootstrap.js')
-    for (const src of [renderScript('2026.7.1'), startup]) {
+    for (const src of [renderScript('2026.9.2'), startup]) {
       expect(src).toContain('--env-file')
       // `--token <value>` on the run command would expose it in `ps`.
       expect(src).not.toMatch(/gateway run[^\n]*--token \$/)

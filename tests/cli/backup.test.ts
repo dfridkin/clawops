@@ -109,8 +109,8 @@ describe('backup command — create', () => {
 })
 
 describe('backup command — restore', () => {
-  it('refuses, because OpenClaw <= 2026.7.1-2 has no restore subcommand', async () => {
-    // 2026.7.1 ships `backup create` and `backup verify` only; restore arrived in
+  it('refuses, because OpenClaw <= 2026.9.2 has no restore subcommand', async () => {
+    // 2026.9.2 ships `backup create` and `backup verify` only; restore arrived in
     // OpenClaw 2.0. The previous implementation piped an archive into
     // `openclaw-ctl backup restore --stdin` — neither the binary nor the subcommand
     // exists, so it silently restored nothing.

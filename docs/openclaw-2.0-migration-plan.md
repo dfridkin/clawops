@@ -314,7 +314,24 @@ proved identity mapping unnecessary here, and the standard path matches upstream
 **Ownership must be numeric (uid 1000), never `clawops:clawops`** (G25).
 *Exception:* when sandboxing is enabled the state dir **must** be identity-mapped (SP-04) — see WO-53.
 
-**WO-40 — Auth and startup posture** *(G1′, G5, G6, G7, G13 — M)*
+**WO-40 — Auth and startup posture** *(G1′, G5, G6, G7, G13 — M)* — ✅ **done. The line is now 2.x.**
+`--allow-unconfigured` dropped; `OPENCLAW_SUPERVISOR_MODE=external` set, which disables OpenClaw's
+self-update — verified in the image's own `gateway-supervision` module and confirmed at runtime
+(`openclaw update` reports the external supervisor). Without it a self-update would drift the running
+version away from the pinned one, defeating the version guard from the inside. The registry typo (G7)
+went with the Pulumi component in WO-38.
+
+**A gap WO-39 left, found by auditing before implementing.** A migrated 1.x config has no
+`gateway.mode`, so dropping the flag would have made every upgraded deployment exit 78 — measured.
+Migration now normalises the config with OpenClaw's own `config set gateway.mode local`, which is
+schema-aware, atomic, and applies OpenClaw's internal migrations at the same time.
+
+`spec/openclaw-versions.yaml` is flipped: `line: "2.x"`, `support.min: 2026.9.2`, no ceiling. The
+interlock test passes, which is the point — it was written so this flip could not be declared before
+the runtime could honour it.
+
+Original text follows.
+
 **Write `gateway.mode: "local"` and stop passing `--allow-unconfigured`.** Measured on 2026.9.1:
 with `mode` present the gateway starts *without* the flag; with the flag it starts regardless of
 what the config says. Today clawops writes no `mode` and passes the flag, so it depends on the

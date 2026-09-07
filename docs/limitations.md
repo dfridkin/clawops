@@ -24,11 +24,16 @@ See [`docs/plan-apply.md`](plan-apply.md) for full semantics and drift guidance.
 
 ## OpenClaw version support
 
-**This clawops line supports OpenClaw up to 2026.7.1-2 only.** OpenClaw 2026.8.1
-("OpenClaw 2.0") changed the container runtime contract: sessions and credentials moved
-into SQLite under a state directory this line does not mount, the config moved to a
-writable path, and model providers became install-gated plugins. Deploying it from here
-produces a crash-looping gateway. `doctor`, `plan`, `up` and `apply` refuse it.
+**This clawops line requires OpenClaw >= 2026.9.2.** It deploys the 2.0 runtime contract:
+a writable state directory holding config, SQLite and plugins; `gateway.mode` written into
+the config; no `--allow-unconfigured`. A pre-2.0 OpenClaw understands none of that, so
+`doctor`, `plan`, `up` and `apply` refuse anything below the floor — the same guard that
+kept the 1.x line off 2.0, pointing the other way.
+
+The floor is `2026.9.2` rather than `2026.9.1` because the official Amazon Bedrock provider
+plugin declares `requires plugin API >=2026.9.2` and refuses to install on 9.1.
+
+For OpenClaw `<= 2026.7.1-2`, use the maintenance line: `npm install -g @clawops/cli@legacy`.
 
 For OpenClaw 2026.9.1 and later, use clawops 2.x. `clawops doctor --stack <name>` reports
 the version a deployed gateway is actually running, so an existing deployment that
