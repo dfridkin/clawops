@@ -7,8 +7,11 @@
 #
 # The optional dist-tag exists for the maintenance line. `changeset publish` defaults
 # to `latest`, so a 1.x patch released after 2.0.0 would take `latest` back and start
-# serving 1.x to everyone running a fresh `npm install`. The 1.x branch passes `v1`;
-# main passes nothing and keeps the default.
+# serving 1.x to everyone running a fresh `npm install`. The 1.x branch passes
+# `legacy`; main passes nothing and keeps the default.
+#
+# `legacy` rather than the obvious `v1`: npm rejects a dist-tag that parses as a
+# SemVer range, and `v1` parses as `>=1.0.0 <2.0.0-0`. So do `v1.x` and `1.x`.
 set -euo pipefail
 
 DIST_TAG="${1:-}"
