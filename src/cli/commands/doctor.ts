@@ -4,6 +4,7 @@ import { accessSync, mkdirSync, constants } from 'node:fs'
 import path from 'node:path'
 import { success, failure, warn, info, REPO_URL } from '../../output/human.js'
 import { PUBLISH_INSPECT_CMD, publishForRestart } from '../../openclaw/runtime.js'
+import { execPrivileged } from '../../transport/privileged.js'
 
 export default defineCommand({
   meta: {
@@ -172,7 +173,7 @@ export default defineCommand({
 
           try {
             // Container status
-            const containerResult = await session.exec(
+            const containerResult = await execPrivileged(session, 
               `docker inspect openclaw --format '{{.State.Status}}' 2>/dev/null || echo 'not found'`,
               ac.signal,
             )
@@ -186,7 +187,7 @@ export default defineCommand({
             // Deployed OpenClaw version — the half that helps users who ALREADY ran
             // `clawops up` with a moving tag and are now on an unsupported release.
             // Refusing future operations does nothing for them.
-            const imageResult = await session.exec(
+            const imageResult = await execPrivileged(session, 
               `docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo ''`,
               ac.signal,
             )
@@ -224,7 +225,7 @@ export default defineCommand({
             // A gateway published on 0.0.0.0 serves plaintext HTTP to anyone the firewall
             // admits; on loopback it is reachable only via `clawops tunnel` or a proxy on
             // the host.
-            const pubResult = await session.exec(PUBLISH_INSPECT_CMD, ac.signal)
+            const pubResult = await execPrivileged(session, PUBLISH_INSPECT_CMD, ac.signal)
             if (publishForRestart(pubResult.stdout) === 'all') {
               warn(
                 'Published    0.0.0.0 — the gateway port is open on every interface. ' +
@@ -236,7 +237,7 @@ export default defineCommand({
             }
 
             // Docker healthcheck
-            const healthResult = await session.exec(
+            const healthResult = await execPrivileged(session, 
               `docker inspect openclaw --format '{{.State.Health.Status}}' 2>/dev/null || echo 'none'`,
               ac.signal,
             )

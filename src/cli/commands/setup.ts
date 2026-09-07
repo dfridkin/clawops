@@ -14,6 +14,7 @@ import path from 'node:path'
 import { success, failure, info, spinner, printCta } from '../../output/human.js'
 import type { ClawopsConfig } from '../../config/store.js'
 import { MCP_APPS, buildMcpEntry, writeAppConfigs } from '../mcp-apps.js'
+import { execPrivileged } from '../../transport/privileged.js'
 
 // Minimal typing shim for inquirer v9 (ships no bundled .d.ts).
 interface InquirerQuestion {
@@ -923,7 +924,7 @@ async function checkDockerPreflight(opts: {
 
   let out = ''
   try {
-    const result = await session.exec(DOCKER_CHECK_CMD, execSignal)
+    const result = await execPrivileged(session, DOCKER_CHECK_CMD, execSignal)
     out = result.stdout.trim()
   } catch {
     // Timed out or aborted — don't block the deploy; let bootstrap handle it
@@ -992,7 +993,11 @@ async function startRemoteDocker(
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, DOCKER_POLL_MS))
       spin.text = `Waiting for Docker to start on ${opts.host}...`
-      const check = await session.exec(
+      // Privileged: this asks "can clawops drive Docker here?", and on AWS the answer is
+      // yes only via sudo — the SSH user is `ubuntu`, which is not in the docker group.
+      // Probing unprivileged would report NOT_RUNNING on a perfectly working host.
+      const check = await execPrivileged(
+        session,
         'docker version >/dev/null 2>&1 && echo OK || echo NOT_RUNNING',
         opts.signal,
       )

@@ -6,6 +6,7 @@ import process from 'node:process'
 import { success, failure, warn, info } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
 import { validateOpenclawConfig } from '../../mcp/tools/cli/config.js'
+import { execPrivileged } from '../../transport/privileged.js'
 
 // One definition, in runtime.ts. This file used to carry its own copy of the path,
 // as did gateway.ts and monitor.ts — the same drift WO-38 ended for the run command.
@@ -173,12 +174,12 @@ export default defineCommand({
       if (args.restart) {
         info('Restarting gateway...')
         // Read current image version to preserve it
-        const imgResult = await session.exec(
+        const imgResult = await execPrivileged(session, 
           `docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo 'ghcr.io/openclaw/openclaw:stable'`,
           abortController.signal,
         )
         const image = imgResult.stdout.trim()
-        const restartResult = await session.exec(dockerRunCmd(image), abortController.signal)
+        const restartResult = await execPrivileged(session, dockerRunCmd(image), abortController.signal)
         if (restartResult.code !== 0) {
           failure(`Restart failed: ${restartResult.stderr}`)
           process.exit(1)

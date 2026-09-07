@@ -6,6 +6,7 @@ import type { LogsTailInput } from '../_generated.js'
 import { buildContext } from '../../../cli/context.js'
 import { acquireSession, drainPool } from '../../../transport/pool.js'
 import { resolveConn, okText, errText } from '../_conn.js'
+import { execPrivileged } from '../../../transport/privileged.js'
 
 const MAX_BYTES = 8 * 1024
 
@@ -27,7 +28,7 @@ export async function handleLogsTail(input: LogsTailInput, _server: McpServer): 
       .filter(Boolean)
       .join(' ')
 
-    const result = await session.exec(command)
+    const result = await execPrivileged(session, command)
     if (result.code !== 0 && !result.stdout) {
       return errText(`Failed to fetch logs: ${result.stderr}`)
     }
