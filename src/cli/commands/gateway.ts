@@ -3,17 +3,19 @@ import process from 'node:process'
 import { spinner, success, failure } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
 import { renderTable } from '../../output/table.js'
+import { IMAGE_INSPECT_CMD, imageForRestart, versionOf } from '../../openclaw/run-flags.js'
 import {
-  gatewayRunCommand, IMAGE_INSPECT_CMD, imageForRestart, versionOf,
-} from '../../openclaw/run-flags.js'
+  gatewayRunCommand, PUBLISH_INSPECT_CMD, publishForRestart,
+} from '../../openclaw/runtime.js'
 
 const OPENCLAW_CONFIG = '/home/clawops/openclaw.json'
 
 /** Shared docker stop → rm → run command. Exported for tests. */
-export function dockerRunCmd(version: string): string {
+export function dockerRunCmd(version: string, publish: 'loopback' | 'all' = 'loopback'): string {
   return gatewayRunCommand({
     image: `ghcr.io/openclaw/openclaw:${version}`,
     configPath: OPENCLAW_CONFIG,
+    publish,
   })
 }
 
@@ -104,9 +106,14 @@ export default defineCommand({
           process.exit(1)
         }
         const version = versionOf(image.value)
+        const pub = await session.exec(PUBLISH_INSPECT_CMD, abortController.signal)
+        const publish = publishForRestart(pub.stdout)
 
         const spin = spinner('Restarting gateway...')
-        const result = await session.exec(dockerRunCmd(version), abortController.signal)
+        const result = await session.exec(
+          dockerRunCmd(version, publish),
+          abortController.signal,
+        )
         spin.stop()
 
         if (result.code !== 0) {
@@ -130,7 +137,13 @@ export default defineCommand({
           process.exit(1)
         }
 
-        const runResult = await session.exec(dockerRunCmd(version), abortController.signal)
+        // An update changes the version by request; it must not also change who can
+          // reach the gateway.
+          const pubU = await session.exec(PUBLISH_INSPECT_CMD, abortController.signal)
+          const runResult = await session.exec(
+            dockerRunCmd(version, publishForRestart(pubU.stdout)),
+            abortController.signal,
+          )
         spin.stop()
 
         if (runResult.code !== 0) {

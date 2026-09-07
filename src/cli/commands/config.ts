@@ -1,5 +1,5 @@
 import { defineCommand } from 'citty'
-import { gatewayRunCommand } from '../../openclaw/run-flags.js'
+import { gatewayRunCommand } from '../../openclaw/runtime.js'
 import process from 'node:process'
 import { success, failure, warn, info } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'

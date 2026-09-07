@@ -22,6 +22,10 @@ export const azureProgram: PulumiFn = async () => {
   const instanceType = cfg.get('instanceType') ?? 'Standard_B2s'
   const location = cfg.get('region') ?? 'eastus'
   const openclawVersion = cfg.get('openclawVersion') ?? 'latest'
+  // Exposure is an explicit choice, never inferred from allowedGatewayCidrs — the
+  // wizard fills that from the SSH CIDR, so inferring would publish plaintext HTTP
+  // to whatever network someone picked for shell access.
+  const publishGateway = cfg.get('publishGateway') === 'all' ? 'all' : 'loopback'
   const accessMode = cfg.get('accessMode') ?? 'restricted'
   const allowedCidrs = cfg.get('allowedCidrs') ?? ''
   const sshCidrs = cfg.get('sshCidrs') ?? ''
@@ -158,7 +162,7 @@ export const azureProgram: PulumiFn = async () => {
     osProfile: {
       adminUsername: 'clawops',
       computerName: 'clawops',
-      customData: Buffer.from(makeStartupScript({ openclawVersion, os: 'ubuntu' })).toString('base64'),
+      customData: Buffer.from(makeStartupScript({ openclawVersion, os: 'ubuntu', publishGateway })).toString('base64'),
       linuxConfiguration: {
         disablePasswordAuthentication: true,
         ssh: {

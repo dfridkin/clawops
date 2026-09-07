@@ -36,6 +36,8 @@ export interface DeployPlan {
     network: {
       allowedSshCidrs: string[]
       allowedGatewayCidrs: string[]
+      /** Interface the gateway publishes on. Defaults to loopback. */
+      publishGateway?: 'loopback' | 'all'
       tailscale?: { enabled: boolean; authKeyRef?: string }
     }
     ssh?: { publicKey?: string; user?: string }
@@ -55,7 +57,10 @@ export interface GeneratePlanIntent {
   region?: string
   instanceType?: string
   openclawVersion?: string
-  network?: { allowedSshCidrs: string[]; allowedGatewayCidrs: string[] }
+  network?: {
+    allowedSshCidrs: string[]
+    allowedGatewayCidrs: string[]
+  }
   tags?: Record<string, string>
 }
 

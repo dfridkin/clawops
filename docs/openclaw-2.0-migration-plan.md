@@ -234,7 +234,39 @@ on --allow-unconfigured"* — and restoring.
 
 ### Phase 1 — runtime contract
 
-**WO-38 — One runtime contract, one builder** *(L — the critical path)*
+**WO-38 — One runtime contract, one builder** *(L — the critical path)* — ✅ **done**
+`src/openclaw/runtime.ts` is the only place a gateway container starts: six hand-written `docker run`
+strings collapsed into one builder with six callers. The dead Pulumi `Gateway` component (G7) is
+deleted rather than fixed. `gatewayRunArgs` and `gatewayRunCommand` differ only in supervision, so
+the systemd ExecStart line and the detached path are provably the same command.
+
+Adopted from SP-06's live-cell profile: `--cap-drop=ALL`, `--security-opt no-new-privileges`,
+`--init`, `--pids-limit 512`, and **loopback publishing**. Fleet's `--memory`/`--cpus` are *not*
+adopted by default — those divide one host between tenants, and inheriting a 2 GB cap would shrink a
+large single-tenant box rather than protect it; they are opt-in via `limits`.
+
+Loopback publishing broke exactly one caller, found by tracing it rather than by testing after:
+local bootstrap polled `http://<host>:18789/health` from the operator's machine. It now probes the
+host's loopback over the SSH session. `clawops tunnel` was already safe — it forwards to
+`localhost` on the remote.
+
+One bug caught in the writing: passing `'"\${VAR}"'` from a plain string literal (rather than the
+template literal it replaced) emitted `\${VAR}`, which bash reads as an escaped dollar and never
+expands. It rendered plausibly and would have failed on the host. There is now a test asserting no
+generated script contains `\${`.
+
+Loopback is a **default**, not a lock: `network.publishGateway: 'loopback' | 'all'` makes exposure
+an explicit choice. It is deliberately **not** derived from `allowedGatewayCidrs` — the plan
+originally said WO-41 would couple them, and that was wrong. The wizard filled that field from the
+CIDR given for *SSH*, so coupling would have re-opened a plaintext HTTP dashboard to someone's
+shell-access network, silently, on the default path. The wizard now leaves it empty.
+
+Restart paths preserve the scope by inspecting the running container's port bindings, the same way
+they preserve the image version — the mirror of the v1.7.6 bug, where a restart silently *widened*
+the version.
+
+*Original text follows.*
+
 `src/openclaw/runtime.ts` owns image ref, paths, ports, env names, and a single command builder driven
 by the spec. Replaces all six hand-written `docker run` strings and the Pulumi component. Adopts
 Fleet's profile, **validated against a live cell** (SP-06): loopback publishing, `--cap-drop=ALL`,

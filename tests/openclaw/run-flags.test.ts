@@ -78,12 +78,26 @@ describe('every run site delivers the config', () => {
     }
   })
 
-  it('the shell template still carries the flags inline', () => {
-    // Provisioning is a shell template, not TypeScript, so a source check is the only
-    // option there. It is the one remaining place these strings are written by hand.
-    const src = read('src/providers/local/bootstrap.sh.tmpl')
-    expect(src).toContain('OPENCLAW_CONFIG_PATH=/app/config.json')
-    expect(src).toContain('host.docker.internal:host-gateway')
+  it('the rendered local script carries the flags', async () => {
+    // Asserted on the RENDERED script, not the template. The template no longer contains
+    // these strings — WO-38 replaced both of its run commands with placeholders filled by
+    // src/openclaw/runtime.ts, which is the whole point: there is nothing left to drift.
+    const { renderScript } = await import('../../src/providers/local/bootstrap.js')
+    const script = renderScript('2026.7.1')
+    expect(script).toContain('OPENCLAW_CONFIG_PATH=/app/config.json')
+    expect(script).toContain('host.docker.internal:host-gateway')
+    expect(script).toContain('gateway run --allow-unconfigured')
+    // Both branches — systemd foreground and the macOS detached path — get built.
+    expect(script).not.toContain('{{GATEWAY_RUN')
+  })
+
+  it('emits no literal backslash-dollar into a generated shell script', () => {
+    // A real bug caught during WO-38: passing '"\\${VAR}"' from a plain string literal
+    // (rather than a template literal) emitted \${VAR}, which bash reads as an escaped
+    // dollar and never expands. The command looked right in review and would have failed
+    // on the host.
+    const script = makeStartupScript({ openclawVersion: '2026.7.1', os: 'ubuntu' })
+    expect(script).not.toContain('\\${')
   })
 
   it('no site builds its own gateway `docker run`', () => {
@@ -195,8 +209,9 @@ describe('gateway auth token', () => {
     expect(startup).toMatch(/openssl rand -hex 32/)
   })
 
-  it('passes the token by env-file, never on argv', () => {
-    for (const src of [tmpl, startup]) {
+  it('passes the token by env-file, never on argv', async () => {
+    const { renderScript } = await import('../../src/providers/local/bootstrap.js')
+    for (const src of [renderScript('2026.7.1'), startup]) {
       expect(src).toContain('--env-file')
       // `--token <value>` on the run command would expose it in `ps`.
       expect(src).not.toMatch(/gateway run[^\n]*--token \$/)

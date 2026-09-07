@@ -56,6 +56,9 @@ export async function applyPlan(
     await stack.setConfig('region', { value: plan.spec.region })
   }
   await stack.setConfig('openclawVersion', { value: plan.spec.openclaw.version })
+  await stack.setConfig('publishGateway', {
+    value: plan.spec.network?.publishGateway ?? 'loopback',
+  })
 
   // Enable Bedrock IAM attachment when the plan selects the bedrock provider.
   const modelProvider = (plan.spec.openclaw.config?.['models'] as Record<string, unknown> | undefined)?.['provider']

@@ -2,6 +2,8 @@
 // All three providers (AWS, GCP, Azure) use this to ensure consistent
 // Docker installation, user setup, and OpenClaw container launch.
 
+import { gatewayRunCommand } from '../openclaw/runtime.js'
+
 export interface StartupScriptOpts {
   openclawVersion: string
   /** OS family — controls which Docker apt source is used. */
@@ -11,6 +13,15 @@ export interface StartupScriptOpts {
    * an IMDSv2-compliant two-step curl. Only meaningful on AWS EC2.
    */
   bedrockEnabled?: boolean
+  /**
+   * Interface the gateway publishes on. Defaults to loopback.
+   *
+   * Deliberately NOT derived from `allowedGatewayCidrs`. The wizard populates that field
+   * from the CIDR the user gave for SSH, so inferring exposure from it would open a
+   * plaintext HTTP dashboard to whatever network someone chose for shell access. A
+   * firewall rule says who may connect; this says whether the port listens at all.
+   */
+  publishGateway?: 'loopback' | 'all'
 }
 
 /**
@@ -28,7 +39,7 @@ export interface StartupScriptOpts {
  * works on instances with httpTokens=required.
  */
 export function makeStartupScript(opts: StartupScriptOpts): string {
-  const { openclawVersion, os, bedrockEnabled = false } = opts
+  const { openclawVersion, os, bedrockEnabled = false, publishGateway = 'loopback' } = opts
   const dockerDistro = os === 'ubuntu' ? 'ubuntu' : 'debian'
   const bedrockEnvBlock = bedrockEnabled ? makeBedrockEnvBlock() : ''
 
@@ -90,17 +101,14 @@ OPENCLAWJSON
 fi
 
 # ── Start OpenClaw container ─────────────────────────────────────────────────
-docker stop openclaw 2>/dev/null || true
-docker rm   openclaw 2>/dev/null || true
-docker run -d \\
-  --name openclaw \\
-  --restart unless-stopped \\
-  -p 18789:18789 \\
-  -e OPENCLAW_CONFIG_PATH=/app/config.json --add-host=host.docker.internal:host-gateway \\
-  --env-file "\${OPENCLAW_ENV_FILE}" \\
-  -v "\${OPENCLAW_CONFIG}":/app/config.json:ro \\
-${bedrockEnvBlock}  ghcr.io/openclaw/openclaw:\${OPENCLAW_VERSION} \\
-  node openclaw.mjs gateway run --allow-unconfigured --port 18789
+# Built by src/openclaw/runtime.ts, so this cannot drift from the restart paths.
+${gatewayRunCommand({
+  image: 'ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}',
+  configPath: '"${OPENCLAW_CONFIG}"',
+  envFilePath: '"${OPENCLAW_ENV_FILE}"',
+  extraArgs: bedrockEnvBlock.trim(),
+  publish: publishGateway,
+})}
 `
 }
 

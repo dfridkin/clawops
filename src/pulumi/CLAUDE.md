@@ -7,7 +7,8 @@ All Pulumi resources use: `clawops:<category>:<Name>`
 Categories:
 - `infra` — Server, HostBootstrap
 - `net`   — Firewall, Tunnel
-- `app`   — Gateway, GatewayInit
+- `app`   — GatewayInit  (the Gateway component was deleted in 2.0: nothing
+          constructed it, and it still pointed at a registry that does not exist)
 - `build` — Image
 - `state` — Secrets, ConfigStore
 

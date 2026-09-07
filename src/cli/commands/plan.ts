@@ -74,12 +74,16 @@ export default defineCommand({
     const { spec, metadata } = plan
     const sshCidrs = spec.network.allowedSshCidrs.join(', ') || '(none)'
     const gatewayCidrs = spec.network.allowedGatewayCidrs.join(', ') || '(none)'
+    const publish = spec.network.publishGateway ?? 'loopback'
     process.stderr.write(
       `\nPlan: ${metadata.name}  (${spec.provider}${spec.region ? ` / ${spec.region}` : ''})\n` +
       `  Instance:  ${spec.instanceType}\n` +
       `  OpenClaw:  ${spec.openclaw.version}\n` +
       `  SSH CIDRs: ${sshCidrs}\n` +
-      `  Gateway:   ${gatewayCidrs}\n`,
+      `  Gateway:   ${gatewayCidrs}\n` +
+      `  Published: ${publish === 'all'
+        ? '0.0.0.0 — reachable from the network; plaintext HTTP unless you add TLS'
+        : '127.0.0.1 only — use `clawops tunnel` or a proxy on the host'}\n`,
     )
 
     if (plan.diff) {

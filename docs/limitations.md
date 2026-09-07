@@ -56,6 +56,23 @@ address accordingly. The runtime must also listen on an address the container ca
 
 ## Networking and TLS
 
+**The gateway is published on the host's loopback by default.** Since clawops 2.0 the container
+publishes `127.0.0.1:18789`, not `0.0.0.0:18789`, so the port is not reachable from the network
+even if a security group allows it. Reach it with `clawops tunnel` (which forwards to the host's
+loopback) or a reverse proxy running on the host.
+
+Set `network.publishGateway: "all"` in the plan to bind `0.0.0.0`. That is deliberately a separate
+choice from `allowedGatewayCidrs`: a firewall rule says *who may connect*, this says *whether the
+port is listening at all*. Before 2.0 the wizard set the gateway CIDR to whatever the operator gave
+for SSH, so a plaintext HTTP dashboard was opened to their whole shell-access network as a side
+effect of one unrelated answer.
+
+A reverse proxy running **in a container** on the same host cannot reach the host loopback without
+`--network host` or `host.docker.internal`. A proxy running directly on the host can.
+
+`clawops doctor` reports which scope a deployment is using, and `gateway restart`/`update` preserve
+it — a restart changes neither the version nor who can reach it.
+
 **No TLS or domain automation in the current release.** The gateway runs on port 18789 without
 TLS termination. Bring your own reverse proxy (nginx, Caddy, Cloudflare Tunnel) for HTTPS. TLS
 automation is tracked in the roadmap.

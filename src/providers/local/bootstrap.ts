@@ -5,6 +5,8 @@ import { readFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { acquireSession } from '../../transport/pool.js'
+import type { SshSession } from '../../transport/ssh.js'
+import { gatewayRunArgs, gatewayRunCommand } from '../../openclaw/runtime.js'
 import { writeLocalState, type LocalState } from './state.js'
 import { ProviderError } from '../../errors/index.js'
 
@@ -46,8 +48,22 @@ function loadTemplate(): string {
   )
 }
 
-function renderScript(openclawVersion: string): string {
-  return loadTemplate().replace(/\{\{OPENCLAW_VERSION\}\}/g, openclawVersion)
+/** Exported so tests assert the rendered provisioning script, not the template. */
+export function renderScript(openclawVersion: string): string {
+  // The two run commands are built by src/openclaw/runtime.ts rather than written into
+  // the template. They differ only in supervision — systemd runs it in the foreground and
+  // owns restarts; the macOS branch detaches — and when they were hand-written they drifted
+  // (the macOS branch still carried a duplicated --env-file).
+  const shared = {
+    image: 'ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}',
+    configPath: '"${OPENCLAW_CONFIG}"',
+    envFilePath: '"${OPENCLAW_ENV_FILE}"',
+    port: '${OPENCLAW_PORT}',
+  }
+  return loadTemplate()
+    .replace(/\{\{GATEWAY_RUN_SYSTEMD\}\}/g, gatewayRunArgs({ ...shared, supervisor: 'systemd' }))
+    .replace(/\{\{GATEWAY_RUN_DARWIN\}\}/g, gatewayRunCommand(shared))
+    .replace(/\{\{OPENCLAW_VERSION\}\}/g, openclawVersion)
 }
 
 /**
@@ -83,6 +99,10 @@ export async function localBootstrap(opts: BootstrapOpts): Promise<LocalState> {
         )
       }
     }
+
+    // Inside the session: the gateway now publishes on the host's loopback only, so the
+    // probe has to run on the host.
+    if (!opts.noWait) await waitForGateway(session, opts.signal)
   } finally {
     release()
   }
@@ -102,36 +122,34 @@ export async function localBootstrap(opts: BootstrapOpts): Promise<LocalState> {
 
   writeLocalState(opts.stackName, state)
 
-  if (!opts.noWait) {
-    await waitForGateway(opts.host, GATEWAY_PORT, opts.signal)
-  }
-
   return state
 }
 
-async function waitForGateway(
-  host: string,
-  port: number,
-  signal?: AbortSignal,
-): Promise<void> {
-  const url = `http://${host}:${port}/health`
+async function waitForGateway(session: SshSession, signal?: AbortSignal): Promise<void> {
+  // Probed over the SSH session against the host's loopback, not with a fetch() from the
+  // operator's machine.
+  //
+  // WO-38 publishes the gateway on 127.0.0.1 only — it is reached through `clawops tunnel`
+  // or a reverse proxy, never by opening the port. A fetch() from here would have to cross
+  // the network to a port that is deliberately not listening there, so it would fail on
+  // every healthy deployment. `clawops tunnel` is unaffected: it forwards to the remote's
+  // own loopback already.
+  const url = `http://127.0.0.1:${GATEWAY_PORT}/health`
+  const probe = `curl -fsS -m 5 -o /dev/null -w '%{http_code}' ${url} 2>/dev/null || echo 000`
   const deadline = Date.now() + HEALTH_TIMEOUT_MS
 
   while (Date.now() < deadline) {
     if (signal?.aborted) {
       throw new ProviderError('Bootstrap aborted while waiting for gateway')
     }
-    try {
-      const res = await fetch(url, { signal })
-      if (res.ok) return
-    } catch {
-      // Not ready yet — keep polling
-    }
+    const result = await session.exec(probe, signal)
+    if (result.stdout.trim().startsWith('2')) return
     await sleep(HEALTH_POLL_INTERVAL_MS)
   }
 
   throw new ProviderError(
-    `Gateway at ${url} did not become healthy within ${HEALTH_TIMEOUT_MS / 1000}s`,
+    `Gateway did not become healthy within ${HEALTH_TIMEOUT_MS / 1000}s. ` +
+      `Probed ${url} on the host; check \`clawops logs\`.`,
   )
 }
 
