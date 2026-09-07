@@ -38,6 +38,7 @@ the plan are **not** valid on Docker Desktop.
 | SP-07 | Migration works, but **1.x state is inside the container** and there is **no config to carry forward** |
 | SP-08 | Bedrock works — **only on ≥2026.9.1**. Floor moved. |
 | SP-09 | **No published image needed** — Docker's static CLI mounted into the unmodified official image drives the sandbox backend |
+| SP-10 | The 2.0 startup contract, measured | [SP-10](SP-10-openclaw-2.0-startup-contract.md) | `gateway.mode` gate, plugin auto-install + convergence restart, silent absence without egress |
 
 **Two P0s refuted, four new gaps found (G25, G26, plugin-gated providers, plugin/runtime skew),
 one version floor moved.**

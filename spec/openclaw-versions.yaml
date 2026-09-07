@@ -1,37 +1,92 @@
 # OpenClaw Version Compatibility Matrix
 # Enforced by src/openclaw/versions.ts — `doctor`, `plan`, `up` and `apply` refuse
-# an OpenClaw version outside this range. Update via /openclaw-config skill.
+# an OpenClaw version outside `support`. Update via /openclaw-config skill.
 #
-# This is the clawops 1.x line: it supports the pre-2.0 OpenClaw runtime contract only.
-# OpenClaw 2026.8.1 ("OpenClaw 2.0") changed that contract — state moved into SQLite,
-# config moved to a writable path, and provider plugins became install-gated. Deploying
-# it from this line produces a crash-looping gateway (exit 78). Use clawops 2.x instead.
+# `support.min`, `support.max` and `support.recommended` are LIVE. Nothing reads
+# `runtime`, `quirks`, `incompatible` or `tested`; they are documentation and the
+# machine-readable source WO-38 will build the runtime contract from.
 
 version: 1
 
-# Minimum and maximum versions clawops supports
+# Which release line this checkout is. Flipping this to "2.x" is gated by a test
+# (tests/openclaw/line-interlock.test.ts) that fails until the runtime actually
+# implements the 2.0 contract — see `runtime` below.
+line: "1.x"
+
+# Minimum and maximum versions clawops supports.
+#
+# Still the 1.x range, deliberately. main is becoming the 2.x line, but until
+# WO-38/39/40 land it can only deploy the pre-2.0 contract correctly. Flipping the
+# range before the runtime work would invert this guard: it would refuse 2026.7.1-2,
+# the only thing the code can actually deploy, and accept 2026.9.1+, which it would
+# deploy with the 1.x contract and crash-loop. The flip lands with WO-40.
 support:
   min: "2026.4.5"
   max: "2026.7.1-2"   # last release before the 2.0 runtime contract
   recommended: "2026.7.1-2"
 
-# Provider-specific quirks discovered through testing
+# The 2.0 runtime contract, measured against ghcr.io/openclaw/openclaw:2026.9.1.
+# See docs/spikes/SP-10-openclaw-2.0-startup-contract.md for how each was observed.
+# WO-38 consumes this; today nothing reads it.
+runtime:
+  targetMin: "2026.9.1"
+  image: "ghcr.io/openclaw/openclaw"
+  variants: [standard, slim, browser]   # `-slim`, `-browser` tag suffixes
+  configPath: "/app/config.json"        # via OPENCLAW_CONFIG_PATH
+  gatewayPort: 18789
+  env:
+    configPath: OPENCLAW_CONFIG_PATH
+    token: OPENCLAW_GATEWAY_TOKEN
+    stateDir: OPENCLAW_STATE_DIR
+  startup:
+    # Verified: without gateway.mode the gateway exits 78 unless --allow-unconfigured
+    # is passed. Setting the mode is the supported answer; the flag exists to bypass a
+    # check for "suspicious or clobbered config", so clawops should not rely on it.
+    requiresGatewayMode: true
+    gatewayMode: "local"          # schema accepts local|remote
+    allowUnconfigured: false      # what 2.x should pass — i.e. do not pass it
+    exitCodeOnBlockedStart: 78
+  # Provider plugins are not all bundled. A configured-but-missing plugin is
+  # auto-installed from ClawHub on first boot, after which the gateway refuses to
+  # report ready and exits 1 ("startup convergence"); the next boot succeeds.
+  # The install lands in the container's writable layer, so it is lost — and refetched —
+  # on every container replacement, which is what clawops's restart path does.
+  plugins:
+    bundledSourceRoot: "/app/dist/extensions"
+    installedPath: "/app/npm/projects"
+    convergenceRestartRequired: true
+    providers:
+      amazon-bedrock:
+        bundled: false
+        package: "@openclaw/amazon-bedrock-provider"
+        install: "openclaw plugins install clawhub:@openclaw/amazon-bedrock-provider"
+        requiresEgress: true
+        # With no egress the gateway starts cleanly WITHOUT the provider — a healthy
+        # deployment missing the model backend it was configured for. clawops defaults
+        # to deny-all egress, so this is the default outcome, not an edge case.
+        silentlyAbsentWithoutEgress: true
+      ollama:    { bundled: true }
+      anthropic: { bundled: true }
+      openai:    { bundled: true }
+
 quirks:
-  - id: aws-bedrock-aws-profile
+  - id: openclaw-2-provider-plugin-install
     description: |
-      OpenClaw 2026.4.5+ ignores `auth: "aws-sdk"` in openclaw.json's Bedrock
-      provider config. Instead, AWS_PROFILE must be set in the systemd
-      EnvironmentFile so the AWS SDK resolves credentials via IMDS.
+      OpenClaw 2.0 does not bundle every model provider. A provider named in
+      models.providers whose plugin is missing is installed from ClawHub during
+      startup convergence; the gateway then exits 1 and requires one restart. With no
+      network egress the gateway starts successfully but without the provider.
     affected:
-      versions: ">=2026.4.5"
+      versions: ">=2026.8.1"
       providers: [aws]
       configs: [openclaw.models.providers.amazon-bedrock]
     workaround: |
-      AWS adapter MUST emit BOTH:
-      1. openclaw.json with `auth: "aws-sdk"` (for older versions, ignored by newer)
-      2. systemd EnvironmentFile with `AWS_PROFILE=default` (or the profile name)
-      Adapter should test the rendered systemd unit includes the EnvironmentFile.
-    discoveredFrom: aws-samples/sample-OpenClaw-on-AWS-with-Bedrock troubleshooting docs
+      Install the plugin at provisioning time, before the first gateway start:
+        openclaw plugins install clawhub:@openclaw/amazon-bedrock-provider
+      and/or persist /app/npm/projects so a container replacement does not refetch it.
+      Verify after deploy rather than trusting a healthy gateway: a missing provider
+      does not fail the health check.
+    discoveredFrom: docs/spikes/SP-10-openclaw-2.0-startup-contract.md
 
   - id: pnpm-pulumi-hoisting
     description: |
@@ -43,25 +98,34 @@ quirks:
       providers: ["*"]
     workaround: See docs/decisions/0003-pulumi-pnpm.md
 
-# Tested combinations — populated by CI matrix
+# Retired: `aws-bedrock-aws-profile` (AWS_PROFILE in the systemd EnvironmentFile).
+# It described a native/systemd install; clawops is Docker-only per ADR 0013, and on
+# 2.0 the Bedrock question is plugin installation, not credential resolution.
+
 tested:
   - openclawVersion: "2026.4.5"
     providers: [aws, gcp, local]
     nodeVersions: ["20.x", "22.x"]
     lastTestedAt: "2026-04-15"
+  - openclawVersion: "2026.9.1"
+    providers: []          # runtime contract characterised only; no deploy path yet
+    nodeVersions: ["24.x"]
+    lastTestedAt: "2026-09-06"
+    notes: "SP-10 — startup contract, plugin install behaviour, config schema capture."
 
-# Known incompatible combinations
 incompatible:
   - openclawVersionRange: "<2026.4.5"
     reason: "Below clawops's declared minimum support. Earlier OpenClaw versions used different config paths and channel registration semantics."
   - openclawVersionRange: ">=2026.8.1"
     reason: |
-      OpenClaw 2.0 changed the container runtime contract. Verified against 2026.8.1:
-        - No gateway token on first boot => "Refusing to bind gateway to auto without
-          auth", exit 78, crash-loop under --restart unless-stopped.
+      OpenClaw 2.0 changed the container runtime contract. Verified on 2026.8.1 and
+      re-verified on 2026.9.1:
+        - Without gateway.mode the gateway exits 78 unless --allow-unconfigured is
+          passed; clawops writes no mode.
         - Sessions, transcripts and credentials moved into SQLite under the state
           directory, which this line does not mount => total state loss on restart.
-        - Provider plugins (Bedrock included) are install-gated; a configured but
-          uninstalled provider prevents startup entirely.
+        - Provider plugins are not all bundled. A configured provider whose plugin is
+          missing is fetched at startup, costing a convergence restart — or is silently
+          absent when egress is denied, which is clawops's default.
       Use clawops 2.x, which targets OpenClaw >= 2026.9.1.
     useInstead: "@clawops/cli@2"
