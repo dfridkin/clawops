@@ -166,15 +166,15 @@ describe('gateway command', () => {
       acquireSession.mockImplementation(wireSession(session))
 
       const cmd = await getCmd()
-      await (cmd.run as AnyRunFn)({ args: { _: ['update', 'dev'], stack: undefined, channel: undefined, json: false } })
+      await (cmd.run as AnyRunFn)({ args: { _: ['update', '2026.9.2'], stack: undefined, channel: undefined, json: false } })
 
       const pull = execCommands.find((c) => c.includes('docker pull'))
       const run = execCommands.find((c) => c.includes('docker run'))
-      expect(pull).toContain('dev')
+      expect(pull).toContain('2026.9.2')
       // An update changes the version by request; it must not change reachability, so it
       // reads the current port bindings first.
       expect(execCommands.some((c) => c.includes('PortBindings'))).toBe(true)
-      expect(run).toContain('dev')
+      expect(run).toContain('2026.9.2')
       expect(run).toContain('127.0.0.1:18789')
     })
 
@@ -189,12 +189,12 @@ describe('gateway command', () => {
       acquireSession.mockImplementation(wireSession(session))
 
       const cmd = await getCmd()
-      await (cmd.run as AnyRunFn)({ args: { _: ['update'], stack: undefined, channel: 'dev', json: false } })
+      await (cmd.run as AnyRunFn)({ args: { _: ['update'], stack: undefined, channel: '2026.9.2', json: false } })
 
-      expect(execCommands[0]).toContain('dev')
+      expect(execCommands[0]).toContain('2026.9.2')
     })
 
-    it('defaults to stable when no version or channel given', async () => {
+    it('defaults to the supported pin, never a moving tag', async () => {
       const execCommands: string[] = []
       const session = new FakeSshSession()
       session.onExec((cmd) => { execCommands.push(cmd); return { stdout: '', stderr: '', code: 0 } })
@@ -207,7 +207,60 @@ describe('gateway command', () => {
       const cmd = await getCmd()
       await (cmd.run as AnyRunFn)({ args: { _: ['update'], stack: undefined, channel: undefined, json: false } })
 
-      expect(execCommands[0]).toContain('stable')
+      // Was `stable` — a moving tag handed straight to `docker pull`, which is how an
+      // unsupported release reaches a deployment. Now the recommended pin from
+      // spec/openclaw-versions.yaml.
+      expect(execCommands[0]).toContain('2026.9.2')
+      expect(execCommands[0]).not.toContain('stable')
+    })
+
+    it('refuses a version the runtime cannot deploy, BEFORE pulling it', async () => {
+      // `update` is the only command that changes the deployed version, and it was the
+      // only one that did not check it. Guarding after the pull would guard after the
+      // damage: the image is on the host and the container is replaced with it.
+      const execCommands: string[] = []
+      const session = new FakeSshSession()
+      session.onExec(function handler(cmd: string) {
+        execCommands.push(cmd)
+        session.onExec(handler)
+        return { stdout: '', stderr: '', code: 0 }
+      })
+      const { buildContext, acquireSession } = await getMocks()
+      buildContext.mockReturnValue(makeFakeContext())
+      acquireSession.mockImplementation(wireSession(session))
+
+      const cmd = await getCmd()
+      await expect(
+        (cmd.run as AnyRunFn)({
+          args: { _: ['update', '2026.7.1-2'], stack: undefined, channel: undefined, json: false },
+        }),
+      ).rejects.toThrow(/older than this clawops release supports|legacy/)
+
+      // Nothing reached the host at all.
+      expect(execCommands.filter((c) => c.includes('docker pull'))).toEqual([])
+    })
+
+    it('refuses a moving tag rather than resolving it at pull time', async () => {
+      // A moving tag passed to `docker pull` is resolved by the registry, after every
+      // check clawops could make. That is how the unbounded ceiling survived on 1.x.
+      const execCommands: string[] = []
+      const session = new FakeSshSession()
+      session.onExec(function handler(cmd: string) {
+        execCommands.push(cmd)
+        session.onExec(handler)
+        return { stdout: '', stderr: '', code: 0 }
+      })
+      const { buildContext, acquireSession } = await getMocks()
+      buildContext.mockReturnValue(makeFakeContext())
+      acquireSession.mockImplementation(wireSession(session))
+
+      const cmd = await getCmd()
+      await expect(
+        (cmd.run as AnyRunFn)({
+          args: { _: ['update'], stack: undefined, channel: 'stable', json: false },
+        }),
+      ).rejects.toThrow(/moving tag/)
+      expect(execCommands.filter((c) => c.includes('docker pull'))).toEqual([])
     })
 
     it('exits with code 1 when docker pull fails', async () => {
@@ -222,7 +275,7 @@ describe('gateway command', () => {
 
       const cmd = await getCmd()
       await expect(
-        (cmd.run as AnyRunFn)({ args: { _: ['update', 'nonexistent'], stack: undefined, channel: undefined, json: false } })
+        (cmd.run as AnyRunFn)({ args: { _: ['update', '2026.9.2'], stack: undefined, channel: undefined, json: false } })
       ).rejects.toThrow('exit:1')
 
       exitSpy.mockRestore()

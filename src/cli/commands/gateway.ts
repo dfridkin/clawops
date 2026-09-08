@@ -27,7 +27,7 @@ export default defineCommand({
   },
   args: {
     stack: { type: 'string', description: 'Target stack name' },
-    channel: { type: 'string', description: 'Channel for update: stable | dev | <version>' },
+    channel: { type: 'string', description: 'Version for update (a concrete pin; moving tags are refused)' },
     json: { type: 'boolean', description: 'Emit JSON (for status)' },
   },
   async run({ args }) {
@@ -125,7 +125,19 @@ export default defineCommand({
         success(`Gateway restarted (${version}).`)
       } else {
         // update
-        const version = versionArg ?? args.channel ?? 'stable'
+        //
+        // The one path that CHANGES the deployed version, and the one path that did not
+        // check it. `clawops gateway update 2026.7.1-2` would have pulled a pre-2.0
+        // OpenClaw onto a host running the 2.0 contract; and the old default was the
+        // moving tag `stable`, handed straight to `docker pull` with no resolution and no
+        // range check — exactly how an unsupported release reaches a deployment. Guarding
+        // after the pull would be guarding after the damage.
+        const { guardOpenclawVersion, defaultOpenclawVersion } =
+          await import('../version-guard.js')
+        const requested = versionArg ?? args.channel
+        const version = requested
+          ? await guardOpenclawVersion(requested)
+          : await defaultOpenclawVersion()
 
         const spin = spinner(`Updating gateway to ${version}...`)
 

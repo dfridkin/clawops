@@ -56,12 +56,17 @@ describe('checkVersion', () => {
     expect(checkVersion('2026.7.1-2', SUPPORT).ok).toBe(true)
   })
 
-  it('refuses OpenClaw 2.0 — the defect this release fixes', () => {
+  it('refuses a version above a declared ceiling', () => {
+    // SUPPORT is a local fixture with an upper bound. The shipped 2.x spec has none, so
+    // this branch is unreachable there — but it must stay correct for any future line
+    // that reintroduces a ceiling, and must not advertise "use clawops 2.x", which is
+    // where we already are.
     const r = checkVersion('2026.8.1', SUPPORT)
     expect(r.ok).toBe(false)
     if (r.ok) return
     expect(r.error.reason).toBe('too-new')
-    expect(r.error.message).toContain('clawops 2.x')
+    expect(r.error.message).toContain('at or below')
+    expect(r.error.message).not.toContain('clawops 2.x')
   })
 
   it('refuses anything newer than 2.0 too', () => {

@@ -346,7 +346,22 @@ SP-01 confirmed `clawops tunnel` reaches it while the LAN address and internet d
 need not open 18789 at all. **Breaking change:** anyone hitting `:18789` directly loses that path —
 migration-guide entry plus a `spec.network.publish` escape hatch.
 
-**WO-51 — Enforce the version pin both ways** *(G9 — S)*
+**WO-51 — Enforce the version pin both ways** *(G9 — S)* — ✅ **done**
+The range check and resolve-before-check already existed; the gap was **where they were applied**.
+`up`, `plan` and `apply` guarded. `gateway update` — *the only command whose purpose is to change the
+deployed version* — did not, and its default was the moving tag `stable`, handed straight to
+`docker pull`. Guarding after the pull is guarding after the damage: the image is on the host and the
+container has been replaced with it.
+
+It now resolves and range-checks before pulling, and defaults to the recommended pin rather than a
+moving tag. Two tests assert that nothing reaches the host when the version is refused.
+
+The guard's messages were also written from the 1.x side. **too-old** now points at
+`@clawops/cli@legacy` — the mirror of the 1.x guard pointing here — instead of only saying "upgrade
+OpenClaw", which is wrong advice for someone deliberately running a 1.x runtime.
+
+*Original text follows.*
+
 `2.x` refuses `< 2026.9.1`; `1.x` refuses `>= 2026.8.1`. Resolve `latest`/`stable` **before** the
 range check — resolving after is how the unbounded ceiling survived.
 
