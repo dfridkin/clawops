@@ -367,7 +367,35 @@ range check — resolving after is how the unbounded ceiling survived.
 
 ### Phase 2 — config, plan, catalogs
 
-**WO-41 — Validate before writing** *(G4-adjacent — M)*
+**WO-41 — Validate before writing** *(G4-adjacent — M)* — ✅ **done**
+The captured schema (WO-36) finally has a consumer. It replaces a hand-written validator with five
+rules — top-level `version`, `channels` as an array, `meta` shape, `gateway.port` type,
+`gateway.auth.mode` — that knew nothing of `models.providers` and nothing of `gateway.mode`.
+
+**Two things the work order did not anticipate.**
+
+*The schema alone would have made clawops refuse valid configs.* It rejects unknown keys in 36 of its
+43 sections, and this line declares no version ceiling — so a deployment may legitimately run a newer
+OpenClaw with settings the pinned schema has never seen. Unknown keys are therefore errors by
+default but **warnings when the deployed OpenClaw is newer than the release the schema was captured
+from** (`runtime.configSchemaCapturedFrom`). Wrong types and bad enums stay errors at every version:
+a newer runtime explains an unknown key, not a string where an integer belongs.
+
+*The schema does not require `gateway.mode`.* Measured: a config missing it passes both this schema
+and `openclaw config validate`, then exits 78. It is optional upstream only because
+`--allow-unconfigured` can bypass the check — which WO-40 stopped passing. So clawops layers its own
+deployment-contract rule on top of the schema, and a test proves ajv really does accept what that
+rule rejects.
+
+`cli/commands/config.ts` also had its own hand-rolled base64/mv/chown write — a second copy of
+`atomicWriteConfig` that would have skipped validation entirely, exactly as the MCP restart path once
+skipped the shared run-command builder. It goes through the shared writer now.
+
+A rejected config is preserved at `<path>.rejected.<timestamp>` and the live config is left
+untouched; a test asserts no `mv` onto the real path happens.
+
+*Original text follows.*
+
 ajv against the WO-36 schema before `atomicWriteConfig`; respect the clobber guards; surface
 `<path>.rejected.<timestamp>`; add `clawops config validate`.
 

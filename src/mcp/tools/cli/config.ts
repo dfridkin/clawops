@@ -8,7 +8,6 @@ import { acquireSession, drainPool } from '../../../transport/pool.js'
 import { resolveConn, okText, errText } from '../_conn.js'
 import { OPENCLAW_CONFIG, atomicWriteConfig, restartGateway as restartGatewayShared } from '../../../plan/remote-config.js'
 
-const VALID_AUTH_MODES = new Set(['none', 'token', 'password', 'trusted-proxy'])
 
 export async function handleConfigGet(input: ConfigGetInput, _server: McpServer): Promise<CallToolResult> {
   const ac = new AbortController()
@@ -146,8 +145,14 @@ export async function handleConfigValidate(input: ConfigValidateInput, _server: 
     } catch {
       return okText(JSON.stringify({ valid: false, issues: [`Invalid JSON: ${result.stderr || result.stdout}`] }))
     }
-    const issues = validateOpenclawConfig(cfg)
-    return okText(JSON.stringify({ valid: issues.length === 0, issues }))
+    const { validateConfig } = await import('../../../openclaw/config-validate.js')
+    const yaml = await import('js-yaml')
+    const { loadVersionSpec } = await import('../../../openclaw/versions.js')
+    const spec = loadVersionSpec(yaml)
+    const { errors, warnings } = await validateConfig(cfg, {
+      schemaCapturedFrom: spec.runtime?.configSchemaCapturedFrom,
+    })
+    return okText(JSON.stringify({ valid: errors.length === 0, issues: errors, warnings }))
   } finally {
     release()
     drainPool()
@@ -185,48 +190,8 @@ function deletePath(obj: Record<string, unknown>, dotKey: string): void {
   delete cur[keys[keys.length - 1]!]
 }
 
-export function validateOpenclawConfig(cfg: Record<string, unknown>): string[] {
-  const issues: string[] = []
-
-  if ('version' in cfg) {
-    issues.push(
-      "Top-level 'version' is not a valid OpenClaw config key. " +
-      "Use 'meta.lastTouchedVersion' (string) instead.",
-    )
-  }
-
-  if ('channels' in cfg && Array.isArray(cfg['channels'])) {
-    issues.push(
-      "'channels' must be an object keyed by provider name (e.g. {\"discord\":{...}}), not an array.",
-    )
-  }
-
-  const meta = cfg['meta']
-  if (meta !== undefined && (typeof meta !== 'object' || Array.isArray(meta) || meta === null)) {
-    issues.push("'meta' must be an object.")
-  } else if (meta && typeof meta === 'object') {
-    const ltv = (meta as Record<string, unknown>)['lastTouchedVersion']
-    if (ltv !== undefined && typeof ltv !== 'string') {
-      issues.push("'meta.lastTouchedVersion' must be a string.")
-    }
-  }
-
-  const gateway = cfg['gateway']
-  if (gateway !== undefined && typeof gateway === 'object' && !Array.isArray(gateway) && gateway !== null) {
-    const gw = gateway as Record<string, unknown>
-    if ('port' in gw && typeof gw['port'] !== 'number') {
-      issues.push("'gateway.port' must be a number.")
-    }
-    const auth = gw['auth']
-    if (auth !== undefined && typeof auth === 'object' && !Array.isArray(auth) && auth !== null) {
-      const mode = (auth as Record<string, unknown>)['mode']
-      if (mode !== undefined && !VALID_AUTH_MODES.has(mode as string)) {
-        issues.push(
-          `'gateway.auth.mode' must be one of: ${[...VALID_AUTH_MODES].join(', ')}. Got: "${mode}".`,
-        )
-      }
-    }
-  }
-
-  return issues
-}
+// The hand-written validator that used to live here checked five things: a top-level
+// `version` key, `channels` as an array, `meta` shape, `gateway.port` type and
+// `gateway.auth.mode`. It knew nothing of `gateway.mode` — the field whose absence exits
+// the gateway 78 — and nothing of models.providers. Replaced by validation against the
+// schema OpenClaw publishes: src/openclaw/config-validate.ts.

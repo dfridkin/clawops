@@ -30,6 +30,11 @@ export interface VersionSupport {
 
 export interface VersionSpec {
   support: VersionSupport
+  /** Facts about the runtime this line targets. Optional — the 1.x line has no such block. */
+  runtime?: {
+    /** The OpenClaw release spec/openclaw-2.0.config.schema.json was captured from. */
+    configSchemaCapturedFrom?: string
+  }
 }
 
 let _spec: VersionSpec | undefined
@@ -49,6 +54,7 @@ export function loadVersionSpec(yaml: typeof import('js-yaml')): VersionSpec {
         max: raw.support.max ?? '',
         recommended: raw.support.recommended ?? raw.support.min,
       },
+      ...(raw.runtime ? { runtime: raw.runtime } : {}),
     }
     return _spec
   } catch (e) {

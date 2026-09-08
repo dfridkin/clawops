@@ -82,6 +82,19 @@ version, and it was the only one that never checked it — its default was the m
 `stable`, passed straight to `docker pull`. It now resolves and range-checks first, and
 defaults to a concrete pin. A refused version reaches the host not at all.
 
+## Bad config is caught before it is written
+
+clawops now validates against the schema OpenClaw itself publishes, rather than five
+hand-written rules — so a mistake is reported at write time instead of surfacing as a
+crash-looping gateway after the restart. A rejected config is kept at
+`<path>.rejected.<timestamp>` and your deployment's current config is left untouched.
+
+Two refinements worth knowing. A key the schema does not recognise is only a *warning* when
+you are running a newer OpenClaw than clawops captured its schema from — otherwise clawops
+would refuse configs your runtime accepts. And `gateway.mode` is required even though
+OpenClaw marks it optional: it is optional upstream only because `--allow-unconfigured` can
+bypass the check, and clawops no longer passes that flag.
+
 ## Removed
 
 **`clawops agents restart`** and the `clawops_agents_restart` MCP tool. OpenClaw 2.0 has no

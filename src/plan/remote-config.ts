@@ -68,14 +68,52 @@ export function normaliseGatewayPort(cfg: Record<string, unknown>): number | und
 }
 
 /** Atomically write a config object to the remote openclaw.json. */
+export interface WriteConfigOpts {
+  /** The OpenClaw version this config is for, so validation can judge unknown keys. */
+  openclawVersion?: string
+  /** Skip validation. For callers writing a config the schema cannot describe. */
+  skipValidation?: boolean
+}
+
 export async function atomicWriteConfig(
   session: SshSession,
   cfg: Record<string, unknown>,
   signal?: AbortSignal,
+  opts: WriteConfigOpts = {},
 ): Promise<void> {
   const os = await detectOS(session, signal)
   const configPath = configPathForOS(os)
   const json = JSON.stringify(cfg, null, 2)
+
+  // Validate BEFORE the write, not after. A config that fails validation is one the
+  // gateway may refuse to start on, and the restart that follows a write is where that
+  // surfaces — by which point the previous good config is gone.
+  if (!opts.skipValidation) {
+    const [{ validateConfig }, yaml] = await Promise.all([
+      import('../openclaw/config-validate.js'),
+      import('js-yaml'),
+    ])
+    const { loadVersionSpec } = await import('../openclaw/versions.js')
+    const spec = loadVersionSpec(yaml)
+    const { errors, warnings } = await validateConfig(cfg, {
+      openclawVersion: opts.openclawVersion,
+      schemaCapturedFrom: spec.runtime?.configSchemaCapturedFrom,
+    })
+    for (const w of warnings) process.stderr.write(`warning: ${w}\n`)
+    if (errors.length > 0) {
+      // Keep what was rejected. Losing the operator's intended config to a validation
+      // failure would make the check worse than not having one.
+      const rejected = `${configPath}.rejected.${new Date().toISOString().replace(/[:.]/g, '-')}`
+      const b64r = Buffer.from(json, 'utf-8').toString('base64')
+      await execPrivileged(session, `echo '${b64r}' | base64 -d > ${rejected}`, signal)
+      throw new Error(
+        `Refusing to write an invalid OpenClaw config:\n` +
+          errors.map((e) => `  - ${e}`).join('\n') +
+          `\nThe rejected config was kept at ${rejected}. ` +
+          `The deployment's current config is unchanged.`,
+      )
+    }
+  }
   const b64 = Buffer.from(json, 'utf-8').toString('base64')
   // Numeric, never `clawops:clawops`. On Ubuntu 24.04 `useradd clawops` gets uid 1001
   // while the container runs as 1000, and the gateway then exits 1 with EACCES on its
