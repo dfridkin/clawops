@@ -95,6 +95,15 @@ would refuse configs your runtime accepts. And `gateway.mode` is required even t
 OpenClaw marks it optional: it is optional upstream only because `--allow-unconfigured` can
 bypass the check, and clawops no longer passes that flag.
 
+## `clawops plan` checks the config it carries
+
+A plan's `spec.openclaw.config` is free-form, so a config the gateway would reject used to
+pass plan validation and fail later, on the host, after provisioning. `clawops plan` now
+validates it while the plan is still a file you can edit.
+
+Saved plans keep working: `apiVersion` stays `clawops.dev/v1`. A plan pinning a pre-2.0
+OpenClaw is refused by the version guard, which names the maintenance line.
+
 ## Removed
 
 **`clawops agents restart`** and the `clawops_agents_restart` MCP tool. OpenClaw 2.0 has no

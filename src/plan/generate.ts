@@ -187,6 +187,20 @@ export async function generatePlan(
     throw new Error(`Generated plan failed schema validation:\n${validation.errors.join('\n')}`)
   }
 
+  // The plan schema treats spec.openclaw.config as free-form, so schema validation says
+  // nothing about whether the gateway would accept it. Check it here, while the plan is
+  // still a file on disk and nothing has been provisioned.
+  const { validatePlanConfig } = await import('./validate.js')
+  const cfgCheck = await validatePlanConfig(plan)
+  for (const w of cfgCheck.warnings) process.stderr.write(`[clawops] warning: ${w}\n`)
+  if (!cfgCheck.ok) {
+    throw new Error(
+      `The OpenClaw config in this plan would be rejected:\n` +
+        cfgCheck.errors.map((e) => `  - ${e}`).join('\n') +
+        `\nFix spec.openclaw.config before applying — the gateway reads it verbatim.`,
+    )
+  }
+
   return plan
 }
 
