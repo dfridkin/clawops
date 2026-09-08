@@ -41,6 +41,11 @@ runtime:
   # Verified — `plugins install` cannot record a plugin against a file mount. SP-10b §4.
   configDir: "/cfg"
   configPath: "/cfg/config.json"        # via OPENCLAW_CONFIG_PATH
+  # The OpenClaw release spec/openclaw-2.0.config.schema.json was captured from.
+  # Validation compares the deployed version against this: a config key the schema
+  # does not know is an ERROR on an older-or-equal runtime and a WARNING on a newer
+  # one, because there it more likely means the schema is stale than the config wrong.
+  configSchemaCapturedFrom: "2026.9.2"
   configMount: directory
   gatewayPort: 18789
   env:

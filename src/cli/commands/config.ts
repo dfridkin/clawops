@@ -1,17 +1,15 @@
 import { defineCommand } from 'citty'
 import {
-  gatewayRunCommand, STATE_DIR_HOST_LINUX, configPathForOS, CONTAINER_UID,
+  gatewayRunCommand, STATE_DIR_HOST_LINUX, configPathForOS,
 } from '../../openclaw/runtime.js'
 import process from 'node:process'
 import { success, failure, warn, info } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
-import { validateOpenclawConfig } from '../../mcp/tools/cli/config.js'
 import { execPrivileged } from '../../transport/privileged.js'
 
 // One definition, in runtime.ts. This file used to carry its own copy of the path,
 // as did gateway.ts and monitor.ts — the same drift WO-38 ended for the run command.
 const OPENCLAW_CONFIG = configPathForOS('Linux')
-const OPENCLAW_TMP = '/tmp/clawops-config.json.tmp'
 
 /** docker stop + rm + run with the given full image reference and config mount. */
 export function dockerRunCmd(image: string): string {
@@ -129,12 +127,20 @@ export default defineCommand({
       }
 
       if (action === 'validate') {
-        const issues = validateOpenclawConfig(cfg)
-        if (issues.length === 0) {
-          success('Config is valid.')
+        // Against the schema OpenClaw itself publishes, not five hand-written rules.
+        const { validateConfig } = await import('../../openclaw/config-validate.js')
+        const yaml = await import('js-yaml')
+        const { loadVersionSpec } = await import('../../openclaw/versions.js')
+        const spec = loadVersionSpec(yaml)
+        const { errors, warnings } = await validateConfig(cfg, {
+          schemaCapturedFrom: spec.runtime?.configSchemaCapturedFrom,
+        })
+        for (const w of warnings) warn(w)
+        if (errors.length === 0) {
+          success(warnings.length === 0 ? 'Config is valid.' : 'Config is valid, with notes.')
         } else {
-          for (const issue of issues) warn(issue)
-          failure(`Config has ${issues.length} issue(s).`)
+          for (const e of errors) failure(e)
+          failure(`Config has ${errors.length} error(s).`)
           process.exit(1)
         }
         return
@@ -155,17 +161,15 @@ export default defineCommand({
         return
       }
 
-      // Atomic write via base64 to avoid shell-escaping issues
-      const json = JSON.stringify(cfg, null, 2)
-      const b64 = Buffer.from(json, 'utf-8').toString('base64')
-      const writeCmd =
-        `echo '${b64}' | base64 -d > ${OPENCLAW_TMP} && ` +
-        `mv ${OPENCLAW_TMP} ${OPENCLAW_CONFIG} && ` +
-        `chown ${CONTAINER_UID}:${CONTAINER_UID} ${OPENCLAW_CONFIG}`
-
-      const writeResult = await session.exec(writeCmd, abortController.signal)
-      if (writeResult.code !== 0) {
-        failure(`Failed to write config: ${writeResult.stderr}`)
+      // Through the shared writer, which validates first. This path used to hand-roll its
+      // own base64/mv/chown — a second copy of atomicWriteConfig that would have skipped
+      // validation entirely, exactly as the MCP restart path once skipped the shared
+      // run-command builder.
+      const { atomicWriteConfig } = await import('../../plan/remote-config.js')
+      try {
+        await atomicWriteConfig(session, cfg, abortController.signal)
+      } catch (err) {
+        failure((err as Error).message)
         process.exit(1)
       }
 

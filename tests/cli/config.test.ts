@@ -30,7 +30,7 @@ async function getMocks() {
 
 const SAMPLE_CONFIG = JSON.stringify({
   meta: { lastTouchedVersion: '2026.4' },
-  gateway: { port: 18789, auth: { mode: 'token' } },
+  gateway: { mode: 'local', port: 18789, auth: { mode: 'token' } },
   models: {},
   channels: {},
 })
@@ -105,8 +105,15 @@ describe('config command', () => {
     it('sends a write command containing base64-encoded JSON', async () => {
       const execCommands: string[] = []
       const session = new FakeSshSession()
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: SAMPLE_CONFIG, stderr: '', code: 0 } })
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: '', stderr: '', code: 0 } })
+      session.onExec(function handler(cmd: string) {
+        execCommands.push(cmd)
+        session.onExec(handler)
+        if (cmd.includes('uname')) return { stdout: 'Linux', stderr: '', code: 0 }
+        if (cmd.includes('cat ')) return { stdout: SAMPLE_CONFIG, stderr: '', code: 0 }
+        if (cmd.includes('PortBindings')) return { stdout: '{"18789/tcp":[{"HostIp":"127.0.0.1"}]}', stderr: '', code: 0 }
+        if (cmd.includes('docker inspect')) return { stdout: 'ghcr.io/openclaw/openclaw:2026.9.2', stderr: '', code: 0 }
+        return { stdout: '', stderr: '', code: 0 }
+      })
 
       const { buildContext, acquireSession } = await getMocks()
       buildContext.mockReturnValue(makeFakeContext())
@@ -115,18 +122,24 @@ describe('config command', () => {
       const cmd = await getCmd()
       await (cmd.run as AnyRunFn)({ args: { _: ['set', 'gateway.auth.mode', 'none'], stack: undefined, restart: false, json: false } })
 
-      expect(execCommands[0]).toContain('cat /var/lib/clawops/openclaw/openclaw.json')
-      expect(execCommands[1]).toContain('base64 -d')
-      expect(execCommands[1]).toContain('openclaw.json')
+      expect(execCommands.some((c) => c.includes('cat /var/lib/clawops/openclaw/openclaw.json'))).toBe(true)
+      expect(execCommands.some((c) => c.includes('base64 -d')), 'expected a base64 write').toBe(true)
+      expect(execCommands.find((c) => c.includes('base64 -d'))).toContain('openclaw.json')
     })
 
     it('restarts gateway when --restart flag is set', async () => {
       const execCommands: string[] = []
       const session = new FakeSshSession()
       session.onExec((cmd) => { execCommands.push(cmd); return { stdout: SAMPLE_CONFIG, stderr: '', code: 0 } })
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: '', stderr: '', code: 0 } })
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: 'ghcr.io/openclaw/openclaw:stable', stderr: '', code: 0 } })
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: '', stderr: '', code: 0 } })
+      session.onExec(function handler(cmd: string) {
+        execCommands.push(cmd)
+        session.onExec(handler)
+        if (cmd.includes('uname')) return { stdout: 'Linux', stderr: '', code: 0 }
+        if (cmd.includes('cat ')) return { stdout: SAMPLE_CONFIG, stderr: '', code: 0 }
+        if (cmd.includes('PortBindings')) return { stdout: '{"18789/tcp":[{"HostIp":"127.0.0.1"}]}', stderr: '', code: 0 }
+        if (cmd.includes('docker inspect')) return { stdout: 'ghcr.io/openclaw/openclaw:2026.9.2', stderr: '', code: 0 }
+        return { stdout: '', stderr: '', code: 0 }
+      })
 
       const { buildContext, acquireSession } = await getMocks()
       buildContext.mockReturnValue(makeFakeContext())
@@ -135,8 +148,7 @@ describe('config command', () => {
       const cmd = await getCmd()
       await (cmd.run as AnyRunFn)({ args: { _: ['set', 'gateway.auth.mode', 'none'], stack: undefined, restart: true, json: false } })
 
-      expect(execCommands).toHaveLength(4)
-      expect(execCommands[3]).toContain('docker run')
+      expect(execCommands.some((c) => c.includes('docker run')), 'expected a restart').toBe(true)
     })
   })
 
