@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest'
 import { gatewayRunCommand, gatewayRunArgs, SECURITY_FLAGS } from '../../src/openclaw/runtime.js'
 
 const base = {
-  image: 'ghcr.io/openclaw/openclaw:2026.7.1',
+  image: 'ghcr.io/openclaw/openclaw:2026.9.2',
   stateDir: '/var/lib/clawops/openclaw',
 }
 
@@ -18,7 +18,9 @@ describe('gatewayRunArgs', () => {
     expect(cmd).not.toContain('OPENCLAW_CONFIG_PATH')
     expect(cmd).toContain('--add-host=host.docker.internal:host-gateway') // host-local models
     expect(cmd).toContain('--port 18789')                                 // argv beats config
-    expect(cmd).toContain('gateway run --allow-unconfigured')             // not the bare CMD
+    expect(cmd).toContain('gateway run')                                  // not the bare CMD
+    expect(cmd).not.toMatch(/gateway run[^\n]*--allow-unconfigured/)                     // WO-40
+    expect(cmd).toContain('OPENCLAW_SUPERVISOR_MODE=external')            // no self-update
     expect(cmd).toContain('openclaw.env')                                 // token, off argv
   })
 

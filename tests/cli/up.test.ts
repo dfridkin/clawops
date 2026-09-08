@@ -72,7 +72,7 @@ describe('up command — local provider', () => {
         host: '10.0.0.1',
         port: 22,
         user: 'root',
-        openclawVersion: '2026.7.1-2',
+        openclawVersion: '2026.9.2',
       }),
     )
   })
@@ -84,10 +84,10 @@ describe('up command — local provider', () => {
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
-    await (cmd.run as AnyRunFn)({ args: { 'openclaw-version': '2026.6.34' } })
+    await (cmd.run as AnyRunFn)({ args: { 'openclaw-version': '2026.9.2' } })
 
     expect(mockLocalBootstrap).toHaveBeenCalledWith(
-      expect.objectContaining({ openclawVersion: '2026.6.34' }),
+      expect.objectContaining({ openclawVersion: '2026.9.2' }),
     )
   })
 
@@ -96,11 +96,12 @@ describe('up command — local provider', () => {
     mockLocalBootstrap.mockResolvedValue(FAKE_LOCAL_STATE)
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
-    // 2026.8.1 is OpenClaw 2.0: a different container runtime contract that this
-    // clawops line cannot deploy. It must be refused BEFORE anything is provisioned.
+    // 2026.7.1-2 is the last pre-2.0 release: a different container runtime contract that
+    // this line cannot deploy — it mounts a writable state directory, writes gateway.mode
+    // and passes no --allow-unconfigured. Refused BEFORE anything is provisioned.
     await expect(
-      (cmd.run as AnyRunFn)({ args: { 'openclaw-version': '2026.8.1' } }),
-    ).rejects.toThrow(/clawops 2\.x/)
+      (cmd.run as AnyRunFn)({ args: { 'openclaw-version': '2026.7.1-2' } }),
+    ).rejects.toThrow(/2026\.9\.2|supported|range/i)
 
     expect(mockLocalBootstrap).not.toHaveBeenCalled()
   })
@@ -192,7 +193,7 @@ describe('up command — cloud provider path', () => {
     await (cmd.run as AnyRunFn)({ args: { 'instance-type': 'small', region: 'eu-west-1' } })
     expect(mockSetConfig).toHaveBeenCalledWith('region', { value: 'eu-west-1' })
     expect(mockSetConfig).toHaveBeenCalledWith('instanceType', expect.any(Object))
-    expect(mockSetConfig).toHaveBeenCalledWith('openclawVersion', { value: '2026.7.1-2' })
+    expect(mockSetConfig).toHaveBeenCalledWith('openclawVersion', { value: '2026.9.2' })
   })
 
   it('runs preview (not up) when --dry-run is set', async () => {

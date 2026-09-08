@@ -22,10 +22,11 @@ full history.
 
 ## What's new in v1.7.2
 
-**Refuses OpenClaw 2.0.** OpenClaw `2026.8.1` changed the container runtime contract — state moved
-into SQLite, config moved to a writable path, and model providers became install-gated plugins.
-Deploying it from this release line produces a crash-looping gateway. `doctor`, `plan`, `up` and
-`apply` now refuse anything above `2026.7.1-2`.
+**Requires OpenClaw >= 2026.9.2.** This line deploys the 2.0 runtime contract: a writable state
+directory holding config, SQLite and plugins; `gateway.mode` written into the config; no
+`--allow-unconfigured`. A pre-2.0 OpenClaw understands none of it, so `doctor`, `plan`, `up` and
+`apply` refuse anything below the floor. For OpenClaw `<= 2026.7.1-2`, use
+`npm install -g @clawops/cli@legacy`.
 
 The support range in `spec/openclaw-versions.yaml` was previously unbounded *and read by no code*,
 so any OpenClaw release was accepted. Moving tags are now resolved to a concrete version **before**

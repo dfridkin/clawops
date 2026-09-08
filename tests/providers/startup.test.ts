@@ -52,16 +52,21 @@ describe('makeStartupScript — universal invariants', () => {
   })
 
   it('embeds the specified openclawVersion in the OPENCLAW_VERSION variable assignment', () => {
-    const script = makeStartupScript({ openclawVersion: '2026.4.5', os: 'ubuntu' })
+    const script = makeStartupScript({ openclawVersion: '2026.9.2', os: 'ubuntu' })
     // Version is set as a shell variable; docker pull/run use ${OPENCLAW_VERSION}
-    expect(script).toContain('OPENCLAW_VERSION="2026.4.5"')
+    expect(script).toContain('OPENCLAW_VERSION="2026.9.2"')
     expect(script).toContain('docker pull ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}')
     expect(script).toContain('ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}')
   })
 
-  it('runs container with --allow-unconfigured flag', () => {
+  it('runs the gateway WITHOUT --allow-unconfigured', () => {
     const script = makeStartupScript({ openclawVersion: 'latest', os: 'ubuntu' })
-    expect(script).toContain('--allow-unconfigured')
+    // Inverted by WO-40. The flag suppressed upstream's clobbered-config check, and
+    // clawops passed it permanently. Provisioning writes gateway.mode: "local" instead,
+    // which is what the check actually wants — measured on 2026.9.2.
+    expect(script).toContain('gateway run')
+    expect(script).not.toMatch(/gateway run[^\n]*--allow-unconfigured/)
+    expect(script).toContain('"mode":"local"')
   })
 
   it('mounts the state directory writable, not the config file read-only', () => {

@@ -115,16 +115,18 @@ describe('assertSupportedVersion — resolution order', () => {
   it('resolves BEFORE range-checking', async () => {
     // Order is the whole point: checking first and resolving after is how an
     // unbounded ceiling went unnoticed. `latest` now points at 2.0.
-    const r = await assertSupportedVersion('latest', yaml, async () => '2026.8.1')
+    // A moving tag resolving BELOW the floor is the 2.x version of this hazard: the tag
+    // says nothing, the resolved version is what the runtime has to honour.
+    const r = await assertSupportedVersion('latest', yaml, async () => '2026.7.1-2')
     expect(r.ok).toBe(false)
     if (r.ok) return
     expect(r.error.requested).toBe('latest')
-    expect(r.error.resolved).toBe('2026.8.1')
-    expect(r.error.reason).toBe('too-new')
+    expect(r.error.resolved).toBe('2026.7.1-2')
+    expect(r.error.reason).toBe('too-old')
   })
 
   it('accepts a moving tag that resolves inside the range', async () => {
-    const r = await assertSupportedVersion('stable', yaml, async () => '2026.7.1')
+    const r = await assertSupportedVersion('stable', yaml, async () => '2026.9.2')
     expect(r.ok).toBe(true)
   })
 
@@ -135,22 +137,35 @@ describe('assertSupportedVersion — resolution order', () => {
 })
 
 describe('spec/openclaw-versions.yaml', () => {
-  it('is loadable and declares a bounded range on this line', () => {
+  it('declares a floor, and no ceiling on this line', () => {
     const spec = loadVersionSpec(yaml)
     expect(spec.support.min).toBeTruthy()
-    // The v1.7.1 bug: an empty max silently accepted every future release.
-    expect(spec.support.max, 'the 1.x line must declare an upper bound').not.toBe('')
+    // Inverted with the 2.x flip. On 1.x an empty max was the v1.7.1 bug — it silently
+    // accepted every future release including 2.0. On 2.x it is correct: this line tracks
+    // the 2.x runtime contract and has no known upper bound. The 1.x branch keeps the
+    // bounded-range assertion, which is where it still means something.
+    expect(spec.support.max, 'the 2.x line tracks forward and declares no ceiling').toBe('')
   })
 
-  it('excludes OpenClaw 2.0 from the shipped range', () => {
+  it('accepts the 2.0 runtime it was built for', () => {
     const spec = loadVersionSpec(yaml)
-    expect(checkVersion('2026.8.1', spec.support).ok).toBe(false)
-    expect(checkVersion('2026.9.1', spec.support).ok).toBe(false)
+    expect(checkVersion('2026.9.2', spec.support).ok).toBe(true)
+    expect(checkVersion('2026.12.1', spec.support).ok).toBe(true)
   })
 
-  it('still admits the last pre-2.0 release', () => {
+  it('refuses the 1.x runtime it can no longer deploy correctly', () => {
+    // The mirror of the 1.x guard. This line mounts a writable state directory, writes
+    // gateway.mode and drops --allow-unconfigured — none of which a pre-2.0 OpenClaw
+    // understands. Deploying one from here would be the same class of failure the guard
+    // was written to prevent, in the other direction.
     const spec = loadVersionSpec(yaml)
-    expect(checkVersion('2026.7.1-2', spec.support).ok).toBe(true)
+    expect(checkVersion('2026.7.1-2', spec.support).ok).toBe(false)
+    expect(checkVersion('2026.4.5', spec.support).ok).toBe(false)
+  })
+
+  it('admits the floor it was built against', () => {
+    const spec = loadVersionSpec(yaml)
+    expect(checkVersion('2026.9.2', spec.support).ok).toBe(true)
   })
 })
 
