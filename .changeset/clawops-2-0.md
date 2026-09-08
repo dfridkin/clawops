@@ -75,6 +75,13 @@ Provisioning now writes `gateway.mode: "local"`, which is what the check actuall
 the flag is gone. A deployment upgrading from 1.x has its config normalised during migration
 using OpenClaw's own `config set`, which also applies OpenClaw's internal config migrations.
 
+## The version pin is enforced everywhere it can change
+
+`clawops gateway update` is the only command whose job is to change the deployed OpenClaw
+version, and it was the only one that never checked it — its default was the moving tag
+`stable`, passed straight to `docker pull`. It now resolves and range-checks first, and
+defaults to a concrete pin. A refused version reaches the host not at all.
+
 ## Removed
 
 **`clawops agents restart`** and the `clawops_agents_restart` MCP tool. OpenClaw 2.0 has no

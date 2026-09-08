@@ -141,10 +141,7 @@ export function checkVersion(
       message:
         `OpenClaw ${version} is newer than this clawops release supports ` +
         `(${describeRange(support)}).\n` +
-        `OpenClaw 2026.8.1+ changed the container runtime contract: state moved to SQLite, ` +
-        `config moved to a writable path, and provider plugins became install-gated.\n` +
-        `Use clawops 2.x for OpenClaw 2026.9.1 and later:  npm install -g @clawops/cli@latest\n` +
-        `To stay on this line, pin an OpenClaw version at or below ${support.max}.`,
+        `Pin an OpenClaw version at or below ${support.max}, or upgrade clawops.`,
     })
   }
 
