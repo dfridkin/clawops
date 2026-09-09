@@ -3,7 +3,9 @@ import process from 'node:process'
 import { spinner, success, failure, info } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
 import { renderTable } from '../../output/table.js'
-import { IMAGE_INSPECT_CMD, imageForRestart, versionOf } from '../../openclaw/run-flags.js'
+import {
+  IMAGE_INSPECT_CMD, imageForRestart, versionOf, GATEWAY_PORT,
+} from '../../openclaw/run-flags.js'
 import {
   gatewayRunCommand, PUBLISH_INSPECT_CMD, publishForRestart, STATE_DIR_HOST_LINUX,
 } from '../../openclaw/runtime.js'
@@ -210,13 +212,65 @@ export default defineCommand({
             dockerRunCmd(version, publishForRestart(pubU.stdout)),
             abortController.signal,
           )
-        spin.stop()
-
         if (runResult.code !== 0) {
+          spin.stop()
           failure(`Start failed: ${runResult.stderr}`)
+          info(`State snapshot from before the upgrade: ${snapPath}`)
           process.exit(1)
         }
-        success(`Gateway updated to ${version}.`)
+
+        // `docker run` exiting 0 means the container was created. Whether the gateway
+        // STARTED is a different question, and it is the one that matters here — the
+        // container this replaced is already gone.
+        spin.text = 'Waiting for the gateway to start...'
+        const { probeCommand, interpretProbe } = await import('../../openclaw/health.js')
+        const { repairCommand, describeOutcome } = await import('../../openclaw/upgrade.js')
+        const publish = publishForRestart(pubU.stdout)
+
+        const gate = async (): Promise<{ ok: boolean; reason?: string }> => {
+          let last: string | undefined
+          for (let i = 0; i < 15; i++) {
+            if (abortController.signal.aborted) return { ok: false, reason: 'aborted' }
+            const r = await execPrivileged(
+              session, probeCommand('started', GATEWAY_PORT), abortController.signal,
+            )
+            const v = interpretProbe('started', r.stdout)
+            if (v.ok) return { ok: true }
+            last = v.reason
+            await new Promise((res) => setTimeout(res, 2000))
+          }
+          return { ok: false, reason: last ?? 'no response' }
+        }
+
+        const { resolveUpgrade } = await import('../../openclaw/upgrade.js')
+        const outcome = await resolveUpgrade(
+          {
+            gate,
+            repair: async () => {
+              spin.text = 'Gateway did not start; attempting one-shot repair...'
+              await execPrivileged(
+                session, repairCommand(targetImage, STATE_DIR_HOST_LINUX), abortController.signal,
+              )
+            },
+            run: async (v) => {
+              await execPrivileged(session, dockerRunCmd(v, publish), abortController.signal)
+            },
+          },
+          {
+            version,
+            previousVersion: cur.ok ? versionOf(cur.value) : undefined,
+            snapshotPath: snapPath,
+          },
+        )
+
+        spin.stop()
+        const message = describeOutcome(outcome, version)
+        if (outcome.kind === 'started' || outcome.kind === 'repaired') {
+          success(message)
+        } else {
+          failure(message)
+          process.exit(1)
+        }
       }
     } finally {
       release()

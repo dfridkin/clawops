@@ -520,8 +520,7 @@ closed without them, so they were re-homed here:
   `openclaw logs` is gateway-wide and its envelope carries no agent key, so filtering it would mean
   substring-matching `message`/`raw`.
 
-**WO-45 — Upgrade, repair, rollback** *(G12 — M)* — ✅ **snapshot + compatibility gate done; repair
-and rollback remain** — verified backup → image swap → `/startupz` gate →
+**WO-45 — Upgrade, repair, rollback** *(G12 — M)* — ✅ **done** — verified backup → image swap → `/startupz` gate →
 one-shot `doctor --fix` on failure. Refuse downgrade across the SQLite boundary. SP-07 found the
 startup-safe path handled a real 1.x→2.0 migration with **no** `doctor --fix` needed, so treat the
 fallback as exceptional rather than routine.
@@ -546,9 +545,20 @@ so **no released pair exercises the rejection**; it is unit-tested against synth
 guard exists before it is needed, which is the point of a guard, but it should not be described as
 proven.
 
-**Still open in this work order:** the `/startupz` gate after the swap (the probe exists from WO-44
-but `update` does not yet gate on it), the one-shot `doctor --fix` on failure, and rollback to the
-previous image. The snapshot taken above is the rollback point those steps need.
+**The rest, now complete.** After the swap, `update` gates on `/startupz`; on failure it runs one
+`doctor --fix` in a **throwaway container** (the gateway may be crash-looping, where `docker exec`
+races the restart), re-runs, and re-gates. Still failing, it rolls back to the image that was running
+before the command touched anything. If the rollback will not come up either, the message names the
+snapshot — the only way back.
+
+Repair is deliberately **one shot, not a retry loop**: SP-07 found a real 1.x→2.0 migration needed no
+repair at all, so repeating it would thrash a deployment whose problem is something else.
+
+The decision — did not start → repair → still did not start → roll back — lives in `resolveUpgrade`
+with the three effects injected. It was first written inline in the CLI and tested through a fake SSH
+session with fake timers, which timed out: the command awaits dynamic imports that fake timers do not
+settle. Extracting it made the branch that matters testable in milliseconds, without a session or a
+30-second gate.
 
 **WO-46 — Delegate backup** *(G11, G22 — M)* — `openclaw backup create --verify` over SFTP; restore
 into a staging dir, never in place. Archives carry plaintext OAuth — say so, restrict permissions.

@@ -147,6 +147,11 @@ It now snapshots the state database first, then asks the release you are upgradi
 whether it understands that schema, and refuses if it does not. If the snapshot cannot be
 taken, the upgrade stops rather than proceeding without a rollback point.
 
+After the swap it waits for the gateway to actually start. If it does not, clawops attempts
+one repair, and failing that **rolls back to the image that was running before** — telling
+you which state you ended up in rather than leaving you to work it out. If the rollback
+will not start either, the message names the snapshot to restore.
+
 ## Removed
 
 **`clawops agents restart`** and the `clawops_agents_restart` MCP tool. OpenClaw 2.0 has no

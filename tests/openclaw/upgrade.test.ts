@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   judgePreflight, parsePreflight, snapshotCommand, preflightCommand, snapshotPathFrom,
+  resolveUpgrade,
 } from '../../src/openclaw/upgrade.js'
 
 describe('judgePreflight', () => {
@@ -92,5 +93,81 @@ describe('commands', () => {
     expect(cmd).toContain('ghcr.io/openclaw/openclaw:2026.9.2')
     expect(cmd).toContain('database preflight /snap/database.sqlite')
     expect(cmd).toContain('--json')
+  })
+})
+
+describe('resolveUpgrade — what happens after the container is created', () => {
+  const ctx = { version: '2026.9.2', previousVersion: '2026.9.0', snapshotPath: '/snap/s1' }
+
+  function steps(gateResults: boolean[]) {
+    const calls: string[] = []
+    let i = 0
+    return {
+      calls,
+      steps: {
+        gate: async () => {
+          const ok = gateResults[Math.min(i++, gateResults.length - 1)] ?? false
+          calls.push(`gate:${ok ? 'ok' : 'fail'}`)
+          return ok ? { ok: true } : { ok: false, reason: 'still starting' }
+        },
+        repair: async () => { calls.push('repair') },
+        run: async (v: string) => { calls.push(`run:${v}`) },
+      },
+    }
+  }
+
+  it('reports started when the gateway comes up', async () => {
+    const { steps: s, calls } = steps([true])
+    expect(await resolveUpgrade(s, ctx)).toEqual({ kind: 'started' })
+    // No repair on the happy path — repairing a healthy deployment is thrashing.
+    expect(calls).toEqual(['gate:ok'])
+  })
+
+  it('repairs ONCE, then re-runs and re-gates', async () => {
+    const { steps: s, calls } = steps([false, true])
+    expect(await resolveUpgrade(s, ctx)).toEqual({ kind: 'repaired' })
+    expect(calls).toEqual(['gate:fail', 'repair', 'run:2026.9.2', 'gate:ok'])
+    // One shot, not a loop: SP-07 found a real 1.x→2.0 migration needed no repair at all,
+    // so retrying would thrash a deployment with a different problem.
+    expect(calls.filter((c) => c === 'repair')).toHaveLength(1)
+  })
+
+  it('rolls back to the previous image when repair does not help', async () => {
+    const { steps: s, calls } = steps([false, false, true])
+    const out = await resolveUpgrade(s, ctx)
+    expect(out).toEqual({ kind: 'rolled-back', to: '2026.9.0', reason: 'still starting' })
+    expect(calls).toEqual([
+      'gate:fail', 'repair', 'run:2026.9.2', 'gate:fail', 'run:2026.9.0', 'gate:ok',
+    ])
+  })
+
+  it('reports failure, with the snapshot, when the rollback will not come up either', async () => {
+    const { steps: s } = steps([false])
+    const out = await resolveUpgrade(s, ctx)
+    expect(out).toEqual({ kind: 'failed', reason: 'still starting', snapshotPath: '/snap/s1' })
+  })
+
+  it('does not attempt a rollback with no previous version to go back to', async () => {
+    const { steps: s, calls } = steps([false])
+    const out = await resolveUpgrade(s, { ...ctx, previousVersion: undefined })
+    expect(out.kind).toBe('failed')
+    expect(calls.filter((c) => c.startsWith('run:'))).toEqual(['run:2026.9.2'])
+  })
+})
+
+describe('describeOutcome', () => {
+  it('tells the operator what state they are in', async () => {
+    const { describeOutcome } = await import('../../src/openclaw/upgrade.js')
+    expect(describeOutcome({ kind: 'started' }, '2026.9.2')).toMatch(/updated to 2026\.9\.2/)
+    expect(describeOutcome({ kind: 'repaired' }, '2026.9.2')).toMatch(/one-shot repair/)
+
+    const back = describeOutcome({ kind: 'rolled-back', to: '2026.9.0', reason: 'x' }, '2026.9.2')
+    expect(back).toMatch(/Rolled back to 2026\.9\.0/)
+    expect(back).toMatch(/previous image is running again/)
+
+    // The failure case must name the snapshot: it is the only way back.
+    const dead = describeOutcome({ kind: 'failed', reason: 'x', snapshotPath: '/snap/s1' }, '2026.9.2')
+    expect(dead).toMatch(/\/snap\/s1/)
+    expect(dead).toMatch(/backup sqlite restore/)
   })
 })
