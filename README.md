@@ -12,59 +12,149 @@ and Cursor drive them through typed MCP tools with explicit safety controls.
 
 ---
 
-## What's new in v1.7.3
+## What's new in 2.0
 
-**README maintenance.** The release-notes section had grown to four versions and was missing
-v1.7.2 entirely. It now carries the current line only; [`CHANGELOG.md`](CHANGELOG.md) remains the
-full history.
+clawops 2.x targets **OpenClaw >= 2026.9.2**. The 1.x line continues for OpenClaw
+`<= 2026.7.1-2` under the `legacy` dist-tag until **2027-03-31**:
+
+```bash
+npm install -g @clawops/cli            # 2.x
+npm install -g @clawops/cli@legacy     # 1.x maintenance
+```
+
+Pin the tag in CI — `latest` moves to 2.x, so an unpinned pipeline will change lines.
+[`CHANGELOG.md`](CHANGELOG.md) carries the full history; this section covers what changed
+about *how clawops behaves*.
+
+> **Release in progress.** 2.0 has not shipped yet. This section is written as the work
+> lands so the flows stay documented while they are being changed, not reconstructed after.
+
+### Your deployment keeps its state
+
+OpenClaw 2.0 stores sessions, transcripts and credentials in SQLite. clawops mounted no
+state at all, so **every restart destroyed them** — and a restart is what `gateway restart`,
+`gateway update` and `config set` all do.
+
+One host directory (`/var/lib/clawops/openclaw`) is now bind-mounted at OpenClaw's own
+default location, holding the config, the database and any provider plugins. Existing
+deployments migrate on the next `up`/`apply`.
+
+### `clawops up` / `clawops apply`
+
+```mermaid
+flowchart TD
+    A["clawops plan"] --> B{"config valid<br/>against OpenClaw schema?"}
+    B -- no --> B1["refuse — plan is still<br/>a file you can edit"]
+    B -- yes --> C["clawops apply"]
+    C --> D{"OpenClaw version<br/>in supported range?"}
+    D -- no --> D1["refuse — names<br/>@clawops/cli@legacy"]
+    D -- yes --> E["provision host"]
+    E --> F["state dir, owned 1000:1000<br/>migrate any pre-2.0 config"]
+    F --> G["write config<br/>validated before writing"]
+    G --> H["install provider plugins<br/>while egress exists"]
+    H --> I["start gateway"]
+    I --> J{"/startupz says started?"}
+    J -- no --> J1["fail with the reason"]
+    J -- yes --> K{"configured providers<br/>all loaded?"}
+    K -- no --> K1["warn — healthy gateway,<br/>missing model backend"]
+    K -- yes --> L["done"]
+```
+
+Three of those steps are new, and each exists because the old flow could report success
+while something was wrong: the config was never validated before being written, provider
+plugins were left to be fetched at boot (or silently missing on a deny-all host), and
+"started" was inferred from `docker run` exiting 0.
+
+### `clawops gateway update`
+
+Previously: pull, run, report success. `docker run` exiting 0 means the container was
+*created* — and the container it replaced is already gone.
+
+```mermaid
+flowchart TD
+    A["clawops gateway update X"] --> B{"X in supported range?"}
+    B -- no --> B1["refuse before pulling"]
+    B -- yes --> C["docker pull X"]
+    C --> D["snapshot state database"]
+    D -- cannot snapshot --> D1["refuse — no rollback point"]
+    D --> E{"target release understands<br/>this schema?"}
+    E -- no --> E1["refuse — downgrade across<br/>a schema boundary"]
+    E -- yes --> F["swap container"]
+    F --> G{"/startupz says started?"}
+    G -- yes --> H["done"]
+    G -- no --> I["one-shot doctor --fix<br/>in a throwaway container"]
+    I --> J["re-run, re-gate"]
+    J -- started --> K["done — reported as repaired"]
+    J -- still not --> L["roll back to previous image"]
+    L -- started --> M["rolled back, reason reported"]
+    L -- still not --> N["failed — snapshot path named"]
+```
+
+The snapshot is not only a rollback point: `database preflight` refuses a live database
+because the schema version sits in the WAL until checkpointed, so the consolidated snapshot
+is what makes the compatibility check possible at all.
+
+### `clawops gateway restart`
+
+A restart changes neither the deployed version nor who can reach the gateway. Both are read
+back from the running container rather than guessed:
+
+```mermaid
+flowchart LR
+    A["gateway restart"] --> B["read current image"]
+    B -- no container --> B1["refuse — nothing to reuse.<br/>latest and stable point at 2.0"]
+    B --> C["read current publish scope"]
+    C --> D["recreate with the same<br/>version and reachability"]
+    D --> E{"/startupz says started?"}
+    E -- no --> E1["fail with the reason"]
+    E -- yes --> F["done"]
+```
+
+### The gateway is no longer exposed to your network
+
+The container publishes on `127.0.0.1:18789` instead of `0.0.0.0:18789`. Reach it with
+`clawops tunnel` or a reverse proxy on the host.
+
+Previously the wizard set `allowedGatewayCidrs` from the CIDR you gave for **SSH**, so a
+plaintext HTTP dashboard — token in the URL — was opened to your whole shell-access network
+as a side effect of one unrelated answer. To bind all interfaces deliberately, set
+`network.publishGateway: "all"`.
+
+**You must act if** a client or reverse proxy on another machine reaches the gateway
+directly, or external monitoring hits `/health`. A proxy on the host is unaffected; one in a
+*container* on the host needs `--network host`.
+
+### Health checks can actually fail
+
+The gateway serves its Control UI on a catch-all route, so **any unmatched path answers 200
+with HTML**:
+
+```
+/healthz                        200  application/json   {"ok":true,"status":"live"}
+/health-typo                    200  text/html          <!doctype html>…
+```
+
+clawops probed with `curl -fsS … >/dev/null`, which succeeds on a typo. It proved something
+was listening on the port, not that the gateway was healthy. Probes now read the response
+body, and the restart gate uses `/startupz` rather than liveness — after a restart the
+process listens long before startup finishes.
+
+### Day-two commands work on AWS
+
+`gateway restart`, `logs`, `monitor`, `backup`, `agents`, `config set` and `doctor`'s
+container checks were **all broken on AWS**: clawops connects as `ubuntu`, but provisioning
+only put `clawops` in the docker group, so every Docker command failed with `permission
+denied`. GCP and Azure connect as `clawops`, which is why only AWS was affected.
+
+### Removed
+
+**`clawops agents restart`** and the `clawops_agents_restart` MCP tool. OpenClaw 2.0 has no
+per-agent restart — only `gateway restart` and `daemon restart`, both of which interrupt
+every agent on the host. Use `clawops gateway restart`, or stay on `@clawops/cli@legacy`.
+
+`clawops agents list` and `clawops agents logs` are unaffected.
 
 ---
-
-## What's new in v1.7.2
-
-**Requires OpenClaw >= 2026.9.2.** This line deploys the 2.0 runtime contract: a writable state
-directory holding config, SQLite and plugins; `gateway.mode` written into the config; no
-`--allow-unconfigured`. A pre-2.0 OpenClaw understands none of it, so `doctor`, `plan`, `up` and
-`apply` refuse anything below the floor. For OpenClaw `<= 2026.7.1-2`, use
-`npm install -g @clawops/cli@legacy`.
-
-The support range in `spec/openclaw-versions.yaml` was previously unbounded *and read by no code*,
-so any OpenClaw release was accepted. Moving tags are now resolved to a concrete version **before**
-the range check, and an unresolved tag is refused rather than assumed safe — `latest` and `stable`
-both point at 2.0 today. The default is now a concrete pin.
-
-`clawops doctor --stack <name>` reports the version a deployed gateway is actually running, so an
-existing deployment that already picked up 2.0 through a moving tag can be identified.
-
-**`clawops config set` now applies.** It never has. The config clawops mounted was read by nothing
-on either OpenClaw line — models, channels and auth mode were silently discarded. Setting
-`OPENCLAW_CONFIG_PATH` fixes it, with four guards: `gateway.port` normalisation (with a warning),
-an argv `--port` pin, a parse check, and a post-restart health gate. The MCP `gateway restart`
-tool, which dropped the config mount entirely, now matches the CLI path.
-
-**A fresh local deployment starts.** OpenClaw refuses a non-loopback bind without auth and always
-binds `0.0.0.0` in a container, and the bootstrap never supplied a token — so the gateway exited 78
-and systemd restart-looped. A token is now generated once, kept in a `0600` env file, and passed
-via `--env-file`, never on the command line.
-
-**Ollama is reachable.** `localhost` inside the container is the container. clawops now passes
-`--add-host=host.docker.internal:host-gateway` and defaults the Ollama address to match.
-
-**Packaging.** `spec/` was missing from the published files, and neither it nor
-`bootstrap.sh.tmpl` resolved from the bundle — so `clawops plan` and `clawops up --provider local`
-failed from an npm install. Both are now shipped and resolved correctly.
-
-**SSH host keys.** The verifier read each `known_hosts` line's *key type* as the key, so any
-standard entry failed permanently with `Host denied`. Standard entries now parse, including
-comma-separated host lists, `[host]:port`, hashed hostnames, `@revoked` / `@cert-authority`
-markers, and wildcard and negated patterns.
-
-> **Behaviour change:** a host covered by a wildcard whose key does not match is now refused where
-> it previously connected. Ignoring wildcards meant trust-on-first-use accepted a key your own
-> `known_hosts` contradicted. This matches OpenSSH.
-
----
-
 
 ## Who this is for
 
