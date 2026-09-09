@@ -108,6 +108,33 @@ describe('backup command — create', () => {
   })
 })
 
+describe('backup archive permissions (G22)', () => {
+  it('writes the archive 0600, not the default 0644', async () => {
+    // The archive carries the state database — mcp_oauth_stores, secret_store_entries,
+    // worker_environment_credentials, device_auth_tokens — unencrypted. OpenClaw writes it
+    // 0600 on the host; clawops was writing the local copy at the default 0644.
+    //
+    // Claimed in the changeset and the docs, but nothing tested it: mutation testing
+    // reverted the mode and every test still passed.
+    const session = new FakeSshSession()
+    session.onExec(() => ({ stdout: '', stderr: '', code: 0 }))
+    session.onStream(vi.fn().mockResolvedValue(Readable.from(['backup-data'])))
+
+    const { buildContext, acquireSession } = await getMocks()
+    buildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
+    acquireSession.mockResolvedValue({ session, release: vi.fn() })
+
+    const cmd = await getCmd()
+    await (cmd.run as AnyRunFn)({ args: { action: 'create', out: '/tmp/perm-test.tar.gz' } })
+
+    const { createWriteStream } = await import('node:fs')
+    expect(vi.mocked(createWriteStream)).toHaveBeenCalledWith(
+      '/tmp/perm-test.tar.gz',
+      expect.objectContaining({ mode: 0o600 }),
+    )
+  })
+})
+
 describe('backup command — restore', () => {
   // v1.7.5 made restore throw, because OpenClaw 2026.7.1-2 had no restore subcommand to
   // call. 2.0 does — and it restores into a fresh directory, refusing a non-empty target.

@@ -163,3 +163,34 @@ describe('clawops requirements the schema does not express', () => {
     expect(ajv.compile(schema)({ gateway: { port: 18789 } })).toBe(true)
   })
 })
+
+describe('atomicWriteConfig ownership (G25)', () => {
+  it('chowns the config NUMERICALLY, never to clawops:clawops', async () => {
+    // `useradd clawops` gets uid 1001 on Ubuntu 24.04 because the ubuntu user already
+    // holds 1000, while the container runs as 1000 — so a clawops-owned file makes the
+    // gateway exit 1 with EACCES on its own SQLite WAL. Verified on a native Linux bind
+    // mount in SP-11.
+    //
+    // No test covered this until mutation testing reverted the chown and nothing failed.
+    const { FakeSshSession } = await import('../helpers/ssh.js')
+    const { atomicWriteConfig } = await import('../../src/plan/remote-config.js')
+
+    const cmds: string[] = []
+    const session = new FakeSshSession()
+    session.onExec(function handler(cmd: string) {
+      cmds.push(cmd)
+      session.onExec(handler)
+      return { stdout: cmd.includes('uname') ? 'Linux' : '', stderr: '', code: 0 }
+    })
+
+    await atomicWriteConfig(session as never, {
+      meta: { lastTouchedVersion: '2026.9.2' },
+      gateway: { mode: 'local', port: 18789, auth: { mode: 'token' } },
+    })
+
+    const write = cmds.find((c) => c.includes('chown'))
+    expect(write, 'expected the config write to set ownership').toBeDefined()
+    expect(write).toMatch(/chown 1000:1000/)
+    expect(write, 'a named owner is uid 1001 on Ubuntu 24.04, not 1000').not.toMatch(/clawops:clawops/)
+  })
+})

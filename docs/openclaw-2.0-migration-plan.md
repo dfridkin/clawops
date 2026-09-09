@@ -742,6 +742,31 @@ builder, which is the argument for centralising it.
 
 ---
 
+### Closing a work order — the check that goes with it
+
+A passing test proves nothing on its own. It can assert a fixture, grep for a string that has
+moved, take an early-return branch that never runs, or fail for a different reason than the one it
+names. Every one of those has happened in this release.
+
+So before a work order closes, its guards are **mutation-checked**: break the behaviour, confirm the
+test notices. `pnpm test:mutation` does this for every behaviour 2.0 established.
+
+The first run over the whole release caught **18 of 22** — and the four misses were the interesting
+part:
+
+| Mutation | Why it survived |
+|---|---|
+| moving tags no longer refused | the test asserted `ok === false`, and the tag then failed a *version comparison* instead — green for the wrong reason |
+| ownership reverts to `clawops:clawops` | **G25 had no test at the config writer at all** — the bug that makes the gateway exit 1 on its own SQLite WAL |
+| archive written world-readable | claimed in the changeset and the docs; nothing asserted it |
+| restart falls back to a moving tag | *harness* error — I pointed it at the wrong suite |
+
+That last row matters too: the harness had its own bugs, and a mutation "surviving" is a claim that
+needs checking before it is believed.
+
+All 22 are now caught. Two of the three real gaps were behaviours this release **documented as
+fixed** while nothing tested them.
+
 ### Carried forward — every deferral, and who owns it
 
 Deferrals lived only in the prose of whichever work order raised them. Two of them ended up pointing
