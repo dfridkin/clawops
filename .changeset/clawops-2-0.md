@@ -104,6 +104,23 @@ validates it while the plan is still a file you can edit.
 Saved plans keep working: `apiVersion` stays `clawops.dev/v1`. A plan pinning a pre-2.0
 OpenClaw is refused by the version guard, which names the maintenance line.
 
+## Model providers that need a plugin are installed for you
+
+OpenClaw 2.0 does not bundle every model provider. Of the six clawops offers, **deepseek,
+kimi and Amazon Bedrock** are not in the image. A configured-but-missing provider does not
+fail loudly: with egress the gateway fetches it mid-boot and restarts once; **without
+egress it starts healthy and simply lacks the provider** — and clawops defaults to deny-all
+egress, so that was the default outcome.
+
+`clawops apply` now installs them while the deploy still has egress, then checks that every
+configured provider actually loaded and warns if one did not. A locked-down host never
+reaches for ClawHub at boot.
+
+Plugin versions are **pinned**. These packages track forward independently of the runtime —
+all three moved a version within hours during development, and the newer builds required a
+runtime newer than the supported floor. Installing "latest" would mean a plan that deployed
+this morning fails this afternoon.
+
 ## Removed
 
 **`clawops agents restart`** and the `clawops_agents_restart` MCP tool. OpenClaw 2.0 has no

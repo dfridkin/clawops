@@ -39,6 +39,9 @@ providers:
       - { id: deepseek-reasoner,  displayName: "DeepSeek Reasoner (R1)" }
     defaultModel: deepseek-chat
     configPath: models.providers.deepseek
+    plugin:
+      package: "@openclaw/deepseek-provider"
+      version: "2026.9.2"
 
   - id: kimi
     displayName: Kimi (Moonshot AI)
@@ -50,6 +53,9 @@ providers:
       - { id: moonshot-v1-128k,  displayName: "Moonshot v1 128K" }
     defaultModel: moonshot-v1-8k
     configPath: models.providers.kimi
+    plugin:
+      package: "@openclaw/kimi-provider"
+      version: "2026.9.2"
 
   - id: bedrock
     displayName: AWS Bedrock
@@ -80,6 +86,9 @@ providers:
       - { id: deepseek-r1,           displayName: "DeepSeek-R1",            modelId: "deepseek.r1-v1:0",                             family: DeepSeek }
     defaultModel: claude-sonnet-46
     configPath: models.providers.amazon-bedrock
+    plugin:
+      package: "@openclaw/amazon-bedrock-provider"
+      version: "2026.9.2"
 
   - id: ollama
     displayName: Ollama (self-hosted)

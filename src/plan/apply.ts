@@ -144,10 +144,99 @@ async function applyConfigOverlay(
         : {}),
     })
 
-    await atomicWriteConfig(session, merged, signal)
+    await atomicWriteConfig(session, merged, signal, {
+      openclawVersion: plan.spec.openclaw.version,
+    })
+
+    // Install any provider plugin the config names but the image does not bundle, BEFORE
+    // the restart — while this deploy still has egress. Left to the gateway, a missing
+    // plugin is either fetched mid-boot at the cost of a convergence restart, or silently
+    // absent on a deny-all host, which is clawops's default. See src/openclaw/plugins.ts.
+    await installProviderPlugins(session, merged, plan.spec.openclaw.version, signal)
+
     await restartGateway(session, signal)
+
+    // A green gateway says nothing about whether the provider loaded, so ask.
+    await verifyProviders(session, merged, signal)
     saveOverlay(plan.spec.stackName, configOverlay as Record<string, unknown>, plan.spec.secrets ?? [])
   } finally {
     session.close()
+  }
+}
+
+/**
+ * Install provider plugins the config needs and the image does not bundle.
+ *
+ * Failures warn rather than throw: the deployment is otherwise healthy, and
+ * `verifyProviders` reports the consequence in terms the operator can act on.
+ */
+async function installProviderPlugins(
+  session: import('../transport/ssh.js').SshSession,
+  cfg: Record<string, unknown>,
+  openclawVersion: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const [{ requiredPlugins, installCommand }, { STATE_DIR_HOST_LINUX }, yaml, { readFileSync }, { join }, { resolveSpecDir }] =
+    await Promise.all([
+      import('../openclaw/plugins.js'),
+      import('../openclaw/runtime.js'),
+      import('js-yaml'),
+      import('node:fs'),
+      import('node:path'),
+      import('../spec-path.js'),
+    ])
+
+  const catalog = yaml.load(
+    readFileSync(join(resolveSpecDir(), 'models.yaml'), 'utf-8'),
+  ) as { providers: Array<{ id: string; configPath?: string; plugin?: { package: string; version: string } }> }
+
+  const needed = requiredPlugins(cfg, catalog)
+  if (needed.length === 0) return
+
+  const { execPrivileged } = await import('../transport/privileged.js')
+  const image = `ghcr.io/openclaw/openclaw:${openclawVersion}`
+  for (const plugin of needed) {
+    const result = await execPrivileged(
+      session,
+      installCommand(plugin, image, STATE_DIR_HOST_LINUX),
+      signal,
+    )
+    if (result.code !== 0) {
+      process.stderr.write(
+        `[clawops] warning: could not install ${plugin.package}@${plugin.version} for ` +
+          `provider "${plugin.providerId}": ${result.stderr || result.stdout}\n`,
+      )
+    }
+  }
+}
+
+/**
+ * Check that every configured provider actually loaded.
+ *
+ * The failure this exists for is quiet: on a deny-all host the gateway starts healthy
+ * without the provider, so nothing in a normal deploy would report it.
+ */
+async function verifyProviders(
+  session: import('../transport/ssh.js').SshSession,
+  cfg: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<void> {
+  const { missingProviders } = await import('../openclaw/plugins.js')
+  const { execPrivileged } = await import('../transport/privileged.js')
+  const result = await execPrivileged(
+    session,
+    'docker exec openclaw openclaw plugins list --json',
+    signal,
+  )
+  if (result.code !== 0) return
+
+  const missing = missingProviders(cfg, result.stdout)
+  if (missing.length > 0) {
+    process.stderr.write(
+      `[clawops] warning: the gateway is running, but these configured model providers ` +
+        `did not load: ${missing.join(', ')}.\n` +
+        `[clawops] The deployment will look healthy and fail on first use. Check egress to ` +
+        `ClawHub, then re-run apply.\n`,
+    )
   }
 }
