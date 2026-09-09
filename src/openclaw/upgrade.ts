@@ -130,9 +130,19 @@ export function snapshotPathFrom(stdout: string): string | undefined {
  * path, not a routine step: it runs only after the startup gate has already failed.
  */
 export function repairCommand(image: string, stateDir: string): string {
+  // NOT `--json`: the CLI refuses that combination outright —
+  //   "doctor --json runs read-only lint checks and cannot be combined with
+  //    --repair, --fix, or --force."
+  // Shipped as `--fix --json` in the first cut of WO-45, which meant the repair step could
+  // only ever fail. The fake in the unit tests returns success for any command, so nothing
+  // noticed until this was run against the real image.
+  //
+  // `--non-interactive --yes` because provisioning has no TTY to answer prompts on. The
+  // exit code is deliberately ignored by the caller: doctor exits 1 on advisories
+  // ("Memory system not found in workspace") that are not failures of the repair.
   return (
     `docker run --rm -v ${stateDir}:/home/node/.openclaw ${image} ` +
-    `openclaw doctor --fix --json`
+    `openclaw doctor --fix --non-interactive --yes`
   )
 }
 

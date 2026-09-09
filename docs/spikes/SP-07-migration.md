@@ -68,7 +68,55 @@ migration path did the work, as upstream documents.
 6. Gate on `/startupz`; on failure run the documented one-shot `doctor --fix`
 7. Report what carried over and what needs operator attention
 
-## Open item — device identity continuity
+## Open item — CLOSED 2026-09-09: device identity IS preserved
+
+Re-run locally with the real images (`2026.7.1-2` → `2026.9.2`), capturing the identifier
+before and after rather than inferring:
+
+```
+deviceId BEFORE: 40cb0f9916e0c27e86478754...   (identity/device.json)
+after migration: deviceId PRESERVED in 2.0 state
+identity/ dir:   0 files       ← emptied, as expected; the value moved into SQLite
+```
+
+So `identity/` emptying is relocation, not loss, and the identifier paired devices key on
+survives. Pairings themselves still cannot be proven here — there is nothing to pair — but
+the thing they depend on carries over.
+
+**And a correction to Finding 3.** The migration is *not* clean on the first start. The 2.0
+gateway comes up and reports:
+
+```
+[state/db] state database schema migration pending; verifying integrity first
+Config health-state write failed: OpenClaw state database schema migration required
+(audit-events-v2) … run openclaw doctor --fix to migrate it.
+```
+
+It is healthy only after a **second** start — `/startupz` then returns
+`{"ok":true,"status":"started"}` with zero pending-migration complaints. So a 1.x→2.0
+migration takes **two starts**, and WO-52 must gate, restart, and re-gate rather than
+declaring success on the first.
+
+This also revises WO-45's framing: the plan treats `doctor --fix` as exceptional on the
+strength of this spike. What the spike actually showed is that the *restart* completes the
+migration. In this re-run `doctor --fix` did nothing at all, because the command was
+malformed — see below.
+
+## A shipped bug this re-run exposed
+
+`repairCommand` (WO-45) was `openclaw doctor --fix --json`. The CLI refuses that pairing:
+
+```
+doctor --json runs read-only lint checks and cannot be combined with --repair, --fix, or --force.
+```
+
+So the repair step in `clawops gateway update` could only ever fail. The unit tests drive a
+fake that returns success for any command, so nothing caught it until it ran against the
+image. Fixed to `--fix --non-interactive --yes` (no TTY during provisioning), with the exit
+code ignored — doctor exits 1 on advisories that are not repair failures — and a test that
+asserts the two flags are never combined.
+
+## Original open item — device identity continuity
 
 `identity/` is emptied by the migration ("Migrated primary device identity to SQLite"), which is
 expected 2.0 behavior rather than loss. **I did not independently verify the `deviceId` value
