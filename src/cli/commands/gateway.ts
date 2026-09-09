@@ -1,6 +1,6 @@
 import { defineCommand } from 'citty'
 import process from 'node:process'
-import { spinner, success, failure } from '../../output/human.js'
+import { spinner, success, failure, info } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
 import { renderTable } from '../../output/table.js'
 import { IMAGE_INSPECT_CMD, imageForRestart, versionOf } from '../../openclaw/run-flags.js'
@@ -140,9 +140,10 @@ export default defineCommand({
           : await defaultOpenclawVersion()
 
         const spin = spinner(`Updating gateway to ${version}...`)
+        const targetImage = `ghcr.io/openclaw/openclaw:${version}`
 
-        const pullResult = await execPrivileged(session, 
-          `docker pull ghcr.io/openclaw/openclaw:${version}`,
+        const pullResult = await execPrivileged(session,
+          `docker pull ${targetImage}`,
           abortController.signal,
         )
         if (pullResult.code !== 0) {
@@ -150,6 +151,56 @@ export default defineCommand({
           failure(`Pull failed: ${pullResult.stderr}`)
           process.exit(1)
         }
+
+        // Snapshot, then ask the TARGET release whether it understands this database. The
+        // snapshot is not only a rollback point: preflight refuses a live database, because
+        // the schema version sits in the WAL until checkpointed.
+        spin.text = 'Checking state compatibility...'
+        const {
+          snapshotCommand, snapshotPathFrom, preflightCommand, parsePreflight, judgePreflight,
+        } = await import('../../openclaw/upgrade.js')
+
+        const cur = imageForRestart(
+          (await execPrivileged(session, IMAGE_INSPECT_CMD, abortController.signal)).stdout,
+        )
+        const snapRepo = `${STATE_DIR_HOST_LINUX}/snapshots`
+        const snapOut = await execPrivileged(
+          session,
+          snapshotCommand(cur.ok ? cur.value : targetImage, STATE_DIR_HOST_LINUX, snapRepo),
+          abortController.signal,
+        )
+        const snapPath = snapshotPathFrom(snapOut.stdout)
+
+        if (!snapPath) {
+          // No snapshot means no compatibility check and no rollback point. Refuse rather
+          // than replace a working container on the strength of a `docker run` exit code.
+          spin.stop()
+          failure(
+            'Could not snapshot the state database before upgrading, so neither the ' +
+              'compatibility check nor a rollback point is available.\n' +
+              (snapOut.stderr || snapOut.stdout).slice(0, 300),
+          )
+          process.exit(1)
+        }
+
+        const pre = await execPrivileged(
+          session,
+          preflightCommand(targetImage, STATE_DIR_HOST_LINUX, `${snapPath}/database.sqlite`),
+          abortController.signal,
+        )
+        const report = parsePreflight(pre.stdout)
+        const verdict = report
+          ? judgePreflight(report)
+          : { ok: false as const, reason: `preflight produced no readable report: ${pre.stderr.slice(0, 200)}` }
+
+        if (!verdict.ok) {
+          spin.stop()
+          failure(`Refusing to upgrade to ${version}: ${verdict.reason}`)
+          info(`A snapshot of the current state was kept at ${snapPath}.`)
+          process.exit(1)
+        }
+        if (verdict.ok && verdict.note) info(verdict.note)
+        spin.text = `Updating gateway to ${version}...`
 
         // An update changes the version by request; it must not also change who can
           // reach the gateway.
