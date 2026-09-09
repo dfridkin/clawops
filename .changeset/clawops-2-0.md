@@ -137,6 +137,16 @@ converging.
 rather than the state directory — which is where the SQLite database now grows, so the
 gauge was watching the wrong filesystem.
 
+## Upgrades check your database before replacing anything
+
+`clawops gateway update` used to pull an image and swap the container — and `docker run`
+exiting successfully means the container was *created*, not that the gateway started. By
+then the previous container is gone.
+
+It now snapshots the state database first, then asks the release you are upgrading **to**
+whether it understands that schema, and refuses if it does not. If the snapshot cannot be
+taken, the upgrade stops rather than proceeding without a rollback point.
+
 ## Removed
 
 **`clawops agents restart`** and the `clawops_agents_restart` MCP tool. OpenClaw 2.0 has no

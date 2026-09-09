@@ -520,10 +520,35 @@ closed without them, so they were re-homed here:
   `openclaw logs` is gateway-wide and its envelope carries no agent key, so filtering it would mean
   substring-matching `message`/`raw`.
 
-**WO-45 — Upgrade, repair, rollback** *(G12 — M)* — verified backup → image swap → `/startupz` gate →
+**WO-45 — Upgrade, repair, rollback** *(G12 — M)* — ✅ **snapshot + compatibility gate done; repair
+and rollback remain** — verified backup → image swap → `/startupz` gate →
 one-shot `doctor --fix` on failure. Refuse downgrade across the SQLite boundary. SP-07 found the
 startup-safe path handled a real 1.x→2.0 migration with **no** `doctor --fix` needed, so treat the
 fallback as exceptional rather than routine.
+
+**Done.** `gateway update` was pull → run → report success; `docker run` exiting 0 means the
+container was created, not that the gateway started, and the container it replaced is already gone
+by then. It now snapshots the state, asks the **target** release whether it understands the schema,
+and refuses if not.
+
+**The backup is not merely a safety net — it is what makes the check possible.** `database preflight`
+refuses a live database:
+
+> `SQLite preflight requires a consolidated snapshot with no sidecars; found -wal, -shm.`
+
+The schema version sits in the WAL until checkpointed, so `backup sqlite create --global` (which
+produces a consolidated snapshot with a `userVersion` in its manifest) has to come first. That is why
+the sequence in this work order is ordered the way it is, which was not obvious before measuring.
+
+**The downgrade guard is written but NOT demonstrated.** The rule is `foundVersion > targetVersion`
+→ refuse. Every 2.x image checked — `2026.8.1`, `2026.9.1`, `2026.9.2` — reports `userVersion: 15`,
+so **no released pair exercises the rejection**; it is unit-tested against synthetic reports. The
+guard exists before it is needed, which is the point of a guard, but it should not be described as
+proven.
+
+**Still open in this work order:** the `/startupz` gate after the swap (the probe exists from WO-44
+but `update` does not yet gate on it), the one-shot `doctor --fix` on failure, and rollback to the
+previous image. The snapshot taken above is the rollback point those steps need.
 
 **WO-46 — Delegate backup** *(G11, G22 — M)* — `openclaw backup create --verify` over SFTP; restore
 into a staging dir, never in place. Archives carry plaintext OAuth — say so, restrict permissions.

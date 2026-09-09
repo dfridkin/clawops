@@ -158,6 +158,15 @@ describe('gateway command', () => {
         execCommands.push(cmd)
         session.onExec(handler)
         if (cmd.includes('PortBindings')) return { stdout: '{"18789/tcp":[{"HostIp":"127.0.0.1"}]}', stderr: '', code: 0 }
+        // An update snapshots the state and asks the target release whether it understands
+        // the schema, before replacing a working container.
+        if (cmd.includes('backup sqlite create')) {
+          return { stdout: '{"ok":true,"snapshotPath":"/var/lib/clawops/openclaw/snapshots/s1"}', stderr: '', code: 0 }
+        }
+        if (cmd.includes('database preflight')) {
+          return { stdout: '{"targetVersion":15,"foundVersion":15,"status":"exact"}', stderr: '', code: 0 }
+        }
+        if (cmd.includes('docker inspect')) return { stdout: 'ghcr.io/openclaw/openclaw:2026.9.2', stderr: '', code: 0 }
         return { stdout: '', stderr: '', code: 0 }
       })
 
@@ -169,7 +178,7 @@ describe('gateway command', () => {
       await (cmd.run as AnyRunFn)({ args: { _: ['update', '2026.9.2'], stack: undefined, channel: undefined, json: false } })
 
       const pull = execCommands.find((c) => c.includes('docker pull'))
-      const run = execCommands.find((c) => c.includes('docker run'))
+      const run = execCommands.find((c) => c.includes('--name openclaw'))
       expect(pull).toContain('2026.9.2')
       // An update changes the version by request; it must not change reachability, so it
       // reads the current port bindings first.
@@ -181,8 +190,19 @@ describe('gateway command', () => {
     it('uses --channel when no positional version given', async () => {
       const execCommands: string[] = []
       const session = new FakeSshSession()
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: '', stderr: '', code: 0 } })
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: '', stderr: '', code: 0 } })
+      session.onExec(function handler(cmd: string) {
+        execCommands.push(cmd)
+        session.onExec(handler)
+        if (cmd.includes('PortBindings')) return { stdout: '{"18789/tcp":[{"HostIp":"127.0.0.1"}]}', stderr: '', code: 0 }
+        if (cmd.includes('backup sqlite create')) {
+          return { stdout: '{"ok":true,"snapshotPath":"/var/lib/clawops/openclaw/snapshots/s1"}', stderr: '', code: 0 }
+        }
+        if (cmd.includes('database preflight')) {
+          return { stdout: '{"targetVersion":15,"foundVersion":15,"status":"exact"}', stderr: '', code: 0 }
+        }
+        if (cmd.includes('docker inspect')) return { stdout: 'ghcr.io/openclaw/openclaw:2026.9.2', stderr: '', code: 0 }
+        return { stdout: '', stderr: '', code: 0 }
+      })
 
       const { buildContext, acquireSession } = await getMocks()
       buildContext.mockReturnValue(makeFakeContext())
@@ -191,14 +211,25 @@ describe('gateway command', () => {
       const cmd = await getCmd()
       await (cmd.run as AnyRunFn)({ args: { _: ['update'], stack: undefined, channel: '2026.9.2', json: false } })
 
-      expect(execCommands[0]).toContain('2026.9.2')
+      expect(execCommands.find((c) => c.includes('docker pull'))).toContain('2026.9.2')
     })
 
     it('defaults to the supported pin, never a moving tag', async () => {
       const execCommands: string[] = []
       const session = new FakeSshSession()
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: '', stderr: '', code: 0 } })
-      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: '', stderr: '', code: 0 } })
+      session.onExec(function handler(cmd: string) {
+        execCommands.push(cmd)
+        session.onExec(handler)
+        if (cmd.includes('PortBindings')) return { stdout: '{"18789/tcp":[{"HostIp":"127.0.0.1"}]}', stderr: '', code: 0 }
+        if (cmd.includes('backup sqlite create')) {
+          return { stdout: '{"ok":true,"snapshotPath":"/var/lib/clawops/openclaw/snapshots/s1"}', stderr: '', code: 0 }
+        }
+        if (cmd.includes('database preflight')) {
+          return { stdout: '{"targetVersion":15,"foundVersion":15,"status":"exact"}', stderr: '', code: 0 }
+        }
+        if (cmd.includes('docker inspect')) return { stdout: 'ghcr.io/openclaw/openclaw:2026.9.2', stderr: '', code: 0 }
+        return { stdout: '', stderr: '', code: 0 }
+      })
 
       const { buildContext, acquireSession } = await getMocks()
       buildContext.mockReturnValue(makeFakeContext())
@@ -210,7 +241,7 @@ describe('gateway command', () => {
       // Was `stable` — a moving tag handed straight to `docker pull`, which is how an
       // unsupported release reaches a deployment. Now the recommended pin from
       // spec/openclaw-versions.yaml.
-      expect(execCommands[0]).toContain('2026.9.2')
+      expect(execCommands.find((c) => c.includes('docker pull'))).toContain('2026.9.2')
       expect(execCommands[0]).not.toContain('stable')
     })
 
