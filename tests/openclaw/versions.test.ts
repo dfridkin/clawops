@@ -82,9 +82,17 @@ describe('checkVersion', () => {
 
   it('refuses an unresolved moving tag rather than assuming it is safe', () => {
     // Failing closed matters: a moving tag is exactly how 2.0 reaches a deployment.
+    //
+    // Asserting only `ok === false` passed even with the moving-tag branch deleted — the
+    // tag then fell through to a version comparison that also failed, so the test was
+    // green for the wrong reason. Found by mutation testing; the message is what proves
+    // the tag was recognised AS a tag.
     for (const tag of ['latest', 'stable', 'dev', 'main']) {
       const r = checkVersion(tag, SUPPORT)
       expect(r.ok, `${tag} must not pass unresolved`).toBe(false)
+      if (r.ok) continue
+      expect(r.error.message, `${tag} must be refused AS a moving tag`).toMatch(/moving tag/)
+      expect(r.error.message).toContain(tag)
     }
   })
 

@@ -38,7 +38,8 @@
     "lint": "eslint --max-warnings=0 src tests scripts",
     "gen:schemas": "tsx scripts/gen-schemas.ts",
     "changeset": "changeset",
-    "release": "pnpm build && changeset publish"
+    "release": "pnpm build && changeset publish",
+    "test:mutation": "node scripts/dev/mutation-check.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-cloudwatch-logs": "^3.1063.0",
