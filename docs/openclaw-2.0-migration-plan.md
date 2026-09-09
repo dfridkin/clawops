@@ -232,7 +232,7 @@ setting `line: "2.x"` fails CI until the runtime writes `gateway.mode` and stops
 `--allow-unconfigured`. Verified by flipping it — the suite fails with *"the 2.x line must not depend
 on --allow-unconfigured"* — and restoring.
 
-**WO-59 — Privilege-correct remote execution** *(M — new, found by SP-11 tier 3)*
+**WO-59 — Privilege-correct remote execution** *(M — new, found by SP-11 tier 3)* — ✅ **done**
 Every day-2 command that touches Docker is broken on AWS and has been: clawops connects as `ubuntu`,
 provisioning only adds `clawops` to the docker group, and only `remote-config.ts` uses the sudo
 fallback. Nine other files call Docker directly. A second failure hides behind it — the token env
@@ -281,8 +281,7 @@ Fleet's profile, **validated against a live cell** (SP-06): loopback publishing,
 `--init`, pids/memory/cpu limits, a dedicated bridge network. Roughly 60% of the value for 15% of the
 effort.
 
-**WO-39 — Persist state** *(G2, G3, G25 — M)* — audited, not yet implemented →
-[`SP-11`](spikes/SP-11-wo-39-state-audit.md)
+**WO-39 — Persist state** *(G2, G3, G25 — M)* — ✅ **done** → [`SP-11`](spikes/SP-11-wo-39-state-audit.md)
 
 Audit changes the shape. **One bind mount of `/home/node/.openclaw` covers config, SQLite state
 and installed plugins** — not the three mounts this work order assumed — and `OPENCLAW_CONFIG_PATH`
@@ -458,9 +457,10 @@ pre-installed then booted with `--network none` → `restarts=0`, nothing refetc
 providers; and the same config *without* the pre-install → gateway `running exit=0` while the
 reconcile correctly reports `["amazon-bedrock"]`.
 
-**Deferred, and listed honestly:** `integrations.yaml` channel work (per-channel token fields,
-`dmPolicy`/`groupPolicy`, per-channel plugin packages) is untouched — it is channel configuration
-rather than the startup-blocking provider path, and belongs with WO-45. The ClawHub egress
+**Deferred, and re-homed:** `integrations.yaml` channel work is untouched — it is channel
+configuration rather than the startup-blocking provider path. I first filed it against WO-45, which
+was wrong: WO-45 is upgrade/repair/rollback and would have swallowed it. Nothing covered channel
+catalog work, so it is now **WO-60**. The ClawHub egress
 dependency needs an `/audit-egress` and firewall-notes entry (WO-49 docs). Ollama via
 `host.docker.internal` (G23) was already done in v1.7.2.
 
@@ -478,8 +478,23 @@ Bigger than first scoped, because provider plugins are **startup-blocking**:
 
 ### Phase 3 — lifecycle
 
-**WO-44 — Real health checks** *(G10 — M)* — `/startupz` gates apply; `/readyz` drives status and
-monitor; `docker inspect` becomes a fallback. Add `doctor --lint --json` as post-apply preflight.
+**WO-44 — Real health checks and the observability surface** *(G10 — M)* — `/startupz` gates apply;
+`/readyz` drives status and monitor; `docker inspect` becomes a fallback. Add `doctor --lint --json`
+as post-apply preflight.
+
+**Carried in from the WO-58 audit** — both were originally filed against WO-38, which has since
+closed without them, so they are re-homed here rather than left pointing at finished work:
+
+- **`logs.ts` and `mcp/tools/cli/logs.ts` assume a systemd unit.** They run
+  `journalctl -u openclaw || docker logs openclaw`. Only the local provider creates that unit, so
+  cloud VMs work *by accident* — the first command fails and the fallback produces the right output
+  for the wrong reason, hiding which one ran. 2.0 offers `openclaw logs --follow --json --limit` over
+  RPC, which is strictly better and removes the assumption rather than documenting it.
+- **`clawops agents logs <name>` no longer scopes to an agent.** 2.0 removed `agents logs`; the verb
+  survives (SP-11 §8b) but currently has nothing correct to call. Per-agent scoping moved to
+  `openclaw audit --agent <id> --kind agent_run --json`, with `--cursor` for the follow case.
+  `openclaw logs` is gateway-wide and its envelope carries no agent key, so filtering it would mean
+  substring-matching `message`/`raw`.
 
 **WO-45 — Upgrade, repair, rollback** *(G12 — M)* — verified backup → image swap → `/startupz` gate →
 one-shot `doctor --fix` on failure. Refuse downgrade across the SQLite boundary. SP-07 found the
@@ -488,6 +503,12 @@ fallback as exceptional rather than routine.
 
 **WO-46 — Delegate backup** *(G11, G22 — M)* — `openclaw backup create --verify` over SFTP; restore
 into a staging dir, never in place. Archives carry plaintext OAuth — say so, restrict permissions.
+
+**Starting state:** `clawops backup restore` currently *throws* — v1.7.5 made it fail with an
+explanation because OpenClaw `2026.7.1-2` had no restore subcommand to call. 2.0 does
+(`backup: Create, verify, and restore backup archives and SQLite snapshots`), so this work order
+reinstates the command. Until it lands, the 2.0 changeset must not claim restore has returned; that
+claim was written and removed once already.
 
 **WO-52 — `clawops migrate`** *(D2 — L; rewritten after SP-07)*
 The drafted sequence was wrong in two ways:
@@ -512,14 +533,50 @@ It should also say plainly when there was nothing to rescue: given G2, any user 
 **WO-47 — MCP tool surface** *(S)* — declare in `spec/mcp-tools.yaml` first; add
 `clawops_openclaw_doctor`; all four annotation hints; 8 KB trim with the full report as a resource.
 
-**WO-48 — Plan-driven firewall** *(G16 — S)* — ports from the plan, not module constants. With
+**WO-48 — Plan-driven firewall, and the hardcoded port** *(G16 — S)*
+
+**Carried in from the WO-58 audit:** the gateway port `18789` is hardcoded in **9 files** —
+`providers/{aws,azure,gcp}/program.ts`, `providers/local/bootstrap.{ts,sh.tmpl}`,
+`providers/startup.ts`, `openclaw/runtime.ts`, `cli/commands/monitor.ts` and the (now deleted)
+Pulumi component. Unchanged by 2.0, but it is why a port change is a nine-file edit. This was
+previously filed against "WO-42 / WO-48"; WO-42 closed without it, deliberately — it turned out to
+be plan-validation work — so WO-48 owns it alone now.
+
+Ports from the plan, not module constants. With
 loopback publishing, the default set may be **SSH only**.
+
+**WO-60 — Channel catalog for 2.0** *(M — new, carried in from WO-43)*
+`spec/integrations.yaml` is read by the setup wizard and has not been checked against the 2.0
+channel surface. WO-43 covered model providers, which are startup-blocking; channels are not, which
+is why they were separated rather than dropped.
+
+Needs verifying against the image, not assumed: correct per-channel token fields, the required
+`dmPolicy`/`groupPolicy` settings, SecretRef credentials, and **which channels need their own plugin
+installed** — the same bundled-vs-ClawHub split that turned out to affect three of six model
+providers. `plugins list --json` already reports `channelIds` per plugin, so the bundled set is
+derivable the same way, and `scripts/openclaw/check-plugin-pins.sh` extends to cover it.
 
 **WO-49 — Documentation audit and release** *(L)* — §9.
 
+**Carried in from WO-43:** clawops now installs provider plugins from **ClawHub at deploy time**, a
+new outbound dependency that did not exist on the 1.x line. It needs an `/audit-egress` entry and a
+line in the firewall notes: the host requires egress to ClawHub during `apply` (not at boot — that
+is the point of installing early), alongside the existing ghcr.io image pull. A deny-all host that
+never gets it produces a **healthy gateway with no model provider**, which is precisely the failure
+WO-43 exists to prevent, so the docs must say where the egress is needed and what it looks like when
+it is missing.
+
 ### Deferred to clawops 2.1
 
-**WO-53 — Agent sandboxing** *(D4 — L)* — feasible (SP-04), and **no clawops-published image is
+**WO-53 — Agent sandboxing** *(D4 — L)*
+
+**Carried in from WO-42:** the deploy-plan fields that work order contemplated —
+`spec.openclaw.{workspace, permissionMode, image.variant}` and the extra-mount fields — were
+deliberately **not** added, because nothing consumes them and a schema field is a promise. They
+belong here, with the feature that gives them meaning. `image.variant` is real (`-slim` and
+`-browser` tags exist upstream); add each field in the same change that reads it.
+
+Feasible (SP-04), and **no clawops-published image is
 needed** (SP-09). Mount Docker's own statically-linked CLI into the **unmodified official image**:
 verified `CLI 28.5.2 -> daemon 25.0.16`, sandbox backend active, sibling containers spawned from
 inside the gateway with `cap-drop=ALL` and `network=none`. The derived image (SP-03, +70 MB) stays
@@ -576,6 +633,29 @@ range with `latest`/`stable` resolution order · Bedrock emits a plugin-install 
 Minimum honest position for v2.0.0: unit and Pulumi-mock coverage on all four, VM-backed on `local`,
 AWS exercised by hand per `docs/smoke-testing.md` before release. GCP and Azure ride on WO-38's shared
 builder, which is the argument for centralising it.
+
+---
+
+### Carried forward — every deferral, and who owns it
+
+Deferrals lived only in the prose of whichever work order raised them. Two of them ended up pointing
+at **WO-38 after it closed**, which means they were silently no longer anyone's job. This table is
+the index; the detail stays with the owning work order.
+
+**Rule: a deferral may only name an open work order.** If the owner closes without it, re-home it
+before marking that owner done.
+
+| Deferred item | Raised by | Owner | State |
+|---|---|---|---|
+| `logs.ts` assumes a systemd unit; use `openclaw logs` over RPC | WO-58 audit | **WO-44** | re-homed from WO-38 |
+| `clawops agents logs` has nothing correct to call; use `audit --agent` | SP-11 §8b | **WO-44** | re-homed from WO-38 |
+| `clawops backup restore` throws; 2.0 has a real restore | v1.7.5 | **WO-46** | open |
+| Port `18789` hardcoded in 9 files | WO-58 audit | **WO-48** | WO-42 closed without it, by design |
+| ClawHub egress at apply — `/audit-egress` + firewall notes | WO-43 | **WO-49** | open |
+| `integrations.yaml` unchecked against the 2.0 channel surface | WO-43 | **WO-60** | re-homed from WO-45 (wrong owner) |
+| Plan fields `workspace`, `permissionMode`, `image.variant`, mounts | WO-42 | **WO-53** (2.1) | open |
+| Pulumi `Gateway` component (G7) | WO-58 audit | WO-38 | ✅ deleted |
+| `monitor.ts` reads the config path directly | WO-58 audit | WO-39 | ✅ path moved with the state dir |
 
 ---
 
