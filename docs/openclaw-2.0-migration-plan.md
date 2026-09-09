@@ -478,12 +478,36 @@ Bigger than first scoped, because provider plugins are **startup-blocking**:
 
 ### Phase 3 — lifecycle
 
-**WO-44 — Real health checks and the observability surface** *(G10 — M)* — `/startupz` gates apply;
+**WO-44 — Real health checks and the observability surface** *(G10 — M)* — ✅ **health checks done;
+the two carried-in observability items remain** — `/startupz` gates apply;
 `/readyz` drives status and monitor; `docker inspect` becomes a fallback. Add `doctor --lint --json`
 as post-apply preflight.
 
-**Carried in from the WO-58 audit** — both were originally filed against WO-38, which has since
-closed without them, so they are re-homed here rather than left pointing at finished work:
+**Done.** Endpoints verified present on 2026.9.2 rather than taken from the work order:
+`/health` and `/healthz` both return `{"ok":true,"status":"live"}`, `/startupz` returns
+`{"ok":true,"status":"started"}`, `/readyz` returns `{"ready":true}`.
+
+**The finding that reshaped this.** The gateway serves its Control UI on a catch-all route, so *any*
+unmatched path answers **200 with `text/html`** — `/health-typo` and
+`/obviously-not-a-real-endpoint` both do. clawops's probe was `curl -fsS … >/dev/null`, which
+**passes on a typo**. It proved something was listening on the port, not that the gateway was
+healthy, and would have gone on passing if the endpoint were renamed upstream. Every probe now
+judges the JSON body, and rejects HTML with a reason that names the cause — otherwise an operator
+reasonably suspects the gateway when the real problem is the path.
+
+Three probes on two paths (`remote-config.ts` on `/healthz`, `bootstrap.ts` and `monitor.ts` on
+`/health`) became one module. The restart gate moved to `/startupz`: after a restart the process
+listens long before startup finishes, so a liveness probe returns ok while the gateway is still
+converging — and the caller is about to report success.
+
+**Also fixed here, because the audit's record was wrong.** The carried-forward table claimed WO-39
+had moved `monitor.ts` off the pre-2.0 config path. It had not: `monitor.ts` still read
+`/home/clawops/openclaw.json`, and both it and `doctor.ts` reported disk usage for
+`/home/clawops` — while 2.0's SQLite grows in `/var/lib/clawops/openclaw`, so the disk gauge watched
+the wrong filesystem.
+
+**Still open — carried in from the WO-58 audit.** Both were originally filed against WO-38, which
+closed without them, so they were re-homed here:
 
 - **`logs.ts` and `mcp/tools/cli/logs.ts` assume a systemd unit.** They run
   `journalctl -u openclaw || docker logs openclaw`. Only the local provider creates that unit, so
@@ -655,7 +679,7 @@ before marking that owner done.
 | `integrations.yaml` unchecked against the 2.0 channel surface | WO-43 | **WO-60** | re-homed from WO-45 (wrong owner) |
 | Plan fields `workspace`, `permissionMode`, `image.variant`, mounts | WO-42 | **WO-53** (2.1) | open |
 | Pulumi `Gateway` component (G7) | WO-58 audit | WO-38 | ✅ deleted |
-| `monitor.ts` reads the config path directly | WO-58 audit | WO-39 | ✅ path moved with the state dir |
+| `monitor.ts` on the pre-2.0 config path; disk gauge on the wrong filesystem | WO-58 audit | WO-44 | ✅ fixed — the WO-39 claim was wrong |
 
 ---
 

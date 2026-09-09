@@ -19,7 +19,9 @@ beforeEach(() => {
 
 const GOOD_INSPECT = 'running|ghcr.io/openclaw/openclaw:stable|2026-01-01T00:00:00Z|0'
 const GOOD_STATS   = '45.2MiB / 1.9GiB|0.30%'
-const GOOD_HEALTH  = 'ok'
+// A real payload. The probe judges the body now: a status code cannot distinguish a
+// healthy gateway from a path that fell through to the Control UI (src/openclaw/health.ts).
+const GOOD_HEALTH = '{"ok":true,"status":"live"}'
 const GOOD_CONFIG  = JSON.stringify({
   meta: { lastTouchedVersion: '2026.4' },
   gateway: { auth: { mode: 'token' } },
@@ -63,7 +65,7 @@ describe('gatherSnapshot()', () => {
 
   it('reports gateway reachable=false when health endpoint returns unreachable', async () => {
     const { gatherSnapshot } = await import('../../src/cli/commands/monitor.js')
-    const snap = await gatherSnapshot(makeSession({ health: 'unreachable' }), new AbortController().signal)
+    const snap = await gatherSnapshot(makeSession({ health: '<!doctype html><html>…' }), new AbortController().signal)
     expect(snap.gateway.reachable).toBe(false)
   })
 
@@ -115,7 +117,7 @@ describe('renderSnapshot()', () => {
 
   it('shows unreachable when gateway is down', async () => {
     const { gatherSnapshot, renderSnapshot } = await import('../../src/cli/commands/monitor.js')
-    const snap = await gatherSnapshot(makeSession({ health: 'unreachable' }), new AbortController().signal)
+    const snap = await gatherSnapshot(makeSession({ health: '<!doctype html><html>…' }), new AbortController().signal)
     const out = renderSnapshot(snap, { stackName: 'default', intervalSec: 10, showLogs: false, noColor: true })
     expect(out).toContain('✗ unreachable')
   })

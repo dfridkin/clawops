@@ -121,6 +121,22 @@ all three moved a version within hours during development, and the newer builds 
 runtime newer than the supported floor. Installing "latest" would mean a plan that deployed
 this morning fails this afternoon.
 
+## Health checks that can actually fail
+
+The gateway serves its Control UI on a catch-all route, so any unmatched path answers `200`
+with HTML. clawops probed with `curl -fsS … >/dev/null`, which **succeeds on a typo** — it
+proved something was listening on the port, not that the gateway was healthy.
+
+Probes now read the response body and reject HTML with an explanation. The three probes
+that had drifted onto two different paths are one module, and the restart gate uses
+`/startupz` rather than a liveness check: after a restart the process listens long before
+startup finishes, so the old check could report success while the gateway was still
+converging.
+
+`clawops monitor` and `clawops doctor` also reported disk usage for the service user's home
+rather than the state directory — which is where the SQLite database now grows, so the
+gauge was watching the wrong filesystem.
+
 ## Removed
 
 **`clawops agents restart`** and the `clawops_agents_restart` MCP tool. OpenClaw 2.0 has no

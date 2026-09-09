@@ -3,6 +3,8 @@ import process from 'node:process'
 import { chalk, failure } from '../../output/human.js'
 import type { SshSession } from '../../transport/ssh.js'
 import { execPrivileged } from '../../transport/privileged.js'
+import { probeCommand, interpretProbe } from '../../openclaw/health.js'
+import { STATE_DIR_HOST_LINUX, configPathForOS } from '../../openclaw/runtime.js'
 
 const GATEWAY_PORT = 18789
 
@@ -58,16 +60,15 @@ export async function gatherSnapshot(
       `${DOCKER} stats openclaw --no-stream --format '{{.MemUsage}}|{{.CPUPerc}}' 2>/dev/null || echo '—|—'`,
       signal,
     ),
+    session.exec(probeCommand('live', GATEWAY_PORT), signal),
     session.exec(
-      `curl -sf --connect-timeout 2 http://localhost:${GATEWAY_PORT}/health >/dev/null 2>&1 && echo ok || echo unreachable`,
+      `cat ${configPathForOS('Linux')} 2>/dev/null || echo '{}'`,
       signal,
     ),
     session.exec(
-      `cat /home/clawops/openclaw.json 2>/dev/null || echo '{}'`,
-      signal,
-    ),
-    session.exec(
-      `df -h /home/clawops 2>/dev/null | awk 'NR==2{print $5" used ("$3" of "$2")"}'`,
+      // The state directory, not the service user's home: 2.0 keeps the SQLite database
+      // there, so that is the filesystem that fills up.
+      `df -h ${STATE_DIR_HOST_LINUX} 2>/dev/null | awk 'NR==2{print $5" used ("$3" of "$2")"}'`,
       signal,
     ),
     execPrivileged(session, 
@@ -100,7 +101,9 @@ export async function gatherSnapshot(
   return {
     container: { status, image, startedAt, restartCount, memUsage, cpuPct },
     gateway: {
-      reachable: healthRaw.stdout.trim() === 'ok',
+      // Judged on the payload: a status code cannot distinguish a healthy gateway from
+      // a path that fell through to the Control UI. See src/openclaw/health.ts.
+      reachable: interpretProbe('live', healthRaw.stdout).ok,
       version,
       authMode,
     },

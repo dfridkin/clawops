@@ -3,7 +3,9 @@ import process from 'node:process'
 import { accessSync, mkdirSync, constants } from 'node:fs'
 import path from 'node:path'
 import { success, failure, warn, info, REPO_URL } from '../../output/human.js'
-import { PUBLISH_INSPECT_CMD, publishForRestart } from '../../openclaw/runtime.js'
+import {
+  PUBLISH_INSPECT_CMD, publishForRestart, STATE_DIR_HOST_LINUX,
+} from '../../openclaw/runtime.js'
 import { execPrivileged } from '../../transport/privileged.js'
 
 export default defineCommand({
@@ -252,7 +254,8 @@ export default defineCommand({
 
             // Disk usage
             const diskResult = await session.exec(
-              `df -h /home/clawops 2>/dev/null | awk 'NR==2{print $5" used ("$3" of "$2")"}'`,
+              // The state directory: 2.0's SQLite lives there, not in the user's home.
+              `df -h ${STATE_DIR_HOST_LINUX} 2>/dev/null | awk 'NR==2{print $5" used ("$3" of "$2")"}'`,
               ac.signal,
             )
             const diskUsage = diskResult.stdout.trim()

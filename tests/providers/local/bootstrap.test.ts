@@ -112,22 +112,22 @@ describe('localBootstrap()', () => {
     // WO-38 publishes on 127.0.0.1 only, so a fetch() from the operator's machine would
     // fail against every healthy deployment. The probe runs on the host instead.
     mockSession.exec.mockImplementation(async (cmd: string) =>
-      cmd.includes('/health')
-        ? { stdout: '200', stderr: '', code: 0 }
+      cmd.includes('/startupz')
+        ? { stdout: '{"ok":true,"status":"started"}', stderr: '', code: 0 }
         : { stdout: 'clawops: bootstrap complete\n', stderr: '', code: 0 },
     )
     await localBootstrap({ ...BASE_OPTS, noWait: false })
 
     const cmds = mockSession.exec.mock.calls.map((c) => String(c[0]))
-    const probe = cmds.find((c) => c.includes('/health'))
+    const probe = cmds.find((c) => c.includes('/startupz'))
     expect(probe, 'expected a health probe over the session').toBeDefined()
-    expect(probe).toContain('127.0.0.1:18789/health')
+    expect(probe).toContain('127.0.0.1:18789/startupz')
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('skips the probe when noWait is true', async () => {
     await localBootstrap({ ...BASE_OPTS, noWait: true })
     const cmds = mockSession.exec.mock.calls.map((c) => String(c[0]))
-    expect(cmds.some((c) => c.includes('/health'))).toBe(false)
+    expect(cmds.some((c) => c.includes('/startupz'))).toBe(false)
   })
 })
