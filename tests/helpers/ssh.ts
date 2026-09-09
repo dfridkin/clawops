@@ -37,6 +37,24 @@ export class FakeSshSession implements SshSession {
   }
 
   /** Queue a handler that will respond to the next stream() call. */
+  /** Commands run with piped input, and the bytes they received. */
+  readonly inputCalls: Array<{ cmd: string; bytes: number }> = []
+
+  async execWithInput(
+    command: string,
+    input: NodeJS.ReadableStream,
+  ): Promise<SshExecResult> {
+    let bytes = 0
+    await new Promise<void>((resolve, reject) => {
+      input.on('data', (c: Buffer | string) => { bytes += Buffer.from(c).length })
+      input.on('end', resolve)
+      input.on('error', reject)
+    })
+    this.inputCalls.push({ cmd: command, bytes })
+    const handler = this.execHandlers.shift()
+    return handler ? handler(command) : { stdout: '', stderr: '', code: 0 }
+  }
+
   onStream(handler: StreamHandler): this {
     this.streamHandlers.push(handler)
     return this

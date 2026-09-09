@@ -39,6 +39,18 @@ export interface SshSession {
   /** Run a command and return its stdout as a readable stream (for log tailing). */
   stream(command: string, signal?: AbortSignal): Promise<NodeJS.ReadableStream>
   /**
+   * Run a command, feeding `input` to its stdin, and collect the output.
+   *
+   * `stream()` exposes only the read side, so there was no way to send a file to the host —
+   * which `backup restore` needs, to put an archive back where it came from. Base64 through
+   * `exec` would have worked for small archives and failed at ARG_MAX for real ones.
+   */
+  execWithInput(
+    command: string,
+    input: NodeJS.ReadableStream,
+    signal?: AbortSignal,
+  ): Promise<SshExecResult>
+  /**
    * Open a local TCP server on localPort that forwards connections to
    * remoteHost:remotePort via SSH direct-tcpip. Returns a TunnelHandle;
    * call handle.close() to tear down the server and all open sockets.
@@ -91,6 +103,55 @@ class Ssh2Session implements SshSession {
           signal?.removeEventListener('abort', onAbort)
           reject(new NetworkError(`SSH channel error: ${chanErr.message}`))
         })
+      })
+    })
+  }
+
+  execWithInput(
+    command: string,
+    input: NodeJS.ReadableStream,
+    signal?: AbortSignal,
+  ): Promise<SshExecResult> {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new NetworkError('Operation aborted'))
+        return
+      }
+
+      this.client.exec(command, (err, channel) => {
+        if (err) {
+          reject(new NetworkError(`SSH exec failed: ${err.message}`))
+          return
+        }
+
+        let stdout = ''
+        let stderr = ''
+
+        const onAbort = () => {
+          channel.destroy()
+          reject(new NetworkError('Operation aborted'))
+        }
+        signal?.addEventListener('abort', onAbort, { once: true })
+
+        channel.on('data', (data: Buffer) => { stdout += data.toString('utf-8') })
+        channel.stderr.on('data', (data: Buffer) => { stderr += data.toString('utf-8') })
+        channel.on('close', (code: number) => {
+          signal?.removeEventListener('abort', onAbort)
+          resolve({ stdout, stderr, code: code ?? 0 })
+        })
+        channel.on('error', (chanErr: Error) => {
+          signal?.removeEventListener('abort', onAbort)
+          reject(new NetworkError(`SSH channel error: ${chanErr.message}`))
+        })
+
+        // The remote command sees EOF when the pipe closes, which is what tells it the
+        // upload is complete.
+        input.on('error', (readErr: Error) => {
+          channel.destroy()
+          signal?.removeEventListener('abort', onAbort)
+          reject(new NetworkError(`Failed reading input: ${readErr.message}`))
+        })
+        input.pipe(channel)
       })
     })
   }

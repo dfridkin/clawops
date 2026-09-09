@@ -2,9 +2,11 @@ import { defineCommand } from 'citty'
 import { createWriteStream } from 'node:fs'
 import { pipeline } from 'node:stream/promises'
 import process from 'node:process'
-import { success, failure, info, spinner } from '../../output/human.js'
+import { success, failure, info, spinner, warn } from '../../output/human.js'
 import { UsageError } from '../../errors/index.js'
-import { execPrivileged, streamPrivileged } from '../../transport/privileged.js'
+import {
+  execPrivileged, streamPrivileged, execPrivilegedWithInput,
+} from '../../transport/privileged.js'
 
 export default defineCommand({
   meta: {
@@ -106,30 +108,83 @@ export default defineCommand({
           abortController.signal,
         )
         spin.stop()
-        const fileStream = createWriteStream(outPath)
+        // 0600, matching the mode OpenClaw gives the archive on the host. The default is
+        // 0644, and this archive carries the state database — whose tables include
+        // mcp_oauth_stores, secret_store_entries, worker_environment_credentials and
+        // device_auth_tokens, unencrypted.
+        const fileStream = createWriteStream(outPath, { mode: 0o600 })
         await pipeline(backupStream, fileStream)
         await execPrivileged(session, 
           `docker exec openclaw rm -f ${remoteArchive}`,
           abortController.signal,
         )
         success(`Backup saved to ${outPath}`)
-        info('The archive contains credentials — store it accordingly.')
+        info('Saved with mode 0600. The archive contains the state database — OAuth tokens,')
+        info('secrets and device credentials, unencrypted. Treat it as a credential.')
       } else {
-        // `openclaw backup restore` does not exist on the OpenClaw line this clawops
-        // release supports — 2026.7.1 ships `backup create` and `backup verify` only.
-        // Restore arrived with OpenClaw 2.0. The previous implementation piped an
-        // archive into `openclaw-ctl backup restore --stdin`: neither the binary nor
-        // the subcommand exists, so it never restored anything.
-        //
-        // Failing with an explanation beats a hand-rolled untar into a live state
-        // directory, which is how backups get turned into corruption.
-        throw new UsageError(
-          'Restore is not available on this clawops release.\n' +
-            'OpenClaw up to 2026.7.1-2 provides `backup create` and `backup verify` only; ' +
-            'restore arrived in OpenClaw 2.0 and will be supported by clawops 2.x.\n' +
-            'To recover manually: copy the archive to the host, then extract it into the ' +
-            'gateway container with the gateway stopped.',
+        // Delegated to OpenClaw, which restores into a FRESH directory and refuses a
+        // non-empty target ("Backup restore target directory must be empty"). clawops does
+        // not extract archives itself and does not restore in place: writing an archive over
+        // a live state directory is how a backup becomes corruption, and upstream already
+        // enforces the safe shape.
+        const file = typeof args.file === 'string' ? args.file : undefined
+        if (!file) {
+          throw new UsageError('Usage: clawops backup restore --file <archive.tar.gz>')
+        }
+
+        const { createReadStream } = await import('node:fs')
+        const remoteArchive = '/tmp/clawops-restore.tar.gz'
+        const staging = `/tmp/clawops-restored-${Date.now()}`
+
+        const spin = spinner('Uploading archive...')
+        const uploadResult = await execPrivilegedWithInput(
+          session,
+          `docker exec -i openclaw sh -c 'cat > ${remoteArchive}'`,
+          createReadStream(file),
+          abortController.signal,
         )
+        if (uploadResult.code !== 0) {
+          spin.stop()
+          throw new Error(`Could not upload the archive: ${uploadResult.stderr.slice(0, 300)}`)
+        }
+
+        spin.text = 'Verifying and restoring to a staging directory...'
+        const restore = await execPrivileged(
+          session,
+          `docker exec openclaw openclaw backup restore ${remoteArchive} --target ${staging} --json`,
+          abortController.signal,
+        )
+        await execPrivileged(
+          session, `docker exec openclaw rm -f ${remoteArchive}`, abortController.signal,
+        )
+        spin.stop()
+
+        if (restore.code !== 0) {
+          throw new Error(`Restore failed: ${(restore.stderr || restore.stdout).slice(0, 400)}`)
+        }
+
+        let report: { entryCount?: number; warnings?: string[] } = {}
+        try {
+          report = JSON.parse(restore.stdout.trim()) as typeof report
+        } catch {
+          info(restore.stdout)
+        }
+
+        success(`Archive verified and restored to ${staging} on the host.`)
+        if (report.entryCount !== undefined) info(`${report.entryCount} entries restored.`)
+
+        // Surfaced verbatim rather than summarised: they describe consequences clawops
+        // cannot judge for the operator — rolled-back approvals, channel credentials that
+        // may need relinking — and paraphrasing would lose exactly that detail.
+        for (const w of report.warnings ?? []) warn(w)
+
+        info('')
+        info('Nothing has been activated. To adopt the restored state:')
+        info("  1. clawops ssh --command 'sudo docker stop openclaw'")
+        info(`  2. replace the state directory contents with ${staging}`)
+        info('  3. clawops gateway restart')
+        info('Provider plugins are not carried in the archive; re-run `clawops apply` to')
+        info('reinstall them, or the gateway starts without its model providers.')
       }
     } finally {
       release()

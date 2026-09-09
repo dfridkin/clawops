@@ -3,12 +3,10 @@
 ClawOps provides `clawops backup create` to capture point-in-time snapshots of your OpenClaw
 application data over SSH.
 
-> **Restore is not available on the clawops 1.x line.** OpenClaw up to `2026.7.1-2` ships
-> `backup create` and `backup verify` only — there is no `restore` subcommand to call. Earlier
-> clawops releases advertised `backup restore`, but it invoked a binary that does not exist in the
-> image and never ran. `clawops backup restore` now fails with an explanation rather than pretending
-> to work. See [Recovering from an archive](#recovering-from-an-archive) for what you can do today,
-> and [OpenClaw 2.0](#openclaw-20) for what is coming.
+> **The archive is a credential.** It contains the state database, whose tables include
+> `mcp_oauth_stores`, `secret_store_entries`, `worker_environment_credentials` and
+> `device_auth_tokens` — unencrypted. clawops writes it `0600`; keep it that way, and
+> encrypt it at rest for anything you would not hand over.
 
 ## What gets backed up
 
@@ -77,41 +75,46 @@ For production stacks, rehearse recovery against a staging stack at least monthl
 [Recovering from an archive](#recovering-from-an-archive) below). Because recovery is manual on
 this line, the rehearsal matters more, not less.
 
-## Recovering from an archive
-
-There is no `clawops backup restore` on this release line, and no `restore` subcommand inside
-OpenClaw `2026.7.1-2` for it to call. Recovery today is a manual procedure, and it is deliberately
-not automated: writing an archive into a live state directory without the application's cooperation
-is how a bad backup becomes a corrupt deployment.
-
-The archive is an ordinary `.tar.gz`. To recover:
+## Restoring
 
 ```bash
-# 1. Inspect what you are about to write
-tar -tzf /backups/openclaw-prod-20260508.tar.gz
-
-# 2. Stop the gateway so nothing is writing to the state directory
-clawops ssh --command 'sudo docker stop openclaw'
-
-# 3. Copy the archive to the host and unpack it into the data directory
-#    Confirm the path against your own deployment before running this.
-scp /backups/openclaw-prod-20260508.tar.gz ec2-user@<host>:/tmp/
-clawops ssh --command 'sudo tar -xzf /tmp/openclaw-restore.tar.gz -C /home/clawops/'
-
-# 4. Bring the gateway back
-clawops gateway restart
-clawops agents list
+clawops backup restore --file /backups/openclaw-prod-20260908.tar.gz
 ```
 
-Treat this as a break-glass procedure. Validate it against a staging stack before you need it in
-anger, and record the data directory your deployment actually uses — it is not identical across
-providers.
+clawops does not extract the archive itself. It uploads it and calls
+`openclaw backup restore`, which verifies the archive and expands it into a **fresh staging
+directory** — refusing a non-empty target. Nothing is activated:
 
-## OpenClaw 2.0
+```
+✓ Archive verified and restored to /tmp/clawops-restored-1757... on the host.
+  10 entries restored.
+⚠ Restoring an archive is time travel: every restored state surface rolls back to the
+  archive timestamp.
+⚠ Messaging-channel credentials with ratchet state, especially WhatsApp, may desynchronize
+  after rollback and require relinking.
+⚠ Approvals and delivery/dedupe state also roll back; review pending approvals before
+  resuming the Gateway.
+⚠ Plugin node_modules are not archived.
+```
 
-OpenClaw 2.0 adds a real `backup restore` subcommand that understands the SQLite state layout it
-introduced. `clawops backup restore` returns as a supported command in the clawops 2.x line, built
-on that, rather than on an untar this project would be guessing at.
+Those warnings come from OpenClaw and are printed verbatim. They describe consequences
+clawops cannot judge for you, and summarising them would lose the detail that matters.
+
+### Adopting the restored state
+
+```bash
+clawops ssh --command 'sudo docker stop openclaw'
+# replace the state directory contents with the staging directory
+clawops gateway restart
+clawops apply <plan>.json     # reinstalls provider plugins
+```
+
+The last step is not optional if you use a provider whose plugin is not bundled — the
+archive does not carry plugin `node_modules`, so the gateway would start without its model
+providers and look healthy while doing it.
+
+Restoring in place is deliberately not offered. Writing an archive over a live state
+directory is how a backup becomes corruption, and OpenClaw refuses it too.
 
 ## Automation
 

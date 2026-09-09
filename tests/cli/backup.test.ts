@@ -109,37 +109,108 @@ describe('backup command — create', () => {
 })
 
 describe('backup command — restore', () => {
-  it('refuses, because OpenClaw <= 2026.9.2 has no restore subcommand', async () => {
-    // 2026.9.2 ships `backup create` and `backup verify` only; restore arrived in
-    // OpenClaw 2.0. The previous implementation piped an archive into
-    // `openclaw-ctl backup restore --stdin` — neither the binary nor the subcommand
-    // exists, so it silently restored nothing.
-    const session = new FakeSshSession()
-    const streamSpy = vi.fn().mockResolvedValue(Readable.from(['x']))
-    session.onStream(streamSpy)
+  // v1.7.5 made restore throw, because OpenClaw 2026.7.1-2 had no restore subcommand to
+  // call. 2.0 does — and it restores into a fresh directory, refusing a non-empty target.
+  // clawops delegates rather than extracting archives itself: writing an archive over a
+  // live state directory is how a backup becomes corruption.
 
-    const { buildContext, acquireSession } = await getMocks()
-    buildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
-    acquireSession.mockResolvedValue({ session, release: vi.fn() })
-
-    const cmd = await getCmd()
-    await expect(
-      (cmd.run as AnyRunFn)({ args: { action: 'restore', file: '/tmp/b.tar.gz', yes: true } }),
-    ).rejects.toThrow(/not available on this clawops release/)
-
-    // and it must not have touched the remote host on the way to failing
-    expect(streamSpy).not.toHaveBeenCalled()
+  const RESTORE_JSON = JSON.stringify({
+    ok: true,
+    entryCount: 10,
+    targetPath: '/tmp/clawops-restored-1',
+    warnings: [
+      'Restoring an archive is time travel: every restored state surface rolls back to the archive timestamp.',
+      'Plugin node_modules are not archived; after activation, run `openclaw plugins update <id>`.',
+    ],
   })
 
-  it('names the version that does support restore', async () => {
+  it('delegates to openclaw, into a fresh staging directory', async () => {
+    const { writeFileSync, mkdtempSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const os = await import('node:os')
+    const dir = mkdtempSync(join(os.tmpdir(), 'clawops-restore-test-'))
+    const archive = join(dir, 'b.tar.gz')
+    writeFileSync(archive, 'archive-bytes')
+
+    const cmds: string[] = []
     const session = new FakeSshSession()
+    session.onExec(function handler(cmd: string) {
+      cmds.push(cmd)
+      session.onExec(handler)
+      if (cmd.includes('backup restore')) return { stdout: RESTORE_JSON, stderr: '', code: 0 }
+      return { stdout: '', stderr: '', code: 0 }
+    })
+
+    const { buildContext, acquireSession } = await getMocks()
+    buildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
+    acquireSession.mockResolvedValue({ session, release: vi.fn() })
+    const writes: string[] = []
+    vi.spyOn(process.stdout, 'write').mockImplementation((c) => { writes.push(String(c)); return true })
+
+    const cmd = await getCmd()
+    await (cmd.run as AnyRunFn)({ args: { action: 'restore', file: archive, yes: true } })
+
+    // The archive is uploaded through the privileged path, not extracted locally.
+    expect(session.inputCalls.length, 'expected the archive to be uploaded').toBe(1)
+    // This file mocks node:fs, so createReadStream yields the canned 'backup-data' stream
+    // rather than the bytes written above. Asserting against the real file size can never
+    // match — what matters here is that the archive's stream reached the upload.
+    expect(session.inputCalls[0]!.bytes).toBe('backup-data'.length)
+
+    const restore = cmds.find((c) => c.includes('backup restore'))
+    expect(restore).toBeDefined()
+    // --target, so upstream's "must be empty" guard applies; never in place.
+    expect(restore).toMatch(/--target \/tmp\/clawops-restored-/)
+    expect(restore).toContain('--json')
+    // clawops does not untar anything itself.
+    // An invocation, not the substring in "restore.tar.gz" — which is what a bare
+    // \btar\b matched on the first attempt.
+    expect(cmds.some((c) => /(^|[\s;&|])tar\s/.test(c))).toBe(false)
+  })
+
+  it('surfaces the restore warnings verbatim', async () => {
+    // They describe consequences clawops cannot judge for the operator — rolled-back
+    // approvals, channel credentials needing relink, plugins not carried in the archive.
+    // Summarising them would lose exactly the detail that matters.
+    const { writeFileSync, mkdtempSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const os = await import('node:os')
+    const dir = mkdtempSync(join(os.tmpdir(), 'clawops-restore-test-'))
+    const archive = join(dir, 'b.tar.gz')
+    writeFileSync(archive, 'x')
+
+    const session = new FakeSshSession()
+    session.onExec(function handler(cmd: string) {
+      session.onExec(handler)
+      if (cmd.includes('backup restore')) return { stdout: RESTORE_JSON, stderr: '', code: 0 }
+      return { stdout: '', stderr: '', code: 0 }
+    })
     const { buildContext, acquireSession } = await getMocks()
     buildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
     acquireSession.mockResolvedValue({ session, release: vi.fn() })
 
+    const out: string[] = []
+    vi.spyOn(process.stdout, 'write').mockImplementation((c) => { out.push(String(c)); return true })
+    vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => { out.push(a.map(String).join(' ')) })
+    vi.spyOn(console, 'warn').mockImplementation((...a: unknown[]) => { out.push(a.map(String).join(' ')) })
+
+    const cmd = await getCmd()
+    await (cmd.run as AnyRunFn)({ args: { action: 'restore', file: archive, yes: true } })
+
+    const text = out.join('\n')
+    expect(text).toMatch(/time travel/)
+    expect(text).toMatch(/Plugin node_modules are not archived/)
+    // And it must not imply the restore is live.
+    expect(text).toMatch(/Nothing has been activated/)
+  })
+
+  it('requires an archive to restore from', async () => {
+    const { buildContext, acquireSession } = await getMocks()
+    buildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
+    acquireSession.mockResolvedValue({ session: new FakeSshSession(), release: vi.fn() })
     const cmd = await getCmd()
     await expect(
-      (cmd.run as AnyRunFn)({ args: { action: 'restore', file: '/tmp/b.tar.gz', yes: true } }),
-    ).rejects.toThrow(/clawops 2\.x/)
+      (cmd.run as AnyRunFn)({ args: { action: 'restore', yes: true } }),
+    ).rejects.toThrow(/--file/)
   })
 })

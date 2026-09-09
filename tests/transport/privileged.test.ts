@@ -126,7 +126,9 @@ describe('every remote Docker call is routed through this module', () => {
         const src = readFileSync(join(root, path), 'utf8')
         const lines = src.split('\n')
         lines.forEach((line, i) => {
-          if (!/session\.(exec|stream)\(/.test(line)) return
+          // execWithInput too: it was added for backup restore and slipped past a
+          // narrower `exec\(`-anchored pattern, which is exactly the gap this guards.
+          if (!/session\.(exec|execWithInput|stream)\(/.test(line)) return
           // Look at the call and the few lines after it, since arguments wrap.
           const window = lines.slice(i, i + 4).join(' ')
           const touchesDocker = /docker|dockerRunCmd|INSPECT_CMD/i.test(window)
