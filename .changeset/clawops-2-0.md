@@ -152,6 +152,27 @@ one repair, and failing that **rolls back to the image that was running before**
 you which state you ended up in rather than leaving you to work it out. If the rollback
 will not start either, the message names the snapshot to restore.
 
+## `clawops migrate` moves an existing 1.x deployment across
+
+```bash
+clawops migrate --stack prod
+```
+
+It takes a verified backup inside the running container, extracts the state **from that
+running container** — stopping first would destroy it, since 1.x kept everything inside —
+owns it numerically, starts 2.0 against it, and waits for the gateway to actually come up.
+
+Your old config is **not** applied. It never applied on 1.x either: the file clawops mounted
+was read by nothing. It is reported as something to review, and a fresh valid 2.0 config is
+written instead.
+
+Device identity is preserved, so paired devices do not need re-pairing — `migrate` compares
+it before and after and tells you if that ever stops being true.
+
+**If you ran `gateway restart`, `gateway update` or `config set` on a clawops before 2.0,
+your state is already gone.** Nothing was mounted to survive the container replacement.
+`migrate` says so plainly rather than pretending to rescue it.
+
 ## `clawops backup restore` works again
 
 It was made to fail in v1.7.5, because the OpenClaw it supported had no restore subcommand
