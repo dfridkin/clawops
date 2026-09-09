@@ -184,9 +184,10 @@ export async function restartGateway(
   // port cases are already handled (normalise + argv pin); this catches whatever
   // they did not, by verifying the gateway actually answers before we call it done.
   const healthy = await waitForGateway(session, pathPrefix, signal)
-  if (!healthy) {
+  if (!healthy.ok) {
     throw new Error(
-      `Gateway restarted but did not become healthy on port ${GATEWAY_PORT}. ` +
+      `Gateway restarted but did not finish starting on port ${GATEWAY_PORT}` +
+        (healthy.reason ? ` — ${healthy.reason}` : '') + `. ` +
         `The previous container has already been replaced; inspect it with ` +
         `\`docker logs openclaw\`. If the newly-applied config is at fault, ` +
         `revert it and restart — before v1.7.2 this config was never applied, so a ` +
@@ -195,23 +196,34 @@ export async function restartGateway(
   }
 }
 
-/** Poll the gateway's health endpoint until it answers or the budget runs out. */
+/**
+ * Poll until the gateway reports it has STARTED, or the budget runs out.
+ *
+ * `/startupz`, not `/health`: after a restart the process is listening long before startup
+ * has finished, so a liveness probe returns ok while the gateway is still converging. The
+ * caller is about to tell the operator the deploy succeeded.
+ *
+ * The body is judged, not the status code — see src/openclaw/health.ts for why a status
+ * code cannot distinguish a healthy gateway from a typo'd path.
+ */
 async function waitForGateway(
   session: SshSession,
   pathPrefix: string,
   signal?: AbortSignal,
   attempts = 15,
-): Promise<boolean> {
-  const probe =
-    `${pathPrefix}curl -fsS -m 3 http://127.0.0.1:${GATEWAY_PORT}/healthz >/dev/null 2>&1 ` +
-    `&& echo ok || echo waiting`
+): Promise<{ ok: boolean; reason?: string }> {
+  const { probeCommand, interpretProbe } = await import('../openclaw/health.js')
+  const probe = probeCommand('started', GATEWAY_PORT, pathPrefix)
+  let last = 'no response from the gateway'
   for (let i = 0; i < attempts; i++) {
-    if (signal?.aborted) return false
+    if (signal?.aborted) return { ok: false, reason: 'aborted' }
     const r = await session.exec(probe, signal)
-    if (r.stdout.trim().endsWith('ok')) return true
+    const verdict = interpretProbe('started', r.stdout)
+    if (verdict.ok) return { ok: true }
+    last = verdict.reason ?? last
     await new Promise((resolve) => setTimeout(resolve, 2000))
   }
-  return false
+  return { ok: false, reason: last }
 }
 
 /** Deep-merge overlay into base. Arrays in overlay replace (not concat) base arrays. */

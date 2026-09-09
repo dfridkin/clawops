@@ -134,8 +134,10 @@ async function waitForGateway(session: SshSession, signal?: AbortSignal): Promis
   // the network to a port that is deliberately not listening there, so it would fail on
   // every healthy deployment. `clawops tunnel` is unaffected: it forwards to the remote's
   // own loopback already.
-  const url = `http://127.0.0.1:${GATEWAY_PORT}/health`
-  const probe = `curl -fsS -m 5 -o /dev/null -w '%{http_code}' ${url} 2>/dev/null || echo 000`
+  const { probeCommand, interpretProbe } = await import('../../openclaw/health.js')
+  // /startupz, and the BODY is judged. `-o /dev/null -w '%{http_code}'` could not tell a
+  // healthy gateway from a typo'd path: the Control UI answers 200 on any unmatched route.
+  const probe = probeCommand('started', GATEWAY_PORT)
   const deadline = Date.now() + HEALTH_TIMEOUT_MS
 
   while (Date.now() < deadline) {
@@ -143,13 +145,13 @@ async function waitForGateway(session: SshSession, signal?: AbortSignal): Promis
       throw new ProviderError('Bootstrap aborted while waiting for gateway')
     }
     const result = await session.exec(probe, signal)
-    if (result.stdout.trim().startsWith('2')) return
+    if (interpretProbe('started', result.stdout).ok) return
     await sleep(HEALTH_POLL_INTERVAL_MS)
   }
 
   throw new ProviderError(
-    `Gateway did not become healthy within ${HEALTH_TIMEOUT_MS / 1000}s. ` +
-      `Probed ${url} on the host; check \`clawops logs\`.`,
+    `Gateway did not finish starting within ${HEALTH_TIMEOUT_MS / 1000}s. ` +
+      `Probed /startupz on the host's loopback; check \`clawops logs\`.`,
   )
 }
 

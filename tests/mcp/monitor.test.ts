@@ -24,7 +24,7 @@ function makeSession(overrides: Partial<{
   session
     .onExec(() => ({ stdout: overrides.inspect ?? 'running|ghcr.io/openclaw/openclaw:stable|2026-01-01T00:00:00Z|0', stderr: '', code: 0 }))
     .onExec(() => ({ stdout: overrides.stats   ?? '45.2MiB / 1.9GiB|0.30%', stderr: '', code: 0 }))
-    .onExec(() => ({ stdout: overrides.health  ?? 'ok',                       stderr: '', code: 0 }))
+    .onExec(() => ({ stdout: overrides.health  ?? '{"ok":true,"status":"live"}',                       stderr: '', code: 0 }))
     .onExec(() => ({ stdout: overrides.config  ?? JSON.stringify({ meta: { lastTouchedVersion: '2026.4' }, gateway: { auth: { mode: 'token' } } }), stderr: '', code: 0 }))
     .onExec(() => ({ stdout: overrides.disk    ?? '25% used (5G of 20G)',     stderr: '', code: 0 }))
     .onExec(() => ({ stdout: overrides.logs    ?? 'log line 1\nlog line 2',   stderr: '', code: 0 }))
@@ -55,7 +55,7 @@ describe('handleMonitor — cloud stack', () => {
   it('returns gateway reachable=false when health endpoint fails', async () => {
     const { buildContext, acquireSession } = await getMocks()
     buildContext.mockReturnValue(makeFakeContext())
-    acquireSession.mockResolvedValue({ session: makeSession({ health: 'unreachable' }), release: vi.fn() })
+    acquireSession.mockResolvedValue({ session: makeSession({ health: '<!doctype html><html>…' }), release: vi.fn() })
 
     const { handleMonitor } = await import('../../src/mcp/tools/cli/monitor.js')
     const result = await handleMonitor({ stackName: 'default', tailLines: 5 }, FAKE_SERVER)

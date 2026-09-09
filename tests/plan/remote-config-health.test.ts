@@ -9,6 +9,12 @@ import type { SshSession, SshExecResult } from '../../src/transport/ssh.js'
 const exec = (stdout: string, code = 0): SshExecResult =>
   ({ stdout, stderr: '', code }) as SshExecResult
 
+// Real payloads, not sentinels. The probe judges the body now: a status code cannot tell a
+// healthy gateway from a typo'd path, because the Control UI answers 200 on any unmatched
+// route. See src/openclaw/health.ts.
+const STARTED = '{"ok":true,"status":"started"}'
+const STARTING = '{"ok":true,"status":"live"}'
+
 /**
  * Fake session that answers the fixed preamble (uname, docker inspect, cat config,
  * the restart itself) and then replies to health probes from a scripted list.
@@ -22,7 +28,7 @@ function makeSession(probeAnswers: string[]): { session: SshSession; probes: () 
       if (cmd.includes('cat /home/clawops/openclaw.json')) {
         return exec(JSON.stringify({ gateway: { auth: { token: 'tok' } } }))
       }
-      if (cmd.includes('/healthz')) {
+      if (cmd.includes('/startupz')) {
         const answer = probeAnswers[Math.min(probeCount, probeAnswers.length - 1)] ?? 'waiting'
         probeCount++
         return exec(answer)
@@ -37,14 +43,14 @@ afterEach(() => vi.useRealTimers())
 
 describe('restartGateway health gate', () => {
   it('succeeds once the gateway answers', async () => {
-    const { session, probes } = makeSession(['ok'])
+    const { session, probes } = makeSession([STARTED])
     await expect(restartGateway(session)).resolves.toBeUndefined()
     expect(probes()).toBe(1)
   })
 
   it('keeps polling while the gateway is still starting', async () => {
     vi.useFakeTimers()
-    const { session, probes } = makeSession(['waiting', 'waiting', 'ok'])
+    const { session, probes } = makeSession([STARTING, STARTING, STARTED])
     const pending = restartGateway(session)
     await vi.advanceTimersByTimeAsync(10_000)
     await expect(pending).resolves.toBeUndefined()
@@ -53,9 +59,9 @@ describe('restartGateway health gate', () => {
 
   it('fails loudly when the gateway never becomes healthy', async () => {
     vi.useFakeTimers()
-    const { session } = makeSession(['waiting'])
+    const { session } = makeSession([STARTING])
     const pending = restartGateway(session)
-    const assertion = expect(pending).rejects.toThrow(/did not become healthy/)
+    const assertion = expect(pending).rejects.toThrow(/did not finish starting/)
     await vi.advanceTimersByTimeAsync(60_000)
     await assertion
   })
@@ -64,7 +70,7 @@ describe('restartGateway health gate', () => {
     // The operator needs to know this restart is the first time their stored config
     // has ever taken effect — otherwise the failure looks inexplicable.
     vi.useFakeTimers()
-    const { session } = makeSession(['waiting'])
+    const { session } = makeSession([STARTING])
     const pending = restartGateway(session)
     const assertion = expect(pending).rejects.toThrow(/never applied/)
     await vi.advanceTimersByTimeAsync(60_000)
