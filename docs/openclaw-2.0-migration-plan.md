@@ -617,6 +617,15 @@ derivable the same way, and `scripts/openclaw/check-plugin-pins.sh` extends to c
 
 **WO-49 — Documentation audit and release** *(L)* — §9.
 
+**Standing task, not a final step:** the README's *What's new in 2.0* block documents each changed
+flow **as the work lands**, with a diagram per flow. Reconstructing flows after the fact is how
+release notes end up describing what someone remembers rather than what shipped. Every work order
+that changes a user-visible flow updates that block in the same PR; WO-49 audits it at the end
+rather than writing it.
+
+Covered so far: `up`/`apply`, `gateway update`, `gateway restart`, loopback publishing, health
+probing, AWS day-two commands, and the `agents restart` removal.
+
 **Carried in from WO-43:** clawops now installs provider plugins from **ClawHub at deploy time**, a
 new outbound dependency that did not exist on the 1.x line. It needs an `/audit-egress` entry and a
 line in the firewall notes: the host requires egress to ClawHub during `apply` (not at boot — that
@@ -713,6 +722,7 @@ before marking that owner done.
 | ClawHub egress at apply — `/audit-egress` + firewall notes | WO-43 | **WO-49** | open |
 | `integrations.yaml` unchecked against the 2.0 channel surface | WO-43 | **WO-60** | re-homed from WO-45 (wrong owner) |
 | Plan fields `workspace`, `permissionMode`, `image.variant`, mounts | WO-42 | **WO-53** (2.1) | open |
+| README *What's new in 2.0* — update per flow change, audit at the end | user request | **every WO**, audited by WO-49 | standing |
 | Pulumi `Gateway` component (G7) | WO-58 audit | WO-38 | ✅ deleted |
 | `monitor.ts` on the pre-2.0 config path; disk gauge on the wrong filesystem | WO-58 audit | WO-44 | ✅ fixed — the WO-39 claim was wrong |
 
