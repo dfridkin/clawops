@@ -434,7 +434,38 @@ operator never made. (Written as a spread first; the test caught it.)
 `spec.openclaw.{workspace,permissionMode,plugins[],image.variant}`, `spec.network.ports[]` and
 `spec.network.publish`, plus extra-mount fields. Migration path for existing `clawops.dev/v1` plans.
 
-**WO-43 — Catalogs, and provider plugins at bootstrap** *(G8, G14, G15, G27, G28 — L, was M)*
+**WO-43 — Catalogs, and provider plugins at bootstrap** *(G8, G14, G15, G27, G28 — L, was M)* — ✅ **core done**
+
+**Three providers need a plugin, not one.** Derived from `plugins list --json` in a bare container:
+24 provider ids ship bundled, and of the six clawops offers, **deepseek, kimi and bedrock** are not
+among them. The silent-absence problem was never Bedrock-specific.
+
+**G28 is live and worse than "declare a minimum runtime".** All three ClawHub packages moved from
+`2026.9.2` to `2026.9.3` *within hours* on 2026-09-08, and the new builds declare
+`requires plugin API >=2026.9.3` — which the supported floor does not satisfy. Installing `latest`
+would mean a plan that deployed in the morning fails in the afternoon: the same hazard as the moving
+`latest` image tag the version guard exists to prevent.
+
+So **plugin versions are pinned in `spec/models.yaml`**, verified installing and loading on the
+floor. Advancing them is a coordinated change with the runtime floor;
+`scripts/openclaw/check-plugin-pins.sh` reports when it is due and whether the newer builds would
+install at all. It currently reports all three BLOCKED, which is the pin doing its job.
+
+**Installed at apply, not at boot.** `apply` installs pinned plugins after writing the config and
+before the restart, while the deploy still has egress — then reconciles configured
+`models.providers` against loaded `providerIds` and warns if any did not load. Verified end to end:
+pre-installed then booted with `--network none` → `restarts=0`, nothing refetched, no missing
+providers; and the same config *without* the pre-install → gateway `running exit=0` while the
+reconcile correctly reports `["amazon-bedrock"]`.
+
+**Deferred, and listed honestly:** `integrations.yaml` channel work (per-channel token fields,
+`dmPolicy`/`groupPolicy`, per-channel plugin packages) is untouched — it is channel configuration
+rather than the startup-blocking provider path, and belongs with WO-45. The ClawHub egress
+dependency needs an `/audit-egress` and firewall-notes entry (WO-49 docs). Ollama via
+`host.docker.internal` (G23) was already done in v1.7.2.
+
+*Original text follows.*
+
 Bigger than first scoped, because provider plugins are **startup-blocking**:
 - Install and consent provider plugins during bootstrap, before first gateway start
   (`plugins install clawhub:… --accept-capabilities`), with per-plugin minimum runtime (G28).
