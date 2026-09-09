@@ -136,6 +136,8 @@ describe('gateway command', () => {
         session.onExec(handler)
         if (cmd.includes('PortBindings')) return { stdout: '{"18789/tcp":[{"HostIp":"127.0.0.1"}]}', stderr: '', code: 0 }
         if (cmd.includes('docker inspect')) return { stdout: 'ghcr.io/openclaw/openclaw:2026.9.2', stderr: '', code: 0 }
+        // The startup gate: `docker run` exiting 0 only means the container was created.
+        if (cmd.includes('/startupz')) return { stdout: '{"ok":true,"status":"started"}', stderr: '', code: 0 }
         return { stdout: '', stderr: '', code: 0 }
       })
 
@@ -167,6 +169,8 @@ describe('gateway command', () => {
           return { stdout: '{"targetVersion":15,"foundVersion":15,"status":"exact"}', stderr: '', code: 0 }
         }
         if (cmd.includes('docker inspect')) return { stdout: 'ghcr.io/openclaw/openclaw:2026.9.2', stderr: '', code: 0 }
+        // The startup gate: `docker run` exiting 0 only means the container was created.
+        if (cmd.includes('/startupz')) return { stdout: '{"ok":true,"status":"started"}', stderr: '', code: 0 }
         return { stdout: '', stderr: '', code: 0 }
       })
 
@@ -201,6 +205,8 @@ describe('gateway command', () => {
           return { stdout: '{"targetVersion":15,"foundVersion":15,"status":"exact"}', stderr: '', code: 0 }
         }
         if (cmd.includes('docker inspect')) return { stdout: 'ghcr.io/openclaw/openclaw:2026.9.2', stderr: '', code: 0 }
+        // The startup gate: `docker run` exiting 0 only means the container was created.
+        if (cmd.includes('/startupz')) return { stdout: '{"ok":true,"status":"started"}', stderr: '', code: 0 }
         return { stdout: '', stderr: '', code: 0 }
       })
 
@@ -228,6 +234,8 @@ describe('gateway command', () => {
           return { stdout: '{"targetVersion":15,"foundVersion":15,"status":"exact"}', stderr: '', code: 0 }
         }
         if (cmd.includes('docker inspect')) return { stdout: 'ghcr.io/openclaw/openclaw:2026.9.2', stderr: '', code: 0 }
+        // The startup gate: `docker run` exiting 0 only means the container was created.
+        if (cmd.includes('/startupz')) return { stdout: '{"ok":true,"status":"started"}', stderr: '', code: 0 }
         return { stdout: '', stderr: '', code: 0 }
       })
 

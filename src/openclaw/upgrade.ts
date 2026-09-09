@@ -118,3 +118,95 @@ export function snapshotPathFrom(stdout: string): string | undefined {
   }
   return undefined
 }
+
+/**
+ * One-shot repair, run in a THROWAWAY container rather than via `docker exec`.
+ *
+ * `docker exec` needs a running container, and the case this exists for is a gateway that
+ * failed to start — often crash-looping, where exec races the restart. A one-shot container
+ * mounting the same state directory can repair it whether or not the gateway is up.
+ *
+ * SP-07 found a real 1.x→2.0 migration needed no repair at all, so this is the exceptional
+ * path, not a routine step: it runs only after the startup gate has already failed.
+ */
+export function repairCommand(image: string, stateDir: string): string {
+  return (
+    `docker run --rm -v ${stateDir}:/home/node/.openclaw ${image} ` +
+    `openclaw doctor --fix --json`
+  )
+}
+
+/** What an upgrade attempt ended up doing, for reporting and for tests. */
+export type UpgradeOutcome =
+  | { kind: 'started' }
+  | { kind: 'repaired' }
+  | { kind: 'rolled-back'; to: string; reason: string }
+  | { kind: 'failed'; reason: string; snapshotPath: string }
+
+/**
+ * Human summary of an upgrade outcome.
+ *
+ * Kept beside the state machine so the message and the branch cannot drift, and so the
+ * failure text is testable without standing up a gateway.
+ */
+export function describeOutcome(o: UpgradeOutcome, version: string): string {
+  switch (o.kind) {
+    case 'started':
+      return `Gateway updated to ${version}.`
+    case 'repaired':
+      return `Gateway updated to ${version} after a one-shot repair (doctor --fix).`
+    case 'rolled-back':
+      return (
+        `Rolled back to ${o.to}: the gateway did not start on ${version} — ${o.reason}. ` +
+        `The previous image is running again. If it also fails, restore the snapshot taken ` +
+        `before the upgrade.`
+      )
+    case 'failed':
+      return (
+        `Upgrade to ${version} failed and the rollback did not come up either — ${o.reason}. ` +
+        `The state snapshot taken before the upgrade is at ${o.snapshotPath}; restore it ` +
+        `with \`openclaw backup sqlite restore\` before retrying.`
+      )
+  }
+}
+
+export interface UpgradeSteps {
+  /** Poll until the gateway reports started, or give up. */
+  gate: () => Promise<{ ok: boolean; reason?: string }>
+  /** One-shot `doctor --fix` in a throwaway container. */
+  repair: () => Promise<void>
+  /** (Re)create the gateway container on a given version. */
+  run: (version: string) => Promise<void>
+}
+
+/**
+ * What an upgrade does after the container has been created.
+ *
+ * Extracted from the CLI so the branch that matters — did not start → repair → still did
+ * not start → roll back — is testable without a fake SSH session or a 30-second timer. The
+ * CLI supplies the three effects; this decides the order and the outcome.
+ */
+export async function resolveUpgrade(
+  steps: UpgradeSteps,
+  ctx: { version: string; previousVersion?: string; snapshotPath: string },
+): Promise<UpgradeOutcome> {
+  const first = await steps.gate()
+  if (first.ok) return { kind: 'started' }
+
+  // One shot, not a retry loop: SP-07 found a real 1.x→2.0 migration needed no repair at
+  // all, so repeated repair attempts would be thrashing a deployment that has some other
+  // problem.
+  await steps.repair()
+  await steps.run(ctx.version)
+  const second = await steps.gate()
+  if (second.ok) return { kind: 'repaired' }
+
+  const reason = second.reason ?? first.reason ?? 'unknown'
+  if (!ctx.previousVersion) return { kind: 'failed', reason, snapshotPath: ctx.snapshotPath }
+
+  await steps.run(ctx.previousVersion)
+  const back = await steps.gate()
+  return back.ok
+    ? { kind: 'rolled-back', to: ctx.previousVersion, reason }
+    : { kind: 'failed', reason, snapshotPath: ctx.snapshotPath }
+}
