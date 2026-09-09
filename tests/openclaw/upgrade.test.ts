@@ -96,6 +96,22 @@ describe('commands', () => {
   })
 })
 
+describe('repairCommand', () => {
+  it('never combines --fix with --json', async () => {
+    // The CLI refuses that pairing outright: "doctor --json runs read-only lint checks and
+    // cannot be combined with --repair, --fix, or --force." It shipped that way in the
+    // first cut of WO-45, so the repair step could only ever fail — and the unit fake
+    // returns success for any command, so nothing noticed until it ran against the image.
+    const { repairCommand } = await import('../../src/openclaw/upgrade.js')
+    const cmd = repairCommand('img:tag', '/state')
+    expect(cmd).toContain('doctor')
+    expect(cmd).toContain('--fix')
+    expect(cmd, '--json is rejected when combined with --fix').not.toContain('--json')
+    // No TTY during provisioning.
+    expect(cmd).toContain('--non-interactive')
+  })
+})
+
 describe('resolveUpgrade — what happens after the container is created', () => {
   const ctx = { version: '2026.9.2', previousVersion: '2026.9.0', snapshotPath: '/snap/s1' }
 

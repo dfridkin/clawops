@@ -551,8 +551,15 @@ races the restart), re-runs, and re-gates. Still failing, it rolls back to the i
 before the command touched anything. If the rollback will not come up either, the message names the
 snapshot — the only way back.
 
-Repair is deliberately **one shot, not a retry loop**: SP-07 found a real 1.x→2.0 migration needed no
-repair at all, so repeating it would thrash a deployment whose problem is something else.
+Repair is deliberately **one shot, not a retry loop**: repeating it would thrash a deployment whose
+problem is something else.
+
+**Correction (2026-09-09).** This work order shipped `repairCommand` as
+`openclaw doctor --fix --json`, which the CLI refuses outright — *"doctor --json runs read-only lint
+checks and cannot be combined with --repair, --fix, or --force"*. The repair step could only ever
+fail. The unit tests drive a fake that returns success for any command, so nothing noticed until the
+WO-52 audit ran it against the real image. Now `--fix --non-interactive --yes`, with the exit code
+ignored (doctor exits 1 on advisories), and a test asserting the two flags are never combined.
 
 The decision — did not start → repair → still did not start → roll back — lives in `resolveUpgrade`
 with the three effects injected. It was first written inline in the CLI and tested through a fake SSH
