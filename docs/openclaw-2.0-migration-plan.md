@@ -399,7 +399,38 @@ untouched; a test asserts no `mv` onto the real path happens.
 ajv against the WO-36 schema before `atomicWriteConfig`; respect the clobber guards; surface
 `<path>.rejected.<timestamp>`; add `clawops config validate`.
 
-**WO-42 — Deploy-plan schema v2** *(G16 — M)*
+**WO-42 — Deploy-plan schema v2** *(G16 — M)* — ✅ **done, and much smaller than written**
+
+Audited before implementing, and most of the work order turned out to be unnecessary or harmful:
+
+- **`apiVersion` is NOT bumped to v2.** It is a `const` in the schema, so bumping breaks every saved
+  plan file. The additions contemplated here are all optional fields, which are backward compatible
+  by definition. The one genuine incompatibility — a v1 plan pinning a pre-2.0 OpenClaw — is already
+  caught by the version guard with a better message than "unsupported apiVersion" (it names
+  `@clawops/cli@legacy`). Bumping would replace a good error with a worse one.
+- **`spec.openclaw.plugins[]` is not added.** OpenClaw's own config already has a full `plugins`
+  section (`enabled/allow/deny/load/slots/entries`), and `spec.openclaw.config` is free-form, so
+  plugin intent is already expressible. A parallel plan field would be a second way to say the same
+  thing that clawops would then have to reconcile. WO-43 derives plugins from `models.providers`
+  instead.
+- **`network.publish` already exists** as `network.publishGateway`, added in WO-38.
+- **`workspace`, `permissionMode`, `image.variant` and extra mounts are not added.** Nothing consumes
+  them; they belong to WO-53, which is 2.1. A schema field is a promise — adding one clawops silently
+  ignores is worse than not having it.
+
+**What the audit found instead.** `spec.openclaw.config` is free-form, so a plan carrying a config
+the gateway would reject **passed plan validation completely** and failed at write time, on the host,
+after provisioning. That defeats the Maker flow: the plan is the artifact a human reviews before
+anything reaches their cloud account, and a config error the plan cannot express is one review cannot
+catch.
+
+`validatePlanConfig` now checks the overlay against the OpenClaw schema during plan generation. It
+deep-merges onto `{gateway:{mode:'local'}}` first, because the overlay is applied to a provisioned
+config that already carries the mode — a shallow spread would drop it and report an error the
+operator never made. (Written as a spread first; the test caught it.)
+
+*Original text follows.*
+
 `spec.openclaw.{workspace,permissionMode,plugins[],image.variant}`, `spec.network.ports[]` and
 `spec.network.publish`, plus extra-mount fields. Migration path for existing `clawops.dev/v1` plans.
 
