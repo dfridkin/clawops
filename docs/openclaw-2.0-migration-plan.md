@@ -560,14 +560,52 @@ session with fake timers, which timed out: the command awaits dynamic imports th
 settle. Extracting it made the branch that matters testable in milliseconds, without a session or a
 30-second gate.
 
-**WO-46 — Delegate backup** *(G11, G22 — M)* — `openclaw backup create --verify` over SFTP; restore
+**WO-46 — Delegate backup** *(G11, G22 — M)* — ✅ **done** — `openclaw backup create --verify` over SFTP; restore
 into a staging dir, never in place. Archives carry plaintext OAuth — say so, restrict permissions.
 
-**Starting state:** `clawops backup restore` currently *throws* — v1.7.5 made it fail with an
-explanation because OpenClaw `2026.7.1-2` had no restore subcommand to call. 2.0 does
-(`backup: Create, verify, and restore backup archives and SQLite snapshots`), so this work order
-reinstates the command. Until it lands, the 2.0 changeset must not claim restore has returned; that
-claim was written and removed once already.
+**Done.** `clawops backup restore` delegates to `openclaw backup restore --target <staging> --json`.
+clawops uploads the archive and extracts nothing itself: upstream verifies, expands into a **fresh**
+directory, and refuses a non-empty target ("Backup restore target directory must be empty"), so the
+never-in-place requirement is enforced by the tool that owns the data rather than by our care.
+
+The restore emits five warnings — time travel, channel credentials needing relink, rolled-back
+approvals, plugin `node_modules` not archived, plugin-skills links not archived. They are printed
+**verbatim**: they describe consequences clawops cannot judge for the operator, and summarising them
+would lose the detail that matters. The plugin one interacts with WO-43 — a restored deployment
+starts without its model providers unless `apply` is re-run, and looks healthy doing it.
+
+**G22, verified rather than asserted.** The archive carries the state database, whose tables include
+`mcp_oauth_stores`, `secret_store_entries`, `worker_environment_credentials` and `device_auth_tokens`
+— unencrypted. There is no file named "credentials"; the credentials are *in the database*. OpenClaw
+writes the archive `0600` on the host, but clawops was writing the local copy with the default
+`0644`. Now `0600`.
+
+**A transport gap this exposed.** `SshSession` had `exec` (collect output) and `stream` (read output)
+— no write path at all, so there was no way to send a file to the host. Base64 through `exec` would
+have worked for a 40 KB archive and failed at `ARG_MAX` for a real one. `execWithInput` was added,
+plus `execPrivilegedWithInput`, because the upload runs `docker exec` and needs the same escalation
+as every other Docker call on AWS.
+
+That last point was caught by the WO-59 guard test — but only after widening it: it matched
+`session.exec(` and `session.stream(`, and `session.execWithInput(` slipped straight past.
+
+**Both of those were then closed properly, on review.** The first pass left two things unproven:
+
+- **`execWithInput` had no test at all** — it appeared in the suite only inside the guard's regex
+  string. The real ssh2 write path was entirely unverified, and `execPrivilegedWithInput`'s
+  escalation had no coverage either. Now covered by **real-SSH integration tests** against
+  `linuxserver/openssh-server`: byte-for-byte fidelity through a channel, a **6 MB** upload (past
+  `ARG_MAX`, which is the whole reason the method exists rather than base64-through-`exec`), EOF
+  signalling — without which `cat` blocks forever and the promise never settles, so the test timing
+  out *is* the assertion — and non-zero exit propagation.
+- **The guard was coupled to the variable name.** It matched `session.` literally, so the same call
+  on a differently-named receiver would have slipped past. It now matches any receiver, with
+  `src/transport/*` excluded because that is the implementation. Verified by renaming a receiver and
+  watching it report `backup.ts:96`.
+
+The byte assertion was also weak — it asserted the mocked stream's own payload length, which would
+pass even if the command opened a different file. It now asserts that **the archive the user named**
+is the file read, verified by pointing the code at a different path and watching it fail.
 
 **WO-52 — `clawops migrate`** *(D2 — L; rewritten after SP-07)*
 The drafted sequence was wrong in two ways:

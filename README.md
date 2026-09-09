@@ -110,6 +110,31 @@ flowchart LR
     E -- yes --> F["done"]
 ```
 
+### `clawops backup restore` works again, and never in place
+
+v1.7.5 made restore fail with an explanation, because the OpenClaw it supported had no
+restore subcommand to call. 2.0 does, and clawops delegates to it:
+
+```mermaid
+flowchart TD
+    A["clawops backup restore --file X"] --> B["upload archive to the host"]
+    B --> C["openclaw backup restore --target &lt;staging&gt;"]
+    C -- "target not empty" --> C1["refused by OpenClaw"]
+    C --> D["archive verified, expanded<br/>into a fresh directory"]
+    D --> E["warnings printed verbatim<br/>time travel, channel relink,<br/>approvals, plugins"]
+    E --> F["nothing activated"]
+    F --> G["you stop the gateway, swap the<br/>state dir, restart, re-apply"]
+```
+
+clawops does not extract archives itself and does not restore in place. The final step is
+manual on purpose, and re-applying matters: the archive does not carry plugin
+`node_modules`, so a restored deployment starts without its model providers — looking
+healthy while doing it.
+
+**The archive is a credential.** It carries the state database — `mcp_oauth_stores`,
+`secret_store_entries`, `worker_environment_credentials`, `device_auth_tokens` — unencrypted.
+clawops now writes it `0600` locally; it previously used the default `0644`.
+
 ### The gateway is no longer exposed to your network
 
 The container publishes on `127.0.0.1:18789` instead of `0.0.0.0:18789`. Reach it with

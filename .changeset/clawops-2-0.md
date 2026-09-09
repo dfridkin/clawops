@@ -152,6 +152,22 @@ one repair, and failing that **rolls back to the image that was running before**
 you which state you ended up in rather than leaving you to work it out. If the rollback
 will not start either, the message names the snapshot to restore.
 
+## `clawops backup restore` works again
+
+It was made to fail in v1.7.5, because the OpenClaw it supported had no restore subcommand
+to call. 2.0 has one, and clawops delegates to it: the archive is uploaded, verified, and
+expanded into a **fresh staging directory**. Nothing is activated for you, and restoring in
+place is not offered — writing an archive over a live state directory is how a backup
+becomes corruption.
+
+OpenClaw's own warnings are printed verbatim, including one that matters here: plugin
+`node_modules` are not archived, so re-run `clawops apply` after adopting a restore or the
+gateway starts without its model providers.
+
+**The archive is a credential.** It carries the state database — OAuth stores, secret store
+entries, device tokens — unencrypted. clawops now writes it `0600` locally; it previously
+used the default `0644`.
+
 ## Removed
 
 **`clawops agents restart`** and the `clawops_agents_restart` MCP tool. OpenClaw 2.0 has no

@@ -113,3 +113,27 @@ export async function streamPrivileged(
 
   return session.stream(sudoNeeded.get(key) ? sudoWrap(cmd) : cmd, signal)
 }
+
+/**
+ * Like {@link execPrivileged}, but feeding `input` to the command's stdin.
+ *
+ * Uploading a backup archive runs `docker exec`, so it needs the same escalation as every
+ * other Docker call — on AWS the SSH user is not in the docker group. A stream cannot be
+ * replayed after a failed first attempt, so the privilege question is settled with a probe
+ * first, as `streamPrivileged` does.
+ */
+export async function execPrivilegedWithInput(
+  session: SshSession,
+  cmd: string,
+  input: NodeJS.ReadableStream,
+  signal?: AbortSignal,
+): Promise<SshExecResult> {
+  const key = session as unknown as object
+
+  if (sudoNeeded.get(key) === undefined) {
+    const probe = await session.exec('docker version --format "{{.Server.Version}}"', signal)
+    sudoNeeded.set(key, looksLikePermissionDenied(probe))
+  }
+
+  return session.execWithInput(sudoNeeded.get(key) ? sudoWrap(cmd) : cmd, input, signal)
+}

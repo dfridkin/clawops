@@ -119,16 +119,16 @@ not set up Prometheus, Grafana, or alert routing. This is planned for a future r
 
 ## Backup and restore
 
-**Backups can be created but not restored by clawops on the 1.x line.** `clawops backup create`
-works and verifies the archive it produces. `clawops backup restore` fails with an explanation:
-OpenClaw up to `2026.7.1-2` ships `backup create` and `backup verify` only, so there is no restore
-subcommand for clawops to call. Recovery is a manual procedure documented in
-[`docs/backup-restore.md`](backup-restore.md#recovering-from-an-archive). OpenClaw 2.0 adds a real
-restore that understands its SQLite state layout, and `clawops backup restore` returns in the
-clawops 2.x line built on that.
+**Backups are created and restored, but never activated for you.** `clawops backup restore`
+verifies the archive and expands it into a fresh staging directory on the host; adopting it is a
+deliberate manual step (stop the gateway, replace the state directory, restart, re-apply to
+reinstall provider plugins). Restoring in place is not offered — writing an archive over a live
+state directory is how a backup becomes corruption.
 
-Releases before v1.7.5 advertised this command, but it invoked `openclaw-ctl`, a binary that does
-not exist in the OpenClaw image, so it never ran.
+**The archive is a credential.** It carries the state database, whose tables include
+`mcp_oauth_stores`, `secret_store_entries`, `worker_environment_credentials` and
+`device_auth_tokens`, unencrypted. clawops writes it `0600`. Encrypt it at rest if you keep it
+anywhere shared.
 
 ## Cost
 
