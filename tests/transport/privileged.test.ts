@@ -106,6 +106,47 @@ describe('streamPrivileged', () => {
   })
 })
 
+describe('execPrivilegedWithInput', () => {
+  it('probes first, because a stream cannot be replayed after a failed attempt', async () => {
+    const { execPrivilegedWithInput, resetPrivilegeCache } =
+      await import('../../src/transport/privileged.js')
+    const { Readable } = await import('node:stream')
+
+    const calls: string[] = []
+    const session = {
+      exec: vi.fn(async (cmd: string) => { calls.push(cmd); return DENIED }),
+      execWithInput: vi.fn(async (cmd: string) => { calls.push(cmd); return OK() }),
+      stream: vi.fn(),
+    } as unknown as SshSession
+    resetPrivilegeCache(session)
+
+    await execPrivilegedWithInput(session, 'docker exec -i openclaw sh -c "cat > /tmp/a"',
+      Readable.from(['x']))
+
+    // The probe settles the question; the upload itself is escalated on the first try.
+    expect(calls[0]).toContain('docker version')
+    expect(calls[1]).toContain('sudo -n bash -c')
+    expect(calls[1]).toContain('docker exec -i openclaw')
+  })
+
+  it('does not escalate where the SSH user already has Docker access', async () => {
+    const { execPrivilegedWithInput, resetPrivilegeCache } =
+      await import('../../src/transport/privileged.js')
+    const { Readable } = await import('node:stream')
+
+    const calls: string[] = []
+    const session = {
+      exec: vi.fn(async (cmd: string) => { calls.push(cmd); return OK('29.8.0') }),
+      execWithInput: vi.fn(async (cmd: string) => { calls.push(cmd); return OK() }),
+      stream: vi.fn(),
+    } as unknown as SshSession
+    resetPrivilegeCache(session)
+
+    await execPrivilegedWithInput(session, 'docker exec -i openclaw cat', Readable.from(['x']))
+    expect(calls[1]).not.toContain('sudo')
+  })
+})
+
 describe('every remote Docker call is routed through this module', () => {
   it('no command file invokes Docker on a raw session', async () => {
     // This is the guard that would have caught the original bug. plan/remote-config.ts had
@@ -121,14 +162,17 @@ describe('every remote Docker call is routed through this module', () => {
 
     for (const dir of dirs) {
       for (const name of readdirSync(join(root, dir))) {
+        // src/transport/* IS the implementation; it necessarily calls the raw channel.
         if (!name.endsWith('.ts')) continue
         const path = join(dir, name)
         const src = readFileSync(join(root, path), 'utf8')
         const lines = src.split('\n')
         lines.forEach((line, i) => {
-          // execWithInput too: it was added for backup restore and slipped past a
-          // narrower `exec\(`-anchored pattern, which is exactly the gap this guards.
-          if (!/session\.(exec|execWithInput|stream)\(/.test(line)) return
+          // Any receiver, not just a variable named `session`. Two holes have already
+          // shown up here: `execWithInput` slipped past an `exec\(`-anchored pattern, and
+          // matching `session.` literally would miss the same call on a variable named
+          // anything else. The transport's own implementation is excluded above.
+          if (!/\.(exec|execWithInput|stream)\(/.test(line)) return
           // Look at the call and the few lines after it, since arguments wrap.
           const window = lines.slice(i, i + 4).join(' ')
           const touchesDocker = /docker|dockerRunCmd|INSPECT_CMD/i.test(window)

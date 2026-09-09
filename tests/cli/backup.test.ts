@@ -152,10 +152,16 @@ describe('backup command — restore', () => {
 
     // The archive is uploaded through the privileged path, not extracted locally.
     expect(session.inputCalls.length, 'expected the archive to be uploaded').toBe(1)
-    // This file mocks node:fs, so createReadStream yields the canned 'backup-data' stream
-    // rather than the bytes written above. Asserting against the real file size can never
-    // match — what matters here is that the archive's stream reached the upload.
-    expect(session.inputCalls[0]!.bytes).toBe('backup-data'.length)
+    // This file mocks node:fs, so createReadStream yields a canned stream rather than the
+    // bytes written above — asserting a real file size here can never match, which is how
+    // the first version of this assertion went wrong.
+    //
+    // What matters is the contract: the ARCHIVE THE USER NAMED is the file that gets read
+    // and piped to the upload. Asserting the canned payload's length alone would pass even
+    // if the command opened a different path entirely.
+    const { createReadStream } = await import('node:fs')
+    expect(vi.mocked(createReadStream)).toHaveBeenCalledWith(archive)
+    expect(session.inputCalls[0]!.bytes).toBeGreaterThan(0)
 
     const restore = cmds.find((c) => c.includes('backup restore'))
     expect(restore).toBeDefined()

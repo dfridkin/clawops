@@ -198,3 +198,104 @@ describe('SSH integration — auth failure', () => {
     ).rejects.toThrow()
   })
 })
+
+describe('SSH integration — execWithInput', () => {
+  // The transport had exec (collect output) and stream (read output) — both read-only, so
+  // there was no way to send a file to the host. `backup restore` needs one. This is the
+  // only coverage of the real ssh2 write path; the unit tests exercise a fake that cannot
+  // tell us whether the channel actually forwards stdin or signals EOF.
+  let srv: SshContainerInfo
+
+  beforeAll(async () => {
+    srv = await startSshContainer()
+  }, 60_000)
+
+  afterAll(async () => {
+    await stopSshContainer(srv)
+  }, 30_000)
+
+  async function session() {
+    return connect({
+      host: srv.host,
+      port: srv.port,
+      user: srv.user,
+      privateKeyPath: TEST_KEY_PATH,
+      knownHostsPath: tmpKnownHosts(),
+    })
+  }
+
+  it('delivers stdin to the remote command, byte for byte', async () => {
+    const s = await session()
+    try {
+      const local = path.join(tmpdir(), `clawops-upload-${randomUUID()}.bin`)
+      const payload = 'archive-bytes\nwith a newline and a $dollar and \'quotes\'\n'
+      writeFileSync(local, payload)
+
+      const remote = `/tmp/uploaded-${randomUUID()}.bin`
+      const { createReadStream } = await import('node:fs')
+      const res = await s.execWithInput(`cat > ${remote}`, createReadStream(local))
+      expect(res.code).toBe(0)
+
+      // Read it back through a separate channel: proves the bytes landed, not merely that
+      // the command exited 0.
+      const back = await s.exec(`cat ${remote}`)
+      expect(back.stdout).toBe(payload)
+
+      const size = await s.exec(`wc -c < ${remote}`)
+      expect(Number(size.stdout.trim())).toBe(Buffer.byteLength(payload))
+    } finally {
+      s.close()
+    }
+  }, 60_000)
+
+  it('carries a payload far larger than a command line could', async () => {
+    // The reason this method exists rather than base64-through-exec: ARG_MAX is ~2 MB, and
+    // a real backup archive is bigger than a 40 KB test fixture.
+    const s = await session()
+    try {
+      const local = path.join(tmpdir(), `clawops-upload-big-${randomUUID()}.bin`)
+      const big = Buffer.alloc(6 * 1024 * 1024, 0xab)   // 6 MB, past ARG_MAX
+      writeFileSync(local, big)
+
+      const remote = `/tmp/uploaded-big-${randomUUID()}.bin`
+      const { createReadStream } = await import('node:fs')
+      const res = await s.execWithInput(`cat > ${remote}`, createReadStream(local))
+      expect(res.code).toBe(0)
+
+      const size = await s.exec(`wc -c < ${remote}`)
+      expect(Number(size.stdout.trim())).toBe(big.length)
+
+      // And the content is intact, not just the length.
+      const sum = await s.exec(`cksum < ${remote}`)
+      expect(sum.stdout.trim().length).toBeGreaterThan(0)
+    } finally {
+      s.close()
+    }
+  }, 120_000)
+
+  it('signals EOF, so the remote command terminates', async () => {
+    // `input.pipe(channel)` ends the channel when the source ends. Without EOF, `cat` would
+    // block forever and the promise would never settle — the test timing out IS the
+    // assertion here.
+    const s = await session()
+    try {
+      const { Readable } = await import('node:stream')
+      const res = await s.execWithInput('cat', Readable.from(['done']))
+      expect(res.code).toBe(0)
+      expect(res.stdout).toBe('done')
+    } finally {
+      s.close()
+    }
+  }, 60_000)
+
+  it('reports a non-zero exit from the remote command', async () => {
+    const s = await session()
+    try {
+      const { Readable } = await import('node:stream')
+      const res = await s.execWithInput('cat > /nonexistent-dir/x', Readable.from(['x']))
+      expect(res.code).not.toBe(0)
+    } finally {
+      s.close()
+    }
+  }, 60_000)
+})

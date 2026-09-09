@@ -587,8 +587,25 @@ plus `execPrivilegedWithInput`, because the upload runs `docker exec` and needs 
 as every other Docker call on AWS.
 
 That last point was caught by the WO-59 guard test — but only after widening it: it matched
-`session.exec(` and `session.stream(`, and `session.execWithInput(` slipped straight past. The guard
-found the real gap the moment it could see it.
+`session.exec(` and `session.stream(`, and `session.execWithInput(` slipped straight past.
+
+**Both of those were then closed properly, on review.** The first pass left two things unproven:
+
+- **`execWithInput` had no test at all** — it appeared in the suite only inside the guard's regex
+  string. The real ssh2 write path was entirely unverified, and `execPrivilegedWithInput`'s
+  escalation had no coverage either. Now covered by **real-SSH integration tests** against
+  `linuxserver/openssh-server`: byte-for-byte fidelity through a channel, a **6 MB** upload (past
+  `ARG_MAX`, which is the whole reason the method exists rather than base64-through-`exec`), EOF
+  signalling — without which `cat` blocks forever and the promise never settles, so the test timing
+  out *is* the assertion — and non-zero exit propagation.
+- **The guard was coupled to the variable name.** It matched `session.` literally, so the same call
+  on a differently-named receiver would have slipped past. It now matches any receiver, with
+  `src/transport/*` excluded because that is the implementation. Verified by renaming a receiver and
+  watching it report `backup.ts:96`.
+
+The byte assertion was also weak — it asserted the mocked stream's own payload length, which would
+pass even if the command opened a different file. It now asserts that **the archive the user named**
+is the file read, verified by pointing the code at a different path and watching it fail.
 
 **WO-52 — `clawops migrate`** *(D2 — L; rewritten after SP-07)*
 The drafted sequence was wrong in two ways:
