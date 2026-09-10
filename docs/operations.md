@@ -44,8 +44,15 @@ clawops logs --stack prod             # specific stack
 ```
 
 Logs are read from `journalctl -u openclaw` on the remote host, falling back to
-`docker logs openclaw` if journalctl is unavailable. Output is piped directly to your terminal.
-Press `Ctrl-C` to stop following.
+`docker logs openclaw`. Output is piped directly to your terminal; press `Ctrl-C` to stop
+following.
+
+**Which of the two you get depends on the provider, and clawops does not tell you.** Only the
+local provider creates a systemd unit named `openclaw`; on AWS, GCP and Azure the container is
+started directly, so `journalctl -u openclaw` finds nothing and the fallback produces the
+output — the right answer for the wrong reason. The two differ: the systemd journal carries the
+unit's own start/stop records, `docker logs` carries only the container's stdout. Worth knowing
+when a log line you expect is missing.
 
 ### Run a health check
 
@@ -137,7 +144,7 @@ Output:
 ├─────────┼──────────────────────────────────────────────────────┤
 │ Status  │ running                                              │
 │ Started │ 2026-05-08T14:01:23.456Z                            │
-│ Image   │ ghcr.io/openclaw/openclaw:stable                     │
+│ Image   │ ghcr.io/openclaw/openclaw:2026.9.2                   │
 └─────────┴──────────────────────────────────────────────────────┘
 ```
 
@@ -150,7 +157,9 @@ clawops gateway restart
 ```
 
 Restarts the container using the currently running image tag. Config is preserved — the container
-mounts `/home/clawops/openclaw.json` read-only, so no config is lost on restart.
+bind-mounts the state directory `/var/lib/clawops/openclaw`, so the config, the SQLite
+database and any installed plugins all survive the restart. Before 2.0 nothing was mounted
+and a restart discarded every session.
 
 ### Update the gateway
 
@@ -200,8 +209,13 @@ Quick reference:
 clawops backup create --out /backups/openclaw-$(date +%Y%m%d).tar.gz
 ```
 
-`clawops backup restore` is not available on the 1.x line — OpenClaw `2026.7.1-2` has no restore
-subcommand. Recovery is a manual, documented procedure; the command returns in clawops 2.x.
+`clawops backup restore` works on this line. OpenClaw 2.0 ships a real restore and clawops
+delegates to it: the archive is verified upstream and expanded into a **fresh staging
+directory**, never in place. Adopting the restored state is a deliberate manual step — see
+[backup-restore.md](backup-restore.md).
+
+On the clawops 1.x line the command is unavailable, because `2026.7.1-2` has no restore
+subcommand at all.
 
 ## Config management
 

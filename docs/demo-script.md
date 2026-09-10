@@ -99,7 +99,7 @@ clawops status
 Stack: my-vm  Provider: local  Region: —
 
   IP address    192.168.1.50
-  Gateway URL   http://192.168.1.50:18789
+  Gateway URL   http://127.0.0.1:18789  (loopback — reach it with `clawops tunnel`)
   SSH host      192.168.1.50:22  (user: ubuntu)
   Provisioned   2026-05-13T14:22:01Z
 
@@ -139,7 +139,7 @@ clawops ssh --command "docker ps"
 
 ```
 CONTAINER ID   IMAGE                                    STATUS
-a3f1bc9e2d4a   ghcr.io/openclaw/openclaw:stable   Up 3 minutes
+a3f1bc9e2d4a   ghcr.io/openclaw/openclaw:2026.9.2   Up 3 minutes
 ```
 
 ```bash
@@ -181,7 +181,7 @@ No public port needed — access the gateway over an SSH tunnel:
 
 ```bash
 clawops tunnel
-# Forwarding localhost:18789 → 192.168.1.50:18789
+# Forwarding localhost:18789 → 192.168.1.50's own loopback:18789
 # Press Ctrl-C to stop
 ```
 
@@ -201,7 +201,8 @@ Example Claude Code session:
 > **Claude:** I'll check the stack status and recent logs.
 >
 > *[calls `clawops_status`]*
-> Stack `my-vm` is running. IP: `192.168.1.50`, gateway: `http://192.168.1.50:18789`, uptime: 14 minutes.
+> Stack `my-vm` is running. IP: `192.168.1.50`, gateway on the host's loopback at
+> `127.0.0.1:18789` (reach it with `clawops tunnel`), uptime: 14 minutes.
 >
 > *[calls `clawops_logs_tail` with `lines: 10`]*
 > Last 10 log lines: ... *(gateway activity, agent invocations)*
@@ -230,9 +231,15 @@ clawops backup create
   Size: 4.2 KB
 ```
 
-Restoring is a manual procedure on this release line — OpenClaw `2026.7.1-2` has no `backup
-restore` subcommand, so there is nothing to demo here beyond the archive itself. See
-[Recovering from an archive](backup-restore.md#recovering-from-an-archive).
+Restoring works on this line — OpenClaw 2.0 ships a real restore and clawops delegates to it:
+
+```bash
+clawops backup restore --file ~/.clawops/backups/my-vm-2026-05-13T14-35-00Z.tar.gz
+```
+
+It verifies the archive and expands it into a **fresh staging directory**, never in place, and
+prints upstream's warnings verbatim — restoring is time travel, and channel credentials need
+relinking afterwards. See [backup-restore.md](backup-restore.md).
 
 ---
 

@@ -223,7 +223,7 @@ Error: Gateway at http://192.168.1.50:18789/health did not become healthy within
 SSH in and check Docker:
 ```bash
 clawops ssh --command "docker ps -a"
-clawops ssh --command "journalctl -u openclaw -n 50"
+clawops ssh --command "journalctl -u openclaw -n 50"   # local provider: systemd unit exists
 ```
 
 Common causes: Docker image pull failed (no internet), port 18789 blocked by host firewall,

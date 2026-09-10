@@ -868,7 +868,34 @@ installed** — the same bundled-vs-ClawHub split that turned out to affect thre
 providers. `plugins list --json` already reports `channelIds` per plugin, so the bundled set is
 derivable the same way, and `scripts/openclaw/check-plugin-pins.sh` extends to cover it.
 
-**WO-49 — Documentation audit and release** *(L)* — §9.
+**WO-49 — Documentation audit and release** *(L)* — §9 — ✅ **audit done; release pending**
+
+The standing task worked: every flow-changing PR updated the README block as it landed. The
+audit found the gap was not *accuracy* but *coverage* — the changeset had 22 sections and the
+README block 16, and the missing ones were not minor. Added: model-provider plugin installs
+and the ClawHub egress they need, config validation before writing, container hardening, and
+where the version pin is enforced.
+
+**ClawHub egress is documented, and measured rather than described.** `docs/security/egress.md`
+is new: every destination, from which machine, when, and what the failure looks like. The
+facts came from running it — `clawhub:` resolves and downloads from `clawhub.ai`, not npm, and
+a blocked host gives `fetch failed | getaddrinfo EAI_AGAIN clawhub.ai` with the install exiting
+**1** while the twenty-four bundled providers stay available. Linked from all three provider
+guides' Firewall Model sections, and `/audit-egress` now requires a new destination to be
+recorded there in the same change.
+
+**Stale-behaviour sweep.** User-facing docs still described the pre-2.0 contract in eight
+places: the old config path in four files, a `docker run` line still mounting
+`/app/config.json:ro`, `backup restore` described as unavailable in four places (including the
+README command table and the `limitations.md` deferred list), a routable gateway URL in the
+demo script, and `:stable` image tags the version guard now refuses. Historical records —
+`docs/spikes/*`, the gap audit, this plan — were deliberately left alone: they record what was
+true when written.
+
+**One finding handed back rather than papered over.** `docs/operations.md` described logs as
+"`journalctl -u openclaw`, falling back to `docker logs`" without saying that only the local
+provider creates that unit — so on cloud VMs the fallback always wins, and the two sources
+carry different records. The docs now say so. The code-side fix is WO-44's carried item.
 
 **Standing task, not a final step:** the README's *What's new in 2.0* block documents each changed
 flow **as the work lands**, with a diagram per flow. Reconstructing flows after the fact is how

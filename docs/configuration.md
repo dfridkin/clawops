@@ -6,7 +6,8 @@ by editing `openclaw.json` on the remote host.
 
 ## Where the config lives
 
-OpenClaw's config file is written to `/home/clawops/openclaw.json` on the target host during
+OpenClaw's config file is written to `/var/lib/clawops/openclaw/openclaw.json` on the target
+host during
 bootstrap. The bootstrap creates a minimal default if the file doesn't already exist:
 
 ```json
@@ -139,7 +140,7 @@ Ready-to-use starting points are in [`examples/configs/`](../examples/configs/).
 
    Or for a full config replacement, SSH in and write the file directly:
    ```bash
-   clawops ssh --command "cat > /home/clawops/openclaw.json" < /tmp/my-openclaw.json
+   clawops ssh --command "cat > /var/lib/clawops/openclaw/openclaw.json" < /tmp/my-openclaw.json
    ```
 
 4. Restart the gateway:
@@ -173,12 +174,12 @@ For complex edits not easily expressed as `clawops config set` calls:
 
 ```bash
 # Open the config in vim on the remote host
-clawops ssh --command "sudo -u clawops vim /home/clawops/openclaw.json"
+clawops ssh --command "sudo vim /var/lib/clawops/openclaw/openclaw.json"
 
 # Or pull the config locally, edit, then push back
-clawops ssh --command "cat /home/clawops/openclaw.json" > /tmp/openclaw.json
+clawops ssh --command "cat /var/lib/clawops/openclaw/openclaw.json" > /tmp/openclaw.json
 # edit /tmp/openclaw.json
-clawops ssh --command "sudo tee /home/clawops/openclaw.json" < /tmp/openclaw.json
+clawops ssh --command "sudo tee /var/lib/clawops/openclaw/openclaw.json" < /tmp/openclaw.json
 clawops gateway restart
 ```
 
@@ -196,6 +197,6 @@ clawops status
 ```
 
 If the gateway fails to start after a config change, the most common causes are:
-- Syntax error in `openclaw.json` — run `clawops ssh --command "python3 -m json.tool /home/clawops/openclaw.json"` to check
+- Syntax error in `openclaw.json` — run `clawops ssh --command "python3 -m json.tool /var/lib/clawops/openclaw/openclaw.json"` to check
 - Unknown field name — verify against your OpenClaw version's documentation
 - Missing required field — check `clawops logs --tail 50` for the specific error

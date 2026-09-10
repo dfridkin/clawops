@@ -30,7 +30,8 @@ Before any upgrade:
 ## Gateway-only upgrade
 
 Pulls the new Docker image and replaces the running container. Config is preserved — the container
-mounts `/home/clawops/openclaw.json` read-only and is not modified by the upgrade.
+bind-mounts the state directory `/var/lib/clawops/openclaw`, which holds the config, the
+SQLite database and installed plugins. The upgrade replaces the container, not the state.
 
 ```bash
 # Upgrade to stable (latest stable release)
@@ -46,7 +47,7 @@ clawops gateway update --channel dev
 Sequence executed on the remote host:
 1. `docker pull ghcr.io/openclaw/openclaw:<version>`
 2. `docker stop openclaw && docker rm openclaw`
-3. `docker run -d --name openclaw --restart unless-stopped -p 18789:18789 -v /home/clawops/openclaw.json:/app/config.json:ro ghcr.io/openclaw/openclaw:<version>`
+3. `docker run -d --name openclaw --restart unless-stopped -p 127.0.0.1:18789:18789 -v /var/lib/clawops/openclaw:/home/node/.openclaw ghcr.io/openclaw/openclaw:<version> node openclaw.mjs gateway run --port 18789`
 
 Expect ~60 seconds of gateway unavailability between steps 2 and 3. Agents reconnect
 automatically when the gateway comes back up.
@@ -129,8 +130,8 @@ clawops apply /tmp/rollback-plan.json
 If the upgrade corrupted application data, restore from the pre-upgrade backup after rolling
 back the software:
 
-Data rollback is manual on the clawops 1.x line — OpenClaw `2026.7.1-2` ships no `backup restore`
-subcommand. Follow [Recovering from an archive](backup-restore.md#recovering-from-an-archive),
+Data rollback uses `clawops backup restore`, which delegates to OpenClaw 2.0's own restore:
+it verifies the archive and expands it into a fresh staging directory, never in place. Follow [Recovering from an archive](backup-restore.md#recovering-from-an-archive),
 which stops the gateway, unpacks the archive and restarts:
 
 ```bash

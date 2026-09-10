@@ -173,6 +173,58 @@ healthy while doing it.
 `secret_store_entries`, `worker_environment_credentials`, `device_auth_tokens` — unencrypted.
 clawops now writes it `0600` locally; it previously used the default `0644`.
 
+### Model providers that need a plugin are installed for you
+
+OpenClaw 2.0 made model providers **install-gated plugins**. Twenty-four ship in the image —
+`anthropic`, `openai`, `google`, `ollama`, `openrouter` among them — but not all of them.
+Configuring one that is not bundled, without installing it, produces a gateway that starts,
+reports healthy, and has no model backend.
+
+clawops installs what your config needs, pinned to an exact version, **during `apply`**:
+
+```
+Resolving clawhub:@openclaw/deepseek-provider@2026.9.2…
+Downloading plugin @openclaw/deepseek-provider@2026.9.2 from ClawHub…
+Installed plugin: deepseek
+```
+
+**This adds an outbound dependency the 1.x line did not have: `clawhub.ai`.** It is needed
+while `apply` is running, not at boot — deliberately, so a failure reaches the person running
+the command rather than a locked-down host at 3am. Blocked, it looks like this:
+
+```
+fetch failed | getaddrinfo EAI_AGAIN clawhub.ai | EAI_AGAIN
+```
+
+clawops checks the installed provider IDs afterwards and will not call the deploy finished
+while a configured provider is missing. [Required outbound access](docs/security/egress.md)
+lists every destination and when it is needed.
+
+### Bad config is caught before it is written
+
+Config is validated against **OpenClaw's own schema** — captured from the image, not
+hand-written — before anything is sent to the host, and again before a write replaces a
+working file. `clawops plan` refuses a plan whose config the gateway would reject, while the
+plan is still a file you can edit.
+
+A rejected config is kept at `<path>.rejected.<timestamp>` and the live one is left alone, so
+a validation failure never costs you what you were trying to write.
+
+One rule is clawops's own: `gateway.mode` is optional in the schema and **mandatory in
+practice** — a config without it passes `openclaw config validate` and then exits 78.
+
+### Containers are hardened
+
+The gateway runs with `--cap-drop=ALL`, `--security-opt no-new-privileges`, `--init` and
+`--pids-limit 512`. State is owned numerically by `1000:1000`, matching the container's user
+rather than a host account that may not have that uid.
+
+### The version pin is enforced everywhere it can change
+
+`doctor`, `plan`, `up` and `apply` refuse an OpenClaw release outside the supported range, and
+`gateway restart` reuses the version already deployed rather than resolving a moving tag. A
+restart changes neither the version nor who can reach it.
+
 ### The gateway is no longer exposed to your network
 
 The container publishes on `127.0.0.1:18789` instead of `0.0.0.0:18789`. Reach it with
@@ -566,7 +618,7 @@ clawops down --yes          # Destroy local-provider stack
 | `config` | Get/set remote OpenClaw config values (`--dry-run` shows would-write JSON) |
 | `agents` | List OpenClaw agents, or stream one agent's logs |
 | `gateway` | Restart the OpenClaw gateway service |
-| `backup` | Create an OpenClaw state backup (`restore` returns in clawops 2.x — see [limitations](docs/limitations.md#backup-and-restore)) |
+| `backup` | Create and restore OpenClaw state backups (`restore` expands into a staging directory, never in place) |
 | `stacks` | List named stacks and their state |
 | `doctor` | Check the local machine; with `--stack`, the deployment's health too. `--json` for the report. Exits 1 on any failure |
 | `secret` | Manage secrets: `list`, `set`, `delete`, `rotate`, `audit` |

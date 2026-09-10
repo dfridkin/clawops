@@ -118,6 +118,11 @@ clawops config set gateway.auth.mode token
 clawops config set gateway.auth.token "$(openssl rand -hex 32)" --restart
 ```
 
+**Egress.** Unrestricted by default. The host needs outbound access to `download.docker.com`
+and your package mirrors at first bootstrap, `ghcr.io` for the image, and — new in 2.0 —
+`clawhub.ai` **during `apply`** to install model-provider plugins. See
+[required outbound access](../security/egress.md) for what each failure looks like.
+
 ## OpenClaw Version Compatibility
 
 See `spec/openclaw-versions.yaml`. No GCP-specific quirks in current releases.
