@@ -9,9 +9,11 @@ import { fileURLToPath } from 'node:url'
 import { join, dirname } from 'node:path'
 import process from 'node:process'
 import yaml from 'js-yaml'
+import { validateMcpSpec, type McpSpec, type ToolInput } from './lib/validate-mcp-spec.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = join(__dirname, '..')
+
 const checkMode = process.argv.includes('--check')
 let checkFailed = false
 
@@ -139,36 +141,8 @@ export interface ProviderAdapter {
 
 // ── src/mcp/tools/_generated.ts ───────────────────────────────────────────────
 
-interface ToolInput {
-  type: string
-  optional?: boolean
-  description?: string
-  default?: unknown
-  values?: string[]
-  max?: number
-  minimum?: number
-  maximum?: number
-}
 
-interface Tool {
-  name: string
-  toolset: string | string[]
-  description: string
-  annotations: {
-    title: string
-    readOnlyHint: boolean
-    destructiveHint: boolean
-    idempotentHint: boolean
-    openWorldHint: boolean
-  }
-  input?: Record<string, ToolInput>
-}
 
-interface McpSpec {
-  version: number
-  toolsets: Array<{ id: string; description: string }>
-  tools: Tool[]
-}
 
 function toTypeName(toolName: string): string {
   // clawops_workflow_deploy_app → WorkflowDeployApp
@@ -210,6 +184,7 @@ function zodField(key: string, def: ToolInput): string {
 function genMcpTools(): string {
   const raw = readFileSync(join(root, 'spec/mcp-tools.yaml'), 'utf-8')
   const spec = yaml.load(raw) as McpSpec
+  validateMcpSpec(spec)
 
   const toolsetsUnion = toUnion(spec.toolsets.map(ts => ts.id))
 

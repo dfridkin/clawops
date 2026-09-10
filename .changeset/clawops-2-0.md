@@ -152,6 +152,52 @@ one repair, and failing that **rolls back to the image that was running before**
 you which state you ended up in rather than leaving you to work it out. If the rollback
 will not start either, the message names the snapshot to restore.
 
+## `clawops doctor` asks the gateway, and its exit code means something
+
+`doctor` read `docker inspect`'s healthcheck field, which the OpenClaw image does not set —
+so it reported "no healthcheck configured" and moved on. A running container means the
+process started, not that it serves. It now probes `/startupz` and reads the body.
+
+It exits **1 when any check failed**. Only an old Node.js used to do that, so a CI step
+running `clawops doctor` read an unreadable SSH key or an unsupported gateway as success.
+Warnings still exit 0 — an unconfigured machine is not a broken one. `--json` emits the
+whole report.
+
+## `clawops_doctor` — diagnostics as an MCP tool
+
+The checks moved out of the command into `src/diagnostics`, because a stdio MCP server
+cannot write to stdout (R15) and `doctor` printed as it went. An agent that hits a failure
+can now find out why, with `failuresOnly` to skip what passed. It reports only — it never
+runs `openclaw doctor --fix`.
+
+## `clawops agents list` stops inventing an empty list
+
+The command ended in `|| echo '[]'`, so a stopped container, a gateway still starting, or a
+Docker permission error all produced "No agents running." — a wrong answer rather than an
+error. Both the CLI and the MCP tool now fail and say which.
+
+## MCP config tools read the config the way everything else does
+
+`clawops_config_{get,set,unset,validate}` each hand-rolled `cat` on a hardcoded Linux path
+with an unprivileged exec — wrong on a macOS target, and dependent on the SSH user happening
+to be uid 1000 on Linux. They go through the shared reader, which detects the OS and
+escalates. This is the same defect as the gateway-restart one fixed in 1.7.6: a handler
+re-implementing what a shared module owns, and so missing its fixes.
+
+## The tool catalog is checked, not just declared
+
+`spec/mcp-tools.yaml` was cast to a type and generated from. A tool missing `readOnlyHint`
+generated `readOnlyHint: undefined`, which compiles and ships, leaving the client on its
+defaults — R10 defeated with nothing to see. Generation now fails on a missing or
+non-boolean hint, a name that breaks the convention, an unknown toolset, a read-only tool
+outside the `read` toolset (or a writing one inside it), and the R1/R2 caps.
+
+Tests assert the registry and the catalog list the same tools, and that the README and the
+risk matrix tables match both. They did not: the README listed `clawops_ssh_exec` and
+`clawops_agents_restart`, neither of which exists, and omitted five that do; the risk matrix
+claimed 15 tools above sixteen rows and marked three unavailable in `--read-only` that the
+catalog puts in the `read` toolset.
+
 ## `clawops migrate` moves an existing 1.x deployment across
 
 ```bash

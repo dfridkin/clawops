@@ -1,14 +1,14 @@
 # MCP Safety Modes
 
 clawops exposes its operations as an MCP server. By default the server enables all
-17 tools, including destructive ones like `clawops_destroy` and `clawops_up`. For
+18 tools, including destructive ones like `clawops_destroy` and `clawops_up`. For
 most agent integrations you should restrict the tool set.
 
 ## Three safety modes
 
 ### `--read-only` (recommended for most setups)
 
-Enables **9 tools** from the curated `read` toolset — no writes, no infrastructure
+Enables the **11 tools** in the curated `read` toolset — no writes, no infrastructure
 changes:
 
 - `clawops_status`
@@ -26,7 +26,7 @@ human review, and run recovery diagnostics — but cannot apply any changes.
 
 ### `--no-destructive`
 
-Enables the same **9 tools** as `--read-only` when used with default toolsets. The
+Enables the same **11 tools** as `--read-only` when used with default toolsets. The
 difference is the mechanism: `--no-destructive` filters the active toolset by
 removing any tool with `destructiveHint: true`, making it composable with
 `--toolsets` for custom configurations.
@@ -36,7 +36,7 @@ block.
 
 ### Default (all tools)
 
-Enables all **17 tools**, including the 8 destructive ones: `clawops_up`,
+Enables all **18 tools**, including the 7 destructive ones: `clawops_up`,
 `clawops_destroy`, `clawops_apply`, `clawops_config_set`, `clawops_config_unset`,
 `clawops_gateway_restart`, `clawops_workflow_deploy_app`.
 

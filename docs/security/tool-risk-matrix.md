@@ -1,6 +1,11 @@
 # MCP Tool Risk Matrix
 
-All 15 clawops MCP tools, their risk classification, and which safety mode includes them.
+All 18 clawops MCP tools, their risk classification, and which safety mode includes them.
+
+The `--read-only` column is the `read` toolset, and the `--no-destructive` column is
+`destructiveHint: false`. Both come from `spec/mcp-tools.yaml`, and a test asserts this table
+still matches it — the table previously said 15 tools, listed 16, and marked three tools
+unavailable in `--read-only` that the catalog put in the `read` toolset.
 
 ## Risk levels
 
@@ -15,24 +20,26 @@ All 15 clawops MCP tools, their risk classification, and which safety mode inclu
 
 | Tool | Toolset | Risk | `--read-only` | `--no-destructive` | Default |
 |---|---|---|:---:|:---:|:---:|
-| `clawops_status` | read | Read-only | ✅ | ✅ | ✅ |
-| `clawops_logs_tail` | read | Read-only | ✅ | ✅ | ✅ |
-| `clawops_stacks_list` | read / admin | Read-only | ✅ | ✅ | ✅ |
-| `clawops_config_get` | read | Read-only | ✅ | ✅ | ✅ |
-| `clawops_agents_list` | read | Read-only | ✅ | ✅ | ✅ |
-| `clawops_plan` | cli | Low | ❌ | ✅ | ✅ |
-| `clawops_task_status` | cli | Read-only | ❌ | ✅ | ✅ |
-| `clawops_workflow_recover` | workflow | Low | ❌ | ✅ | ✅ |
-| `clawops_config_validate` | cli / read | Read-only | ✅ | ✅ | ✅ |
-| `clawops_config_set` | cli | Medium | ❌ | ❌ | ✅ |
-| `clawops_config_unset` | cli | Medium | ❌ | ❌ | ✅ |
-| `clawops_gateway_restart` | cli | Medium | ❌ | ❌ | ✅ |
+| `clawops_status` | cli | Read-only | ✅ | ✅ | ✅ |
+| `clawops_doctor` | cli | Read-only | ✅ | ✅ | ✅ |
+| `clawops_logs_tail` | cli | Read-only | ✅ | ✅ | ✅ |
+| `clawops_monitor` | cli | Read-only | ✅ | ✅ | ✅ |
+| `clawops_stacks_list` | admin | Read-only | ✅ | ✅ | ✅ |
+| `clawops_config_get` | cli | Read-only | ✅ | ✅ | ✅ |
+| `clawops_agents_list` | cli | Read-only | ✅ | ✅ | ✅ |
 | `clawops_up` | cli | High | ❌ | ❌ | ✅ |
 | `clawops_destroy` | cli | High | ❌ | ❌ | ✅ |
 | `clawops_apply` | cli | High | ❌ | ❌ | ✅ |
+| `clawops_plan` | cli | Low | ✅ | ✅ | ✅ |
+| `clawops_config_set` | cli | Medium | ❌ | ❌ | ✅ |
+| `clawops_config_unset` | cli | Medium | ❌ | ❌ | ✅ |
+| `clawops_config_validate` | cli | Read-only | ✅ | ✅ | ✅ |
+| `clawops_gateway_restart` | cli | Medium | ❌ | ❌ | ✅ |
 | `clawops_workflow_deploy_app` | workflow | High | ❌ | ❌ | ✅ |
+| `clawops_workflow_recover` | workflow | Low | ✅ | ✅ | ✅ |
+| `clawops_task_status` | cli | Read-only | ✅ | ✅ | ✅ |
 
-`--read-only` enables 9 tools (TOOLSETS.read). `--no-destructive` enables 9 tools (same set with default toolsets; filters destructiveHint=true from any active toolset). Default enables all 17.
+`--read-only` enables 11 tools (TOOLSETS.read). `--no-destructive` enables 11 tools (filters `destructiveHint: true` from any active toolset). Default enables all 18.
 
 ## Annotations
 

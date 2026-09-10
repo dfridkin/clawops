@@ -23,6 +23,24 @@ export const clawops_statusAnnotations = {
 
 export type StatusInput = z.infer<typeof clawops_statusSchema>
 
+// ── clawops_doctor ──────────────────────────────────────────────────────────
+
+export const clawops_doctorSchema = z.object({
+  stackName: z.string().optional(),
+  failuresOnly: z.boolean().optional().default(false),
+})
+
+export const clawops_doctorAnnotations = {
+  title: "Run Diagnostics",
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+  toolsets: ["cli","read"] as const,
+} as const
+
+export type DoctorInput = z.infer<typeof clawops_doctorSchema>
+
 // ── clawops_logs_tail ───────────────────────────────────────────────────────
 
 export const clawops_logs_tailSchema = z.object({
@@ -321,6 +339,7 @@ export type TaskStatusInput = z.infer<typeof clawops_task_statusSchema>
 export const TOOLSETS: Record<Toolset, string[]> = {
   cli: [
     'clawops_status',
+    'clawops_doctor',
     'clawops_logs_tail',
     'clawops_monitor',
     'clawops_config_get',
@@ -341,6 +360,7 @@ export const TOOLSETS: Record<Toolset, string[]> = {
   ],
   read: [
     'clawops_status',
+    'clawops_doctor',
     'clawops_logs_tail',
     'clawops_monitor',
     'clawops_stacks_list',

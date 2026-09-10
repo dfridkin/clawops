@@ -1,12 +1,12 @@
 import { defineCommand } from 'citty'
 import process from 'node:process'
-import { accessSync, mkdirSync, constants } from 'node:fs'
-import path from 'node:path'
 import { success, failure, warn, info, REPO_URL } from '../../output/human.js'
-import {
-  PUBLISH_INSPECT_CMD, publishForRestart, STATE_DIR_HOST_LINUX,
-} from '../../openclaw/runtime.js'
-import { execPrivileged } from '../../transport/privileged.js'
+import { printJson, jsonOk } from '../../output/json.js'
+import { runDiagnostics, type DiagnosticsReport, type Check } from '../../diagnostics/index.js'
+
+// The checks themselves live in src/diagnostics — they are also what clawops_doctor
+// returns over MCP, where writing to stdout is forbidden (R15). This file renders.
+const NAME_COLUMN = 13
 
 export default defineCommand({
   meta: {
@@ -15,337 +15,54 @@ export default defineCommand({
   },
   args: {
     stack: { type: 'string', description: 'Stack name to include remote health checks' },
+    json: { type: 'boolean', description: 'Emit the report as JSON' },
   },
   async run({ args }) {
-    const { getConfig, getConfigDir } = await import('../../config/store.js')
+    const ac = new AbortController()
+    const abort = () => ac.abort()
+    process.on('SIGINT', abort)
+    process.on('SIGTERM', abort)
 
-    process.stdout.write('\nclawops doctor\n')
-
-    // ── Runtime ─────────────────────────────────────────────────────────────
-    process.stdout.write('\nRuntime\n')
-
-    const nodeVersion = process.version
-    const nodeMajor = parseInt(nodeVersion.slice(1).split('.')[0] ?? '0', 10)
-    const nodeOk = nodeMajor >= 22
-    if (nodeOk) {
-      success(`Node.js ${nodeVersion}`)
-    } else {
-      failure(`Node.js ${nodeVersion}  (requires >=22)`)
-    }
-
-    // Pulumi home (embedded — just ensure the directory can be created)
-    const configDir = getConfigDir()
-    const pulumiHome = path.join(configDir, '.pulumi')
+    let report: DiagnosticsReport
     try {
-      mkdirSync(pulumiHome, { recursive: true })
-      success(`Pulumi home  ${pulumiHome}`)
-    } catch {
-      failure(`Pulumi home  ${pulumiHome}  (not writable)`)
+      report = await runDiagnostics({ stack: args.stack, signal: ac.signal })
+    } finally {
+      process.off('SIGINT', abort)
+      process.off('SIGTERM', abort)
     }
 
-    // ── Config ───────────────────────────────────────────────────────────────
-    process.stdout.write('\nConfig\n')
-
-    const config = getConfig()
-    if (!config) {
-      warn('No config file found — run `clawops init` to create one')
+    if (args.json) {
+      printJson(jsonOk(report))
     } else {
-      success(`Config file  ${path.join(configDir, 'config.json')}`)
+      render(report)
     }
 
-    // ── SSH ──────────────────────────────────────────────────────────────────
-    process.stdout.write('\nSSH\n')
-
-    if (!config) {
-      info('SSH checks skipped — no config')
-    } else {
-      const keyPath = config.ssh.keyPath.replace(/^~/, process.env['HOME'] ?? '~')
-      try {
-        accessSync(keyPath, constants.R_OK)
-        success(`SSH key      ${keyPath}`)
-      } catch {
-        failure(`SSH key      ${keyPath}  (not found or not readable)`)
-      }
-
-      const knownHostsPath = config.ssh.knownHostsPath.replace(/^~/, process.env['HOME'] ?? '~')
-      try {
-        accessSync(knownHostsPath, constants.F_OK)
-        success(`known_hosts  ${knownHostsPath}`)
-      } catch {
-        warn(`known_hosts  ${knownHostsPath}  (does not exist — will be created on first connect)`)
-      }
-    }
-
-    // ── Credentials ──────────────────────────────────────────────────────────
-    process.stdout.write('\nCredentials\n')
-
-    if (!config) {
-      info('Credential checks skipped — no config')
-    } else {
-      const { getProvider } = await import('../../providers/index.js')
-
-      // Register all adapters (side-effect imports)
-      await import('../../providers/aws/index.js')
-      await import('../../providers/gcp/index.js')
-      await import('../../providers/azure/index.js')
-      await import('../../providers/local/index.js')
-
-      const checkedProviders = new Set<string>()
-      for (const [stackName, stackCfg] of Object.entries(config.stacks)) {
-        const providerName = stackCfg.provider
-        if (checkedProviders.has(providerName)) continue
-        checkedProviders.add(providerName)
-
-        if (providerName === 'local') {
-          success(`local  stack "${stackName}"  (SSH-only, no cloud credentials required)`)
-          continue
-        }
-
-        try {
-          const adapter = getProvider(providerName as 'aws' | 'gcp' | 'azure')
-          const result = await adapter.validateConfig()
-          if (result.ok) {
-            success(`${providerName}  stack "${stackName}"`)
-          } else {
-            for (const err of result.errors) {
-              failure(`${providerName}  stack "${stackName}"  — ${err}`)
-            }
-          }
-        } catch (err) {
-          failure(`${providerName}  stack "${stackName}"  — ${err instanceof Error ? err.message : String(err)}`)
-        }
-      }
-
-      if (checkedProviders.size === 0) {
-        warn('No stacks configured — run `clawops init`')
-      }
-    }
-
-    // ── OpenClaw compatibility ───────────────────────────────────────────────
-    process.stdout.write('\nOpenClaw\n')
-    try {
-      const yaml = await import('js-yaml')
-      const { loadVersionSpec, describeRange } = await import('../../openclaw/versions.js')
-      const support = loadVersionSpec(yaml).support
-      success(`Supported range  ${describeRange(support)}  (recommended ${support.recommended})`)
-      if (!support.max) {
-        warn('No upper bound declared — this line would accept any OpenClaw release')
-      }
-    } catch (e) {
-      failure(`Version matrix   ${(e as Error).message}`)
-    }
-
-    // ── Remote health (requires --stack) ─────────────────────────────────────
-    if (args.stack) {
-      process.stdout.write('\nRemote health\n')
-
-      if (!config) {
-        info('Remote health skipped — no config')
-      } else {
-        try {
-          const { buildContext } = await import('../context.js')
-          const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
-          const { acquireSession, drainPool } = await import('../../transport/pool.js')
-
-          const ctx = buildContext({ stack: args.stack })
-          const stack = await ctx.getStack()
-          const outputMap = await stack.outputs()
-          const outputs: Record<string, unknown> = Object.fromEntries(
-            Object.entries(outputMap).map(([k, v]) => [k, v.value]),
-          )
-          const base = extractBaseOutputs(outputs)
-          const conn = ctx.adapter.getConnectionInfo({
-            ...base,
-            privateKeyPath: config.ssh.keyPath,
-            knownHostsPath: config.ssh.knownHostsPath,
-          })
-
-          const ac = new AbortController()
-          process.on('SIGINT', () => ac.abort())
-          process.on('SIGTERM', () => ac.abort())
-
-          const { session, release } = await acquireSession({
-            host: conn.host,
-            port: conn.port,
-            user: conn.user,
-            privateKeyPath: conn.privateKeyPath,
-            knownHostsPath: conn.knownHostsPath,
-            signal: ac.signal,
-          })
-
-          try {
-            // Container status
-            const containerResult = await execPrivileged(session, 
-              `docker inspect openclaw --format '{{.State.Status}}' 2>/dev/null || echo 'not found'`,
-              ac.signal,
-            )
-            const containerStatus = containerResult.stdout.trim()
-            if (containerStatus === 'running') {
-              success(`Container    running`)
-            } else {
-              failure(`Container    ${containerStatus || 'unknown'}`)
-            }
-
-            // Deployed OpenClaw version — the half that helps users who ALREADY ran
-            // `clawops up` with a moving tag and are now on an unsupported release.
-            // Refusing future operations does nothing for them.
-            const imageResult = await execPrivileged(session, 
-              `docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo ''`,
-              ac.signal,
-            )
-            const image = imageResult.stdout.trim()
-            const deployedVersion = image.includes(':') ? image.slice(image.lastIndexOf(':') + 1) : ''
-            if (deployedVersion) {
-              const yaml = await import('js-yaml')
-              const { loadVersionSpec, checkVersion, isMovingTag } =
-                await import('../../openclaw/versions.js')
-              const support = loadVersionSpec(yaml).support
-              if (isMovingTag(deployedVersion)) {
-                warn(
-                  `Deployed     ${image}  (moving tag — pin an explicit version; ` +
-                    `"${deployedVersion}" now resolves to OpenClaw 2.0)`,
-                )
-              } else {
-                const check = checkVersion(deployedVersion, support)
-                if (check.ok) {
-                  success(`Deployed     OpenClaw ${deployedVersion}`)
-                } else {
-                  failure(`Deployed     OpenClaw ${deployedVersion} is not supported by this clawops line`)
-                  if (check.error.reason === 'too-new') {
-                    warn(
-                      '  This gateway is running OpenClaw 2.0 or later. Session state may ' +
-                        'already have been lost: 2.0 stores sessions and credentials in SQLite ' +
-                        'under a directory this clawops line does not mount, so every container ' +
-                        'restart discards them. Upgrade to clawops 2.x before making changes.',
-                    )
-                  }
-                }
-              }
-            }
-
-            // Reachability — the one property a green healthcheck says nothing about.
-            // A gateway published on 0.0.0.0 serves plaintext HTTP to anyone the firewall
-            // admits; on loopback it is reachable only via `clawops tunnel` or a proxy on
-            // the host.
-            const pubResult = await execPrivileged(session, PUBLISH_INSPECT_CMD, ac.signal)
-            if (publishForRestart(pubResult.stdout) === 'all') {
-              warn(
-                'Published    0.0.0.0 — the gateway port is open on every interface. ' +
-                  'It serves plaintext HTTP; front it with TLS, or set ' +
-                  'network.publishGateway to "loopback" and use `clawops tunnel`.',
-              )
-            } else {
-              success('Published    127.0.0.1 only (reach it with `clawops tunnel`)')
-            }
-
-            // Docker healthcheck
-            const healthResult = await execPrivileged(session, 
-              `docker inspect openclaw --format '{{.State.Health.Status}}' 2>/dev/null || echo 'none'`,
-              ac.signal,
-            )
-            const healthStatus = healthResult.stdout.trim()
-            if (healthStatus === 'healthy') {
-              success(`Healthcheck  healthy`)
-            } else if (healthStatus === 'none' || healthStatus === '<no value>') {
-              info(`Healthcheck  no healthcheck configured`)
-            } else {
-              warn(`Healthcheck  ${healthStatus}`)
-            }
-
-            // Disk usage
-            const diskResult = await session.exec(
-              // The state directory: 2.0's SQLite lives there, not in the user's home.
-              `df -h ${STATE_DIR_HOST_LINUX} 2>/dev/null | awk 'NR==2{print $5" used ("$3" of "$2")"}'`,
-              ac.signal,
-            )
-            const diskUsage = diskResult.stdout.trim()
-            if (diskUsage) {
-              const pctMatch = diskUsage.match(/^(\d+)%/)
-              const pct = pctMatch ? parseInt(pctMatch[1]!, 10) : 0
-              if (pct >= 90) {
-                failure(`Disk         ${diskUsage}`)
-              } else if (pct >= 75) {
-                warn(`Disk         ${diskUsage}`)
-              } else {
-                success(`Disk         ${diskUsage}`)
-              }
-            } else {
-              warn('Disk         unable to determine disk usage')
-            }
-
-            // Log rotation
-            const logrotateResult = await session.exec(
-              `test -f /etc/logrotate.d/openclaw && echo 'configured' || echo 'not configured'`,
-              ac.signal,
-            )
-            const logrotate = logrotateResult.stdout.trim()
-            if (logrotate === 'configured') {
-              success(`Log rotation configured`)
-            } else {
-              warn(`Log rotation not configured — logs may grow unbounded`)
-            }
-          } finally {
-            release()
-            drainPool()
-          }
-        } catch (err) {
-          failure(`Remote health checks failed: ${err instanceof Error ? err.message : String(err)}`)
-        }
-      }
-    }
-
-    // ── Hardening status (requires --stack) ──────────────────────────────────
-    if (args.stack && config) {
-      process.stdout.write('\nHardening\n')
-      try {
-        const { MODULE_CATALOG, resolveModules, withRemoteExec } = await import('../../harden/index.js')
-        const { buildContext } = await import('../context.js')
-        const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
-
-        const ctx = buildContext({ stack: args.stack })
-        const stackObj = await ctx.getStack()
-        const outputMap = await stackObj.outputs()
-        const outputs: Record<string, unknown> = Object.fromEntries(
-          Object.entries(outputMap).map(([k, v]) => [k, v.value]),
+    // Exit non-zero when a check failed, not only when Node is too old. `doctor` is what
+    // a script or a CI step runs to decide whether a deployment is healthy; an unreadable
+    // SSH key or an unsupported gateway used to exit 0 and read as success.
+    if (!report.ok) {
+      if (!args.json) {
+        process.stdout.write(
+          `Run \`clawops bug\` to open a pre-filled issue at ${REPO_URL}/issues\n\n`,
         )
-        const base = extractBaseOutputs(outputs)
-        const conn = ctx.adapter.getConnectionInfo({
-          ...base,
-          privateKeyPath: config.ssh.keyPath,
-          knownHostsPath: config.ssh.knownHostsPath,
-        })
-
-        const hardenAc = new AbortController()
-        process.on('SIGINT', () => hardenAc.abort())
-
-        const provider = ctx.adapter.name
-        const modules = resolveModules(MODULE_CATALOG, undefined, provider)
-
-        await withRemoteExec(conn, hardenAc.signal, async (exec) => {
-          for (const mod of modules) {
-            const result = await mod.check(exec)
-            if (result.status === 'applied') {
-              success(`${mod.label.padEnd(32)} applied`)
-            } else if (result.status === 'drifted') {
-              warn(`${mod.label.padEnd(32)} drifted — ${result.detail}`)
-            } else if (result.status === 'missing') {
-              info(`${mod.label.padEnd(32)} not applied — run \`clawops harden\``)
-            }
-            // 'skipped' modules are silently omitted
-          }
-        })
-      } catch (err) {
-        failure(`Hardening checks failed: ${err instanceof Error ? err.message : String(err)}`)
       }
-    }
-
-    process.stdout.write('\n')
-
-    if (!nodeOk) {
-      process.stdout.write(
-        `Run \`clawops bug\` to open a pre-filled issue at ${REPO_URL}/issues\n\n`,
-      )
       process.exit(1)
     }
   },
 })
+
+function render(report: DiagnosticsReport): void {
+  process.stdout.write('\nclawops doctor\n')
+  for (const section of report.sections) {
+    process.stdout.write(`\n${section.title}\n`)
+    for (const check of section.checks) line(check)
+  }
+  process.stdout.write('\n')
+}
+
+function line(check: Check): void {
+  const label = check.detail ? `${check.name.padEnd(NAME_COLUMN)}${check.detail}` : check.name
+  const emit = { pass: success, fail: failure, warn, info }[check.status]
+  emit(label)
+  if (check.remedy) info(`  ${check.remedy}`)
+}

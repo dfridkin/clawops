@@ -14,6 +14,7 @@ export type TunnelHandler = (
 
 export class FakeSshSession implements SshSession {
   private execHandlers: ExecHandler[] = []
+  private execMatchers: Array<{ pattern: RegExp; handler: ExecHandler }> = []
   private streamHandlers: StreamHandler[] = []
   private tunnelHandlers: TunnelHandler[] = []
   private execLog: string[] = []
@@ -33,6 +34,27 @@ export class FakeSshSession implements SshSession {
   /** Queue a handler that will respond to the next exec() call. */
   onExec(handler: ExecHandler): this {
     this.execHandlers.push(handler)
+    return this
+  }
+
+  /**
+   * Respond to any command matching `pattern`, however many times it is run and in
+   * whatever order.
+   *
+   * onExec() is a positional queue, which couples a test to the exact sequence of commands
+   * its subject happens to run. Insert one command upstream — a `uname -s` to pick a path,
+   * say — and every queued answer shifts by one, so the assertions still pass while the
+   * subject reads a different command's output. Match on the command instead.
+   *
+   * The most recently registered matcher wins, so a shared "healthy host" builder can be
+   * given one failing command per test without rebuilding the rest.
+   */
+  respond(pattern: RegExp, result: Partial<SshExecResult> | ExecHandler): this {
+    const handler: ExecHandler =
+      typeof result === 'function'
+        ? result
+        : () => ({ stdout: '', stderr: '', code: 0, ...result })
+    this.execMatchers.unshift({ pattern, handler })
     return this
   }
 
@@ -69,6 +91,8 @@ export class FakeSshSession implements SshSession {
   async exec(command: string, signal?: AbortSignal): Promise<SshExecResult> {
     this.execLog.push(command)
     if (signal?.aborted) throw new Error('Operation aborted')
+    const matched = this.execMatchers.find((m) => m.pattern.test(command))
+    if (matched) return matched.handler(command)
     const handler = this.execHandlers.shift()
     if (!handler) {
       return { stdout: '', stderr: `no handler for exec: ${command}`, code: 0 }

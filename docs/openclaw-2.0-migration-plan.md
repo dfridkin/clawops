@@ -656,8 +656,70 @@ command exists to rescue.
 
 ### Phase 4 — surface, hardening, release
 
-**WO-47 — MCP tool surface** *(S)* — declare in `spec/mcp-tools.yaml` first; add
-`clawops_openclaw_doctor`; all four annotation hints; 8 KB trim with the full report as a resource.
+**WO-47 — MCP tool surface** *(S)* — ✅ **done** — declare in `spec/mcp-tools.yaml` first; add
+the doctor tool; all four annotation hints; 8 KB trim with the full report as a resource.
+
+**Named `clawops_doctor`, not `clawops_openclaw_doctor`.** The `cli` toolset maps tool names
+to CLI commands (`clawops_config_get` ← `config get`), and there is no `clawops openclaw
+doctor`. The `openclaw_` prefix would also read as OpenClaw's own `doctor`, which is the
+`--fix` repair path — deliberately *not* exposed: WO-45 gates repair on a verified backup,
+and a read-only diagnostic tool that can also mutate the deployment is the wrong shape. The
+description says so, so an agent looking for repair is pointed at `gateway update`.
+
+**The blocker was structural, not missing code.** `doctor` wrote to stdout as it checked, and
+R15 forbids a stdio MCP server from writing to stdout at all — so exposing it would have
+corrupted the protocol on every call. The checks moved to `src/diagnostics`, which returns a
+report; the command renders it and the tool serialises it. Neither owns the logic.
+
+Two things surfaced once the checks were data:
+
+- **`doctor` never asked the gateway anything.** It read `docker inspect`'s
+  `.State.Health.Status`, which the OpenClaw image does not set, and reported "no
+  healthcheck configured". WO-44 built `src/openclaw/health.ts` for exactly this and doctor
+  never adopted it. It now probes `/startupz` and reads the body.
+- **`doctor` exited 0 on failure.** Only an old Node.js exited 1. An unreadable SSH key or an
+  unsupported gateway exited 0, so a CI step reading the exit code saw success. Now any
+  `fail` exits 1; warnings still exit 0, or a fresh machine would read as broken.
+
+**Audit of the existing surface, which is where the real defects were:**
+
+- `clawops_config_{get,set,unset,validate}` each hand-rolled `cat` on a hardcoded *Linux*
+  path with an unprivileged exec. `remote-config.ts` was extracted for these callers — its
+  header says "so the MCP config handler and plan layer share one implementation" — and they
+  never adopted it. Same defect as G32, same cause.
+- `clawops_agents_list` ran `… || echo "[]"` with `2>&1`, so every failure became an empty
+  list. An agent cannot tell "no agents" from "could not ask", and acts on the first. The CLI
+  had it too, plus a `catch { agents = [] }`. Both now fail.
+- The catalog was **cast**, not validated: a tool missing `readOnlyHint` generated
+  `readOnlyHint: undefined`, which compiles, ships, and leaves the client on its defaults —
+  R10 defeated silently. `scripts/lib/validate-mcp-spec.ts` now fails generation on that, on
+  name-convention breaks, unknown toolsets, a read-only tool outside the `read` toolset (or a
+  writing one inside it — the dangerous direction, since `--read-only` would admit it), and
+  the R1/R2 caps. It is a separate module because gen-schemas generates on import, so a test
+  importing it would rewrite the tree.
+- **Documented tables lied.** The README listed `clawops_ssh_exec` and
+  `clawops_agents_restart` — neither exists — and omitted five tools that do. The risk matrix
+  said "All 15 tools" above sixteen rows and marked three tools unavailable in `--read-only`
+  that the catalog puts in the `read` toolset. Both fixed, and now asserted against the
+  catalog in `tests/mcp/catalog.test.ts`.
+- `output:` blocks in the catalog are **inert** — nothing generates an `outputSchema` and no
+  handler is checked against one. `clawops_status` declared `health`, `uptimeSec`,
+  `openclawVersion` and `agentCount` for three releases while returning none of them. Its
+  entry now matches the handler, and the file says the blocks are descriptive. Making them
+  real means an `outputSchema` per tool plus `structuredContent` from all 18 handlers —
+  carried forward below, not smuggled into an (S).
+
+**Deliberately not exposed: `clawops_migrate` and `clawops_gateway_update`.** Both would need
+their effects extracted from `cli/commands/*.ts` first — the pure sequences live in
+`openclaw/{migrate,upgrade}.ts`, but the effects that drive them do not. An MCP handler
+written against them today would hand-roll those effects, which is precisely the divergence
+this work order spent its time undoing. Carried forward.
+
+**Mutation-checked before closing.** Three survived, all of them behaviour I changed without
+asserting: the agents masking (CLI and MCP) and the config read path. One assertion of mine
+was also wrong rather than the code — `execPrivileged` tries direct and escalates only on
+denial, so asserting `sudo` on the first call failed; the real guarantee is that a denied
+read is retried, which is what the test asserts now. 49/49 caught.
 
 **WO-48 — Plan-driven firewall, and the hardcoded port** *(G16 — S)*
 
@@ -813,6 +875,9 @@ before marking that owner done.
 | Port `18789` hardcoded in 9 files | WO-58 audit | **WO-48** | WO-42 closed without it, by design |
 | ClawHub egress at apply — `/audit-egress` + firewall notes | WO-43 | **WO-49** | open |
 | `integrations.yaml` unchecked against the 2.0 channel surface | WO-43 | **WO-60** | re-homed from WO-45 (wrong owner) |
+| `output:` blocks in `spec/mcp-tools.yaml` are descriptive only — no `outputSchema`, no `structuredContent` | WO-47 | **open** | needs a change to all 18 handlers; too big for an (S) |
+| `clawops_migrate` and `clawops_gateway_update` have no MCP tool | WO-47 | **open** | needs their effects extracted from `cli/commands/*.ts` first, or the handler duplicates them |
+| `clawops_workflow_recover` still reports "systemd service status" | WO-47 | WO-44 | same systemd assumption as `logs.ts`; it should call the diagnostics module |
 | Plan fields `workspace`, `permissionMode`, `image.variant`, mounts | WO-42 | **WO-53** (2.1) | open |
 | README *What's new in 2.0* — update per flow change, audit at the end | user request | **every WO**, audited by WO-49 | standing |
 | Pulumi `Gateway` component (G7) | WO-58 audit | WO-38 | ✅ deleted |

@@ -9,7 +9,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { AgentsListInput } from '../_generated.js'
 import { buildContext } from '../../../cli/context.js'
 import { acquireSession, drainPool } from '../../../transport/pool.js'
-import { resolveConn, okText } from '../_conn.js'
+import { resolveConn, okText, errText } from '../_conn.js'
 import { execPrivileged } from '../../../transport/privileged.js'
 
 export async function handleAgentsList(input: AgentsListInput, _server: McpServer): Promise<CallToolResult> {
@@ -17,8 +17,16 @@ export async function handleAgentsList(input: AgentsListInput, _server: McpServe
   const conn = await resolveConn(ctx)
   const { session, release } = await acquireSession(conn)
   try {
-    const result = await execPrivileged(session, 'docker exec openclaw openclaw agents list --json 2>&1 || echo "[]"')
-    return okText(result.stdout.trim())
+    // No `|| echo "[]"`. That turned every failure into an empty list, and an agent
+    // cannot tell "this deployment has no agents" from "I could not ask" — the second
+    // reads as the first and gets acted on. Same reason stderr is not folded into stdout:
+    // an error message is not a JSON array, and returning it as one invites a parse of
+    // whatever the container happened to print.
+    const result = await execPrivileged(session, 'docker exec openclaw openclaw agents list --json')
+    if (result.code !== 0) {
+      return errText(`Cannot list agents: ${result.stderr.trim() || result.stdout.trim() || `exit ${result.code}`}`)
+    }
+    return okText(result.stdout.trim() || '[]')
   } finally {
     release()
     drainPool()
