@@ -6,11 +6,11 @@ const NPM = 'https://www.npmjs.com/package/@clawops/cli'
 /**
  * OpenClaw compatibility, stated on the landing page rather than buried in docs.
  *
- * OpenClaw 2.0 shipped and this release line refuses it, so "does this work with 2.0?"
- * is the first question a visitor has. Answering it above the fold costs one paragraph
- * and saves a support round-trip.
+ * "Does this work with 2.0?" is the first question a visitor has. Answering it above the
+ * fold costs one line and saves a support round-trip. This line requires 2.0; the previous
+ * one is maintained under the `legacy` dist-tag.
  */
-const OPENCLAW_SUPPORTED = '2026.7.1-2'
+const OPENCLAW_SUPPORTED = '2026.9.2'
 
 export default function Home() {
   return (
@@ -18,10 +18,10 @@ export default function Home() {
       <div className={styles.strip}>
         <div className={styles.stripInner}>
           <span>
-            Supports OpenClaw up to <code>{OPENCLAW_SUPPORTED}</code>. Support for the 2.0 line
-            ships in clawops 2.x.
+            Requires OpenClaw <code>{OPENCLAW_SUPPORTED}</code> or later. For older releases,
+            install <code>@clawops/cli@legacy</code>.
           </span>
-          <a href="#compat">Why</a>
+          <a href="#compat">More</a>
         </div>
       </div>
 
@@ -117,8 +117,8 @@ export default function Home() {
             <h3 className={styles.cardTitle}>Day-two operations</h3>
             <p className={styles.cardBody}>
               <code>logs</code>, <code>ssh</code>, <code>tunnel</code>, <code>monitor</code>,{' '}
-              <code>backup</code>, <code>harden</code> — the things you need on day two, not just
-              the first deploy.
+              <code>backup</code>, <code>migrate</code>, <code>harden</code> — the things you need
+              on day two, not just the first deploy.
             </p>
           </article>
         </div>
@@ -164,8 +164,9 @@ clawops doctor`}</pre>
             <div className={styles.stepBody}>
               <h3>Deploy</h3>
               <p>
-                Pin a version rather than a moving tag — <code>latest</code> and <code>stable</code>{' '}
-                both point at OpenClaw 2.0, which this line does not support.
+                Pin a version rather than a moving tag. clawops refuses <code>latest</code> and{' '}
+                <code>stable</code>: a tag that moves changes what is deployed without changing
+                the plan.
               </p>
               <pre>{`clawops up --openclaw-version ${OPENCLAW_SUPPORTED}`}</pre>
             </div>
@@ -214,14 +215,14 @@ clawops doctor`}</pre>
                 <td>Compute Engine</td>
                 <td className={styles.yes}>yes</td>
                 <td>Secret Manager</td>
-                <td className={styles.no}>v1.8</td>
+                <td className={styles.yes}>yes</td>
               </tr>
               <tr>
                 <td>Azure</td>
                 <td>Linux VM</td>
                 <td className={styles.yes}>yes</td>
                 <td>Key Vault</td>
-                <td className={styles.no}>v1.8</td>
+                <td className={styles.yes}>yes</td>
               </tr>
               <tr>
                 <td>Local / any VM</td>
@@ -284,29 +285,30 @@ clawops doctor`}</pre>
         </div>
         <div className={styles.limits}>
           <div className={styles.limit}>
-            <h3>This line supports OpenClaw up to {OPENCLAW_SUPPORTED}</h3>
+            <h3>This line requires OpenClaw {OPENCLAW_SUPPORTED} or later</h3>
             <p>
               OpenClaw <code>2026.8.1</code> changed the container runtime contract: state moved
-              into SQLite, config moved to a writable path, and model providers became
-              install-gated plugins.
+              into SQLite, config moved to a writable path, and model providers — then channels —
+              became install-gated plugins. clawops mounts the state directory, validates config
+              against OpenClaw&rsquo;s own schema before writing it, and installs the plugins your
+              config names during <code>apply</code>.
             </p>
           </div>
           <div className={styles.limit}>
-            <h3>clawops refuses what it cannot deploy correctly</h3>
+            <h3>Coming from 1.x</h3>
             <p>
-              Rather than producing a crash-looping gateway, <code>doctor</code>, <code>plan</code>,{' '}
-              <code>up</code> and <code>apply</code> reject an unsupported version and say which
-              release line to use. Pin a version — <code>latest</code> and <code>stable</code> both
-              point at 2.0.
+              <code>clawops migrate</code> takes a verified backup, extracts the state from the
+              running container, and starts 2.0 against it. Device identity is preserved, so paired
+              devices do not need re-pairing. Your old config is not applied — on 1.x it was read by
+              nothing — so a valid 2.0 config is written and the old one reported for review.
             </p>
           </div>
           <div className={styles.limit}>
-            <h3>Already deployed 2.0?</h3>
+            <h3>Still on the older runtime?</h3>
             <p>
-              <code>clawops doctor --stack &lt;name&gt;</code> reports the version a gateway is
-              actually running, so a deployment that picked up 2.0 through a moving tag can be
-              identified. Support for the 2.0 line ships in clawops 2.x, with a migration command
-              for existing deployments.
+              The 1.x line is maintained under the <code>legacy</code> dist-tag until 2027-03-31 for
+              OpenClaw <code>2026.7.1-2</code> and earlier:{' '}
+              <code>npm install -g @clawops/cli@legacy</code>.
             </p>
           </div>
         </div>

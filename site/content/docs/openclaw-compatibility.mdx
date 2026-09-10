@@ -1,47 +1,69 @@
 ---
 title: OpenClaw compatibility
-description: Which OpenClaw versions this release line supports, and why 2.0 is refused.
+description: Which OpenClaw versions this release line supports, and what changed in 2.0.
 ---
 
 | OpenClaw version | Support |
 |---|---|
-| `2026.7.1-2` | **Recommended** |
-| `2026.4.5` – `2026.7.1-2` | Supported |
-| `< 2026.4.5` | Not supported — different config schemas |
-| `>= 2026.8.1` | **Not supported on clawops 1.x** — use clawops 2.x |
+| `2026.9.2` | **Recommended** — the floor this line was built against |
+| `>= 2026.9.2` | Supported, no upper bound |
+| `2026.8.x` – `2026.9.1` | Not supported — 2.0 runtime, but the official Bedrock provider plugin requires `>= 2026.9.2` |
+| `<= 2026.7.1-2` | **Pre-2.0 contract** — use `npm install -g @clawops/cli@legacy` |
 
-`spec/openclaw-versions.yaml` is the canonical matrix, and since v1.7.2 it is **enforced**:
-`doctor`, `plan`, `up` and `apply` refuse a version outside the range.
+`spec/openclaw-versions.yaml` is the canonical matrix, and it is **enforced**: `doctor`, `plan`,
+`up` and `apply` refuse a version outside the range.
 
-## Why 2.0 is refused
+## What 2.0 changed
 
-OpenClaw `2026.8.1` changed the container runtime contract. Verified against a real deployment:
+OpenClaw `2026.8.1` changed the container runtime contract. Verified against real deployments:
 
-- **State moved into SQLite** under a state directory this line does not mount, so every container
-  replacement discards sessions, transcripts and credentials.
-- **Config moved to a writable path.** The file this line mounts is read by nothing.
-- **Model providers became install-gated plugins.** A configured but uninstalled provider prevents
-  the gateway from starting at all.
+- **State moved into SQLite.** clawops bind-mounts one host directory
+  (`/var/lib/clawops/openclaw`) at OpenClaw's own default location, holding the config, the
+  database and installed plugins. Before this, nothing was mounted and every container
+  replacement discarded sessions, transcripts and credentials.
+- **Config moved to a writable path.** The file the 1.x line mounted was read by nothing.
+- **Model providers became install-gated plugins.** Twenty-four ship in the image; the rest are
+  installed during `apply`, while the deploy still has egress.
+- **Chat channels became install-gated too** — all of them. A configured channel with no plugin
+  gives a gateway that starts, reports healthy, and never connects.
 
-Deploying it produces a gateway that crash-loops with exit 78. Refusing is the better failure.
+## Why the floor is 2026.9.2
+
+Not because 2.0 starts there. The official Amazon Bedrock provider plugin declares
+`requires plugin API >=2026.9.2` and refuses to install on `2026.9.1`, and clawops's AWS adapter
+makes Bedrock first-class — so a lower floor would offer a path that cannot work.
 
 ## Moving tags
 
-`latest` and `stable` both point at OpenClaw 2.0 today. clawops resolves a moving tag to a concrete
-release **before** range-checking it, and refuses a tag it cannot resolve rather than assuming
-compatibility. The default version is a concrete pin.
+`latest` and `stable` are refused. clawops resolves a moving tag to a concrete release **before**
+range-checking it, and refuses a tag it cannot resolve rather than assuming compatibility. A
+restart reuses the version already deployed rather than re-resolving, so it changes neither the
+version nor who can reach the gateway.
 
-## Already deployed 2.0?
+## Coming from 1.x
 
 ```bash
-clawops doctor --stack <name>
+clawops migrate --stack <name>
 ```
 
-reports the version a gateway is actually running, and warns that state may already have been lost —
-because with no state volume mounted, every restart discarded it.
+Takes a verified backup inside the running container, extracts the state **from that running
+container** — stopping first would destroy it, since 1.x kept everything inside — starts 2.0
+against it, and waits for the gateway to come up. Device identity is preserved, so paired devices
+do not need re-pairing.
 
-## What's coming
+Your old config is **not** applied. It never applied on 1.x either: the file clawops mounted was
+read by nothing. A fresh valid 2.0 config is written instead, and the old one is reported as
+something to review.
 
-Support for the 2.0 line ships in **clawops 2.x**, alongside `clawops migrate` for existing
-deployments. The two lines are pinned: clawops `1.x` to OpenClaw `<= 2026.7.1-2`, clawops `2.x` to
-`>= 2026.9.1`. The 1.x line is supported until **2027-03-31**.
+<Callout type="warn" title="If you ran gateway restart, gateway update or config set on a pre-2.0 clawops">
+  Your state is already gone. Nothing was mounted to survive the container replacement.
+  `clawops migrate` says so plainly rather than pretending to rescue it.
+</Callout>
+
+## The 1.x line
+
+Still maintained under the `legacy` dist-tag until **2027-03-31**, for OpenClaw `<= 2026.7.1-2`:
+
+```bash
+npm install -g @clawops/cli@legacy
+```

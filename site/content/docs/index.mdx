@@ -32,10 +32,11 @@ OpenClaw's job.
 
 ## Before you start
 
-<Callout type="warn" title="OpenClaw 2.0 is not supported on this line">
-  This release line supports OpenClaw up to `2026.7.1-2`. OpenClaw `2026.8.1` changed the container
-  runtime contract, and clawops refuses versions it cannot deploy correctly rather than producing a
-  crash-looping gateway. See [OpenClaw compatibility](/docs/openclaw-compatibility).
+<Callout title="This line requires OpenClaw 2.0">
+  clawops 2.x deploys OpenClaw `>= 2026.9.2` and refuses anything older. For OpenClaw
+  `<= 2026.7.1-2`, use `npm install -g @clawops/cli@legacy`. Coming from 1.x?
+  `clawops migrate` moves an existing deployment across, keeping its state and device identity.
+  See [OpenClaw compatibility](/docs/openclaw-compatibility).
 </Callout>
 
 ## Where things live

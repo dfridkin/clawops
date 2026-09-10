@@ -35,7 +35,9 @@ the address accordingly — but the runtime must listen somewhere the container 
 **`plan` and `apply` are cloud-only.** The local provider bootstraps over SSH without a state
 backend; use `clawops up`.
 
-**Capabilities vary by provider.** Hardening ships for AWS and local; GCP and Azure follow in v1.8.
+**Capabilities vary by provider.** The eight host-hardening modules — SSH, UFW, fail2ban,
+unattended upgrades, Docker socket, auditd, lynis, sysctl — run on every provider. AWS adds four
+cloud-specific checks: security-group audit, SSM readiness, VPC flow logs and GuardDuty.
 
 ## Platform
 
