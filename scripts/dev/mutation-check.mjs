@@ -54,6 +54,14 @@ const MUTATIONS = [
     file: 'src/cli/mcp-wire.ts', from: "  if (!(await supportsMcpAdd(session, signal))) return { status: 'unsupported', url }", to: '  void supportsMcpAdd', test: 'tests/cli/mcp-wire.test.ts' },
   { name: 'wire treats a missing mcp add as available',
     file: 'src/cli/mcp-wire.ts', from: '  return help.code === 0', to: '  return true', test: 'tests/cli/mcp-wire.test.ts' },
+  { name: 'a 1.x release stops taking latest while latest is still 1.x',
+    file: 'scripts/lib/dist-tag-plan.mjs', from: '  if (latestMajor > majorOf(version)) {', to: '  if (latestMajor >= majorOf(version)) {', test: 'tests/scripts/dist-tag-plan.test.ts tests/release' },
+  { name: 'a 1.x release takes latest back from 2.x',
+    file: 'scripts/lib/dist-tag-plan.mjs', from: '  if (latestMajor > majorOf(version)) {', to: '  if (false) {', test: 'tests/scripts/dist-tag-plan.test.ts tests/release' },
+  { name: 'an unreadable latest is treated as this line',
+    file: 'scripts/lib/dist-tag-plan.mjs', from: '  if (latestMajor === undefined) {', to: '  if (false) {', test: 'tests/scripts/dist-tag-plan.test.ts' },
+  { name: 'main starts publishing under legacy',
+    file: 'scripts/lib/dist-tag-plan.mjs', from: "  if (branch !== '1.x') {", to: '  if (false) {', test: 'tests/scripts/dist-tag-plan.test.ts tests/release' },
 ]
 
 let survived = []
