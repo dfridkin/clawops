@@ -23,17 +23,18 @@ description: Every clawops command, grouped by what you reach for it.
 |---|---|
 | `init` | Choose a provider, configure the state backend, generate an SSH key |
 | `setup` | Interactive wizard — configure and deploy in one pass |
-| `doctor` | Check Node, SSH keys, credentials, and the supported OpenClaw range |
+| `doctor` | Check the local machine; with `--stack`, the deployment too. Exits 1 on any failure |
 
 ## Provisioning
 
 | Command | Does |
 |---|---|
-| `up` | Provision and deploy a stack |
+| `up` | Provision and deploy a stack (`--gateway-port` for a non-default port) |
 | `plan` | Generate a deploy plan without applying it |
 | `apply` | Apply a plan produced by `clawops plan` |
 | `down` | Destroy provisioned resources for a stack |
 | `destroy` | Destroy everything in a stack — irreversible |
+| `migrate` | Move an existing 1.x deployment onto the 2.0 runtime, keeping its state |
 | `stacks` | List or delete stacks |
 | `status` | Outputs, region, provisioned time |
 
@@ -41,14 +42,14 @@ description: Every clawops command, grouped by what you reach for it.
 
 | Command | Does |
 |---|---|
-| `logs` | Stream gateway logs |
+| `logs` | Stream gateway logs. Says which source answered: the gateway, or container output when it is not reachable |
 | `monitor` | Live dashboard: health, container status, resources, log tail |
 | `ssh` | Open a session to the instance |
 | `tunnel` | Forward the gateway port to localhost |
 | `gateway` | `status`, `restart`, `update [version]` |
-| `agents` | `list`, `restart [name]`, `logs <name>` |
+| `agents` | `list`, `logs <name>` — per-agent activity from the audit log. OpenClaw 2.0 has no per-agent restart |
 | `config` | `get`, `set`, `unset` on the gateway configuration |
-| `backup` | `create`, `restore` |
+| `backup` | `create`, `restore` — restore expands into a staging directory, never in place |
 
 ## Security
 

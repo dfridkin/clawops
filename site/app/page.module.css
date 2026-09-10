@@ -50,6 +50,20 @@
   align-items: baseline;
   flex-wrap: wrap;
 }
+.stripBadge {
+  /* Reads as an announcement without an amber block competing with the headline — the strip
+     keeps its quiet ground and the badge carries the emphasis. */
+  flex: none;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--surface);
+  background: var(--accent);
+  padding: 0.12em 0.45em;
+  border-radius: 3px;
+}
+.stripInner strong { color: var(--ink); font-weight: 600; }
 .stripInner code {
   background: var(--code-bg);
   padding: 0.08em 0.34em;

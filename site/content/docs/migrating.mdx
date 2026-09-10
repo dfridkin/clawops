@@ -1,0 +1,61 @@
+---
+title: Migrating from 1.x
+description: Move an existing OpenClaw 1.x deployment onto the 2.0 runtime contract.
+---
+
+```bash
+npm install -g @clawops/cli
+clawops migrate --stack prod
+```
+
+## What it does
+
+1. Takes a **verified backup** inside the running container, and refuses to continue without one
+2. Extracts the state **from that running container** — stopping first would destroy it, since
+   1.x kept everything inside the container
+3. Gives the state directory numeric ownership `1000:1000`, matching the container's user
+4. Writes a fresh, valid 2.0 config
+5. Starts 2.0 against the migrated state and waits for `/startupz`
+6. Restarts once more, because the first start reports a pending schema migration, and re-gates
+7. Compares device identity before and after
+
+## Device identity is preserved
+
+Paired devices do not need re-pairing. `migrate` reads the device id before and after and reports
+`preserved`, `changed`, or `unknown` — a value it could not read is never reported as continuity.
+
+## Your old config is not applied
+
+<Callout title="This is deliberate">
+  The config file clawops mounted on 1.x was **read by nothing** — `OPENCLAW_CONFIG_PATH` was
+  unset and the gateway ran on defaults. Carrying it forward would apply settings that have never
+  been in effect, and its channel blocks would not validate against 2.0 anyway.
+</Callout>
+
+Old settings are reported as **intent to review**, and a fresh valid 2.0 config is written instead.
+
+## If there is nothing to rescue
+
+<Callout type="warn" title="Ran gateway restart, gateway update or config set on a pre-2.0 clawops?">
+  Your state is already gone. Nothing was mounted to survive the container replacement, so every
+  one of those commands discarded sessions, transcripts and credentials. `clawops migrate` says so
+  plainly rather than pretending to rescue it.
+</Callout>
+
+## After migrating
+
+```bash
+clawops doctor --stack prod
+```
+
+Reports the deployed version, whether the gateway actually answers, whether the port is published
+to the network, disk usage on the state directory, and hardening drift. It exits **1** if any check
+failed, so it works in a script.
+
+## Staying on 1.x
+
+The 1.x line is maintained under the `legacy` dist-tag until **2027-03-31**:
+
+```bash
+npm install -g @clawops/cli@legacy
+```

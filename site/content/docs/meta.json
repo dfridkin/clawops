@@ -1,4 +1,15 @@
 {
   "title": "Documentation",
-  "pages": ["index", "installation", "quickstart", "openclaw-compatibility", "commands", "plan-apply", "mcp", "limitations"]
+  "pages": [
+    "index",
+    "installation",
+    "quickstart",
+    "openclaw-compatibility",
+    "migrating",
+    "commands",
+    "plugins",
+    "plan-apply",
+    "mcp",
+    "limitations"
+  ]
 }

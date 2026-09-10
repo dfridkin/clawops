@@ -1,0 +1,71 @@
+---
+title: Model providers and channels
+description: Both are install-gated plugins in OpenClaw 2.0, and clawops installs them for you.
+---
+
+OpenClaw 2.0 made both model providers and chat channels **install-gated plugins**. A configured
+one that is not installed does not fail loudly — the gateway starts, reports healthy, and has no
+model backend or never connects to the channel.
+
+`clawops apply` installs what your config names, during the deploy, and then asks the gateway
+whether they are really there.
+
+## Model providers
+
+Twenty-four ship in the image — `anthropic`, `openai`, `google`, `ollama`, `openrouter` and others.
+The rest are installed from ClawHub, pinned to an exact version:
+
+```
+Resolving clawhub:@openclaw/deepseek-provider@2026.9.2…
+Downloading plugin @openclaw/deepseek-provider@2026.9.2 from ClawHub…
+Installed plugin: deepseek
+```
+
+## Channels
+
+**Every** channel is install-gated — all thirty-one. clawops installs the plugin for the channels
+your config names, from npm as `@openclaw/<channel>`:
+
+| Channel | Plugin | Non-interactive setup |
+|---|---|---|
+| Telegram | bundled in the image | `TELEGRAM_BOT_TOKEN` |
+| Discord | `@openclaw/discord` | `DISCORD_BOT_TOKEN` |
+| Slack | `@openclaw/slack` | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` |
+| WhatsApp | `@openclaw/whatsapp` | none — configure on the host |
+| Microsoft Teams | `@openclaw/msteams` | none — configure on the host |
+
+Slack is set up for **Socket Mode**: the gateway dials out to Slack, so there is no public webhook
+to register and no inbound firewall rule to open.
+
+WhatsApp and Microsoft Teams have no non-interactive setup in OpenClaw — `channels add` rejects
+`--use-env` for them — so clawops installs their plugin and leaves the credentials to
+`openclaw channels add` on the host.
+
+## Versions are pinned, and that matters
+
+Plugin builds declare a minimum plugin API and move ahead of the runtime. The current `latest`
+Discord plugin refuses the supported floor outright:
+
+```
+plugin "discord" requires plugin API >=2026.9.3, but this OpenClaw runtime exposes 2026.9.2
+```
+
+So every plugin is pinned to the runtime this line supports, and advancing them is a coordinated
+change with the floor rather than a version bump.
+
+## Egress
+
+Installing happens during `apply` — deliberately, so a blocked host fails in front of the person
+running the command rather than at 3am. The two plugin kinds come from **different** registries:
+
+| Plugin kind | Installed from |
+|---|---|
+| model provider | `clawhub.ai` |
+| chat channel | `registry.npmjs.org` |
+
+Allowing one does not allow the other. If either is blocked, clawops says so after the restart:
+
+```
+[clawops] warning: the gateway is running, but these configured channels are not installed:
+discord. They will never connect.
+```
