@@ -52,6 +52,10 @@ describe('release dist-tag', () => {
       .toBeUndefined()
     expect(planDistTags({ branch: '1.x', version: '1.7.9', currentLatest: '2.0.0' }).publishTag)
       .toBe('legacy')
+    // Pre-2.0 the 1.x line takes `latest` itself, because only the publish call can
+    // authenticate and `latest` is the tag every default install reads.
+    expect(planDistTags({ branch: '1.x', version: '1.7.9', currentLatest: '1.7.8' }).publishTag)
+      .toBeUndefined()
   })
 
   it('the workflow hands the planner a branch, not a pre-decided tag', () => {

@@ -9,6 +9,20 @@
 // so the release that added authentication to the MCP HTTP server was not what a fresh
 // install got.
 //
+// Only ONE tag can be set, because only the publish call is authenticated. npm's trusted
+// publishing exchanges an OIDC token inside `npm publish` and does not leave credentials
+// behind, so a follow-up `npm dist-tag add` gets:
+//
+//   npm error code E401
+//   npm error Unable to authenticate, your authentication token seems to be invalid.
+//
+// Measured on the 1.7.9 release. So the choice is which single tag the publish takes, and
+// pre-2.0 that has to be `latest`: a stale `latest` is served to every default install,
+// while a stale `legacy` only reaches someone who pinned it deliberately.
+//
+// When 2.0.0 ships, `legacy` needs setting once, by hand, to the final 1.x release. That is
+// a one-time step at a boundary that is already a manual event.
+//
 // Pure so it can be tested; the shell script does the I/O.
 
 /** The major version number of a SemVer string, or undefined when it is not one. */
@@ -56,9 +70,13 @@ export function planDistTags({ branch, version, currentLatest }) {
     }
   }
 
+  // No tag: changesets' default is `latest`, which is the one that matters here. Asking for
+  // `legacy` as well would need a second authenticated call, and there is not one.
   return {
-    publishTag: 'legacy',
-    alsoTag: ['latest'],
-    reason: `latest is ${currentLatest}, still on this line — a maintenance release must reach a fresh install`,
+    publishTag: undefined,
+    alsoTag: [],
+    reason:
+      `latest is ${currentLatest}, still on this line — publishing to latest so a fresh ` +
+      `install gets this release. \`legacy\` is set by hand once, when 2.0.0 ships.`,
   }
 }
