@@ -69,6 +69,13 @@ interface Integration {
   description: string
   infraRequired: boolean
   infraNote?: string
+  /** The plugin that provides this channel. Every channel in 2.0 is install-gated. */
+  plugin?: { package: string; source: 'npm' | 'clawhub' | 'unknown' }
+  /** Keys the OpenClaw schema marks required on this channel. */
+  requiredConfig?: string[]
+  /** False when the wizard cannot collect this channel's credentials — see WhatsApp. */
+  wizardSupported?: boolean
+  unsupportedNote?: string
   fields: IntegrationField[]
   setupUrl?: string
 }
@@ -334,7 +341,7 @@ export default defineCommand({
       type: 'checkbox',
       name: 'selectedIntegrationIds',
       message: 'Which chat integrations would you like to enable?',
-      choices: catalogs.integrations.map((integ) => ({
+      choices: wizardChannels(catalogs.integrations).map((integ) => ({
         name: `${integ.displayName} — ${integ.description}`,
         value: integ.id,
         checked: false,
@@ -365,6 +372,19 @@ export default defineCommand({
           }])
           channelConfig[field.name] = value
         }
+      }
+
+      // Every channel in OpenClaw 2.0 is an install-gated plugin: configuring one without
+      // installing it yields a gateway that starts, reports healthy, and never connects.
+      // The wizard does not install it — it says so, because a config that silently does
+      // nothing is the failure this whole release has been removing.
+      if (integ.plugin?.package) {
+        warn(`${integ.displayName} needs its plugin installed on the host before it will connect:`)
+        info(`  openclaw channels add --channel ${integ.channelKey} --use-env`)
+        info(`  (installs ${integ.plugin.package} from ${integ.plugin.source})`)
+      } else if (integ.plugin) {
+        warn(`${integ.displayName} needs a plugin installed on the host, and clawops does not`)
+        info('  know its package name. Run `openclaw channels list --all` on the host.')
       }
 
       channelsConfig[integ.channelKey] = channelConfig
@@ -1473,4 +1493,18 @@ export function validateCidrAnswer(value: string): true | string {
 export function admitsInternet(cidr: string): boolean {
   const v = cidr.trim()
   return v === '0.0.0.0/0' || v === '::/0'
+}
+
+/**
+ * The channels the wizard may offer.
+ *
+ * A channel it cannot fully configure is worse than one it does not offer: it writes a config
+ * that looks complete and connects to nothing. WhatsApp is the case — its credentials live
+ * under `channels.whatsapp.accounts.<name>`, so a flat token prompt has nowhere to put them.
+ *
+ * Absent `wizardSupported` means supported: the field marks the exception, and a catalog
+ * entry that forgets it should still appear.
+ */
+export function wizardChannels(integrations: Integration[]): Integration[] {
+  return integrations.filter((i) => i.wizardSupported !== false)
 }

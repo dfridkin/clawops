@@ -1,9 +1,29 @@
 # spec/integrations.yaml — OpenClaw channel integration catalog for the setup wizard.
 # Read at runtime by src/cli/commands/setup.ts — not compiled or code-generated.
 #
-# Each integration maps to a key in openclaw.json's `channels` object.
+# Each integration maps to a key in the `channels` object of OpenClaw's config.
 # infraRequired: true means a publicly reachable webhook URL must be registered
 # with the provider after the stack is deployed.
+#
+# ── Checked against OpenClaw 2026.9.2 (WO-60) ────────────────────────────────
+#
+# EVERY channel in 2.0 is an install-gated plugin. `openclaw channels list --all --json`
+# reports all 31 as `origin: "installable"`, and none is bundled — the same shape as model
+# providers (WO-43), which is why `plugin:` below carries the package to install.
+#
+# Configuring a channel without installing it produces a gateway that starts, reports
+# healthy, and never connects to the channel.
+#
+# `dmPolicy` and `groupPolicy` are REQUIRED by the schema on every channel here, and Slack
+# and WhatsApp require more. A config missing them fails validation before it is written.
+#
+# Every credential field also accepts a SecretRef — `{source: env, provider, id}` — as well
+# as a plain string, so a token need not be inlined into the config.
+#
+# The catalog was wrong in three ways before this pass, all of which would have produced a
+# config OpenClaw rejects or ignores: the Teams key was `teams` (the schema has `msteams`),
+# Discord's token field was `botToken` (it is `token`), and WhatsApp's `phoneNumberId` and
+# `accessToken` do not exist on that channel at all.
 
 integrations:
   - id: discord
@@ -11,8 +31,12 @@ integrations:
     displayName: Discord
     description: Connect OpenClaw agents to a Discord server via bot
     infraRequired: false
+    plugin:
+      package: "@openclaw/discord"
+      source: npm
+    requiredConfig: [dmPolicy, groupPolicy]
     fields:
-      - name: botToken
+      - name: token
         label: Bot token
         description: Bot token from the Discord Developer Portal (Bot → Token)
         sensitive: true
@@ -24,6 +48,13 @@ integrations:
     displayName: Telegram
     description: Connect OpenClaw agents to a Telegram bot
     infraRequired: false
+    # Listed as installable by the gateway, but `@openclaw/telegram` does not exist on npm
+    # and no package name has been confirmed. Left unset deliberately rather than guessed:
+    # a wrong package name fails the install at deploy time. See WO-60.
+    plugin:
+      package: ""
+      source: unknown
+    requiredConfig: [dmPolicy, groupPolicy]
     fields:
       - name: botToken
         label: Bot token
@@ -37,6 +68,12 @@ integrations:
     displayName: Slack
     description: Connect OpenClaw agents to a Slack workspace via app
     infraRequired: true
+    plugin:
+      package: "@openclaw/slack"
+      source: npm
+    # Slack requires more than the two policies: the schema also demands postAs, mode,
+    # webhookPath and userTokenReadOnly.
+    requiredConfig: [dmPolicy, groupPolicy, postAs, mode, webhookPath, userTokenReadOnly]
     infraNote: >
       After deployment, register the gateway webhook URL in your Slack app
       configuration at api.slack.com (Event Subscriptions → Request URL).
@@ -62,27 +99,35 @@ integrations:
       After deployment, register the gateway webhook URL in the Meta Developer
       Console (WhatsApp → Configuration → Webhook). The gateway URL is printed
       at the end of setup.
-    fields:
-      - name: phoneNumberId
-        label: Phone number ID
-        description: Phone Number ID from Meta Developer Console → WhatsApp → API Setup
-        sensitive: false
-        envDefault: ""
-      - name: accessToken
-        label: Access token
-        description: Permanent system user access token from Meta Business Suite
-        sensitive: true
-        envDefault: OPENCLAW_WHATSAPP_TOKEN
+    plugin:
+      package: "@openclaw/whatsapp"
+      source: npm
+    requiredConfig: [dmPolicy, groupPolicy, mediaMaxMb]
+    # WhatsApp has no top-level credential fields in 2.0 — credentials live under
+    # `accounts.<name>`, with `defaultAccount` selecting one. The wizard cannot collect a
+    # flat token for it, so it is marked unsupported rather than collecting fields that go
+    # nowhere. `phoneNumberId` and `accessToken`, which this entry used to declare, are not
+    # properties of the whatsapp channel at all.
+    wizardSupported: false
+    unsupportedNote: >
+      WhatsApp uses per-account credentials (`channels.whatsapp.accounts.<name>`) rather
+      than a single token. Configure it with `openclaw channels add --channel whatsapp`
+      on the host after deployment.
+    fields: []
     setupUrl: https://developers.facebook.com/apps
 
-  - id: teams
-    channelKey: teams
+  - id: msteams
+    channelKey: msteams
     displayName: Microsoft Teams
     description: Connect OpenClaw agents to a Microsoft Teams channel via bot
     infraRequired: true
     infraNote: >
       After deployment, update the bot's messaging endpoint in Azure Bot Service
       to the gateway webhook URL.
+    plugin:
+      package: "@openclaw/msteams"
+      source: npm
+    requiredConfig: [dmPolicy, groupPolicy]
     fields:
       - name: appId
         label: App (client) ID
@@ -93,5 +138,10 @@ integrations:
         label: App password
         description: Client secret from the Azure app registration
         sensitive: true
-        envDefault: OPENCLAW_TEAMS_APP_PASSWORD
+        envDefault: OPENCLAW_MSTEAMS_APP_PASSWORD
+      - name: tenantId
+        label: Directory (tenant) ID
+        description: Azure AD tenant ID for the app registration
+        sensitive: false
+        envDefault: ""
     setupUrl: https://portal.azure.com/

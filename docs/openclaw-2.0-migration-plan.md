@@ -857,6 +857,55 @@ Anyone building it should start from `docs/security/threat-model.md`, add an ADR
 `docs/decisions/` per R-meta-3, and default the host agent to `--read-only` with the
 destructive surface opt-in.
 
+**WO-60 — Channel catalog for 2.0** *(M — new, carried in from WO-43)* — ✅ **catalog done;
+install flow carried forward**
+
+The suspicion was right and larger than scoped. **Every channel in 2.0 is an install-gated
+plugin** — `openclaw channels list --all --json` reports all 31 as `origin: "installable"`, and
+not one is bundled. Configuring a channel without installing it yields a gateway that starts,
+reports healthy, and never connects: exactly the model-provider failure from WO-43, on a
+surface nobody had checked.
+
+**Three of the five catalog entries would have produced a config OpenClaw rejects or ignores,**
+and none of it was visible without a deployed gateway:
+
+| Entry | Catalog said | Schema says |
+|---|---|---|
+| Microsoft Teams | `channelKey: teams` | `msteams` — `teams` does not exist |
+| Discord | `botToken` | `token` |
+| WhatsApp | `phoneNumberId`, `accessToken` | neither exists; credentials live under `accounts.<name>` |
+
+**`dmPolicy` and `groupPolicy` are required on every channel**, and Slack requires four more
+(`postAs`, `mode`, `webhookPath`, `userTokenReadOnly`), WhatsApp one (`mediaMaxMb`). A config
+missing them fails validation before it is written — so the wizard needed to know.
+
+**Plugins come from two different registries, which the WO-49 egress doc had wrong.** Model
+providers install from `clawhub.ai`; **channels install from `registry.npmjs.org`** as
+`@openclaw/<channelId>`. Measured from the failure text — `request to
+https://registry.npmjs.org/@openclaw%2fdiscord failed`. Allowing one host does not allow the
+other. `docs/security/egress.md` was corrected the same day it was written.
+
+**`openclaw channels add` exits 0 when the plugin install fails.** It prints the failure,
+says "Returning to selection", and returns success. Anything automating it must re-read
+`channels list --all --json` and check `installed: true` rather than trust the exit code —
+recorded in the egress doc, and the reason the install flow is not being written blind.
+
+**Telegram is left deliberately unresolved.** The gateway lists it as installable, but
+`@openclaw/telegram` does not exist on npm and no package name has been confirmed. The catalog
+records `source: unknown` and the wizard says so, rather than guessing a name that would fail
+at deploy time.
+
+`tests/spec/integrations.test.ts` now validates the catalog against the captured schema —
+every key, every field, every required policy, and a plugin block per entry. The catalog drove
+the wizard for five releases with nothing checking it, which is why it drifted this far.
+
+**Carried forward: clawops does not install channel plugins.** The wizard prints the
+`openclaw channels add` command and what it installs. Doing it automatically needs the
+exit-code trap handled and the telegram package resolved, and WhatsApp needs per-account
+credential collection the wizard has no shape for.
+
+*Original text follows.*
+
 **WO-60 — Channel catalog for 2.0** *(M — new, carried in from WO-43)*
 `spec/integrations.yaml` is read by the setup wizard and has not been checked against the 2.0
 channel surface. WO-43 covered model providers, which are startup-blocking; channels are not, which
@@ -1030,6 +1079,8 @@ before marking that owner done.
 | `clawops_migrate` and `clawops_gateway_update` have no MCP tool | WO-47 | **open** | needs their effects extracted from `cli/commands/*.ts` first, or the handler duplicates them |
 | `clawops_workflow_recover` still reports "systemd service status" | WO-47 | WO-44 | same systemd assumption as `logs.ts`; it should call the diagnostics module |
 | `clawops harden` cannot be told which ports to open | WO-48 | **open** | it reads the container instead, which is more honest but means a reverse-proxy port still has to be opened by hand |
+| clawops does not install channel plugins; the wizard prints the command instead | WO-60 | **open** | needs the `channels add` exit-0-on-failure trap handled and the telegram package resolved |
+| WhatsApp cannot be configured by the wizard (per-account credentials) | WO-60 | **open** | `channels.whatsapp.accounts.<name>`; no flat-token shape |
 | Plan fields `workspace`, `permissionMode`, `image.variant`, mounts | WO-42 | **WO-53** (2.1) | open |
 | README *What's new in 2.0* — update per flow change, audit at the end | user request | **every WO**, audited by WO-49 | standing |
 | Pulumi `Gateway` component (G7) | WO-58 audit | WO-38 | ✅ deleted |

@@ -199,6 +199,20 @@ const MUTATIONS = [
     file: 'src/cli/mcp-wire.ts', from: "  if (!(await supportsMcpAdd(session, signal))) return { status: 'unsupported', url }", to: '  void supportsMcpAdd', test: 'tests/cli/mcp-wire.test.ts' },
   { name: 'wire treats a missing mcp add as available',
     file: 'src/cli/mcp-wire.ts', from: '  return help.code === 0', to: '  return true', test: 'tests/cli/mcp-wire.test.ts' },
+
+  // ── WO-60: the channel catalog ───────────────────────────────────────────────
+  { name: 'the Teams channel key reverts to one the schema does not have',
+    file: 'spec/integrations.yaml', from: '  - id: msteams\n    channelKey: msteams', to: '  - id: teams\n    channelKey: teams', test: 'tests/spec/integrations.test.ts' },
+  { name: "Discord's token field reverts to botToken",
+    file: 'spec/integrations.yaml', from: '      - name: token\n        label: Bot token\n        description: Bot token from the Discord', to: '      - name: botToken\n        label: Bot token\n        description: Bot token from the Discord', test: 'tests/spec/integrations.test.ts' },
+  { name: 'a channel stops declaring the plugin that provides it',
+    file: 'spec/integrations.yaml', from: '    plugin:\n      package: "@openclaw/discord"\n      source: npm\n', to: '', test: 'tests/spec/integrations.test.ts' },
+  { name: 'a channel stops recording the keys the schema requires',
+    file: 'spec/integrations.yaml', from: '    requiredConfig: [dmPolicy, groupPolicy, mediaMaxMb]', to: '    requiredConfig: [dmPolicy]', test: 'tests/spec/integrations.test.ts' },
+  { name: 'the wizard offers a channel it cannot configure',
+    file: 'src/cli/commands/setup.ts', from: '  return integrations.filter((i) => i.wizardSupported !== false)', to: '  return integrations', test: 'tests/spec/integrations.test.ts' },
+  { name: 'a channel without wizardSupported is dropped instead of offered',
+    file: 'src/cli/commands/setup.ts', from: '  return integrations.filter((i) => i.wizardSupported !== false)', to: '  return integrations.filter((i) => i.wizardSupported === true)', test: 'tests/spec/integrations.test.ts' },
 ]
 
 let survived = []

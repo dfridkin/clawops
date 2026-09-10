@@ -323,6 +323,32 @@ gateway starts without its model providers.
 entries, device tokens — unencrypted. clawops now writes it `0600` locally; it previously
 used the default `0644`.
 
+## Chat channels need their plugin installed, and the catalog said otherwise
+
+Every channel in OpenClaw 2.0 is an install-gated plugin — all 31 of them. Configuring one
+without installing it gives you a gateway that starts, reports healthy, and never connects.
+
+The wizard's catalog had been wrong in three ways since before 2.0, none of it visible without
+a deployed gateway:
+
+| | It said | OpenClaw wants |
+|---|---|---|
+| Microsoft Teams | `teams` | `msteams` |
+| Discord | `botToken` | `token` |
+| WhatsApp | `phoneNumberId`, `accessToken` | neither exists — credentials live per account |
+
+`dmPolicy` and `groupPolicy` are required on every channel, Slack requires four more, and
+WhatsApp one. The catalog records them, and a test validates the whole thing against
+OpenClaw's own schema so it cannot drift again.
+
+The wizard no longer offers WhatsApp, whose credentials it cannot collect, and it tells you
+the command to install a channel's plugin instead of leaving you with config that connects to
+nothing.
+
+**Channel plugins install from npm, not ClawHub** — `@openclaw/<channel>`. Model providers
+come from ClawHub. Allowing one host does not allow the other; both are in
+[required outbound access](docs/security/egress.md).
+
 ## Docs
 
 `docs/security/egress.md` is new: every outbound destination clawops needs, from which
