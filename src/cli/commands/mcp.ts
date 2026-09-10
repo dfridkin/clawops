@@ -166,6 +166,13 @@ const wireCmd = defineCommand({
         rewire: Boolean(args.rewire),
       })
 
+      if (result.status === 'unsupported') {
+        spin.fail('This gateway has no `openclaw mcp add`, so clawops cannot wire it.')
+        info('OpenClaw 2026.4.5 ships `openclaw mcp` with only `list` and `serve`.')
+        info('Upgrade the gateway to 2026.7.1-2 or later, then re-run this command.')
+        process.exit(1)
+      }
+
       if (result.status === 'exists') {
         spin.info('The gateway already has a clawops MCP server configured.')
         info(`Pointing at ${result.url}. Replace it with: clawops mcp wire --rewire`)

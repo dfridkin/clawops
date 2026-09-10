@@ -42,6 +42,7 @@ export type WireResult =
   | { status: 'wired'; rewired: boolean; url: string }
   | { status: 'exists'; url: string }
   | { status: 'probe-failed'; error: string; url: string }
+  | { status: 'unsupported'; url: string }
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`
@@ -56,12 +57,27 @@ const OC = 'docker exec openclaw openclaw mcp'
  * whole point of using it: clawops cannot write a working-looking entry for a server that
  * is not answering, so "wired" means the gateway connected, not that a file was written.
  */
+/**
+ * Does this gateway's OpenClaw have `mcp add`?
+ *
+ * Asked of the binary rather than inferred from a version string. `2026.4.5` ships
+ * `openclaw mcp` with only `list` and `serve`; `2026.7.1-2` and later add `add`, `unset` and
+ * `reload`. A version comparison would need a boundary nobody has measured — and WO-28's
+ * `>= 2026.4` gate, invented the same way, gated on a capability that never existed at all.
+ */
+async function supportsMcpAdd(session: SshSession, signal: AbortSignal): Promise<boolean> {
+  const help = await execPrivileged(session, `${OC} add --help`, signal)
+  return help.code === 0
+}
+
 export async function wireGatewayMcp(
   session: SshSession,
   signal: AbortSignal,
   opts: WireOpts = {},
 ): Promise<WireResult> {
   const url = opts.url ?? defaultGatewayMcpUrl()
+
+  if (!(await supportsMcpAdd(session, signal))) return { status: 'unsupported', url }
 
   const existing = await execPrivileged(session, `${OC} show ${GATEWAY_MCP_NAME}`, signal)
   const alreadyWired = existing.code === 0

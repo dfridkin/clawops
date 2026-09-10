@@ -803,6 +803,12 @@ not answering: "wired" now means the gateway connected. A failed probe reports t
 error and changes nothing. `add` refuses an existing name, so a rewire is `unset` then `add`,
 behind an explicit `--rewire`.
 
+**The gate is a capability check, not a version comparison.** `2026.4.5` ships `openclaw mcp`
+with only `list` and `serve`; `add`, `unset` and `reload` arrive later in the 1.x range. So
+clawops asks the binary — `openclaw mcp add --help` — rather than inferring from a version
+string. WO-28's `>= 2026.4` gate was invented the same way a version boundary would be, and
+it gated on a capability that never existed at all.
+
 **Verified end to end, locally:** container → `host.docker.internal` → clawops MCP server,
 probed and saved by `openclaw mcp add`. The `--add-host` flag that makes the alias resolvable
 was already in the run command for host-local model runtimes.

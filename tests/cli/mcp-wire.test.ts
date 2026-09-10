@@ -14,11 +14,16 @@ import {
 
 const SIGNAL = new AbortController().signal
 
+/** The real `mcp add` call, not the `--help` capability probe that precedes it. */
+const isAdd = (cmd: string) => cmd.includes('mcp add') && !cmd.includes('--help')
+const addCall = (session: FakeSshSession) => session.execCalls().find(isAdd)
+
 /** A host where no clawops entry exists yet. */
 function freshHost(): FakeSshSession {
   return new FakeSshSession()
+    .respond(/mcp add --help/, { stdout: 'Usage: openclaw mcp add', code: 0 })
     .respond(/mcp show/, { stdout: '', stderr: 'No MCP server named', code: 1 })
-    .respond(/mcp add/, { stdout: 'Saved MCP server "clawops"', code: 0 })
+    .respond(/mcp add (?!--help)/, { stdout: 'Saved MCP server "clawops"', code: 0 })
     .respond(/mcp unset/, { code: 0 })
     .respond(/mcp reload/, { stdout: 'Disposed cached MCP runtimes.', code: 0 })
 }
@@ -36,7 +41,7 @@ describe('wireGatewayMcp', () => {
     const result = await wireGatewayMcp(session, SIGNAL)
 
     expect(result.status).toBe('wired')
-    const add = session.execCalls().find((c) => c.includes('mcp add'))!
+    const add = addCall(session)!
     expect(add).toContain('docker exec openclaw openclaw mcp add clawops')
     // Never the key WO-28 invented.
     expect(session.execCalls().join(' ')).not.toContain('mcpClients')
@@ -56,7 +61,7 @@ describe('wireGatewayMcp', () => {
     // stdio would spawn `clawops` inside the container, where it does not exist.
     const session = freshHost()
     await wireGatewayMcp(session, SIGNAL)
-    const add = session.execCalls().find((c) => c.includes('mcp add'))!
+    const add = addCall(session)!
     expect(add).toContain('--transport streamable-http')
     expect(add).not.toContain('--command')
   })
@@ -71,14 +76,14 @@ describe('wireGatewayMcp', () => {
   it('sends the bearer token as a header when given one', async () => {
     const session = freshHost()
     await wireGatewayMcp(session, SIGNAL, { token: 'sekret' })
-    const add = session.execCalls().find((c) => c.includes('mcp add'))!
+    const add = addCall(session)!
     expect(add).toContain('Authorization=Bearer sekret')
   })
 
   it('sends no header when there is no token', async () => {
     const session = freshHost()
     await wireGatewayMcp(session, SIGNAL)
-    expect(session.execCalls().find((c) => c.includes('mcp add'))).not.toContain('--header')
+    expect(addCall(session)).not.toContain('--header')
   })
 
   it('reloads so the change takes effect without a gateway restart', async () => {
@@ -90,7 +95,7 @@ describe('wireGatewayMcp', () => {
   })
 
   it('reports the probe failure and does not claim to have wired anything', async () => {
-    const session = freshHost().respond(/mcp add/, {
+    const session = freshHost().respond(/mcp add (?!--help)/, {
       stdout: '', stderr: 'MCP probe failed for "clawops": ECONNREFUSED', code: 1,
     })
     const result = await wireGatewayMcp(session, SIGNAL)
@@ -106,7 +111,7 @@ describe('wireGatewayMcp', () => {
     const result = await wireGatewayMcp(session, SIGNAL)
 
     expect(result.status).toBe('exists')
-    expect(session.execCalls().some((c) => c.includes('mcp add'))).toBe(false)
+    expect(session.execCalls().some(isAdd)).toBe(false)
   })
 
   it('removes the old entry before adding, when rewiring', async () => {
@@ -118,7 +123,7 @@ describe('wireGatewayMcp', () => {
     expect(result).toMatchObject({ status: 'wired', rewired: true })
     const calls = session.execCalls()
     const unset = calls.findIndex((c) => c.includes('mcp unset'))
-    const add = calls.findIndex((c) => c.includes('mcp add'))
+    const add = calls.findIndex(isAdd)
     expect(unset).toBeGreaterThanOrEqual(0)
     expect(add).toBeGreaterThanOrEqual(0)
     expect(unset).toBeLessThan(add)
@@ -129,7 +134,7 @@ describe('wireGatewayMcp', () => {
     const result = await wireGatewayMcp(session, SIGNAL, { rewire: true })
 
     expect(result.status).toBe('probe-failed')
-    expect(session.execCalls().some((c) => c.includes('mcp add'))).toBe(false)
+    expect(session.execCalls().some(isAdd)).toBe(false)
   })
 
   it('quotes the url so a crafted value cannot break out of the command', async () => {
@@ -140,13 +145,27 @@ describe('wireGatewayMcp', () => {
     const session = freshHost()
     await wireGatewayMcp(session, SIGNAL, { url: payload })
 
-    const add = session.execCalls().find((c) => c.includes('mcp add'))!
+    const add = addCall(session)!
     const quoted = /--url (('[^']*'|\\')+)/.exec(add)?.[1]
     expect(quoted, 'no --url argument found').toBeDefined()
 
     const { execFileSync } = await import('node:child_process')
     const seen = execFileSync('sh', ['-c', `printf '%s' ${quoted!}`], { encoding: 'utf-8' })
     expect(seen).toBe(payload)
+  })
+
+  it('asks the gateway whether it can wire before trying', async () => {
+    // OpenClaw 2026.4.5 ships `openclaw mcp` with only `list` and `serve`. Asked of the
+    // binary, not inferred from a version string: WO-28's `>= 2026.4` gate was invented the
+    // same way and gated on a capability that never existed.
+    const session = freshHost().respond(/mcp add --help/, {
+      stderr: "error: unknown command 'add'", code: 1,
+    })
+    const result = await wireGatewayMcp(session, SIGNAL)
+
+    expect(result.status).toBe('unsupported')
+    expect(session.execCalls().some(isAdd)).toBe(false)
+    expect(session.execCalls().some((c) => c.includes('mcp unset'))).toBe(false)
   })
 
   it('stores under a stable name', () => {

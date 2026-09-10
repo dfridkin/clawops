@@ -195,6 +195,10 @@ const MUTATIONS = [
     file: 'src/mcp/server.ts', from: "const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost'])", to: "const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost', '0.0.0.0'])", test: 'tests/mcp/http-live.test.ts' },
   { name: 'MCP HTTP server default port collides with the gateway',
     file: 'src/mcp/server.ts', from: 'export const MCP_HTTP_PORT = 18790', to: 'export const MCP_HTTP_PORT = 18789', test: 'tests/mcp/http-live.test.ts' },
+  { name: 'wire assumes the gateway can be wired without asking',
+    file: 'src/cli/mcp-wire.ts', from: "  if (!(await supportsMcpAdd(session, signal))) return { status: 'unsupported', url }", to: '  void supportsMcpAdd', test: 'tests/cli/mcp-wire.test.ts' },
+  { name: 'wire treats a missing mcp add as available',
+    file: 'src/cli/mcp-wire.ts', from: '  return help.code === 0', to: '  return true', test: 'tests/cli/mcp-wire.test.ts' },
 ]
 
 let survived = []

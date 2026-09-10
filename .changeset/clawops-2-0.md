@@ -166,6 +166,10 @@ It now delegates to `openclaw mcp add`, which **probes the server before saving*
 "wired" means the gateway connected, not that a file was written. A failed probe prints the
 reason and changes nothing. Use `--rewire` to replace an existing entry.
 
+If the gateway's OpenClaw has no `mcp add` — `2026.4.5` ships only `list` and `serve` —
+clawops says so and names the version to upgrade to. That is asked of the binary rather than
+inferred from a version string.
+
 **You have to run the server.** clawops does not run on the gateway host:
 
 ```bash
