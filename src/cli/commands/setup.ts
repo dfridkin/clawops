@@ -69,6 +69,18 @@ interface Integration {
   description: string
   infraRequired: boolean
   infraNote?: string
+  /** The plugin that provides this channel. Every channel in 2.0 is install-gated. */
+  plugin?: { package: string; source: 'npm' | 'clawhub' | 'bundled' }
+  /** Keys the OpenClaw schema marks required on this channel. */
+  requiredConfig?: string[]
+  /** Values for those keys, written into the config. A schema default does not satisfy
+   *  `required`, so omitting them produces a config OpenClaw rejects. */
+  defaults?: Record<string, unknown>
+  /** False when the wizard cannot collect this channel's credentials — see WhatsApp. */
+  wizardSupported?: boolean
+  /** False when `openclaw channels add --use-env` is rejected for this channel. */
+  useEnvSupported?: boolean
+  unsupportedNote?: string
   fields: IntegrationField[]
   setupUrl?: string
 }
@@ -334,7 +346,7 @@ export default defineCommand({
       type: 'checkbox',
       name: 'selectedIntegrationIds',
       message: 'Which chat integrations would you like to enable?',
-      choices: catalogs.integrations.map((integ) => ({
+      choices: wizardChannels(catalogs.integrations).map((integ) => ({
         name: `${integ.displayName} — ${integ.description}`,
         value: integ.id,
         checked: false,
@@ -349,7 +361,7 @@ export default defineCommand({
       process.stdout.write('\n')
       info(`Setting up ${integ.displayName}:`)
 
-      const channelConfig: Record<string, unknown> = {}
+      const channelConfig = startChannelConfig(integ)
 
       for (const field of integ.fields) {
         if (field.sensitive && field.envDefault) {
@@ -365,6 +377,23 @@ export default defineCommand({
           }])
           channelConfig[field.name] = value
         }
+      }
+
+      // Every channel in OpenClaw 2.0 is an install-gated plugin: configuring one without
+      // installing it yields a gateway that starts, reports healthy, and never connects.
+      // The wizard does not install it — it says so, because a config that silently does
+      // nothing is the failure this whole release has been removing.
+      if (integ.useEnvSupported === false) {
+        // OpenClaw rejects --use-env for these outright, so there is no command to hand over.
+        warn(`${integ.displayName} has no non-interactive setup in OpenClaw.`)
+        info(`  Run \`openclaw channels add --channel ${integ.channelKey}\` on the host, interactively.`)
+      } else if (integ.plugin?.source === 'bundled') {
+        info(`${integ.displayName} ships in the image. Activate it on the host with:`)
+        info(`  openclaw channels add --channel ${integ.channelKey} --use-env`)
+      } else if (integ.plugin?.package) {
+        warn(`${integ.displayName} needs its plugin installed on the host before it will connect:`)
+        info(`  openclaw channels add --channel ${integ.channelKey} --use-env`)
+        info(`  (installs ${integ.plugin.package} from ${integ.plugin.source})`)
       }
 
       channelsConfig[integ.channelKey] = channelConfig
@@ -1473,4 +1502,31 @@ export function validateCidrAnswer(value: string): true | string {
 export function admitsInternet(cidr: string): boolean {
   const v = cidr.trim()
   return v === '0.0.0.0/0' || v === '::/0'
+}
+
+/**
+ * The channels the wizard may offer.
+ *
+ * A channel it cannot fully configure is worse than one it does not offer: it writes a config
+ * that looks complete and connects to nothing. WhatsApp is the case — its credentials live
+ * under `channels.whatsapp.accounts.<name>`, so a flat token prompt has nowhere to put them.
+ *
+ * Absent `wizardSupported` means supported: the field marks the exception, and a catalog
+ * entry that forgets it should still appear.
+ */
+export function wizardChannels(integrations: Integration[]): Integration[] {
+  return integrations.filter((i) => i.wizardSupported !== false)
+}
+
+/**
+ * The starting point for a channel's config block: the keys OpenClaw requires, with its own
+ * defaults.
+ *
+ * ajv does not treat a JSON Schema `default` as satisfying `required`, so a channel block
+ * without these is rejected before it reaches the host. Every channel this wizard wrote was
+ * rejected that way — Slack for six missing properties, the rest for two — and nothing
+ * noticed, because nothing validated the wizard's own output.
+ */
+export function startChannelConfig(integ: Integration): Record<string, unknown> {
+  return { ...(integ.defaults ?? {}) }
 }

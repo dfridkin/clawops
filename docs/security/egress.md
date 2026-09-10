@@ -15,6 +15,7 @@ deployment that provisions cleanly and then does not work.
 | your distro's package mirrors | first bootstrap only | `ca-certificates`, `curl`, `gnupg`, `lsb-release` |
 | `ghcr.io` and its blob storage | bootstrap, and every `gateway update` | pulling `ghcr.io/openclaw/openclaw:<version>` |
 | `clawhub.ai` | **during `apply`**, not at boot | installing model-provider plugins |
+| `registry.npmjs.org` | when a channel is configured | installing channel plugins |
 | `169.254.169.254` (link-local) | AWS only, when Bedrock is enabled | IMDSv2 region lookup |
 
 ## From your machine
@@ -25,6 +26,29 @@ deployment that provisions cleanly and then does not work.
 | your state backend (S3, GCS, Azure Blob) | any stack operation | reading and writing stack state |
 | `ifconfig.me` | only with `accessMode: auto` | resolving your public IP into a `/32` rule |
 | `registry.npmjs.org` | installing clawops | `npm install -g @clawops/cli` |
+
+## Plugins come from two different places
+
+Model providers and chat channels are both install-gated plugins in 2.0, and they are **not
+installed from the same host**:
+
+| Plugin kind | Installed from | Example |
+|---|---|---|
+| model provider | `clawhub.ai` | `clawhub:@openclaw/deepseek-provider@2026.9.2` |
+| chat channel | `registry.npmjs.org` | `@openclaw/discord` |
+
+Allowing one does not allow the other. A host with ClawHub reachable and npm blocked installs
+its model provider and silently fails to install its channel:
+
+```
+Failed to install @openclaw/discord: npm error code EAI_AGAIN
+request to https://registry.npmjs.org/@openclaw%2fdiscord failed
+```
+
+**`openclaw channels add` exits 0 when that happens.** It prints the failure and returns to
+its selection loop, so the exit code says nothing. Anything automating it has to re-read
+`openclaw channels list --all --json` and check `installed: true` rather than trust the
+status.
 
 ## ClawHub is new in 2.0, and it is needed at deploy time
 

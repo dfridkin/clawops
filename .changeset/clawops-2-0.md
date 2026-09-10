@@ -323,6 +323,46 @@ gateway starts without its model providers.
 entries, device tokens — unencrypted. clawops now writes it `0600` locally; it previously
 used the default `0644`.
 
+## Chat channels need their plugin installed, and the catalog said otherwise
+
+Every channel in OpenClaw 2.0 is an install-gated plugin — all 31 of them. Configuring one
+without installing it gives you a gateway that starts, reports healthy, and never connects.
+
+The wizard's catalog had been wrong in three ways since before 2.0, none of it visible without
+a deployed gateway:
+
+| | It said | OpenClaw wants |
+|---|---|---|
+| Microsoft Teams | `teams` | `msteams` |
+| Discord | `botToken` | `token` |
+| WhatsApp | `phoneNumberId`, `accessToken` | neither exists — credentials live per account |
+
+**And the config the wizard wrote was never valid.** `dmPolicy` and `groupPolicy` are required
+on every channel, Slack requires four more, WhatsApp one — and a JSON Schema *default* does not
+satisfy *required*, so every channel block the wizard produced was rejected before it reached a
+host. The wizard writes those values now, and a test validates its actual output against
+OpenClaw's schema so it cannot drift again.
+
+**Slack is set up for Socket Mode**, which is OpenClaw's default and what its own tooling
+installs: the gateway dials out to Slack, so there is no public webhook to register. It needs
+an app-level token (`xapp-`) rather than a signing secret, and the catalog previously described
+the webhook setup instead — while declaring the socket credentials incompletely.
+
+**Every environment variable the catalog named was wrong.** It used `OPENCLAW_DISCORD_TOKEN`
+and friends; OpenClaw reads `DISCORD_BOT_TOKEN`, `TELEGRAM_BOT_TOKEN`, `SLACK_BOT_TOKEN`. The
+wizard was storing secrets under names nothing looked at.
+
+The wizard no longer offers WhatsApp, whose credentials it cannot collect, and it tells you
+the command to install a channel's plugin instead of leaving you with config that connects to
+nothing. Telegram turns out to ship **in the image** — it activates with no download and no
+egress. WhatsApp and Microsoft Teams have **no non-interactive setup in OpenClaw at all**
+(`channels add` rejects `--use-env` for them), so the wizard says to configure them on the
+host rather than pretending.
+
+**Channel plugins install from npm, not ClawHub** — `@openclaw/<channel>`. Model providers
+come from ClawHub. Allowing one host does not allow the other; both are in
+[required outbound access](docs/security/egress.md).
+
 ## Docs
 
 `docs/security/egress.md` is new: every outbound destination clawops needs, from which

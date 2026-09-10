@@ -831,6 +831,44 @@ passed it. `tests/mcp/http-live.test.ts` runs a real server on a real port.
 wires a server the operator runs themselves and says so plainly instead of pretending. That
 is WO-62.
 
+**WO-63 — Install channel plugins, and stop trusting `channels add`'s exit code** *(M)*
+
+WO-60 corrected the catalog and left the install to the operator. This does it, and it is a
+work order rather than a carried-forward note because the surface it automates is actively
+misleading.
+
+**`openclaw channels add` exits 0 when the plugin install fails.** Measured on 2026.9.2: with
+npm unreachable it prints `Failed to install @openclaw/discord`, says "Returning to selection",
+and returns **0**. It exits **1** for a missing env var — so the exit code is not simply
+unreliable, it is unreliable in the one case that matters. Anything driving it must re-read
+`openclaw channels list --all --json` and assert `installed: true`, exactly as WO-43 checks
+`providerIds` after installing a model provider rather than trusting the installer.
+
+**What the four cases actually need**, all measured rather than inferred:
+
+| Channel | Plugin | Non-interactive path |
+|---|---|---|
+| `telegram` | **bundled** — installs under `--network none` | `--use-env`, `TELEGRAM_BOT_TOKEN` |
+| `discord` | `@openclaw/discord` from npm | `--use-env`, `DISCORD_BOT_TOKEN` |
+| `slack` | `@openclaw/slack` from npm | `--use-env`, `SLACK_APP_TOKEN` (Socket Mode) |
+| `whatsapp` | `@openclaw/whatsapp` from npm | **none — `--use-env` is rejected** |
+| `msteams` | `@openclaw/msteams` from npm | **none — `--use-env` is rejected** |
+
+So WO-63 splits in two. Telegram, Discord and Slack can be installed and configured during
+`apply` the way model providers are, with the same post-install verification. WhatsApp and
+Microsoft Teams have **no non-interactive path in OpenClaw at all** — `channels add` answers
+`OpenClaw does not recognize option "--use-env"` — so clawops cannot configure them without
+upstream adding one. They stay documented-only until it does, and the catalog records that
+with `useEnvSupported: false` rather than the wizard discovering it at deploy time.
+
+**Slack was resolved before this was filed** — see WO-60's follow-up. Socket Mode is
+OpenClaw's default and what `--use-env` drives, so the catalog now configures that and
+`infraRequired` is false.
+
+**Egress note:** channel plugins come from `registry.npmjs.org`, model providers from
+`clawhub.ai`. Installing channels during `apply` extends the deploy-time egress requirement to
+npm on the deployed host, which `docs/security/egress.md` already records.
+
 **WO-62 — clawops as a host agent** *(fast follow, after 2.0)*
 
 For the gateway's AI to manage a stack unattended, clawops has to be installed and running on
@@ -856,6 +894,68 @@ purpose.
 Anyone building it should start from `docs/security/threat-model.md`, add an ADR under
 `docs/decisions/` per R-meta-3, and default the host agent to `--read-only` with the
 destructive surface opt-in.
+
+**WO-60 — Channel catalog for 2.0** *(M — new, carried in from WO-43)* — ✅ **catalog done;
+install flow carried forward**
+
+The suspicion was right and larger than scoped. **Every channel in 2.0 is an install-gated
+plugin** — `openclaw channels list --all --json` reports all 31 as `origin: "installable"`, and
+not one is bundled. Configuring a channel without installing it yields a gateway that starts,
+reports healthy, and never connects: exactly the model-provider failure from WO-43, on a
+surface nobody had checked.
+
+**Three of the five catalog entries would have produced a config OpenClaw rejects or ignores,**
+and none of it was visible without a deployed gateway:
+
+| Entry | Catalog said | Schema says |
+|---|---|---|
+| Microsoft Teams | `channelKey: teams` | `msteams` — `teams` does not exist |
+| Discord | `botToken` | `token` |
+| WhatsApp | `phoneNumberId`, `accessToken` | neither exists; credentials live under `accounts.<name>` |
+
+**`dmPolicy` and `groupPolicy` are required on every channel**, and Slack requires four more
+(`postAs`, `mode`, `webhookPath`, `userTokenReadOnly`), WhatsApp one (`mediaMaxMb`). A config
+missing them fails validation before it is written — so the wizard needed to know.
+
+**Plugins come from two different registries, which the WO-49 egress doc had wrong.** Model
+providers install from `clawhub.ai`; **channels install from `registry.npmjs.org`** as
+`@openclaw/<channelId>`. Measured from the failure text — `request to
+https://registry.npmjs.org/@openclaw%2fdiscord failed`. Allowing one host does not allow the
+other. `docs/security/egress.md` was corrected the same day it was written.
+
+**`openclaw channels add` exits 0 when the plugin install fails.** It prints the failure,
+says "Returning to selection", and returns success. Anything automating it must re-read
+`channels list --all --json` and check `installed: true` rather than trust the exit code —
+recorded in the egress doc, and the reason the install flow is not being written blind.
+
+**Telegram is left deliberately unresolved.** The gateway lists it as installable, but
+`@openclaw/telegram` does not exist on npm and no package name has been confirmed. The catalog
+records `source: unknown` and the wizard says so, rather than guessing a name that would fail
+at deploy time.
+
+**The Slack discrepancy resolved into something worse than a mismatch: the wizard's output
+never validated at all.** Slack failed on six missing required properties, every other channel
+on two. `mode` and the rest carry JSON Schema defaults, and ajv does not treat a `default` as
+satisfying `required` — so the wizard's config was rejected before it reached a host, for
+every channel, on every run. The catalog carries the values now and the wizard writes them.
+
+Slack itself was the `http` webhook setup described in the catalog while the tooling installed
+Socket Mode. Socket Mode dials **out** to Slack, so there is no public URL to register and no
+inbound rule to open: `infraRequired` is false, `appToken` (xapp-) replaces `signingSecret`,
+and `mode: socket` is written explicitly rather than left to a default that does not count.
+
+`tests/spec/integrations.test.ts` now validates the catalog against the captured schema —
+every key, every field, every required policy, a plugin block per entry, and **what the wizard
+actually writes**, built by the wizard's own function rather than re-derived by the test. The
+catalog drove the wizard for five releases with nothing checking it, which is why it drifted
+this far.
+
+**Carried forward: clawops does not install channel plugins.** The wizard prints the
+`openclaw channels add` command and what it installs. Doing it automatically needs the
+exit-code trap handled and the telegram package resolved, and WhatsApp needs per-account
+credential collection the wizard has no shape for.
+
+*Original text follows.*
 
 **WO-60 — Channel catalog for 2.0** *(M — new, carried in from WO-43)*
 `spec/integrations.yaml` is read by the setup wizard and has not been checked against the 2.0
@@ -1030,6 +1130,8 @@ before marking that owner done.
 | `clawops_migrate` and `clawops_gateway_update` have no MCP tool | WO-47 | **open** | needs their effects extracted from `cli/commands/*.ts` first, or the handler duplicates them |
 | `clawops_workflow_recover` still reports "systemd service status" | WO-47 | WO-44 | same systemd assumption as `logs.ts`; it should call the diagnostics module |
 | `clawops harden` cannot be told which ports to open | WO-48 | **open** | it reads the container instead, which is more honest but means a reverse-proxy port still has to be opened by hand |
+| clawops does not install channel plugins; the wizard prints the command instead | WO-60 | **WO-63** | scheduled, not just noted |
+| WhatsApp and Microsoft Teams have no `--use-env` path at all | WO-60 | **WO-63** | the flag is rejected outright, so no non-interactive setup exists |
 | Plan fields `workspace`, `permissionMode`, `image.variant`, mounts | WO-42 | **WO-53** (2.1) | open |
 | README *What's new in 2.0* — update per flow change, audit at the end | user request | **every WO**, audited by WO-49 | standing |
 | Pulumi `Gateway` component (G7) | WO-58 audit | WO-38 | ✅ deleted |
