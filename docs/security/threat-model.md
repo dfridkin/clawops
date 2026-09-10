@@ -113,6 +113,14 @@ Who's involved and what they can do:
 
 **Residual risk:** A misconfigured deployment that does forward tokens. **Detection**: code review on every MCP server change; ADR 0009 (when written) reaffirms this.
 
+> **Correction (clawops 2.0, WO-61).** "Client bearer tokens authenticate the client to
+> clawops" described an intent, not the code. Until 2.0 `clawops mcp serve --http` had **no
+> authentication of any kind** and would bind wherever it was told, exposing the full tool
+> surface — `clawops_destroy` included — to anyone the firewall admitted. It now requires a
+> bearer token, compares it in constant time, and refuses to bind anywhere but loopback
+> without one. The token still authenticates the client to clawops and is never forwarded
+> upstream, so the rest of T5 stands.
+
 ### T6: Supply chain compromise
 
 **Scenario:** A dependency of clawops (e.g., a Pulumi provider, the MCP SDK, ssh2) is compromised and ships malicious code.
@@ -184,6 +192,32 @@ Who's involved and what they can do:
 
 **Residual risk:** Out of scope for clawops itself.
 
+### T11: The gateway's AI as a deputy for the whole cloud account
+
+**Scenario:** `clawops mcp wire` lets the OpenClaw gateway's AI call clawops tools. If clawops
+runs on the gateway host with cloud credentials (WO-62), a prompt injection through any
+channel the gateway is connected to — a message, an email, a fetched page — reaches a tool
+surface that creates and destroys infrastructure.
+
+**Impact:** Critical — the blast radius is the cloud account, not the host.
+
+**Mitigations (as of 2.0):**
+- clawops is **not** installed on the gateway host. The operator runs the MCP server
+  themselves, and it is reachable only where they put it
+- The server requires a bearer token and refuses to bind off-loopback without one
+- Wiring is opt-in and off by default in the wizard
+- `openclaw mcp add` probes before saving, so a wiring that does not work is reported as
+  failed rather than as success
+
+**Residual risk:** An operator who runs the server with full credentials and wires it in has
+given the gateway's AI those capabilities, and clawops cannot distinguish an injected
+instruction from an operator's. WO-28's own design note specifies this server runs **without**
+`--read-only`, which is the wrong default for an agent reachable from a chat channel.
+
+**If WO-62 lands**, the host agent must default to `--read-only` with the destructive surface
+opt-in, and needs an ADR under `docs/decisions/` per R-meta-3 — an instance role satisfies the
+letter of R6 (clawops stores no credentials) while changing the posture entirely.
+
 ## 4. Trust Boundaries
 
 ```
@@ -229,9 +263,12 @@ Who's involved and what they can do:
 - Should the secure profile become the default, with the simpler profile opt-in? (T8)
 - Should clawops issue CVEs for security findings, or rely on GitHub Security Advisories? (Process)
 - What's the SBOM format and publication cadence? (T6)
+- Should the gateway-facing MCP server be a separate, read-only-by-default surface rather
+  than the same server the operator's editor uses? (T11)
 
 ## 6. Review Log
 
 | Date | Reviewer | Notes |
 |---|---|---|
 | 2026-05-04 | Project author | Initial threat model |
+| 2026-09-10 | WO-61 | T5's bearer-token mitigation did not exist in code until 2.0; corrected. Added T11 for the gateway-agent deputy problem |

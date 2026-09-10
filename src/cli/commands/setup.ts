@@ -1247,9 +1247,17 @@ async function maybeWireGatewayMcp(opts: {
   })
   try {
     const result = await wireGatewayMcp(session, opts.signal ?? AbortSignal.timeout(30_000))
-    if (result.status === 'version-blocked') {
-      spin.warn(`Gateway version ${result.version} is too old for MCP client support (requires ≥ 2026.4).`)
-      info('Upgrade OpenClaw and run: clawops mcp wire --stack ' + opts.stackName)
+    if (result.status === 'unsupported') {
+      spin.warn('This gateway has no `openclaw mcp add`, so nothing was wired.')
+      info('Upgrade OpenClaw to 2026.7.1-2 or later and run: clawops mcp wire --stack ' + opts.stackName)
+    } else if (result.status === 'probe-failed') {
+      // `openclaw mcp add` probes before saving, so nothing was written. This step used to
+      // report success unconditionally, for a config key OpenClaw does not read.
+      spin.warn('The gateway could not reach clawops, so nothing was wired.')
+      info('clawops does not run on the gateway host. Start it where the gateway can reach it,')
+      info('then run: clawops mcp wire --stack ' + opts.stackName + ' --url <url> --token <token>')
+    } else if (result.status === 'exists') {
+      spin.info('The gateway is already wired to clawops.')
     } else {
       spin.succeed(result.rewired ? 'Gateway MCP client re-wired.' : 'Gateway MCP client wired.')
       success('The gateway\'s AI can now run clawops commands.')

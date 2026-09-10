@@ -153,7 +153,7 @@ Goal: let the OpenClaw gateway's own AI agent invoke clawops management commands
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-28 — Gateway-agent MCP client config | ✅ | `clawops mcp wire` command; optional wizard step |
+| WO-28 — Gateway-agent MCP client config | ⚠️ | `clawops mcp wire` command; optional wizard step. **Shipped non-functional in v1.5** — wrote `gateway.mcpClients`, a key OpenClaw has never had. Corrected in WO-61 (2.0) |
 
 ### R12 — Server Hardening
 
