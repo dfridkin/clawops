@@ -91,10 +91,10 @@ fi
 # Any additional tags this release should own. Only reached when the version was actually
 # published — `changeset publish` exits non-zero otherwise and `set -e` stops us here.
 #
-# This fails the job if it cannot set the tag. A release that publishes but leaves `latest`
-# on the previous version is worse than a red build: it looks shipped, and every fresh
-# install keeps getting the old one. If npm's OIDC credentials do not survive past the
-# publish call, this is where that shows up, loudly, rather than in a user's install.
+# Kept, and normally empty. npm's OIDC credentials do NOT survive past `npm publish` —
+# measured on the 1.7.9 release, which published and then failed here with E401 — so the plan
+# never asks for a second tag. If a future change makes a second call possible, this is where
+# it goes, and it still fails the job rather than reporting a publish that left a tag behind.
 for tag in $ALSO_TAG; do
   echo "Moving dist-tag '${tag}' to ${VERSION}"
   npm dist-tag add "${PKG_NAME}@${VERSION}" "$tag"

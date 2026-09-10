@@ -56,12 +56,19 @@ const MUTATIONS = [
     file: 'src/cli/mcp-wire.ts', from: '  return help.code === 0', to: '  return true', test: 'tests/cli/mcp-wire.test.ts' },
   { name: 'a 1.x release stops taking latest while latest is still 1.x',
     file: 'scripts/lib/dist-tag-plan.mjs', from: '  if (latestMajor > majorOf(version)) {', to: '  if (latestMajor >= majorOf(version)) {', test: 'tests/scripts/dist-tag-plan.test.ts tests/release' },
+  { name: 'the plan asks for a second tag it cannot authenticate',
+    file: 'scripts/lib/dist-tag-plan.mjs', from: '    publishTag: undefined,\n    alsoTag: [],\n    reason:', to: "    publishTag: 'legacy',\n    alsoTag: ['latest'],\n    reason:", test: 'tests/scripts/dist-tag-plan.test.ts tests/release' },
   { name: 'a 1.x release takes latest back from 2.x',
     file: 'scripts/lib/dist-tag-plan.mjs', from: '  if (latestMajor > majorOf(version)) {', to: '  if (false) {', test: 'tests/scripts/dist-tag-plan.test.ts tests/release' },
   { name: 'an unreadable latest is treated as this line',
     file: 'scripts/lib/dist-tag-plan.mjs', from: '  if (latestMajor === undefined) {', to: '  if (false) {', test: 'tests/scripts/dist-tag-plan.test.ts' },
-  { name: 'main starts publishing under legacy',
-    file: 'scripts/lib/dist-tag-plan.mjs', from: "  if (branch !== '1.x') {", to: '  if (false) {', test: 'tests/scripts/dist-tag-plan.test.ts tests/release' },
+  // `if (false)` here is an EQUIVALENT mutant, not a gap: with the branch guard gone, main
+  // reaches the same answer for every realistic input, because it only diverges when main
+  // publishes a LOWER major than the registry's `latest`. Mutating the branch name instead
+  // describes a defect that can actually happen — the maintenance line stops being
+  // recognised and takes `latest` back from 2.x.
+  { name: 'the maintenance branch name stops matching',
+    file: 'scripts/lib/dist-tag-plan.mjs', from: "  if (branch !== '1.x') {", to: "  if (branch !== '1') {", test: 'tests/scripts/dist-tag-plan.test.ts tests/release' },
 ]
 
 let survived = []

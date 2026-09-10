@@ -13,17 +13,39 @@ describe('planDistTags', () => {
     expect(plan.alsoTag).toEqual([])
   })
 
-  it('gives a 1.x release `latest` too, while `latest` is still 1.x', () => {
-    const plan = planDistTags({ branch: '1.x', version: '1.7.9', currentLatest: '1.7.8' })
-    expect(plan.publishTag).toBe('legacy')
-    expect(plan.alsoTag).toEqual(['latest'])
+  it('leaves main on the default even once `latest` is 2.x', () => {
+    // The case where the two branches actually differ. Pre-2.0 they agree — both take
+    // `latest` — so a test using only that case cannot tell whether the branch is being
+    // read at all, and a 2.1.0 release from main would silently publish under `legacy`.
+    const plan = planDistTags({ branch: 'main', version: '2.1.0', currentLatest: '2.0.0' })
+    expect(plan.publishTag).toBeUndefined()
+    expect(planDistTags({ branch: '1.x', version: '1.7.9', currentLatest: '2.0.0' }).publishTag)
+      .toBe('legacy')
   })
 
-  it('is the 1.7.8 case: same major, newer patch, must take latest', () => {
+  it('publishes a 1.x release straight to `latest` while `latest` is still 1.x', () => {
+    // Not "legacy plus a second tag": only the publish call is authenticated. npm's trusted
+    // publishing leaves no credentials behind, so a follow-up `npm dist-tag add` returns
+    // E401 — measured on the 1.7.9 release, which published and then failed to move `latest`.
+    const plan = planDistTags({ branch: '1.x', version: '1.7.9', currentLatest: '1.7.8' })
+    expect(plan.publishTag).toBeUndefined()
+    expect(plan.alsoTag).toEqual([])
+  })
+
+  it('is the 1.7.8 case: same major, newer patch, must reach a fresh install', () => {
     // The comparison was `>=` first, which read "same line" as "newer line" and reproduced
     // exactly the bug it was written to prevent.
     const plan = planDistTags({ branch: '1.x', version: '1.7.8', currentLatest: '1.7.7' })
-    expect(plan.alsoTag).toEqual(['latest'])
+    expect(plan.publishTag).toBeUndefined()
+  })
+
+  it('never asks for a tag it cannot authenticate', () => {
+    // Any non-empty alsoTag would fail the release job with E401 after a successful publish.
+    for (const currentLatest of ['1.7.8', '2.0.0', undefined, 'nonsense']) {
+      for (const branch of ['1.x', 'main']) {
+        expect(planDistTags({ branch, version: '1.7.9', currentLatest }).alsoTag).toEqual([])
+      }
+    }
   })
 
   it('never lets 1.x take `latest` back once 2.x has shipped', () => {
