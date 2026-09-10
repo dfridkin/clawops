@@ -20,10 +20,15 @@
 # Every credential field also accepts a SecretRef — `{source: env, provider, id}` — as well
 # as a plain string, so a token need not be inlined into the config.
 #
-# The catalog was wrong in three ways before this pass, all of which would have produced a
+# The catalog was wrong in four ways before this pass, all of which would have produced a
 # config OpenClaw rejects or ignores: the Teams key was `teams` (the schema has `msteams`),
-# Discord's token field was `botToken` (it is `token`), and WhatsApp's `phoneNumberId` and
-# `accessToken` do not exist on that channel at all.
+# Discord's token field was `botToken` (it is `token`), WhatsApp's `phoneNumberId` and
+# `accessToken` do not exist on that channel at all, and EVERY `envDefault` used an
+# `OPENCLAW_*` name that OpenClaw does not read.
+#
+# `envVar` below is the variable `openclaw channels add --use-env` actually reads, taken from
+# the binary's own error message. `useEnvSupported: false` means that flag is rejected for the
+# channel outright — measured, not assumed.
 
 integrations:
   - id: discord
@@ -34,13 +39,14 @@ integrations:
     plugin:
       package: "@openclaw/discord"
       source: npm
+    useEnvSupported: true
     requiredConfig: [dmPolicy, groupPolicy]
     fields:
       - name: token
         label: Bot token
         description: Bot token from the Discord Developer Portal (Bot → Token)
         sensitive: true
-        envDefault: OPENCLAW_DISCORD_TOKEN
+        envDefault: DISCORD_BOT_TOKEN
     setupUrl: https://discord.com/developers/applications
 
   - id: telegram
@@ -48,19 +54,20 @@ integrations:
     displayName: Telegram
     description: Connect OpenClaw agents to a Telegram bot
     infraRequired: false
-    # Listed as installable by the gateway, but `@openclaw/telegram` does not exist on npm
-    # and no package name has been confirmed. Left unset deliberately rather than guessed:
-    # a wrong package name fails the install at deploy time. See WO-60.
+    # Bundled in the image: `channels add --channel telegram --use-env` succeeds with
+    # `--network none`, so there is nothing to download and no egress needed. It is listed
+    # as "installable" alongside the rest, which is why this looked unresolved at first.
     plugin:
       package: ""
-      source: unknown
+      source: bundled
+    useEnvSupported: true
     requiredConfig: [dmPolicy, groupPolicy]
     fields:
       - name: botToken
         label: Bot token
         description: Token from @BotFather (/newbot)
         sensitive: true
-        envDefault: OPENCLAW_TELEGRAM_TOKEN
+        envDefault: TELEGRAM_BOT_TOKEN
     setupUrl: https://t.me/BotFather
 
   - id: slack
@@ -71,6 +78,9 @@ integrations:
     plugin:
       package: "@openclaw/slack"
       source: npm
+    # Socket Mode is what --use-env drives, and it demands SLACK_APP_TOKEN:
+    #   "Slack Socket Mode requires SLACK_APP_TOKEN when using --use-env."
+    useEnvSupported: true
     # Slack requires more than the two policies: the schema also demands postAs, mode,
     # webhookPath and userTokenReadOnly.
     requiredConfig: [dmPolicy, groupPolicy, postAs, mode, webhookPath, userTokenReadOnly]
@@ -82,12 +92,12 @@ integrations:
         label: Bot OAuth token
         description: "Bot User OAuth Token (starts with xoxb-)"
         sensitive: true
-        envDefault: OPENCLAW_SLACK_TOKEN
+        envDefault: SLACK_BOT_TOKEN
       - name: signingSecret
         label: Signing secret
         description: App signing secret from Basic Information → App Credentials
         sensitive: true
-        envDefault: OPENCLAW_SLACK_SIGNING_SECRET
+        envDefault: SLACK_SIGNING_SECRET
     setupUrl: https://api.slack.com/apps
 
   - id: whatsapp
@@ -102,6 +112,9 @@ integrations:
     plugin:
       package: "@openclaw/whatsapp"
       source: npm
+    # `openclaw channels add --use-env` answers: OpenClaw does not recognize option
+    # "--use-env". There is no non-interactive path for this channel.
+    useEnvSupported: false
     requiredConfig: [dmPolicy, groupPolicy, mediaMaxMb]
     # WhatsApp has no top-level credential fields in 2.0 — credentials live under
     # `accounts.<name>`, with `defaultAccount` selecting one. The wizard cannot collect a
@@ -127,6 +140,8 @@ integrations:
     plugin:
       package: "@openclaw/msteams"
       source: npm
+    # Same as WhatsApp: --use-env is rejected outright.
+    useEnvSupported: false
     requiredConfig: [dmPolicy, groupPolicy]
     fields:
       - name: appId
@@ -138,7 +153,7 @@ integrations:
         label: App password
         description: Client secret from the Azure app registration
         sensitive: true
-        envDefault: OPENCLAW_MSTEAMS_APP_PASSWORD
+        envDefault: ""   # no --use-env path; collected interactively on the host
       - name: tenantId
         label: Directory (tenant) ID
         description: Azure AD tenant ID for the app registration

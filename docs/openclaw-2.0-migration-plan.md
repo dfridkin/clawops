@@ -831,6 +831,45 @@ passed it. `tests/mcp/http-live.test.ts` runs a real server on a real port.
 wires a server the operator runs themselves and says so plainly instead of pretending. That
 is WO-62.
 
+**WO-63 — Install channel plugins, and stop trusting `channels add`'s exit code** *(M)*
+
+WO-60 corrected the catalog and left the install to the operator. This does it, and it is a
+work order rather than a carried-forward note because the surface it automates is actively
+misleading.
+
+**`openclaw channels add` exits 0 when the plugin install fails.** Measured on 2026.9.2: with
+npm unreachable it prints `Failed to install @openclaw/discord`, says "Returning to selection",
+and returns **0**. It exits **1** for a missing env var — so the exit code is not simply
+unreliable, it is unreliable in the one case that matters. Anything driving it must re-read
+`openclaw channels list --all --json` and assert `installed: true`, exactly as WO-43 checks
+`providerIds` after installing a model provider rather than trusting the installer.
+
+**What the four cases actually need**, all measured rather than inferred:
+
+| Channel | Plugin | Non-interactive path |
+|---|---|---|
+| `telegram` | **bundled** — installs under `--network none` | `--use-env`, `TELEGRAM_BOT_TOKEN` |
+| `discord` | `@openclaw/discord` from npm | `--use-env`, `DISCORD_BOT_TOKEN` |
+| `slack` | `@openclaw/slack` from npm | `--use-env`, `SLACK_APP_TOKEN` (Socket Mode) |
+| `whatsapp` | `@openclaw/whatsapp` from npm | **none — `--use-env` is rejected** |
+| `msteams` | `@openclaw/msteams` from npm | **none — `--use-env` is rejected** |
+
+So WO-63 splits in two. Telegram, Discord and Slack can be installed and configured during
+`apply` the way model providers are, with the same post-install verification. WhatsApp and
+Microsoft Teams have **no non-interactive path in OpenClaw at all** — `channels add` answers
+`OpenClaw does not recognize option "--use-env"` — so clawops cannot configure them without
+upstream adding one. They stay documented-only until it does, and the catalog records that
+with `useEnvSupported: false` rather than the wizard discovering it at deploy time.
+
+Slack needs a second look while doing it: `--use-env` drives **Socket Mode**, which needs no
+public webhook, while the catalog still marks Slack `infraRequired: true` for the webhook path.
+Those are two different setups and the catalog currently describes one while the tooling
+installs the other.
+
+**Egress note:** channel plugins come from `registry.npmjs.org`, model providers from
+`clawhub.ai`. Installing channels during `apply` extends the deploy-time egress requirement to
+npm on the deployed host, which `docs/security/egress.md` already records.
+
 **WO-62 — clawops as a host agent** *(fast follow, after 2.0)*
 
 For the gateway's AI to manage a stack unattended, clawops has to be installed and running on
@@ -1079,8 +1118,8 @@ before marking that owner done.
 | `clawops_migrate` and `clawops_gateway_update` have no MCP tool | WO-47 | **open** | needs their effects extracted from `cli/commands/*.ts` first, or the handler duplicates them |
 | `clawops_workflow_recover` still reports "systemd service status" | WO-47 | WO-44 | same systemd assumption as `logs.ts`; it should call the diagnostics module |
 | `clawops harden` cannot be told which ports to open | WO-48 | **open** | it reads the container instead, which is more honest but means a reverse-proxy port still has to be opened by hand |
-| clawops does not install channel plugins; the wizard prints the command instead | WO-60 | **open** | needs the `channels add` exit-0-on-failure trap handled and the telegram package resolved |
-| WhatsApp cannot be configured by the wizard (per-account credentials) | WO-60 | **open** | `channels.whatsapp.accounts.<name>`; no flat-token shape |
+| clawops does not install channel plugins; the wizard prints the command instead | WO-60 | **WO-63** | scheduled, not just noted |
+| WhatsApp and Microsoft Teams have no `--use-env` path at all | WO-60 | **WO-63** | the flag is rejected outright, so no non-interactive setup exists |
 | Plan fields `workspace`, `permissionMode`, `image.variant`, mounts | WO-42 | **WO-53** (2.1) | open |
 | README *What's new in 2.0* — update per flow change, audit at the end | user request | **every WO**, audited by WO-49 | standing |
 | Pulumi `Gateway` component (G7) | WO-58 audit | WO-38 | ✅ deleted |

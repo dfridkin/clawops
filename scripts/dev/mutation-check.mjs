@@ -213,6 +213,12 @@ const MUTATIONS = [
     file: 'src/cli/commands/setup.ts', from: '  return integrations.filter((i) => i.wizardSupported !== false)', to: '  return integrations', test: 'tests/spec/integrations.test.ts' },
   { name: 'a channel without wizardSupported is dropped instead of offered',
     file: 'src/cli/commands/setup.ts', from: '  return integrations.filter((i) => i.wizardSupported !== false)', to: '  return integrations.filter((i) => i.wizardSupported === true)', test: 'tests/spec/integrations.test.ts' },
+  { name: 'an envDefault reverts to a name OpenClaw does not read',
+    file: 'spec/integrations.yaml', from: '        envDefault: DISCORD_BOT_TOKEN', to: '        envDefault: OPENCLAW_DISCORD_TOKEN', test: 'tests/spec/integrations.test.ts' },
+  { name: 'a channel claims a --use-env path it does not have',
+    file: 'spec/integrations.yaml', from: '    # `openclaw channels add --use-env` answers: OpenClaw does not recognize option\n    # "--use-env". There is no non-interactive path for this channel.\n    useEnvSupported: false', to: '    useEnvSupported: true', test: 'tests/spec/integrations.test.ts' },
+  { name: 'a downloadable channel claims to be bundled',
+    file: 'spec/integrations.yaml', from: '      package: "@openclaw/discord"\n      source: npm', to: '      package: ""\n      source: bundled', test: 'tests/spec/integrations.test.ts' },
 ]
 
 let survived = []

@@ -341,9 +341,16 @@ a deployed gateway:
 WhatsApp one. The catalog records them, and a test validates the whole thing against
 OpenClaw's own schema so it cannot drift again.
 
+**Every environment variable the catalog named was wrong.** It used `OPENCLAW_DISCORD_TOKEN`
+and friends; OpenClaw reads `DISCORD_BOT_TOKEN`, `TELEGRAM_BOT_TOKEN`, `SLACK_BOT_TOKEN`. The
+wizard was storing secrets under names nothing looked at.
+
 The wizard no longer offers WhatsApp, whose credentials it cannot collect, and it tells you
 the command to install a channel's plugin instead of leaving you with config that connects to
-nothing.
+nothing. Telegram turns out to ship **in the image** — it activates with no download and no
+egress. WhatsApp and Microsoft Teams have **no non-interactive setup in OpenClaw at all**
+(`channels add` rejects `--use-env` for them), so the wizard says to configure them on the
+host rather than pretending.
 
 **Channel plugins install from npm, not ClawHub** — `@openclaw/<channel>`. Model providers
 come from ClawHub. Allowing one host does not allow the other; both are in

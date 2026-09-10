@@ -22,6 +22,7 @@ interface Integration {
   plugin?: { package: string; source: string }
   requiredConfig?: string[]
   wizardSupported?: boolean
+  useEnvSupported?: boolean
 }
 
 const root = process.cwd()
@@ -66,9 +67,40 @@ describe('spec/integrations.yaml matches the OpenClaw schema', () => {
     // Every channel in 2.0 is install-gated — `channels list --all --json` reports all 31 as
     // origin "installable". An entry with no plugin block would read as "nothing to install".
     expect(integ.plugin, `${integ.id} has no plugin block`).toBeDefined()
-    expect(['npm', 'clawhub', 'unknown']).toContain(integ.plugin!.source)
-    if (integ.plugin!.source !== 'unknown') {
+    expect(['npm', 'clawhub', 'bundled']).toContain(integ.plugin!.source)
+    // Only a bundled channel may omit the package: it has nothing to download. Anything else
+    // with an empty package would silently mean "nothing to install".
+    if (integ.plugin!.source === 'bundled') {
+      expect(integ.plugin!.package).toBe('')
+    } else {
       expect(integ.plugin!.package, `${integ.id} plugin package`).not.toBe('')
+    }
+  })
+
+  it.each(each)('%s uses the env var OpenClaw reads, not an invented one', (_id, integ) => {
+    // Every envDefault was an `OPENCLAW_*` name that OpenClaw does not read — so the wizard
+    // stored a secret under a variable nothing looked at, and the channel never
+    // authenticated. The real names come from the binary: "Set these environment variables
+    // before using --use-env: TELEGRAM_BOT_TOKEN."
+    for (const f of integ.fields) {
+      if (f.envDefault) {
+        expect(f.envDefault, `${integ.id}.${f.name}`).not.toMatch(/^OPENCLAW_/)
+      }
+    }
+  })
+
+  it.each(each)('%s records whether --use-env works for it', (_id, integ) => {
+    // WhatsApp and Microsoft Teams reject the flag outright: "OpenClaw does not recognize
+    // option --use-env". Claiming otherwise sends an operator down a path that cannot work.
+    expect(typeof integ.useEnvSupported, `${integ.id}.useEnvSupported`).toBe('boolean')
+  })
+
+  it('declares no env var for a channel with no non-interactive path', () => {
+    for (const integ of catalog) {
+      if (integ.useEnvSupported === false) {
+        const named = integ.fields.filter((f) => f.envDefault).map((f) => f.name)
+        expect(named, `${integ.id} has no --use-env path but names env vars`).toEqual([])
+      }
     }
   })
 
@@ -80,6 +112,31 @@ describe('spec/integrations.yaml matches the OpenClaw schema', () => {
         expect(integ.fields, `${integ.id} is unsupported but still declares fields`).toEqual([])
       }
     }
+  })
+
+  it('pins what was actually measured against the image, per channel', () => {
+    // Shape rules alone let a wrong value through: flipping WhatsApp to useEnvSupported:true
+    // passes "is a boolean", and calling Discord bundled passes "bundled has no package".
+    // These are the observed facts from OpenClaw 2026.9.2, named individually.
+    const by = Object.fromEntries(catalog.map((i) => [i.id, i]))
+
+    // `channels add --channel telegram --use-env` succeeds under --network none.
+    expect(by['telegram']!.plugin!.source).toBe('bundled')
+    expect(by['telegram']!.useEnvSupported).toBe(true)
+
+    // These three install from npm as @openclaw/<channel>.
+    for (const id of ['discord', 'slack', 'whatsapp', 'msteams']) {
+      expect(by[id]!.plugin!.source, `${id} install source`).toBe('npm')
+      expect(by[id]!.plugin!.package, `${id} package`).toBe(`@openclaw/${id}`)
+    }
+
+    // "OpenClaw does not recognize option \"--use-env\"" — there is no non-interactive path.
+    expect(by['whatsapp']!.useEnvSupported).toBe(false)
+    expect(by['msteams']!.useEnvSupported).toBe(false)
+
+    // And these do have one.
+    expect(by['discord']!.useEnvSupported).toBe(true)
+    expect(by['slack']!.useEnvSupported).toBe(true)
   })
 
   it('never reintroduces the three keys that were wrong', () => {

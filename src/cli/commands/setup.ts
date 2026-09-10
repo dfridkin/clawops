@@ -70,11 +70,13 @@ interface Integration {
   infraRequired: boolean
   infraNote?: string
   /** The plugin that provides this channel. Every channel in 2.0 is install-gated. */
-  plugin?: { package: string; source: 'npm' | 'clawhub' | 'unknown' }
+  plugin?: { package: string; source: 'npm' | 'clawhub' | 'bundled' }
   /** Keys the OpenClaw schema marks required on this channel. */
   requiredConfig?: string[]
   /** False when the wizard cannot collect this channel's credentials — see WhatsApp. */
   wizardSupported?: boolean
+  /** False when `openclaw channels add --use-env` is rejected for this channel. */
+  useEnvSupported?: boolean
   unsupportedNote?: string
   fields: IntegrationField[]
   setupUrl?: string
@@ -378,13 +380,17 @@ export default defineCommand({
       // installing it yields a gateway that starts, reports healthy, and never connects.
       // The wizard does not install it — it says so, because a config that silently does
       // nothing is the failure this whole release has been removing.
-      if (integ.plugin?.package) {
+      if (integ.useEnvSupported === false) {
+        // OpenClaw rejects --use-env for these outright, so there is no command to hand over.
+        warn(`${integ.displayName} has no non-interactive setup in OpenClaw.`)
+        info(`  Run \`openclaw channels add --channel ${integ.channelKey}\` on the host, interactively.`)
+      } else if (integ.plugin?.source === 'bundled') {
+        info(`${integ.displayName} ships in the image. Activate it on the host with:`)
+        info(`  openclaw channels add --channel ${integ.channelKey} --use-env`)
+      } else if (integ.plugin?.package) {
         warn(`${integ.displayName} needs its plugin installed on the host before it will connect:`)
         info(`  openclaw channels add --channel ${integ.channelKey} --use-env`)
         info(`  (installs ${integ.plugin.package} from ${integ.plugin.source})`)
-      } else if (integ.plugin) {
-        warn(`${integ.displayName} needs a plugin installed on the host, and clawops does not`)
-        info('  know its package name. Run `openclaw channels list --all` on the host.')
       }
 
       channelsConfig[integ.channelKey] = channelConfig
