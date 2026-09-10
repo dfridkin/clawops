@@ -12,6 +12,33 @@ and Cursor drive them through typed MCP tools with explicit safety controls.
 
 ---
 
+## What's new in v1.7.8
+
+**`clawops mcp wire` never wired anything.** It wrote `gateway.mcpClients` — a key OpenClaw
+does not have, checked against the config schemas of `2026.4.5`, `2026.7.1-2` and `2026.9.2`.
+The real key is top-level `mcp.servers`. Nothing on this line validated the write, so clawops
+stored a key nothing read, restarted your gateway, and reported success. The entry also used
+stdio with `command: "clawops"`, which spawns inside the gateway container where clawops is
+not installed — so even the right key would not have worked.
+
+It delegates to `openclaw mcp add` now, which probes the server before saving: "wired" means
+the gateway connected. You run the server yourself, since clawops is not on the gateway host:
+
+```bash
+clawops mcp serve --http 18790 --bind 0.0.0.0 --token "$(openssl rand -hex 16)"
+clawops mcp wire --stack prod --token <same token>
+```
+
+**`clawops mcp serve --http` now requires a token off loopback — this may stop your server.**
+It had no authentication at all while exposing every tool, `clawops_destroy` included. It now
+requires a bearer token and refuses to start when bound off-loopback without one. If you run
+it with `--bind 0.0.0.0`, pass `--token` (or set `CLAWOPS_MCP_TOKEN`) before upgrading.
+
+**And it only ever served one client.** One transport for the whole process meant the first
+client to connect claimed it; every later one got `"Server already initialized"`.
+
+---
+
 ## What's new in v1.7.3
 
 **README maintenance.** The release-notes section had grown to four versions and was missing

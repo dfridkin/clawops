@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const mockServeMcp = vi.fn().mockResolvedValue(undefined)
-vi.mock('../../src/mcp/server.js', () => ({ serveMcp: mockServeMcp }))
+vi.mock('../../src/mcp/server.js', () => ({ serveMcp: mockServeMcp, MCP_HTTP_PORT: 18790 }))
 
 vi.mock('../../src/cli/context.js', () => ({ buildContext: vi.fn() }))
 vi.mock('../../src/transport/pool.js', () => ({
@@ -126,13 +126,15 @@ describe('mcp wire subcommand', () => {
     const session = makeSession()
     const release = vi.fn()
     mocks.acquireSession.mockResolvedValue({ session, release } as never)
-    mocks.wireGatewayMcp.mockResolvedValue({ status: 'wired', rewired: false })
+    mocks.wireGatewayMcp.mockResolvedValue({ status: 'wired', rewired: false, url: 'http://h:18790/' })
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     const wire = await getWire()
-    await wire.run({ args: { stack: 'default', force: false } })
+    await wire.run({ args: { stack: 'default' } })
 
-    expect(mocks.wireGatewayMcp).toHaveBeenCalledWith(session, expect.any(AbortSignal), { force: false })
+    expect(mocks.wireGatewayMcp).toHaveBeenCalledWith(session, expect.any(AbortSignal), {
+      url: undefined, token: undefined, rewire: false,
+    })
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("gateway's AI"))
     expect(release).toHaveBeenCalled()
   })
@@ -142,27 +144,68 @@ describe('mcp wire subcommand', () => {
     mocks.buildContext.mockReturnValue(makeLocalCtx() as unknown as ReturnType<typeof mocks.buildContext>)
     const session = makeSession()
     mocks.acquireSession.mockResolvedValue({ session, release: vi.fn() } as never)
-    mocks.wireGatewayMcp.mockResolvedValue({ status: 'wired', rewired: true })
+    mocks.wireGatewayMcp.mockResolvedValue({ status: 'wired', rewired: true, url: 'http://h:18790/' })
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     const wire = await getWire()
-    await wire.run({ args: { stack: 'default', force: false } })
+    await wire.run({ args: { stack: 'default', rewire: true } })
 
     // success() is called with the "can now run" message in both rewired and new cases
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("gateway's AI"))
   })
 
-  it('exits with code 1 on version-blocked without --force', async () => {
+  it('exits 1 when the gateway could not reach clawops, and says nothing changed', async () => {
+    // `openclaw mcp add` probes before saving, so a failure means nothing was written.
+    // The old command reported success regardless — for a config key OpenClaw never read.
     const mocks = await getMocks()
     mocks.buildContext.mockReturnValue(makeLocalCtx() as unknown as ReturnType<typeof mocks.buildContext>)
     const session = makeSession()
     mocks.acquireSession.mockResolvedValue({ session, release: vi.fn() } as never)
-    mocks.wireGatewayMcp.mockResolvedValue({ status: 'version-blocked', version: '2025.12' })
+    mocks.wireGatewayMcp.mockResolvedValue({
+      status: 'probe-failed', error: 'ECONNREFUSED', url: 'http://h:18790/',
+    })
+    const errors: string[] = []
+    vi.spyOn(console, 'error').mockImplementation((...a) => { errors.push(a.join(' ')) })
+    vi.spyOn(console, 'log').mockImplementation(() => {})
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code) => { throw new Error('exit') })
 
     const wire = await getWire()
-    await expect(wire.run({ args: { stack: 'default', force: false } })).rejects.toThrow('exit')
+    await expect(wire.run({ args: { stack: 'default' } })).rejects.toThrow('exit')
     expect(exitSpy).toHaveBeenCalledWith(1)
+    expect(errors.join(' ')).toContain('ECONNREFUSED')
+  })
+
+  it('passes --url and --token through', async () => {
+    const mocks = await getMocks()
+    mocks.buildContext.mockReturnValue(makeLocalCtx() as unknown as ReturnType<typeof mocks.buildContext>)
+    const session = makeSession()
+    mocks.acquireSession.mockResolvedValue({ session, release: vi.fn() } as never)
+    mocks.wireGatewayMcp.mockResolvedValue({ status: 'wired', rewired: false, url: 'http://x/' })
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const wire = await getWire()
+    await wire.run({ args: { stack: 'default', url: 'http://x/', token: 't0k' } })
+
+    expect(mocks.wireGatewayMcp).toHaveBeenCalledWith(session, expect.any(AbortSignal), {
+      url: 'http://x/', token: 't0k', rewire: false,
+    })
+  })
+
+  it('refuses to replace an existing entry unless asked', async () => {
+    const mocks = await getMocks()
+    mocks.buildContext.mockReturnValue(makeLocalCtx() as unknown as ReturnType<typeof mocks.buildContext>)
+    const session = makeSession()
+    mocks.acquireSession.mockResolvedValue({ session, release: vi.fn() } as never)
+    mocks.wireGatewayMcp.mockResolvedValue({ status: 'exists', url: 'http://h:18790/' })
+    const logs: string[] = []
+    vi.spyOn(console, 'log').mockImplementation((...a) => { logs.push(a.join(' ')) })
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code) => { throw new Error('exit') })
+
+    const wire = await getWire()
+    await wire.run({ args: { stack: 'default' } })
+
+    expect(exitSpy).not.toHaveBeenCalled()
+    expect(logs.join(' ')).toMatch(/--rewire/)
   })
 
   it('exits with code 1 when local stack has no state', async () => {
