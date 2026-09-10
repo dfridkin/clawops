@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# Report when spec/models.yaml's pinned provider plugins have fallen behind ClawHub, and
-# whether the newer builds would even install on the supported runtime floor.
+# Report when the pinned plugins have fallen behind upstream, and whether the newer builds
+# would even install on the supported runtime floor.
+#
+# Covers both catalogs: spec/models.yaml (model providers, from ClawHub) and
+# spec/integrations.yaml (chat channels, from npm). They drift the same way — on 2026-09-08
+# every provider plugin moved to a build requiring a newer runtime than the floor, and the
+# channel plugins have already done the same.
 #
 # Deliberately a report, not a fix. Advancing these pins is a COORDINATED change: the
 # newer plugin builds declare a minimum plugin API, and on 2026-09-08 all three moved to
@@ -59,3 +64,49 @@ for pkg in $PKGS; do
   esac
 done
 rm -rf "$TMP"
+
+# ── Channel plugins ───────────────────────────────────────────────────────────
+#
+# Same drift, different registry: channels come from npm as @openclaw/<channelKey>. Measured
+# on 2026.9.2, @openclaw/discord@2026.9.3 refuses to install against a 2026.9.2 runtime.
+
+echo
+echo "== channel plugin pins vs npm, against runtime ${FLOOR}"
+
+# The bundled set is derived, not hand-maintained: a channel that becomes bundled upstream
+# should stop being installed, and one that stops being bundled must start.
+CH_BUNDLED=$(docker run --rm --network none "$IMAGE" openclaw channels list --all --json 2>/dev/null \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+      const chat=(JSON.parse(s).chat)||{};
+      console.log(Object.entries(chat).filter(([,v])=>v.origin!=="installable").map(([k])=>k).join(" "));
+    });' || echo "")
+
+node -e '
+const yaml = require("js-yaml"), fs = require("fs");
+const catalog = yaml.load(fs.readFileSync("spec/integrations.yaml", "utf8"));
+let drift = 0;
+for (const c of catalog.integrations) {
+  const plugin = c.plugin;
+  if (!plugin) { console.log(`  DRIFT  ${c.id}: no plugin block`); drift++; continue; }
+  if (plugin.source === "bundled") { console.log(`  ok     ${c.id}: bundled`); continue; }
+  if (!plugin.version) { console.log(`  DRIFT  ${c.id}: ${plugin.package} is unpinned`); drift++; continue; }
+  console.log(`  ok     ${c.id}: install ${plugin.package}@${plugin.version}`);
+}
+process.exitCode = drift > 0 ? 1 : 0;
+'
+
+echo
+echo "-- would a newer channel build install on ${FLOOR}?"
+CH_TMP=$(mktemp -d)
+printf '%s' '{"meta":{"lastTouchedVersion":"2026.9"},"gateway":{"mode":"local","port":18789,"auth":{"mode":"token"}}}' > "$CH_TMP/openclaw.json"
+chmod 777 "$CH_TMP"; chmod 666 "$CH_TMP/openclaw.json"
+CH_PKGS=$(node -p "require('js-yaml').load(require('fs').readFileSync('spec/integrations.yaml','utf8')).integrations.filter(c=>c.plugin&&c.plugin.package).map(c=>c.plugin.package).join(' ')")
+for pkg in $CH_PKGS; do
+  out=$(docker run --rm -v "$CH_TMP":/home/node/.openclaw "$IMAGE" \
+        openclaw plugins install "${pkg}" --accept-capabilities 2>&1 | tail -1 || true)
+  case "$out" in
+    *"requires plugin API"*) echo "  BLOCKED  ${pkg}" ; echo "           ${out}" ;;
+    *)                       echo "  ADVANCEABLE  ${pkg}: latest installs on ${FLOOR}" ;;
+  esac
+done
+rm -rf "$CH_TMP"

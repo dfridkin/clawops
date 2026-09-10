@@ -853,6 +853,43 @@ passed it. `tests/mcp/http-live.test.ts` runs a real server on a real port.
 wires a server the operator runs themselves and says so plainly instead of pretending. That
 is WO-62.
 
+**WO-63 — Install channel plugins, and stop trusting `channels add`'s exit code** *(M)* — ✅
+**done, in the 2.0 release**
+
+`clawops apply` installs channel plugins alongside model providers, before the restart, while
+the deploy still has egress — and verifies afterwards, because the gateway reports healthy
+either way.
+
+**It installs with `openclaw plugins install`, not `channels add`.** That is the whole point:
+`channels add` installs and configures in one step and returns **0** when the install fails,
+printing the error and "Returning to selection". `plugins install` exits **1**. Verified.
+
+**Verification asks the gateway, not the exit code**: `channels list --all --json`, asserting
+`installed: true`. An entry that merely omits the field counts as not installed — the
+listing's shape is upstream's to change, and only an explicit `true` means installed.
+
+**The pins are load-bearing, and the same G28 drift caught channels too.** Measured on
+2026.9.2:
+
+```
+plugin "discord" requires plugin API >=2026.9.3, but this OpenClaw runtime exposes 2026.9.2
+```
+
+`@openclaw/discord@2026.9.3` — the current `latest` — refuses to install on the supported
+floor, exactly as all three provider plugins did on 2026-09-08. Every channel plugin is pinned
+to the floor, a test asserts the pins track `support.recommended`, and
+`check-plugin-pins.sh` now reports drift for both catalogs.
+
+Telegram is skipped: it is bundled, and it reports `installed: false` until an account is
+added, so counting it would fail a channel that has nothing to install and is working as
+designed.
+
+WhatsApp and Microsoft Teams get their **plugin** installed like the rest; what they still
+lack is a non-interactive way to supply credentials, since `channels add` rejects `--use-env`
+for them. The plugin being present is the half clawops can do.
+
+*Original text follows.*
+
 **WO-63 — Install channel plugins, and stop trusting `channels add`'s exit code** *(M)*
 
 WO-60 corrected the catalog and left the install to the operator. This does it, and it is a

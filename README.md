@@ -200,6 +200,27 @@ clawops checks the installed provider IDs afterwards and will not call the deplo
 while a configured provider is missing. [Required outbound access](docs/security/egress.md)
 lists every destination and when it is needed.
 
+### Chat channels are installed for you too
+
+Every channel in OpenClaw 2.0 is an install-gated plugin. `clawops apply` installs the ones
+your config names, during the deploy while egress exists, and then asks the gateway whether
+they are really installed:
+
+```
+[clawops] warning: the gateway is running, but these configured channels are not installed:
+discord. They will never connect.
+```
+
+It has to ask. `openclaw channels add` — the obvious command — returns success even when the
+plugin install fails, so clawops uses `openclaw plugins install` and verifies against
+`channels list --all --json`.
+
+Channel plugins are pinned to the supported runtime. The current `latest` does not install on
+it: `plugin "discord" requires plugin API >=2026.9.3, but this OpenClaw runtime exposes
+2026.9.2` — the same drift that forced version pins on model providers.
+
+Telegram needs nothing installed: it ships in the image.
+
 ### Bad config is caught before it is written
 
 Config is validated against **OpenClaw's own schema** — captured from the image, not
@@ -905,7 +926,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (1187 tests, ~13s)
+pnpm test                  # vitest (1210 tests, ~13s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm typecheck             # tsc --noEmit

@@ -15,7 +15,7 @@ deployment that provisions cleanly and then does not work.
 | your distro's package mirrors | first bootstrap only | `ca-certificates`, `curl`, `gnupg`, `lsb-release` |
 | `ghcr.io` and its blob storage | bootstrap, and every `gateway update` | pulling `ghcr.io/openclaw/openclaw:<version>` |
 | `clawhub.ai` | **during `apply`**, not at boot | installing model-provider plugins |
-| `registry.npmjs.org` | when a channel is configured | installing channel plugins |
+| `registry.npmjs.org` | **during `apply`**, when the config names a channel | installing channel plugins |
 | `169.254.169.254` (link-local) | AWS only, when Bedrock is enabled | IMDSv2 region lookup |
 
 ## From your machine
@@ -46,9 +46,12 @@ request to https://registry.npmjs.org/@openclaw%2fdiscord failed
 ```
 
 **`openclaw channels add` exits 0 when that happens.** It prints the failure and returns to
-its selection loop, so the exit code says nothing. Anything automating it has to re-read
-`openclaw channels list --all --json` and check `installed: true` rather than trust the
-status.
+its selection loop, so the exit code says nothing. clawops therefore installs channel plugins
+with `openclaw plugins install`, which exits 1, and verifies against
+`openclaw channels list --all --json` by asserting `installed: true`.
+
+Both installs happen during `apply`, not at boot — so a blocked host fails in front of the
+person running the deploy rather than at 3am.
 
 ## ClawHub is new in 2.0, and it is needed at deploy time
 

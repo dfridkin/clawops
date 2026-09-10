@@ -31,6 +31,14 @@
 # `envVar` below is the variable `openclaw channels add --use-env` actually reads, taken from
 # the binary's own error message. `useEnvSupported: false` means that flag is rejected for the
 # channel outright — measured, not assumed.
+#
+# `plugin.version` is pinned to the runtime floor, and it is not decoration. Measured on
+# 2026.9.2: `@openclaw/discord@2026.9.3` refuses to install with
+#
+#   plugin "discord" requires plugin API >=2026.9.3, but this OpenClaw runtime exposes 2026.9.2
+#
+# The same drift that forced version pins on model providers in WO-43. `latest` would break
+# the deploy the moment upstream publishes ahead of the runtime, which it already has.
 
 integrations:
   - id: discord
@@ -41,6 +49,7 @@ integrations:
     plugin:
       package: "@openclaw/discord"
       source: npm
+      version: "2026.9.2"
     useEnvSupported: true
     requiredConfig: [dmPolicy, groupPolicy]
     defaults:
@@ -97,6 +106,7 @@ integrations:
     plugin:
       package: "@openclaw/slack"
       source: npm
+      version: "2026.9.2"
     # Socket Mode is what --use-env drives, and it demands SLACK_APP_TOKEN:
     #   "Slack Socket Mode requires SLACK_APP_TOKEN when using --use-env."
     useEnvSupported: true
@@ -135,6 +145,7 @@ integrations:
     plugin:
       package: "@openclaw/whatsapp"
       source: npm
+      version: "2026.9.2"
     # `openclaw channels add --use-env` answers: OpenClaw does not recognize option
     # "--use-env". There is no non-interactive path for this channel.
     useEnvSupported: false
@@ -167,6 +178,7 @@ integrations:
     plugin:
       package: "@openclaw/msteams"
       source: npm
+      version: "2026.9.2"
     # Same as WhatsApp: --use-env is rejected outright.
     useEnvSupported: false
     requiredConfig: [dmPolicy, groupPolicy]

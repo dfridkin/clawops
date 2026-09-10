@@ -352,9 +352,20 @@ the webhook setup instead — while declaring the socket credentials incompletel
 and friends; OpenClaw reads `DISCORD_BOT_TOKEN`, `TELEGRAM_BOT_TOKEN`, `SLACK_BOT_TOKEN`. The
 wizard was storing secrets under names nothing looked at.
 
-The wizard no longer offers WhatsApp, whose credentials it cannot collect, and it tells you
-the command to install a channel's plugin instead of leaving you with config that connects to
-nothing. Telegram turns out to ship **in the image** — it activates with no download and no
+**`clawops apply` installs channel plugins for you**, alongside model providers, before the
+restart while the deploy still has egress — then checks the gateway to confirm they are
+actually installed rather than trusting an exit code. It has reason not to: `openclaw channels
+add` returns **0** when the plugin install fails, so clawops installs with `openclaw plugins
+install`, which exits 1.
+
+Channel plugins are pinned to the supported runtime, and that pin matters — the current
+`latest` refuses to install:
+
+```
+plugin "discord" requires plugin API >=2026.9.3, but this OpenClaw runtime exposes 2026.9.2
+```
+
+The wizard no longer offers WhatsApp, whose credentials it cannot collect. Telegram turns out to ship **in the image** — it activates with no download and no
 egress. WhatsApp and Microsoft Teams have **no non-interactive setup in OpenClaw at all**
 (`channels add` rejects `--use-env` for them), so the wizard says to configure them on the
 host rather than pretending.
