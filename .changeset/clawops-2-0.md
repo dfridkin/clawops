@@ -363,6 +363,35 @@ host rather than pretending.
 come from ClawHub. Allowing one host does not allow the other; both are in
 [required outbound access](docs/security/egress.md).
 
+## Logs come from the gateway, and clawops says which source answered
+
+Both `clawops logs` and the MCP tool ran `journalctl -u openclaw || docker logs openclaw`.
+Only the local provider creates that systemd unit, so on every cloud VM the first command
+failed and the fallback answered — the right output for the wrong reason, with nothing saying
+which had run. The two sources carry different things.
+
+Logs now come from OpenClaw 2.0's own `openclaw logs`, which reads the gateway's structured
+log file and can emit JSON. It works over RPC, so a gateway that is down cannot serve its own
+logs — which is exactly when you want them. clawops probes first, falls back to container
+output, and **names the source either way**.
+
+`--since` is a container-log filter and the gateway command has no time window, so asking for
+one selects the container source. That is reported rather than silently ignored.
+
+## `clawops agents logs` reads the audit log
+
+OpenClaw 2.0 removed `agents logs`, so the command clawops was running did not exist — it
+would have failed on every 2.0 gateway. Agent-scoped records live in the audit log now:
+
+```bash
+clawops agents logs slack-bot --limit 100 --json
+clawops agents logs slack-bot --cursor <cursor>
+```
+
+It is a paged query rather than a stream, so there is no `--follow`: it returns a cursor to
+continue from. `clawops logs` stays gateway-wide, because its envelope carries no agent key to
+filter on.
+
 ## Docs
 
 `docs/security/egress.md` is new: every outbound destination clawops needs, from which

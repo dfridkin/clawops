@@ -506,6 +506,28 @@ had moved `monitor.ts` off the pre-2.0 config path. It had not: `monitor.ts` sti
 `/home/clawops` — while 2.0's SQLite grows in `/var/lib/clawops/openclaw`, so the disk gauge watched
 the wrong filesystem.
 
+**Both carried items are now done.** ✅
+
+`src/openclaw/logs.ts` owns the log commands, so the CLI and the MCP tool cannot drift — they
+had hand-rolled the identical `journalctl … || docker logs` chain, and would have drifted the
+moment one was fixed.
+
+Logs come from `openclaw logs`, which reads the gateway's structured log file over RPC. That
+makes the fallback necessary rather than accidental: a gateway that is down cannot serve its
+own logs, and that is when they are wanted. clawops probes first, falls back to container
+output, and **reports which source answered** — the missing half of the original finding. The
+old chain did not say, so a missing log line was indistinguishable from a source never read.
+
+`--since` selects the container source, because `openclaw logs` has no time window. Serving it
+from the gateway would have quietly shown the wrong window.
+
+`agents logs` now queries `openclaw audit --agent <id> --kind agent_run --json`. The command it
+used to run was removed in 2.0, so it would have failed on every supported gateway. It is a
+paged query, so `--follow` is gone in favour of `--cursor`: a poll loop presented as a follow
+would be a different thing wearing the old name.
+
+*Original text follows.*
+
 **Still open — carried in from the WO-58 audit.** Both were originally filed against WO-38, which
 closed without them, so they were re-homed here:
 
