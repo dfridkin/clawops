@@ -1177,15 +1177,21 @@ New optional wizard step in `clawops setup` (and as a standalone `clawops mcp wi
 
 1. Detect whether the deployed gateway's OpenClaw version supports MCP client connections (read `meta.lastTouchedVersion` from remote config; require ≥ 2026.4).
 2. Prompt: *"Should the OpenClaw gateway's AI also be able to manage this stack?"* (default: no — opt-in only).
-3. If yes, write an MCP client entry into the remote `openclaw.json` under `gateway.mcpClients`:
-   ```json
-   "mcpClients": {
-     "clawops": {
-       "command": "clawops",
-       "args": ["mcp", "serve"],
-       "transport": "stdio"
-     }
-   }
+3. If yes, add the entry with `openclaw mcp add`, which probes the server before saving.
+
+   > **Corrected in v1.7.8.** This step originally specified writing `gateway.mcpClients`
+   > directly. **That key does not exist in OpenClaw** — verified against the config schemas
+   > of `2026.4.5`, `2026.7.1-2` and `2026.9.2`. The real key is top-level
+   > `mcp.servers.<name>`. The entry was also `command: "clawops"` over stdio, which spawns
+   > inside the gateway container, where clawops is not installed. The step shipped in v1.5
+   > and never wired anything; nothing on this line validated the write, so it stored a key
+   > nothing read and reported success.
+
+   ```
+   openclaw mcp add clawops \
+     --transport streamable-http \
+     --url http://host.docker.internal:18790/ \
+     --header "Authorization=Bearer <token>"
    ```
 4. Call `restartGateway` to apply the change.
 5. Show a confirmation: *"The gateway's AI can now run clawops commands. Try: 'check if my stack is healthy'"*.
@@ -1193,7 +1199,13 @@ New optional wizard step in `clawops setup` (and as a standalone `clawops mcp wi
 Implementation notes:
 - Use `atomicWriteConfig` + `restartGateway` (existing helpers) — no new SSH primitives needed.
 - The MCP server for gateway use runs **without** `--read-only` (the gateway agent needs write access for config updates and gateway restarts).
-- If the gateway's OpenClaw version does not support `mcpClients`, surface a clear version-upgrade message rather than silently failing.
+- If the gateway's OpenClaw has no `openclaw mcp add` (2026.4.5 ships only `list` and
+  `serve`), say so and name the version to upgrade to. Asked of the binary, not inferred from
+  a version string — the original `>= 2026.4` gate was invented the same way and gated on a
+  capability that never existed.
+- **clawops does not run on the gateway host.** The gateway reaches it over HTTP at
+  `host.docker.internal`, so the operator must be running `clawops mcp serve --http`
+  somewhere reachable.
 - Add a `clawops mcp wire --stack <name>` command as a standalone entry point (not just via setup wizard) so operators can add this to existing deployments without re-running full setup.
 
 Status:

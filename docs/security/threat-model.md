@@ -111,6 +111,14 @@ Who's involved and what they can do:
 - This is explicitly prohibited in MCP June 2025 spec; we follow it strictly
 - HTTP mode requires OAuth 2.1 resource server posture in production
 
+> **Correction (v1.7.8).** "Client bearer tokens authenticate the client to clawops"
+> described an intent, not the code. Until v1.7.8 `clawops mcp serve --http` had **no
+> authentication of any kind** and would bind wherever it was told, exposing the full tool
+> surface — `clawops_destroy` included — to anyone the firewall admitted. It now requires a
+> bearer token, compares it in constant time, and refuses to bind anywhere but loopback
+> without one. The token authenticates the client to clawops and is never forwarded
+> upstream, so the rest of T5 stands.
+
 **Residual risk:** A misconfigured deployment that does forward tokens. **Detection**: code review on every MCP server change; ADR 0009 (when written) reaffirms this.
 
 ### T6: Supply chain compromise

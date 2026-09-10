@@ -33,6 +33,7 @@
     "test": "vitest run",
     "test:pulumi": "vitest run tests/providers/aws/program.test.ts tests/providers/azure/program.test.ts",
     "test:changed": "vitest --changed",
+    "test:mutation": "node scripts/dev/mutation-check.mjs",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "NODE_OPTIONS=--max-old-space-size=4096 tsc --noEmit",
     "lint": "eslint --max-warnings=0 src tests scripts",

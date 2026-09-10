@@ -61,7 +61,13 @@ beforeEach(() => {
 })
 
 describe('serveMcp HTTP transport', () => {
-  it('creates StreamableHTTPServerTransport with sessionIdGenerator when port is provided', async () => {
+  it('creates no transport until a client connects', async () => {
+    // One transport per session, created on the request that starts it — not one for the
+    // process. A shared transport is initialized by whichever client arrives first, and
+    // every client after it is answered "Server already initialized".
+    //
+    // What each session then does is covered in http-live.test.ts against a real server;
+    // this file mocks the SDK, so it can only see that the constructor was not called.
     mockOnce.mockImplementation((_event: string, cb: () => void) => {
       setTimeout(cb, 0)
       return mockHttpServer
@@ -72,9 +78,7 @@ describe('serveMcp HTTP transport', () => {
     const { StreamableHTTPServerTransport } = await import(
       '@modelcontextprotocol/sdk/server/streamableHttp.js'
     )
-    expect(StreamableHTTPServerTransport).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionIdGenerator: expect.any(Function) }),
-    )
+    expect(StreamableHTTPServerTransport).not.toHaveBeenCalled()
   })
 
   it('calls httpServer.listen with the specified port and default bind', async () => {
@@ -94,7 +98,8 @@ describe('serveMcp HTTP transport', () => {
       return mockHttpServer
     })
     const { serveMcp } = await import('../../src/mcp/server.js')
-    await serveMcp({ port: 9000, bind: '0.0.0.0' })
+    // A token is required off loopback — binding wide with no auth is refused before listen.
+    await serveMcp({ port: 9000, bind: '0.0.0.0', token: 'tok' })
 
     expect(mockListen).toHaveBeenCalledWith(9000, '0.0.0.0', expect.any(Function))
   })
@@ -110,5 +115,25 @@ describe('serveMcp HTTP transport', () => {
     const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js')
     expect(StdioServerTransport).toHaveBeenCalledOnce()
     expect(mockListen).not.toHaveBeenCalled()
+  })
+})
+
+describe('serveMcp refuses to expose an unauthenticated control plane', () => {
+  it('throws rather than listening on a non-loopback bind with no token', async () => {
+    const { serveMcp } = await import('../../src/mcp/server.js')
+    await expect(serveMcp({ port: 9000, bind: '0.0.0.0' })).rejects.toThrow(/--token/)
+    expect(mockListen).not.toHaveBeenCalled()
+  })
+
+  it('reads the token from CLAWOPS_MCP_TOKEN', async () => {
+    mockOnce.mockImplementation((_event: string, cb: () => void) => {
+      setTimeout(cb, 0)
+      return mockHttpServer
+    })
+    vi.stubEnv('CLAWOPS_MCP_TOKEN', 'from-env')
+    const { serveMcp } = await import('../../src/mcp/server.js')
+    await serveMcp({ port: 9000, bind: '0.0.0.0' })
+    expect(mockListen).toHaveBeenCalledWith(9000, '0.0.0.0', expect.any(Function))
+    vi.unstubAllEnvs()
   })
 })
