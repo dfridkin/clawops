@@ -73,6 +73,9 @@ interface Integration {
   plugin?: { package: string; source: 'npm' | 'clawhub' | 'bundled' }
   /** Keys the OpenClaw schema marks required on this channel. */
   requiredConfig?: string[]
+  /** Values for those keys, written into the config. A schema default does not satisfy
+   *  `required`, so omitting them produces a config OpenClaw rejects. */
+  defaults?: Record<string, unknown>
   /** False when the wizard cannot collect this channel's credentials — see WhatsApp. */
   wizardSupported?: boolean
   /** False when `openclaw channels add --use-env` is rejected for this channel. */
@@ -358,7 +361,7 @@ export default defineCommand({
       process.stdout.write('\n')
       info(`Setting up ${integ.displayName}:`)
 
-      const channelConfig: Record<string, unknown> = {}
+      const channelConfig = startChannelConfig(integ)
 
       for (const field of integ.fields) {
         if (field.sensitive && field.envDefault) {
@@ -1513,4 +1516,17 @@ export function admitsInternet(cidr: string): boolean {
  */
 export function wizardChannels(integrations: Integration[]): Integration[] {
   return integrations.filter((i) => i.wizardSupported !== false)
+}
+
+/**
+ * The starting point for a channel's config block: the keys OpenClaw requires, with its own
+ * defaults.
+ *
+ * ajv does not treat a JSON Schema `default` as satisfying `required`, so a channel block
+ * without these is rejected before it reaches the host. Every channel this wizard wrote was
+ * rejected that way — Slack for six missing properties, the rest for two — and nothing
+ * noticed, because nothing validated the wizard's own output.
+ */
+export function startChannelConfig(integ: Integration): Record<string, unknown> {
+  return { ...(integ.defaults ?? {}) }
 }

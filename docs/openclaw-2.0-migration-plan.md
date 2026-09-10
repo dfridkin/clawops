@@ -861,10 +861,9 @@ Microsoft Teams have **no non-interactive path in OpenClaw at all** — `channel
 upstream adding one. They stay documented-only until it does, and the catalog records that
 with `useEnvSupported: false` rather than the wizard discovering it at deploy time.
 
-Slack needs a second look while doing it: `--use-env` drives **Socket Mode**, which needs no
-public webhook, while the catalog still marks Slack `infraRequired: true` for the webhook path.
-Those are two different setups and the catalog currently describes one while the tooling
-installs the other.
+**Slack was resolved before this was filed** — see WO-60's follow-up. Socket Mode is
+OpenClaw's default and what `--use-env` drives, so the catalog now configures that and
+`infraRequired` is false.
 
 **Egress note:** channel plugins come from `registry.npmjs.org`, model providers from
 `clawhub.ai`. Installing channels during `apply` extends the deploy-time egress requirement to
@@ -934,9 +933,22 @@ recorded in the egress doc, and the reason the install flow is not being written
 records `source: unknown` and the wizard says so, rather than guessing a name that would fail
 at deploy time.
 
+**The Slack discrepancy resolved into something worse than a mismatch: the wizard's output
+never validated at all.** Slack failed on six missing required properties, every other channel
+on two. `mode` and the rest carry JSON Schema defaults, and ajv does not treat a `default` as
+satisfying `required` — so the wizard's config was rejected before it reached a host, for
+every channel, on every run. The catalog carries the values now and the wizard writes them.
+
+Slack itself was the `http` webhook setup described in the catalog while the tooling installed
+Socket Mode. Socket Mode dials **out** to Slack, so there is no public URL to register and no
+inbound rule to open: `infraRequired` is false, `appToken` (xapp-) replaces `signingSecret`,
+and `mode: socket` is written explicitly rather than left to a default that does not count.
+
 `tests/spec/integrations.test.ts` now validates the catalog against the captured schema —
-every key, every field, every required policy, and a plugin block per entry. The catalog drove
-the wizard for five releases with nothing checking it, which is why it drifted this far.
+every key, every field, every required policy, a plugin block per entry, and **what the wizard
+actually writes**, built by the wizard's own function rather than re-derived by the test. The
+catalog drove the wizard for five releases with nothing checking it, which is why it drifted
+this far.
 
 **Carried forward: clawops does not install channel plugins.** The wizard prints the
 `openclaw channels add` command and what it installs. Doing it automatically needs the

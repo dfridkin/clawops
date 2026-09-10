@@ -337,9 +337,16 @@ a deployed gateway:
 | Discord | `botToken` | `token` |
 | WhatsApp | `phoneNumberId`, `accessToken` | neither exists — credentials live per account |
 
-`dmPolicy` and `groupPolicy` are required on every channel, Slack requires four more, and
-WhatsApp one. The catalog records them, and a test validates the whole thing against
-OpenClaw's own schema so it cannot drift again.
+**And the config the wizard wrote was never valid.** `dmPolicy` and `groupPolicy` are required
+on every channel, Slack requires four more, WhatsApp one — and a JSON Schema *default* does not
+satisfy *required*, so every channel block the wizard produced was rejected before it reached a
+host. The wizard writes those values now, and a test validates its actual output against
+OpenClaw's schema so it cannot drift again.
+
+**Slack is set up for Socket Mode**, which is OpenClaw's default and what its own tooling
+installs: the gateway dials out to Slack, so there is no public webhook to register. It needs
+an app-level token (`xapp-`) rather than a signing secret, and the catalog previously described
+the webhook setup instead — while declaring the socket credentials incompletely.
 
 **Every environment variable the catalog named was wrong.** It used `OPENCLAW_DISCORD_TOKEN`
 and friends; OpenClaw reads `DISCORD_BOT_TOKEN`, `TELEGRAM_BOT_TOKEN`, `SLACK_BOT_TOKEN`. The

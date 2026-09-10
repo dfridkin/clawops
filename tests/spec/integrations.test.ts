@@ -21,6 +21,7 @@ interface Integration {
   fields: Field[]
   plugin?: { package: string; source: string }
   requiredConfig?: string[]
+  defaults?: Record<string, unknown>
   wizardSupported?: boolean
   useEnvSupported?: boolean
 }
@@ -168,5 +169,67 @@ describe('wizardChannels', () => {
       { id: 'c', channelKey: 'c', fields: [], wizardSupported: true },
     ] as never)
     expect(offered.map((i: Integration) => i.id)).toEqual(['a', 'c'])
+  })
+})
+
+describe('what the wizard writes is a config OpenClaw accepts', () => {
+  // The guard that would have caught all of this at once. Every channel the wizard wrote was
+  // rejected by validation — Slack for six missing required properties, the rest for two —
+  // and nothing noticed, because no test ever validated the wizard's own output.
+  it.each(each)('%s produces a valid channels block', async (_id, integ) => {
+    if (integ.wizardSupported === false) return
+
+    // Built by the wizard's own function, not re-derived here — otherwise this validates the
+    // catalog rather than what the wizard writes, and the wizard could stop writing defaults
+    // entirely without failing.
+    const { validateConfig } = await import('../../src/openclaw/config-validate.js')
+    const { startChannelConfig } = await import('../../src/cli/commands/setup.js')
+    const channelConfig = startChannelConfig(integ as never)
+    for (const f of integ.fields) channelConfig[f.name] = f.sensitive ? '$secret:X' : 'value'
+
+    const { errors } = await validateConfig(
+      {
+        meta: { lastTouchedVersion: '2026.9.2' },
+        gateway: { mode: 'local', port: 18789, auth: { mode: 'token' } },
+        models: {},
+        channels: { [integ.channelKey]: channelConfig },
+      },
+      { schemaCapturedFrom: '2026.9.2' },
+    )
+    expect(errors, `${integ.id} config rejected`).toEqual([])
+  })
+
+  it('Slack is configured for Socket Mode, which needs no public webhook', () => {
+    // The discrepancy this resolved: the catalog described the `http` webhook setup while
+    // `channels add --use-env` installs Socket Mode. Socket Mode dials out to Slack, so
+    // there is nothing to register and nothing to open.
+    const slack = catalog.find((i) => i.id === 'slack')!
+    expect(slack.defaults!['mode']).toBe('socket')
+    expect((slack as unknown as { infraRequired: boolean }).infraRequired).toBe(false)
+
+    const fields = slack.fields.map((f) => f.name)
+    expect(fields).toContain('appToken')   // xapp-, what Socket Mode needs
+    expect(fields).toContain('botToken')
+    // And under the variable OpenClaw reads: "Slack Socket Mode requires SLACK_APP_TOKEN
+    // when using --use-env." A field named appToken carrying the signing secret's variable
+    // would look right and authenticate nothing.
+    expect(slack.fields.find((f) => f.name === 'appToken')!.envDefault).toBe('SLACK_APP_TOKEN')
+    expect(slack.fields.find((f) => f.name === 'botToken')!.envDefault).toBe('SLACK_BOT_TOKEN')
+    // signingSecret verifies INBOUND requests; Socket Mode receives none.
+    expect(fields).not.toContain('signingSecret')
+  })
+
+  it('every default is a value the schema actually allows', () => {
+    for (const integ of catalog) {
+      const props = (channels[integ.channelKey]?.properties ?? {}) as Record<
+        string,
+        { enum?: unknown[] }
+      >
+      for (const [key, value] of Object.entries(integ.defaults ?? {})) {
+        expect(Object.keys(props), `${integ.id}.${key}`).toContain(key)
+        const allowed = props[key]?.enum
+        if (allowed) expect(allowed, `${integ.id}.${key}`).toContain(value)
+      }
+    }
   })
 })

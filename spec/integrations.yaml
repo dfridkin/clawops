@@ -15,7 +15,9 @@
 # healthy, and never connects to the channel.
 #
 # `dmPolicy` and `groupPolicy` are REQUIRED by the schema on every channel here, and Slack
-# and WhatsApp require more. A config missing them fails validation before it is written.
+# and WhatsApp require more. `defaults:` carries OpenClaw's own default for each of them, and
+# the wizard writes them — a JSON Schema default does not satisfy `required`, so a config
+# omitting them is REJECTED. Every channel the wizard wrote was invalid before this.
 #
 # Every credential field also accepts a SecretRef — `{source: env, provider, id}` — as well
 # as a plain string, so a token need not be inlined into the config.
@@ -41,6 +43,9 @@ integrations:
       source: npm
     useEnvSupported: true
     requiredConfig: [dmPolicy, groupPolicy]
+    defaults:
+      dmPolicy: pairing
+      groupPolicy: allowlist
     fields:
       - name: token
         label: Bot token
@@ -62,6 +67,9 @@ integrations:
       source: bundled
     useEnvSupported: true
     requiredConfig: [dmPolicy, groupPolicy]
+    defaults:
+      dmPolicy: pairing
+      groupPolicy: allowlist
     fields:
       - name: botToken
         label: Bot token
@@ -73,8 +81,19 @@ integrations:
   - id: slack
     channelKey: slack
     displayName: Slack
-    description: Connect OpenClaw agents to a Slack workspace via app
-    infraRequired: true
+    description: Connect OpenClaw agents to a Slack workspace via app (Socket Mode)
+    # Socket Mode, not a webhook. `mode` defaults to "socket" in OpenClaw and it is what
+    # `channels add --use-env` drives: the gateway opens an OUTBOUND WebSocket to Slack, so
+    # there is no public URL to register and no inbound rule to open.
+    #
+    # This entry said infraRequired: true — the `http` mode setup — while declaring the
+    # socket credentials incompletely. It described one setup while the tooling installed
+    # the other, and the config it produced failed validation either way.
+    #
+    # `mode: http` is still available: it needs a public webhook at `webhookPath` and a
+    # signingSecret to verify inbound requests. That is a deliberate choice, not the default,
+    # and clawops does not configure it.
+    infraRequired: false
     plugin:
       package: "@openclaw/slack"
       source: npm
@@ -84,20 +103,24 @@ integrations:
     # Slack requires more than the two policies: the schema also demands postAs, mode,
     # webhookPath and userTokenReadOnly.
     requiredConfig: [dmPolicy, groupPolicy, postAs, mode, webhookPath, userTokenReadOnly]
-    infraNote: >
-      After deployment, register the gateway webhook URL in your Slack app
-      configuration at api.slack.com (Event Subscriptions → Request URL).
+    defaults:
+      dmPolicy: pairing
+      groupPolicy: allowlist
+      postAs: bot
+      mode: socket
+      webhookPath: /slack/events
+      userTokenReadOnly: true
     fields:
       - name: botToken
         label: Bot OAuth token
         description: "Bot User OAuth Token (starts with xoxb-)"
         sensitive: true
         envDefault: SLACK_BOT_TOKEN
-      - name: signingSecret
-        label: Signing secret
-        description: App signing secret from Basic Information → App Credentials
+      - name: appToken
+        label: App-level token
+        description: "App-level token for Socket Mode (starts with xapp-), from Basic Information → App-Level Tokens"
         sensitive: true
-        envDefault: SLACK_SIGNING_SECRET
+        envDefault: SLACK_APP_TOKEN
     setupUrl: https://api.slack.com/apps
 
   - id: whatsapp
@@ -116,6 +139,10 @@ integrations:
     # "--use-env". There is no non-interactive path for this channel.
     useEnvSupported: false
     requiredConfig: [dmPolicy, groupPolicy, mediaMaxMb]
+    defaults:
+      dmPolicy: pairing
+      groupPolicy: allowlist
+      mediaMaxMb: 50
     # WhatsApp has no top-level credential fields in 2.0 — credentials live under
     # `accounts.<name>`, with `defaultAccount` selecting one. The wizard cannot collect a
     # flat token for it, so it is marked unsupported rather than collecting fields that go
@@ -143,6 +170,9 @@ integrations:
     # Same as WhatsApp: --use-env is rejected outright.
     useEnvSupported: false
     requiredConfig: [dmPolicy, groupPolicy]
+    defaults:
+      dmPolicy: pairing
+      groupPolicy: allowlist
     fields:
       - name: appId
         label: App (client) ID

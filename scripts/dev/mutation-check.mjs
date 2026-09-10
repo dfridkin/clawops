@@ -219,6 +219,14 @@ const MUTATIONS = [
     file: 'spec/integrations.yaml', from: '    # `openclaw channels add --use-env` answers: OpenClaw does not recognize option\n    # "--use-env". There is no non-interactive path for this channel.\n    useEnvSupported: false', to: '    useEnvSupported: true', test: 'tests/spec/integrations.test.ts' },
   { name: 'a downloadable channel claims to be bundled',
     file: 'spec/integrations.yaml', from: '      package: "@openclaw/discord"\n      source: npm', to: '      package: ""\n      source: bundled', test: 'tests/spec/integrations.test.ts' },
+  { name: 'the wizard stops writing the schema-required channel defaults',
+    file: 'src/cli/commands/setup.ts', from: '  return { ...(integ.defaults ?? {}) }', to: '  return {}', test: 'tests/spec/integrations.test.ts' },
+  { name: 'Slack reverts to the webhook setup the tooling does not install',
+    file: 'spec/integrations.yaml', from: '    infraRequired: false\n    plugin:\n      package: "@openclaw/slack"', to: '    infraRequired: true\n    plugin:\n      package: "@openclaw/slack"', test: 'tests/spec/integrations.test.ts' },
+  { name: 'Slack loses the app token Socket Mode needs',
+    file: 'spec/integrations.yaml', from: '        envDefault: SLACK_APP_TOKEN', to: '        envDefault: SLACK_SIGNING_SECRET', test: 'tests/spec/integrations.test.ts' },
+  { name: 'a channel default is set to a value the schema rejects',
+    file: 'spec/integrations.yaml', from: '      mode: socket', to: '      mode: webhook', test: 'tests/spec/integrations.test.ts' },
 ]
 
 let survived = []
