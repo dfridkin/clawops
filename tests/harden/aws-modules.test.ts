@@ -8,25 +8,55 @@ const noopExec: RemoteExec = async () => ({ stdout: '', stderr: '', code: 0 })
 describe('awsSgAuditModule', () => {
   beforeEach(() => vi.resetModules())
 
-  it('returns applied when no 0.0.0.0/0 rules on unexpected ports', async () => {
+  async function auditWith(permissions: unknown[]) {
     const { mockClient: mc } = await import('aws-sdk-client-mock')
     const { EC2Client, DescribeSecurityGroupsCommand } = await import('@aws-sdk/client-ec2')
     const mock = mc(EC2Client)
     mock.on(DescribeSecurityGroupsCommand).resolves({
-      SecurityGroups: [{
-        GroupId: 'sg-test',
-        IpPermissions: [{
-          FromPort: 22,
-          ToPort: 22,
-          IpRanges: [{ CidrIp: '0.0.0.0/0' }],
-        }],
-      }],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      SecurityGroups: [{ GroupId: 'sg-test', IpPermissions: permissions as any }],
     })
-
     const { awsSgAuditModule } = await import('../../src/harden/modules/aws-sg-audit.js')
     const result = await awsSgAuditModule.check(noopExec)
-    expect(result.status).toBe('applied')
     mock.reset()
+    return result
+  }
+
+  it('flags SSH open to the whole internet', async () => {
+    // This case used to return "applied": port 22 was on an exemption list, on the
+    // reasoning that it is a port clawops configures. N10 forbids exactly this rule, and
+    // an audit that exempts it green-lights the finding it exists to catch.
+    const result = await auditWith([
+      { FromPort: 22, ToPort: 22, IpRanges: [{ CidrIp: '0.0.0.0/0' }] },
+    ])
+    expect(result.status).toBe('drifted')
+    expect(result.detail).toMatch(/SSH/)
+  })
+
+  it('flags the gateway port open to the whole internet', async () => {
+    const result = await auditWith([
+      { FromPort: 18789, ToPort: 18789, IpRanges: [{ CidrIp: '0.0.0.0/0' }] },
+    ])
+    expect(result.status).toBe('drifted')
+    expect(result.detail).toMatch(/gateway/)
+  })
+
+  it('flags an IPv6 rule open to the whole internet', async () => {
+    // ::/0 admits the internet just as 0.0.0.0/0 does, and lives in a separate list the
+    // check never read.
+    const result = await auditWith([
+      { FromPort: 22, ToPort: 22, Ipv6Ranges: [{ CidrIpv6: '::/0' }] },
+    ])
+    expect(result.status).toBe('drifted')
+    expect(result.detail).toMatch(/::\/0/)
+  })
+
+  it('is applied when every rule names a specific CIDR', async () => {
+    const result = await auditWith([
+      { FromPort: 22, ToPort: 22, IpRanges: [{ CidrIp: '10.0.0.1/32' }] },
+      { FromPort: 18789, ToPort: 18789, IpRanges: [{ CidrIp: '10.0.0.0/8' }] },
+    ])
+    expect(result.status).toBe('applied')
   })
 
   it('returns drifted when unexpected port is open to 0.0.0.0/0', async () => {

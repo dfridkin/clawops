@@ -3,7 +3,7 @@
 // Docker installation, user setup, and OpenClaw container launch.
 
 import {
-  gatewayRunCommand, STATE_DIR_HOST_LINUX, CONFIG_FILENAME, CONTAINER_UID,
+  gatewayRunCommand, STATE_DIR_HOST_LINUX, CONFIG_FILENAME, CONTAINER_UID, GATEWAY_PORT,
 } from '../openclaw/runtime.js'
 
 export interface StartupScriptOpts {
@@ -24,6 +24,13 @@ export interface StartupScriptOpts {
    * firewall rule says who may connect; this says whether the port listens at all.
    */
   publishGateway?: 'loopback' | 'all'
+  /**
+   * Host port the gateway is published on, and the port written into the default config.
+   *
+   * Both, from one value: a `-p` mapping that disagrees with `gateway.port` produces a
+   * container that starts, passes a container-level check, and answers nothing.
+   */
+  gatewayPort?: number
 }
 
 /**
@@ -41,7 +48,10 @@ export interface StartupScriptOpts {
  * works on instances with httpTokens=required.
  */
 export function makeStartupScript(opts: StartupScriptOpts): string {
-  const { openclawVersion, os, bedrockEnabled = false, publishGateway = 'loopback' } = opts
+  const {
+    openclawVersion, os, bedrockEnabled = false,
+    publishGateway = 'loopback', gatewayPort = GATEWAY_PORT,
+  } = opts
   const dockerDistro = os === 'ubuntu' ? 'ubuntu' : 'debian'
   const bedrockEnvBlock = bedrockEnabled ? makeBedrockEnvBlock() : ''
 
@@ -116,7 +126,7 @@ fi
 # ── Default config (apply.ts will overwrite with plan overlay) ───────────────
 if [ ! -f "\${OPENCLAW_CONFIG}" ]; then
   cat > "\${OPENCLAW_CONFIG}" <<'OPENCLAWJSON'
-{"meta":{"lastTouchedVersion":"2026.9"},"gateway":{"mode":"local","port":18789,"auth":{"mode":"token"}},"models":{},"channels":{}}
+{"meta":{"lastTouchedVersion":"2026.9"},"gateway":{"mode":"local","port":${gatewayPort},"auth":{"mode":"token"}},"models":{},"channels":{}}
 OPENCLAWJSON
 fi
 
@@ -143,6 +153,7 @@ ${gatewayRunCommand({
   envFilePath: '"${OPENCLAW_ENV_FILE}"',
   extraArgs: bedrockEnvBlock.trim(),
   publish: publishGateway,
+  port: gatewayPort,
 })}
 `
 }

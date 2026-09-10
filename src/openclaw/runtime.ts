@@ -240,6 +240,33 @@ export const PUBLISH_INSPECT_CMD =
  *
  * Unparseable or absent output falls back to the safe default rather than guessing wide.
  */
+/**
+ * The host port the gateway is actually published on, from the same inspect output.
+ *
+ * The port is a deployment choice (`spec.network.gatewayPort`), so anything reasoning about
+ * the running container — a firewall rule, a probe — has to read it rather than assume the
+ * default. Returns undefined when nothing is published or the output cannot be parsed; a
+ * caller must not open a guessed port.
+ */
+export function publishedGatewayPort(inspectStdout: string): number | undefined {
+  try {
+    const bindings = JSON.parse(inspectStdout.trim()) as Record<
+      string,
+      { HostPort?: string }[] | null
+    > | null
+    if (!bindings) return undefined
+    for (const hostPorts of Object.values(bindings)) {
+      for (const binding of hostPorts ?? []) {
+        const port = Number(binding.HostPort)
+        if (Number.isInteger(port) && port > 0 && port < 65536) return port
+      }
+    }
+  } catch {
+    // fall through
+  }
+  return undefined
+}
+
 export function publishForRestart(inspectStdout: string): PublishScope {
   try {
     const bindings = JSON.parse(inspectStdout.trim()) as Record<

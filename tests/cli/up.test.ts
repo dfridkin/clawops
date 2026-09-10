@@ -167,6 +167,49 @@ describe('up command — local provider', () => {
 
     await expect((cmd.run as AnyRunFn)({ args: {} })).rejects.toThrow('SSH connection refused')
   })
+
+  it('passes --gateway-port through to bootstrap', async () => {
+    mockBuildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
+    mockLocalBootstrap.mockResolvedValue(FAKE_LOCAL_STATE)
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await (cmd.run as AnyRunFn)({ args: { 'gateway-port': '9443' } })
+
+    expect(mockLocalBootstrap).toHaveBeenCalledWith(
+      expect.objectContaining({ gatewayPort: 9443 }),
+    )
+  })
+
+  it('leaves the port unset when the flag is absent, so bootstrap picks the default', async () => {
+    mockBuildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
+    mockLocalBootstrap.mockResolvedValue(FAKE_LOCAL_STATE)
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await (cmd.run as AnyRunFn)({ args: {} })
+
+    expect(mockLocalBootstrap).toHaveBeenCalledWith(
+      expect.objectContaining({ gatewayPort: undefined }),
+    )
+  })
+
+  it.each(['0', '65536', '-1', 'https', '80.5'])(
+    'refuses --gateway-port %s rather than falling back to the default',
+    async (raw) => {
+      // A typo'd port that silently became 18789 would publish the gateway somewhere the
+      // operator did not ask for and report success.
+      mockBuildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
+      mockLocalBootstrap.mockResolvedValue(FAKE_LOCAL_STATE)
+      vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      await expect((cmd.run as AnyRunFn)({ args: { 'gateway-port': raw } }))
+        .rejects.toThrow(/gateway-port/)
+      expect(mockLocalBootstrap).not.toHaveBeenCalled()
+    },
+  )
+
 })
 
 describe('up command — cloud provider path', () => {

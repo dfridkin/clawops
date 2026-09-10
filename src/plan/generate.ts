@@ -38,6 +38,8 @@ export interface DeployPlan {
       allowedGatewayCidrs: string[]
       /** Interface the gateway publishes on. Defaults to loopback. */
       publishGateway?: 'loopback' | 'all'
+      /** Host port the gateway is published on. Defaults to GATEWAY_PORT. */
+      gatewayPort?: number
       tailscale?: { enabled: boolean; authKeyRef?: string }
     }
     ssh?: { publicKey?: string; user?: string }
@@ -60,6 +62,8 @@ export interface GeneratePlanIntent {
   network?: {
     allowedSshCidrs: string[]
     allowedGatewayCidrs: string[]
+    publishGateway?: 'loopback' | 'all'
+    gatewayPort?: number
   }
   tags?: Record<string, string>
 }
@@ -190,7 +194,7 @@ export async function generatePlan(
   // The plan schema treats spec.openclaw.config as free-form, so schema validation says
   // nothing about whether the gateway would accept it. Check it here, while the plan is
   // still a file on disk and nothing has been provisioned.
-  const { validatePlanConfig } = await import('./validate.js')
+  const { validatePlanConfig, validatePlanNetwork } = await import('./validate.js')
   const cfgCheck = await validatePlanConfig(plan)
   for (const w of cfgCheck.warnings) process.stderr.write(`[clawops] warning: ${w}\n`)
   if (!cfgCheck.ok) {
@@ -198,6 +202,17 @@ export async function generatePlan(
       `The OpenClaw config in this plan would be rejected:\n` +
         cfgCheck.errors.map((e) => `  - ${e}`).join('\n') +
         `\nFix spec.openclaw.config before applying — the gateway reads it verbatim.`,
+    )
+  }
+
+  // Firewall rules that would not do what they say. Same reasoning as the config check:
+  // catch it while the plan is a file, not after a security group exists.
+  const netCheck = validatePlanNetwork(plan)
+  for (const w of netCheck.warnings) process.stderr.write(`[clawops] warning: ${w}\n`)
+  if (!netCheck.ok) {
+    throw new Error(
+      `This plan's network settings contradict each other:\n` +
+        netCheck.errors.map((e) => `  - ${e}`).join('\n'),
     )
   }
 

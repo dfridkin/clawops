@@ -65,13 +65,96 @@ describe('ufwModule', () => {
   it('makeUfwModule() uses the custom SSH port in apply', async () => {
     const { makeUfwModule } = await import('../../src/harden/modules/ufw.js')
     const mod = makeUfwModule(2222)
-    let capturedCommand = ''
+    const { exec, script } = recordingExec()
+    await mod.apply(exec)
+    expect(script()).toContain('2222')
+  })
+
+  /**
+   * apply() asks the host what the container publishes before writing rules, so the exec
+   * has to answer the inspect and then capture the ufw script.
+   */
+  function recordingExec(bindings?: string): { exec: RemoteExec; script: () => string } {
+    const commands: string[] = []
     const exec: RemoteExec = async (cmd) => {
-      capturedCommand = cmd
+      commands.push(cmd)
+      if (cmd.includes('PortBindings')) {
+        return { stdout: bindings ?? '{}', stderr: '', code: 0 }
+      }
       return { stdout: '', stderr: '', code: 0 }
     }
-    await mod.apply(exec)
-    expect(capturedCommand).toContain('2222')
+    return { exec, script: () => commands.filter((c) => c.includes('ufw')).join('\n') }
+  }
+
+  const LOOPBACK = '{"18789/tcp":[{"HostIp":"127.0.0.1","HostPort":"18789"}]}'
+  const EXPOSED = '{"18789/tcp":[{"HostIp":"0.0.0.0","HostPort":"18789"}]}'
+  const EXPOSED_ALT_PORT = '{"9443/tcp":[{"HostIp":"0.0.0.0","HostPort":"9443"}]}'
+
+  it('does not open the gateway port when the gateway is on loopback', async () => {
+    // The rule used to be unconditional. Since the gateway publishes on 127.0.0.1 by
+    // default, `clawops harden` was opening a port nothing was listening on — widening the
+    // firewall past what the deployment exposes, which is the opposite of hardening.
+    const { ufwModule } = await import('../../src/harden/modules/ufw.js')
+    const { exec, script } = recordingExec(LOOPBACK)
+    const result = await ufwModule.apply(exec)
+    expect(script()).not.toContain('18789')
+    expect(script()).toContain('allow 22/tcp')
+    expect(result.detail).toMatch(/not opened/)
+  })
+
+  it('opens the gateway port when the gateway is published to the network', async () => {
+    const { ufwModule } = await import('../../src/harden/modules/ufw.js')
+    const { exec, script } = recordingExec(EXPOSED)
+    await ufwModule.apply(exec)
+    expect(script()).toContain('allow 18789/tcp')
+  })
+
+  it('opens the port the container actually publishes, not the default', async () => {
+    const { ufwModule } = await import('../../src/harden/modules/ufw.js')
+    const { exec, script } = recordingExec(EXPOSED_ALT_PORT)
+    await ufwModule.apply(exec)
+    expect(script()).toContain('allow 9443/tcp')
+    expect(script()).not.toContain('18789')
+  })
+
+  it('opens no gateway port when the published port cannot be read', async () => {
+    // Exposed, but the port is unreadable. Guessing would either open nothing useful or
+    // open something unintended; both are worse than saying so.
+    const { ufwModule } = await import('../../src/harden/modules/ufw.js')
+    const { exec, script } = recordingExec('{"18789/tcp":[{"HostIp":"0.0.0.0"}]}')
+    const result = await ufwModule.apply(exec)
+    expect(script()).not.toContain('allow 18789/tcp')
+    expect(result.detail).toMatch(/could not be read/)
+  })
+
+  it('opens exactly the ports it was asked for, and no others', async () => {
+    // Not just "does it include SSH": the whole allow-list. A rule for a port nobody asked
+    // about — a reverse proxy's 443, say — is the same class of mistake as the
+    // unconditional gateway rule this replaced.
+    const { ufwModule } = await import('../../src/harden/modules/ufw.js')
+    const { exec, script } = recordingExec(LOOPBACK)
+    await ufwModule.apply(exec)
+    const allows = script().split(' && ').filter((c) => c.trim().startsWith('ufw allow'))
+    expect(allows).toEqual(['ufw allow 22/tcp comment "clawops SSH"'])
+  })
+
+  it('opens exactly SSH and the published port when the gateway is exposed', async () => {
+    const { ufwModule } = await import('../../src/harden/modules/ufw.js')
+    const { exec, script } = recordingExec(EXPOSED_ALT_PORT)
+    await ufwModule.apply(exec)
+    const allows = script().split(' && ').filter((c) => c.trim().startsWith('ufw allow'))
+    expect(allows).toEqual([
+      'ufw allow 22/tcp comment "clawops SSH"',
+      'ufw allow 9443/tcp comment "OpenClaw gateway"',
+    ])
+  })
+
+  it('still denies incoming by default and enables ufw', async () => {
+    const { ufwModule } = await import('../../src/harden/modules/ufw.js')
+    const { exec, script } = recordingExec(LOOPBACK)
+    await ufwModule.apply(exec)
+    expect(script()).toContain('ufw default deny incoming')
+    expect(script()).toContain('ufw --force enable')
   })
 })
 

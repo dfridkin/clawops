@@ -150,3 +150,36 @@ describe('exposure is an explicit choice', () => {
     expect(net.enum).toEqual(['loopback', 'all'])
   })
 })
+
+describe('publishedGatewayPort', () => {
+  it('reads the host port off a running container', async () => {
+    const { publishedGatewayPort } = await import('../../src/openclaw/runtime.js')
+    expect(
+      publishedGatewayPort('{"18789/tcp":[{"HostIp":"127.0.0.1","HostPort":"18789"}]}'),
+    ).toBe(18789)
+  })
+
+  it('reads a non-default port', async () => {
+    const { publishedGatewayPort } = await import('../../src/openclaw/runtime.js')
+    expect(publishedGatewayPort('{"9443/tcp":[{"HostIp":"0.0.0.0","HostPort":"9443"}]}')).toBe(9443)
+  })
+
+  it.each([
+    ['nothing published', '{}'],
+    ['null bindings', 'null'],
+    ['a binding with no host port', '{"18789/tcp":[{"HostIp":"0.0.0.0"}]}'],
+    ['an empty port list', '{"18789/tcp":[]}'],
+    ['unparseable output', 'Error: No such object: openclaw'],
+    ['empty output', ''],
+  ])('returns undefined for %s', async (_label, stdout) => {
+    // Undefined, never a guess: the only caller opens a firewall port with it.
+    const { publishedGatewayPort } = await import('../../src/openclaw/runtime.js')
+    expect(publishedGatewayPort(stdout)).toBeUndefined()
+  })
+
+  it('rejects a port outside the valid range', async () => {
+    const { publishedGatewayPort } = await import('../../src/openclaw/runtime.js')
+    expect(publishedGatewayPort('{"x/tcp":[{"HostPort":"0"}]}')).toBeUndefined()
+    expect(publishedGatewayPort('{"x/tcp":[{"HostPort":"70000"}]}')).toBeUndefined()
+  })
+})

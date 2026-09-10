@@ -11,7 +11,7 @@ import { randomBytes } from 'node:crypto'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { execSync, spawnSync, spawn } from 'node:child_process'
 import path from 'node:path'
-import { success, failure, info, spinner, printCta } from '../../output/human.js'
+import { success, failure, warn, info, spinner, printCta } from '../../output/human.js'
 import type { ClawopsConfig } from '../../config/store.js'
 import { MCP_APPS, buildMcpEntry, writeAppConfigs } from '../mcp-apps.js'
 import { execPrivileged } from '../../transport/privileged.js'
@@ -198,6 +198,7 @@ export default defineCommand({
 
     // ── Step 3: Stack basics ───────────────────────────────────────────────────
     process.stdout.write('\n')
+    const sshCidrDefault = provider === 'local' ? undefined : await detectSshCidrDefault()
     const stackAnswers = await inquirer.prompt<{
       stackName: string; region: string; instanceSize: string;
       stateBucket: string; sshKeyPath: string; sshCidr: string; openclawVersion: string
@@ -237,8 +238,15 @@ export default defineCommand({
         {
           type: 'input',
           name: 'sshCidr',
-          message: 'Restrict SSH access to: (your IP address for security, or 0.0.0.0/0 to allow access from anywhere)',
-          default: '0.0.0.0/0',
+          message: sshCidrDefault
+            ? 'Restrict SSH access to: (detected your current IP — press Enter to accept, or enter another CIDR)'
+            : 'Restrict SSH access to: (a CIDR such as 203.0.113.4/32 — your own IP is the usual answer)',
+          // Defaulted to 0.0.0.0/0 until 2.0, so pressing Enter opened SSH to the whole
+          // internet on the path most first-time users take. N10 forbids exactly that
+          // default. When the egress IP cannot be detected there is no default at all and
+          // the answer is required — an unanswerable prompt is better than a wide one.
+          ...(sshCidrDefault ? { default: sshCidrDefault } : {}),
+          validate: validateCidrAnswer,
         },
       ] as InquirerQuestion[] : []),
       {
@@ -248,6 +256,13 @@ export default defineCommand({
         default: 'latest',
       },
     ])
+
+    if (provider !== 'local' && admitsInternet(stackAnswers.sshCidr)) {
+      warn(
+        'SSH will be reachable from anywhere on the internet. `clawops harden` reports this ' +
+        'as a finding; narrowing it to your own IP is the usual fix.',
+      )
+    }
 
     // ── Step 4: LLM provider ───────────────────────────────────────────────────
     process.stdout.write('\n')
@@ -430,7 +445,9 @@ export default defineCommand({
           },
           secrets,
           network: {
-            allowedSshCidrs: [stackAnswers.sshCidr ?? '0.0.0.0/0'],
+            // No `?? '0.0.0.0/0'`. The prompt requires an answer now, and a fallback that
+            // opened the internet would reintroduce the default it replaced.
+            allowedSshCidrs: [stackAnswers.sshCidr.trim()],
             // Empty, not the SSH CIDR. Reusing it opened a plaintext HTTP dashboard to
             // whatever network the operator picked for shell access — two very different
             // risks answered by one question. The gateway is reached with
@@ -1411,4 +1428,41 @@ async function maybeHarden(opts: {
     fail(`Hardening failed: ${err instanceof Error ? err.message : String(err)}`)
     info('Run `clawops harden --stack ' + opts.stackName + '` to retry.')
   }
+}
+
+/**
+ * A CIDR to offer as the SSH default: the operator's own egress IP as a /32.
+ *
+ * Returns undefined when detection fails, and the prompt then requires an answer. The
+ * previous default was `0.0.0.0/0`, so the quickest path through the wizard — pressing
+ * Enter — opened SSH to the entire internet, which is the default N10 exists to forbid.
+ */
+export async function detectSshCidrDefault(): Promise<string | undefined> {
+  const { detectEgressIp } = await import('../../providers/firewall.js')
+  const result = await detectEgressIp('https://ifconfig.me')
+  if (!result.ok) return undefined
+  const ip = result.ip.trim()
+  return ip === '' ? undefined : ip.includes('/') ? ip : `${ip}/32`
+}
+
+/**
+ * Accept a CIDR, and require one.
+ *
+ * An operator who means `0.0.0.0/0` can still type it — the wizard says what it does
+ * afterwards. What changed is that they can no longer arrive there by pressing Enter.
+ */
+export function validateCidrAnswer(value: string): true | string {
+  const v = value.trim()
+  if (v === '') return 'Required — enter a CIDR such as 203.0.113.4/32'
+  const looksIpv6 = v.includes(':')
+  if (!looksIpv6 && !/^(\d{1,3}\.){3}\d{1,3}\/(3[0-2]|[12]?\d)$/.test(v)) {
+    return `"${v}" is not a CIDR. Use an address and a prefix, e.g. 203.0.113.4/32`
+  }
+  return true
+}
+
+/** True when a CIDR admits the whole internet. */
+export function admitsInternet(cidr: string): boolean {
+  const v = cidr.trim()
+  return v === '0.0.0.0/0' || v === '::/0'
 }

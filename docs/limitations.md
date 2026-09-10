@@ -78,7 +78,18 @@ A reverse proxy running **in a container** on the same host cannot reach the hos
 `clawops doctor` reports which scope a deployment is using, and `gateway restart`/`update` preserve
 it — a restart changes neither the version nor who can reach it.
 
-**No TLS or domain automation in the current release.** The gateway runs on port 18789 without
+Because loopback publishing means nothing is listening on a routable interface, clawops creates
+**no security-group rule for the gateway port** while that scope is in effect, and `clawops plan`
+refuses a plan that lists `allowedGatewayCidrs` alongside it. Such a rule grants no access, and to
+anyone auditing the security group it reads as an exposed gateway. `clawops harden` follows the same
+rule: it reads the running container's port bindings and opens the gateway port in `ufw` only when
+the gateway is really published.
+
+**A reverse proxy's port is not opened for you.** `harden` opens SSH and, where applicable, the
+gateway port. If you terminate TLS on the host at 443, add that rule yourself — clawops does not
+know the proxy is there.
+
+**No TLS or domain automation in the current release.** The gateway runs on port 18789 (or `network.gatewayPort`) without
 TLS termination. Bring your own reverse proxy (nginx, Caddy, Cloudflare Tunnel) for HTTPS. TLS
 automation is tracked in the roadmap.
 

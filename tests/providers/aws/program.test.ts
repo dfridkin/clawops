@@ -127,11 +127,27 @@ describe('awsProgram — SecurityGroupIngressRule resources (not inline ingress)
     expect(rules).toHaveLength(0)
   })
 
-  it('creates 4 ingress rules for 2 CIDRs × 2 ports', async () => {
+  it('creates SSH rules only when the gateway publishes on loopback', async () => {
+    // Two CIDRs, and the default publish scope. Four rules would mean two of them opened
+    // the gateway port on a host where the container binds 127.0.0.1 — traffic admitted to
+    // a closed port, and a security group that reads to an auditor as an exposed gateway.
     setConfig({
       sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
       accessMode: 'restricted',
       allowedCidrs: '10.0.0.1/32,10.0.0.2/32',
+    })
+    await runProgram()
+    const rules = created.filter(r => r.type === 'aws:vpc/securityGroupIngressRule:SecurityGroupIngressRule')
+    expect(rules).toHaveLength(2)
+    expect(rules.every(r => r.inputs['fromPort'] === 22)).toBe(true)
+  })
+
+  it('creates 4 ingress rules for 2 CIDRs × 2 ports when the gateway is published', async () => {
+    setConfig({
+      sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
+      accessMode: 'restricted',
+      allowedCidrs: '10.0.0.1/32,10.0.0.2/32',
+      publishGateway: 'all',
     })
     await runProgram()
     const rules = created.filter(r => r.type === 'aws:vpc/securityGroupIngressRule:SecurityGroupIngressRule')
@@ -171,16 +187,43 @@ describe('awsProgram — SecurityGroupIngressRule resources (not inline ingress)
     expect(sshRules[0]!.inputs['cidrIpv4']).toBe('10.0.0.1/32')
   })
 
-  it('gateway rules target port 18789', async () => {
+  it('gateway rules target port 18789 by default', async () => {
     setConfig({
       sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
       allowedCidrs: '10.0.0.1/32',
+      publishGateway: 'all',
     })
     await runProgram()
     const rules = created.filter(r => r.type === 'aws:vpc/securityGroupIngressRule:SecurityGroupIngressRule')
     const gwRules = rules.filter(r => r.inputs['fromPort'] === 18789)
     expect(gwRules).toHaveLength(1)
     expect(gwRules[0]!.inputs['cidrIpv4']).toBe('10.0.0.1/32')
+  })
+
+  it('gateway rules follow the plan\'s port, not the default', async () => {
+    setConfig({
+      sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
+      allowedCidrs: '10.0.0.1/32',
+      publishGateway: 'all',
+      gatewayPort: '9443',
+    })
+    await runProgram()
+    const rules = created.filter(r => r.type === 'aws:vpc/securityGroupIngressRule:SecurityGroupIngressRule')
+    const gwRules = rules.filter(r => r.inputs['fromPort'] === 9443)
+    expect(gwRules).toHaveLength(1)
+    expect(rules.filter(r => r.inputs['fromPort'] === 18789)).toHaveLength(0)
+  })
+
+  it('falls back to the default port for a stack that predates the setting', async () => {
+    setConfig({
+      sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
+      allowedCidrs: '10.0.0.1/32',
+      publishGateway: 'all',
+      gatewayPort: 'not-a-port',
+    })
+    await runProgram()
+    const rules = created.filter(r => r.type === 'aws:vpc/securityGroupIngressRule:SecurityGroupIngressRule')
+    expect(rules.filter(r => r.inputs['fromPort'] === 18789)).toHaveLength(1)
   })
 })
 

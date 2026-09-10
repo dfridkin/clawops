@@ -1,4 +1,5 @@
 import { defineCommand } from 'citty'
+import { GATEWAY_PORT } from '../../openclaw/run-flags.js'
 import process from 'node:process'
 import { readFileSync } from 'node:fs'
 import { success, failure, info, spinner } from '../../output/human.js'
@@ -21,6 +22,7 @@ export default defineCommand({
     'openclaw-version': { type: 'string', description: "OpenClaw release (e.g. 2026.7.1-2). Moving tags are resolved and range-checked" },
     stack: { type: 'string', description: 'Target stack name' },
     config: { type: 'string', description: 'Path to openclaw config overlay JSON (local provider only)' },
+    'gateway-port': { type: 'string', description: `Host port to publish the gateway on (default ${GATEWAY_PORT}, local provider only — cloud stacks set spec.network.gatewayPort in the plan)` },
   },
   async run({ args }) {
     const { buildContext } = await import('../context.js')
@@ -46,6 +48,7 @@ export default defineCommand({
 
       const { localOpts } = stackConfig
       const { localBootstrap } = await import('../../providers/local/bootstrap.js')
+      const gatewayPort = parseGatewayPort(args['gateway-port'])
 
       const abortController = new AbortController()
       process.on('SIGINT', () => abortController.abort())
@@ -61,6 +64,7 @@ export default defineCommand({
           knownHostsPath: ctx.config.ssh.knownHostsPath,
           openclawVersion,
           stackName: ctx.stackName,
+          gatewayPort,
           noWait: Boolean(args['no-wait']),
           signal: abortController.signal,
         })
@@ -195,4 +199,19 @@ async function applyLocalConfigOverlay(opts: LocalOverlayOpts): Promise<void> {
   } finally {
     session.close()
   }
+}
+
+/**
+ * The gateway port for a local bootstrap.
+ *
+ * Rejected rather than silently defaulted: a typo'd port would otherwise publish the
+ * gateway somewhere the operator did not ask for and report success.
+ */
+function parseGatewayPort(raw: unknown): number | undefined {
+  if (typeof raw !== 'string' || raw.trim() === '') return undefined
+  const port = Number(raw)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new UsageError(`--gateway-port must be a port number between 1 and 65535, got "${raw}"`)
+  }
+  return port
 }

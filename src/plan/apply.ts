@@ -8,6 +8,7 @@ import { saveOverlay } from './overlay-store.js'
 import { readRemoteConfig, atomicWriteConfig, restartGateway, deepMerge } from './remote-config.js'
 import type { DeployPlan } from './generate.js'
 import type { StackOutputs } from '../providers/types.js'
+import { GATEWAY_PORT } from '../openclaw/run-flags.js'
 
 export interface ApplyPlanOpts {
   onOutput?: (line: string) => void
@@ -58,6 +59,9 @@ export async function applyPlan(
   await stack.setConfig('openclawVersion', { value: plan.spec.openclaw.version })
   await stack.setConfig('publishGateway', {
     value: plan.spec.network?.publishGateway ?? 'loopback',
+  })
+  await stack.setConfig('gatewayPort', {
+    value: String(plan.spec.network?.gatewayPort ?? GATEWAY_PORT),
   })
 
   // Enable Bedrock IAM attachment when the plan selects the bedrock provider.

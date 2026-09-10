@@ -5,7 +5,7 @@
 set -euo pipefail
 
 OPENCLAW_VERSION="{{OPENCLAW_VERSION}}"
-OPENCLAW_PORT=18789
+OPENCLAW_PORT={{OPENCLAW_PORT}}
 
 # ── OS detection ──────────────────────────────────────────────────────────────
 OS="$(uname -s)"
@@ -161,8 +161,11 @@ fi
 # ── Write default openclaw.json if absent ─────────────────────────────────────
 # clawops up --config will overwrite this with the plan config overlay.
 if [ ! -f "${OPENCLAW_CONFIG}" ]; then
-  cat > "${OPENCLAW_CONFIG}" <<'OPENCLAWJSON'
-{"meta":{"lastTouchedVersion":"2026.9"},"gateway":{"mode":"local","port":18789,"auth":{"mode":"token"}},"models":{},"channels":{}}
+  # Unquoted heredoc, so ${OPENCLAW_PORT} expands. gateway.port and the -p mapping have to
+  # be the same number: a container that publishes one port while the gateway listens on
+  # another starts, looks healthy to Docker, and answers nothing.
+  cat > "${OPENCLAW_CONFIG}" <<OPENCLAWJSON
+{"meta":{"lastTouchedVersion":"2026.9"},"gateway":{"mode":"local","port":${OPENCLAW_PORT},"auth":{"mode":"token"}},"models":{},"channels":{}}
 OPENCLAWJSON
 fi
 

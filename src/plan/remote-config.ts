@@ -45,27 +45,21 @@ export async function readRemoteConfig(
   }
 }
 
-/**
- * Force `gateway.port` to the port clawops publishes.
+/*
+ * `normaliseGatewayPort` was removed in WO-48.
  *
- * Config delivery was broken until v1.7.2, so a non-default port in a stored config
- * has never taken effect — there is no working behaviour to preserve, only a dormant
- * value that would now move the listener away from the `-p` mapping. Returns the
- * previous value when it changed, so the caller can say so rather than silently
- * rewriting the user's file.
+ * It forced `gateway.port` to the one hardcoded port, on the reasoning that a stored value
+ * had never taken effect and would now move the listener away from the `-p` mapping. Two
+ * things ended that. It had no caller — only tests — so it never normalised anything. And
+ * the premise stopped being true: the port is a deployment choice now
+ * (`spec.network.gatewayPort`), so there is no single correct value to force a config to,
+ * and WO-38 pins the listener with `gateway run --port` on argv, which wins over config
+ * either way.
+ *
+ * The hazard it aimed at — a config port disagreeing with the published one — is checked in
+ * `validatePlanNetwork`, while the plan is still a file the operator can edit, rather than
+ * by silently rewriting their config on the host.
  */
-export function normaliseGatewayPort(cfg: Record<string, unknown>): number | undefined {
-  const gateway = cfg['gateway']
-  if (!gateway || typeof gateway !== 'object' || Array.isArray(gateway)) return undefined
-  const g = gateway as Record<string, unknown>
-  const current = g['port']
-  if (typeof current === 'number' && current !== GATEWAY_PORT) {
-    g['port'] = GATEWAY_PORT
-    return current
-  }
-  if (current === undefined) g['port'] = GATEWAY_PORT
-  return undefined
-}
 
 /** Atomically write a config object to the remote openclaw.json. */
 export interface WriteConfigOpts {

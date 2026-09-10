@@ -12,7 +12,6 @@ import {
   COMMON_RUN_FLAGS,
   GATEWAY_PORT,
 } from '../../src/openclaw/run-flags.js'
-import { normaliseGatewayPort } from '../../src/plan/remote-config.js'
 import { makeStartupScript } from '../../src/providers/startup.js'
 import { dockerRunCmd, dockerRunCmd as gatewayDockerRunCmd } from '../../src/cli/commands/gateway.js'
 import { dockerRunCmd as configDockerRunCmd } from '../../src/cli/commands/config.js'
@@ -182,31 +181,6 @@ describe('rendered commands', () => {
   })
 })
 
-describe('normaliseGatewayPort', () => {
-  it('rewrites a divergent port and reports the old value', () => {
-    const cfg = { gateway: { port: 19999 } }
-    expect(normaliseGatewayPort(cfg)).toBe(19999)
-    expect((cfg.gateway as { port: number }).port).toBe(GATEWAY_PORT)
-  })
-
-  it('leaves a matching port alone and reports no change', () => {
-    const cfg = { gateway: { port: GATEWAY_PORT } }
-    expect(normaliseGatewayPort(cfg)).toBeUndefined()
-    expect((cfg.gateway as { port: number }).port).toBe(GATEWAY_PORT)
-  })
-
-  it('fills in a missing port without reporting a change', () => {
-    const cfg: Record<string, unknown> = { gateway: {} }
-    expect(normaliseGatewayPort(cfg)).toBeUndefined()
-    expect((cfg['gateway'] as { port: number }).port).toBe(GATEWAY_PORT)
-  })
-
-  it('ignores configs with no gateway block', () => {
-    expect(normaliseGatewayPort({})).toBeUndefined()
-    expect(normaliseGatewayPort({ gateway: null })).toBeUndefined()
-    expect(normaliseGatewayPort({ gateway: [] })).toBeUndefined()
-  })
-})
 
 describe('gateway auth token', () => {
   // OpenClaw refuses a non-loopback bind without auth, and in a container it always

@@ -152,6 +152,48 @@ one repair, and failing that **rolls back to the image that was running before**
 you which state you ended up in rather than leaving you to work it out. If the rollback
 will not start either, the message names the snapshot to restore.
 
+## The firewall follows the deployment, not a constant
+
+Three security controls were doing the opposite of what they say.
+
+**`clawops harden` opened the gateway port on every deployment.** The `ufw` module ran
+`ufw allow 18789/tcp` unconditionally. Since the gateway publishes on `127.0.0.1`, that
+opened a port nothing was listening on — a hardening step widening the firewall past what
+the deployment exposes. It now reads the running container's port bindings and adds the rule
+only when the gateway is actually published, on whatever port it is published on.
+
+**The AWS security-group audit exempted the two ports it exists to check.** Ports 22 and
+18789 were on an "expected" list, so a group opening SSH *or the gateway* to `0.0.0.0/0` was
+reported as "No unexpected open ingress rules found". It also never looked at IPv6 rules, so
+`::/0` was invisible. A wide rule on any port is a finding now.
+
+**The setup wizard defaulted SSH access to `0.0.0.0/0`.** Pressing Enter opened SSH to the
+whole internet on the path most first-time users take. It now offers your own IP as a `/32`,
+and when that cannot be detected it offers no default and requires an answer.
+
+Cloud stacks no longer get gateway ingress rules while the gateway publishes on loopback:
+they grant no access and read to an auditor as an exposed gateway. `clawops plan` refuses
+that combination rather than creating rules that do nothing.
+
+## The gateway port comes from the plan
+
+`spec.network.gatewayPort` carries it into the security-group rules, the container publish
+flag, the default `gateway.port` and the gateway URL. It was a constant redeclared in eleven
+places, so changing it meant finding all of them — and missing one produced a container
+publishing one port, a gateway listening on another, and a firewall opening a third.
+
+```jsonc
+"network": {
+  "allowedSshCidrs": ["203.0.113.4/32"],
+  "allowedGatewayCidrs": [],
+  "publishGateway": "loopback",
+  "gatewayPort": 9443
+}
+```
+
+Local deployments use `clawops up --gateway-port 9443`, which refuses a value that is not a
+port rather than falling back to the default and publishing somewhere you did not ask for.
+
 ## `clawops doctor` asks the gateway, and its exit code means something
 
 `doctor` read `docker inspect`'s healthcheck field, which the OpenClaw image does not set —
