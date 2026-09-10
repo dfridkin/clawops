@@ -51,12 +51,15 @@ jobs:
           # @changesets/cli calls `npm publish` instead of `pnpm publish`.
           # npm 11.5.1+ then performs the OIDC automated token exchange
           # (npm trusted publishing configured on npmjs.com).
-          # 1.x publishes under the `legacy` dist-tag so it cannot take `latest`
-          # back from 2.x. main passes no tag and keeps changesets' default.
+          # The branch is passed, not a dist-tag: scripts/lib/dist-tag-plan.mjs decides.
+          # 1.x publishes under `legacy` so it cannot take `latest` back from 2.x — but
+          # only once 2.x has shipped. While `latest` is itself a 1.x version, the release
+          # takes `latest` too, or a fresh `npm install` keeps serving the previous one.
+          # That is what happened to 1.7.8.
           #
           # The tag is `legacy`, not `v1`: npm refuses any dist-tag that parses as a
           # SemVer range, and `v1`, `v1.x` and `1.x` all do (`>=1.0.0 <2.0.0-0`).
-          publish: bash scripts/ci-publish.sh ${{ github.ref_name == '1.x' && 'legacy' || '' }}
+          publish: bash scripts/ci-publish.sh ${{ github.ref_name }}
         env:
           # PAT required so the Version Packages PR triggers CI
           # (GITHUB_TOKEN-created PRs don't trigger other workflows)
