@@ -17,11 +17,13 @@ export default function Home() {
     <>
       <div className={styles.strip}>
         <div className={styles.stripInner}>
+          <span className={styles.stripBadge}>New</span>
           <span>
-            Requires OpenClaw <code>{OPENCLAW_SUPPORTED}</code> or later. For older releases,
-            install <code>@clawops/cli@legacy</code>.
+            <strong>OpenClaw 2.0 support is live</strong> in clawops 2.0 — state that survives a
+            restart, plugins installed for you, and <code>clawops migrate</code> to bring an
+            existing 1.x deployment across.
           </span>
-          <a href="#compat">More</a>
+          <a href="/docs/migrating">Migrating from 1.x</a>
         </div>
       </div>
 
