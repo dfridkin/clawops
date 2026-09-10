@@ -245,6 +245,24 @@ const MUTATIONS = [
     file: 'src/openclaw/logs.ts', from: '    `--agent ${shellQuote(opts.agentId)}`,', to: "    '',", test: 'tests/openclaw/logs.test.ts tests/cli/agents.test.ts' },
   { name: 'a failed audit query shows an empty list instead of an error',
     file: 'src/cli/commands/agents.ts', from: '        if (result.code !== 0) {\n          failure(`Cannot read activity', to: '        if (false) {\n          failure(`Cannot read activity', test: 'tests/cli/agents.test.ts' },
+
+  // ── WO-63: channel plugin installs ───────────────────────────────────────────
+  { name: 'channel install goes through the command that exits 0 on failure',
+    file: 'src/openclaw/channels.ts', from: "    `openclaw plugins install '${spec}' --accept-capabilities`", to: "    `openclaw channels add --channel ${plugin.channelKey} --use-env`", test: 'tests/openclaw/channels.test.ts' },
+  { name: 'channel plugins install unpinned',
+    file: 'src/openclaw/channels.ts', from: '  const spec = plugin.version ? `${plugin.package}@${plugin.version}` : plugin.package', to: '  const spec = plugin.package', test: 'tests/openclaw/channels.test.ts tests/spec/integrations.test.ts' },
+  { name: 'a bundled channel is installed anyway',
+    file: 'src/openclaw/channels.ts', from: "    if (!plugin || plugin.source === 'bundled' || !plugin.package) continue", to: '    if (!plugin) continue', test: 'tests/openclaw/channels.test.ts' },
+  { name: 'a bundled channel is reported missing',
+    file: 'src/openclaw/channels.ts', from: '  return [...configuredChannelKeys(cfg)].filter((k) => !installed.has(k) && !bundled.has(k))', to: '  return [...configuredChannelKeys(cfg)].filter((k) => !installed.has(k))', test: 'tests/openclaw/channels.test.ts' },
+  { name: 'channel verification trusts anything but installed:true',
+    file: 'src/openclaw/channels.ts', from: '        .filter(([, v]) => v.installed === true)', to: '        .filter(([, v]) => v.installed !== false)', test: 'tests/openclaw/channels.test.ts' },
+  { name: 'settings blocks are treated as channels',
+    file: 'src/openclaw/channels.ts', from: "  const notAChannel = new Set(['defaults', 'modelByChannel'])", to: '  const notAChannel = new Set([])', test: 'tests/openclaw/channels.test.ts' },
+  { name: 'an unreadable channel listing reports everything missing',
+    file: 'src/openclaw/channels.ts', from: '    return [] // unreadable output is a reporting problem, not a missing channel', to: '    return [...configuredChannelKeys(cfg)]', test: 'tests/openclaw/channels.test.ts' },
+  { name: 'a channel plugin pin drifts off the runtime floor',
+    file: 'spec/integrations.yaml', from: '      package: "@openclaw/discord"\n      source: npm\n      version: "2026.9.2"', to: '      package: "@openclaw/discord"\n      source: npm\n      version: "2026.9.3"', test: 'tests/spec/integrations.test.ts' },
 ]
 
 let survived = []

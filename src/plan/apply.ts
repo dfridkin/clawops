@@ -158,10 +158,15 @@ async function applyConfigOverlay(
     // absent on a deny-all host, which is clawops's default. See src/openclaw/plugins.ts.
     await installProviderPlugins(session, merged, plan.spec.openclaw.version, signal)
 
+    // Channels are install-gated too, and for the same reason: a configured channel with no
+    // plugin gives a gateway that starts, reports healthy, and never connects.
+    await installChannelPlugins(session, merged, plan.spec.openclaw.version, signal)
+
     await restartGateway(session, signal)
 
-    // A green gateway says nothing about whether the provider loaded, so ask.
+    // A green gateway says nothing about whether the provider or channel loaded, so ask.
     await verifyProviders(session, merged, signal)
+    await verifyChannels(session, merged, signal)
     saveOverlay(plan.spec.stackName, configOverlay as Record<string, unknown>, plan.spec.secrets ?? [])
   } finally {
     session.close()
@@ -241,6 +246,84 @@ async function verifyProviders(
         `did not load: ${missing.join(', ')}.\n` +
         `[clawops] The deployment will look healthy and fail on first use. Check egress to ` +
         `ClawHub, then re-run apply.\n`,
+    )
+  }
+}
+
+/** The channel catalog, read from spec. */
+async function loadChannelCatalog(): Promise<{
+  integrations: Array<{ channelKey: string; plugin?: { package: string; source: string; version?: string } }>
+}> {
+  const [yaml, { readFileSync }, { join }, { resolveSpecDir }] = await Promise.all([
+    import('js-yaml'),
+    import('node:fs'),
+    import('node:path'),
+    import('../spec-path.js'),
+  ])
+  return yaml.load(readFileSync(join(resolveSpecDir(), 'integrations.yaml'), 'utf-8')) as {
+    integrations: Array<{ channelKey: string; plugin?: { package: string; source: string; version?: string } }>
+  }
+}
+
+/**
+ * Install channel plugins the config names.
+ *
+ * `openclaw plugins install`, not `openclaw channels add`. The latter installs and
+ * configures in one step, and returns 0 whether or not the install succeeded — it prints the
+ * failure, says "Returning to selection", and exits 0. Measured on 2026.9.2.
+ */
+async function installChannelPlugins(
+  session: import('../transport/ssh.js').SshSession,
+  cfg: Record<string, unknown>,
+  openclawVersion: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const [{ requiredChannelPlugins, channelInstallCommand }, { STATE_DIR_HOST_LINUX }] =
+    await Promise.all([import('../openclaw/channels.js'), import('../openclaw/runtime.js')])
+
+  const needed = requiredChannelPlugins(cfg, await loadChannelCatalog())
+  if (needed.length === 0) return
+
+  const { execPrivileged } = await import('../transport/privileged.js')
+  const image = `ghcr.io/openclaw/openclaw:${openclawVersion}`
+  for (const plugin of needed) {
+    const result = await execPrivileged(
+      session,
+      channelInstallCommand(plugin, image, STATE_DIR_HOST_LINUX),
+      signal,
+    )
+    if (result.code !== 0) {
+      process.stderr.write(
+        `[clawops] warning: could not install ${plugin.package}@${plugin.version} for ` +
+          `channel "${plugin.channelKey}": ${result.stderr || result.stdout}\n`,
+      )
+    }
+  }
+}
+
+/**
+ * Check that every configured channel is actually installed.
+ *
+ * Asked of `channels list`, not inferred from an exit code — the command that installs and
+ * configures a channel reports success either way.
+ */
+async function verifyChannels(
+  session: import('../transport/ssh.js').SshSession,
+  cfg: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<void> {
+  const { missingChannels, CHANNELS_LIST_CMD } = await import('../openclaw/channels.js')
+  const { execPrivileged } = await import('../transport/privileged.js')
+  const result = await execPrivileged(session, CHANNELS_LIST_CMD, signal)
+  if (result.code !== 0) return
+
+  const missing = missingChannels(cfg, result.stdout, await loadChannelCatalog())
+  if (missing.length > 0) {
+    process.stderr.write(
+      `[clawops] warning: the gateway is running, but these configured channels are not ` +
+        `installed: ${missing.join(', ')}.\n` +
+        `[clawops] They will never connect. Check egress to registry.npmjs.org, then re-run ` +
+        `apply.\n`,
     )
   }
 }

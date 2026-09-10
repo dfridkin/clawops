@@ -19,7 +19,7 @@ interface Integration {
   id: string
   channelKey: string
   fields: Field[]
-  plugin?: { package: string; source: string }
+  plugin?: { package: string; source: string; version?: string }
   requiredConfig?: string[]
   defaults?: Record<string, unknown>
   wizardSupported?: boolean
@@ -75,6 +75,23 @@ describe('spec/integrations.yaml matches the OpenClaw schema', () => {
       expect(integ.plugin!.package).toBe('')
     } else {
       expect(integ.plugin!.package, `${integ.id} plugin package`).not.toBe('')
+      // Pinned, and not to a moving tag. @openclaw/discord@2026.9.3 refuses a 2026.9.2
+      // runtime — "requires plugin API >=2026.9.3" — so `latest` breaks the deploy the
+      // moment upstream publishes ahead of the floor, which it already has.
+      expect(integ.plugin!.version, `${integ.id} plugin version`).toMatch(/^\d{4}\.\d+/)
+    }
+  })
+
+  it('pins every channel plugin to the supported runtime floor', async () => {
+    const yamlMod = (await import('js-yaml')).default
+    const spec = yamlMod.load(
+      readFileSync(path.join(root, 'spec/openclaw-versions.yaml'), 'utf-8'),
+    ) as { support: { recommended: string } }
+
+    for (const integ of catalog) {
+      if (integ.plugin?.source === 'bundled' || !integ.plugin) continue
+      expect(integ.plugin.version, `${integ.id} should pin to the runtime floor`)
+        .toBe(spec.support.recommended)
     }
   })
 

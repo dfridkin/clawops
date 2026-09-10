@@ -391,9 +391,9 @@ export default defineCommand({
         info(`${integ.displayName} ships in the image. Activate it on the host with:`)
         info(`  openclaw channels add --channel ${integ.channelKey} --use-env`)
       } else if (integ.plugin?.package) {
-        warn(`${integ.displayName} needs its plugin installed on the host before it will connect:`)
-        info(`  openclaw channels add --channel ${integ.channelKey} --use-env`)
-        info(`  (installs ${integ.plugin.package} from ${integ.plugin.source})`)
+        // `clawops apply` installs this during the deploy, while egress exists, and verifies
+        // it afterwards — the same treatment model providers get.
+        info(`${integ.displayName} needs ${integ.plugin.package}; clawops installs it during apply.`)
       }
 
       channelsConfig[integ.channelKey] = channelConfig
