@@ -202,6 +202,45 @@ was listening on the port, not that the gateway was healthy. Probes now read the
 body, and the restart gate uses `/startupz` rather than liveness — after a restart the
 process listens long before startup finishes.
 
+### `clawops doctor` answers whether it works, and says so in its exit code
+
+```mermaid
+flowchart TD
+    A["clawops doctor"] --> B["local: Node, Pulumi home,<br/>config, SSH key, credentials"]
+    B --> C{"--stack given?"}
+    C -- no --> Z["report"]
+    C -- yes --> D["container state"]
+    D --> E["deployed OpenClaw version"]
+    E --> F["probe /startupz<br/>and read the body"]
+    F --> G["published scope, disk,<br/>log rotation, hardening drift"]
+    G --> Z
+    Z --> Y{"any check failed?"}
+    Y -- no --> Y1["exit 0"]
+    Y -- yes --> Y2["exit 1"]
+```
+
+Three changes worth knowing:
+
+**It asks the gateway.** `doctor` used to read `docker inspect`'s healthcheck field, which
+the OpenClaw image does not set — so it reported "no healthcheck configured" and moved on. A
+running container means the process started, not that it serves. It now probes `/startupz`
+and reads the body.
+
+**It exits 1 when something failed.** Only an old Node.js used to do that; an unreadable SSH
+key or an unsupported gateway exited 0, so a CI step running `clawops doctor` read a broken
+deployment as success. Warnings still exit 0 — a fresh machine with no stacks is
+unconfigured, not broken.
+
+**It is an MCP tool.** `clawops_doctor` returns the same report as structured data, so an
+agent that hits a failure can find out why. It reports only; it never runs `openclaw doctor
+--fix`. `--json` gives the CLI the same report.
+
+### `clawops agents list` stops inventing an empty list
+
+The command ended in `|| echo '[]'`, so a stopped container, a gateway still starting, or a
+Docker permission error all produced **"No agents running."** — a wrong answer rather than an
+error. It now fails, and says which.
+
 ### Day-two commands work on AWS
 
 `gateway restart`, `logs`, `monitor`, `backup`, `agents`, `config set` and `doctor`'s
@@ -431,7 +470,7 @@ clawops down --yes          # Destroy local-provider stack
 | `gateway` | Restart the OpenClaw gateway service |
 | `backup` | Create an OpenClaw state backup (`restore` returns in clawops 2.x — see [limitations](docs/limitations.md#backup-and-restore)) |
 | `stacks` | List named stacks and their state |
-| `doctor` | Check Node version, config, SSH key, provider credentials, and Pulumi home |
+| `doctor` | Check the local machine; with `--stack`, the deployment's health too. `--json` for the report. Exits 1 on any failure |
 | `secret` | Manage secrets: `list`, `set`, `delete`, `rotate`, `audit` |
 | `monitor` | Live dashboard: gateway health, container stats, log tail, stack picker |
 | `mcp serve` | Start the embedded MCP server (stdio or HTTP) |
@@ -521,21 +560,26 @@ Do not bind to a non-loopback address without additional authentication controls
 
 | Tool | Toolset | Description |
 |---|---|---|
-| `clawops_status` | read | Show stack outputs |
-| `clawops_logs_tail` | read | Tail OpenClaw logs |
-| `clawops_config_get` | read | Read a remote config value |
-| `clawops_agents_list` | read | List running agents |
-| `clawops_task_status` | read | Poll a long-running task |
+| `clawops_status` | cli | Show stack outputs (what is deployed, not whether it works) |
+| `clawops_doctor` | cli | Run diagnostics: local prerequisites, and with a stack, remote health |
+| `clawops_logs_tail` | cli | Tail OpenClaw logs |
+| `clawops_monitor` | cli | Sample gateway and host metrics |
 | `clawops_stacks_list` | admin | List all stacks and their state |
+| `clawops_config_get` | cli | Read a remote config value |
+| `clawops_agents_list` | cli | List running agents |
 | `clawops_up` | cli | Provision or update a stack |
-| `clawops_plan` | cli | Generate a deploy plan |
-| `clawops_apply` | cli | Apply a plan file |
-| `clawops_ssh_exec` | cli | Run a command over SSH |
-| `clawops_config_set` | cli | Write a remote config value |
 | `clawops_destroy` | cli | Destroy a stack (elicits confirmation) |
+| `clawops_apply` | cli | Apply a plan file |
+| `clawops_plan` | cli | Generate a deploy plan |
+| `clawops_config_set` | cli | Write a remote config value |
+| `clawops_config_unset` | cli | Remove a remote config key |
+| `clawops_config_validate` | cli | Validate the deployed config against the OpenClaw schema |
+| `clawops_gateway_restart` | cli | Restart the gateway (elicits confirmation) |
 | `clawops_workflow_deploy_app` | workflow | End-to-end deploy: plan → confirm → apply → status |
+| `clawops_workflow_recover` | workflow | Diagnostic workflow for an unhealthy stack |
+| `clawops_task_status` | cli | Poll a long-running task |
 
-`read` toolset tools are available in `--read-only` mode. All other toolsets require full mode.
+Tools in the `read` toolset are also available in `--read-only` mode; the table's Toolset column shows the primary toolset. All other toolsets require full mode.
 Destructive tools require explicit confirmation (elicitation) unless `yes: true` is passed.
 
 See [`docs/security/tool-risk-matrix.md`](docs/security/tool-risk-matrix.md) for the full risk
@@ -711,7 +755,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (786 tests, ~4s)
+pnpm test                  # vitest (1026 tests, ~10s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm typecheck             # tsc --noEmit

@@ -50,18 +50,37 @@ Press `Ctrl-C` to stop following.
 ### Run a health check
 
 ```bash
-clawops doctor
+clawops doctor                    # the local machine
+clawops doctor --stack prod       # and the deployment
+clawops doctor --stack prod --json
 ```
 
-Checks and reports on:
+Without `--stack` it checks only the local machine and makes no SSH connection:
 
 - **Runtime:** Node.js version (≥22 required), Pulumi home directory writability
 - **Config:** presence and readability of `~/.clawops/config.json`
 - **SSH:** SSH key file readable, known_hosts file present
 - **Credentials:** `validateConfig()` for each cloud provider used across your stacks
+- **OpenClaw:** the version range this clawops line supports
 
-Exit code is `0` if all checks pass, `1` if any hard failure is found (missing Node version).
-Warnings (e.g. missing known_hosts) do not fail the exit code.
+With `--stack` it also connects to the host:
+
+- **Container:** whether the `openclaw` container is running
+- **Deployed:** which OpenClaw version the gateway is *actually* running, and whether this
+  clawops line supports it. An unsupported one points at `clawops migrate`
+- **Gateway:** a real probe of `/startupz` whose response body is checked. A running
+  container means the process started, not that it serves — these are different questions
+- **Published:** whether the gateway port is bound to loopback or to every interface
+- **Disk:** usage on the state directory, where 2.0's SQLite lives
+- **Log rotation**, and **hardening** drift per module
+
+Every check reports `pass`, `fail`, `warn` or `info`. **Exit code is `1` if any check
+failed**, `0` otherwise — warnings do not fail it, so a machine that has not run
+`clawops init` yet is not reported as broken. `--json` emits the whole report, including the
+`counts` and the `ok` flag, for scripting.
+
+The same report is available to agents as the `clawops_doctor` MCP tool, with
+`failuresOnly` to skip what passed.
 
 ## Agent management
 

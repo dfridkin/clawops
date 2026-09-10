@@ -11,6 +11,15 @@
 #   R8  — enums for closed sets
 #   R10 — all four annotation hints set
 #   R11 — annotations bound to safety modes (--read-only, --no-destructive)
+#
+# NOTE on `output:` — these blocks are DESCRIPTIVE, not generated. gen-schemas reads
+# `input:` and `annotations:` only; nothing emits an MCP outputSchema, and no handler is
+# checked against what its entry claims to return. Making them real means generating an
+# outputSchema per tool and returning `structuredContent` from every handler — worth doing,
+# but it is a change to all 18 handlers, not a spec edit. Until then, treat `output:` as the
+# intended shape and the handler as the truth. Keeping them honest is not optional:
+# clawops_status declared health, uptimeSec, openclawVersion and agentCount for three
+# releases while returning none of them (WO-47).
 
 version: 1
 
@@ -32,14 +41,15 @@ tools:
   - name: clawops_status
     toolset: [cli, read]
     description: |
-      Get current status of a clawops-managed stack: gateway health, OpenClaw
-      version, agent count, uptime.
+      Get what is deployed for a clawops-managed stack: public IP, gateway URL,
+      SSH user, or that nothing is deployed yet. Reads stack outputs; does not
+      contact the host.
 
-      Use when: the user asks about the health of a deployed instance, whether
-      the gateway is responding, or wants a quick overview.
+      Use when: the user asks what exists for a stack, or where to reach it.
 
-      Do NOT use when: the user asks for live logs (use clawops_logs) or wants
-      to see specific configuration values (use clawops_config_get).
+      Do NOT use when: the user asks whether the gateway is actually WORKING —
+      that needs the host, so use clawops_doctor. Also not for live logs (use
+      clawops_logs_tail) or config values (use clawops_config_get).
     annotations:
       title: Get Stack Status
       readOnlyHint: true
@@ -51,14 +61,59 @@ tools:
         type: string
         optional: true
         description: Stack name. Defaults to active stack from config.
+    # What the handler returns: the stack's deployment outputs. Health, version and agent
+    # count are NOT here — they need the host, and asking for them is clawops_doctor.
     output:
-      health: { type: enum, values: [healthy, degraded, down, unknown] }
+      stack: { type: string }
+      publicIp: { type: string }
       gatewayUrl: { type: string, format: uri }
-      uptimeSec: { type: integer }
-      openclawVersion: { type: string }
-      agentCount: { type: integer }
-      provider: { type: enum, values: [aws, gcp, azure, local] }
+      sshUser: { type: string }
+      status: { type: enum, values: [not bootstrapped, not deployed] }
       region: { type: string }
+
+  - name: clawops_doctor
+    toolset: [cli, read]
+    description: |
+      Run clawops's diagnostics and return the report: Node and Pulumi runtime, config,
+      SSH key and known_hosts, cloud credentials per configured provider, and the
+      supported OpenClaw range. With stackName, also contacts the host for container
+      state, the deployed OpenClaw version, a real gateway health probe, whether the
+      port is published to the internet, disk usage on the state directory, log
+      rotation, and hardening drift.
+
+      Use when: something is not working and you do not yet know what; before any
+      deploy, upgrade or migration; or to find out which OpenClaw version a gateway is
+      actually running.
+
+      Do NOT use when: you already know the problem and want to fix it. This tool only
+      reports — it changes nothing, and never runs `openclaw doctor --fix`. Repair is
+      part of clawops_gateway_update, where it is gated on a verified backup.
+
+      Every check carries a status: fail (something is wrong that clawops can name),
+      warn (worth knowing, not broken), info (did not apply). `ok` is false only when
+      something failed — a fresh machine with no stacks is full of warnings and healthy.
+    annotations:
+      title: Run Diagnostics
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName:
+        type: string
+        optional: true
+        description: |
+          Stack to include remote checks for. Without it, only the local machine is
+          checked — no SSH connection is made.
+      failuresOnly:
+        type: boolean
+        optional: true
+        default: false
+        description: Return only failing and warning checks. Passing checks are counted, not listed.
+    output:
+      ok: { type: boolean }
+      counts: { type: object }
+      sections: { type: array }
 
   - name: clawops_logs_tail
     toolset: [cli, read]

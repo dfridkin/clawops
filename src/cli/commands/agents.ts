@@ -71,16 +71,29 @@ export default defineCommand({
 
     try {
       if (action === 'list') {
-        const result = await execPrivileged(session, 
-          "docker exec openclaw openclaw agents list --json 2>/dev/null || echo '[]'",
+        const result = await execPrivileged(session,
+          'docker exec openclaw openclaw agents list --json',
           abortController.signal,
         )
         type AgentRecord = { name: string; status: string; [k: string]: unknown }
-        let agents: AgentRecord[] = []
+
+        // The `|| echo '[]'` that used to be on this command, and the catch below that
+        // fell back to an empty array, both reported "No agents running." when the real
+        // answer was that the question never got asked — a stopped container, a gateway
+        // still starting, a docker permission error. Failing is the honest outcome.
+        if (result.code !== 0) {
+          const why = result.stderr.trim() || result.stdout.trim() || `exit ${result.code}`
+          failure(`Cannot list agents: ${why}`)
+          process.exitCode = 1
+          return
+        }
+        let agents: AgentRecord[]
         try {
-          agents = JSON.parse(result.stdout.trim()) as AgentRecord[]
+          agents = JSON.parse(result.stdout.trim() || '[]') as AgentRecord[]
         } catch {
-          agents = []
+          failure(`Cannot list agents: unexpected output from OpenClaw: ${result.stdout.trim().slice(0, 200)}`)
+          process.exitCode = 1
+          return
         }
 
         if (args.json) {

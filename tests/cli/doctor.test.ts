@@ -1,66 +1,49 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// ── mocks ─────────────────────────────────────────────────────────────────────
-vi.mock('../../src/config/store.js', () => ({
-  getConfig: vi.fn(),
-  getConfigDir: vi.fn(() => '/tmp/clawops-test'),
-}))
-
-const mockValidateConfig = vi.fn()
-vi.mock('../../src/providers/index.js', () => ({
-  getProvider: vi.fn(() => ({ validateConfig: mockValidateConfig })),
-}))
-
-// Suppress provider side-effect imports
-vi.mock('../../src/providers/aws/index.js', () => ({}))
-vi.mock('../../src/providers/gcp/index.js', () => ({}))
-vi.mock('../../src/providers/azure/index.js', () => ({}))
-vi.mock('../../src/providers/local/index.js', () => ({}))
-
-const mockAccessSync = vi.fn()
-const mockMkdirSync = vi.fn()
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>()
-  return { ...actual, accessSync: mockAccessSync, mkdirSync: mockMkdirSync }
-})
-
-import { getConfig, getConfigDir } from '../../src/config/store.js'
-const mockGetConfig = vi.mocked(getConfig)
-const mockGetConfigDir = vi.mocked(getConfigDir)
-
-const baseConfig = {
-  version: 1 as const,
-  defaults: { stack: 'default', provider: 'aws' as const },
-  stacks: {
-    default: { provider: 'aws' as const, region: 'us-east-1', stateUrl: 's3://bucket/clawops' },
-  },
-  ssh: { keyPath: '~/.clawops/id_ed25519', knownHostsPath: '~/.clawops/known_hosts' },
-  mcp: {},
-}
+// The checks themselves are tested in tests/diagnostics/doctor.test.ts against the report
+// they return. What is left here is the command: rendering, --json, and the exit code.
+const { mockRunDiagnostics } = vi.hoisted(() => ({ mockRunDiagnostics: vi.fn() }))
+vi.mock('../../src/diagnostics/index.js', () => ({ runDiagnostics: mockRunDiagnostics }))
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRunFn = (ctx: any) => Promise<void>
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let cmd: any
 
+const HEALTHY = {
+  sections: [
+    { title: 'Runtime', checks: [{ name: 'Node.js', status: 'pass', detail: 'v22.0.0' }] },
+    { title: 'SSH', checks: [{ name: 'known_hosts', status: 'warn', detail: 'does not exist' }] },
+  ],
+  ok: true,
+  counts: { pass: 1, fail: 0, warn: 1, info: 0 },
+}
+const BROKEN = {
+  sections: [
+    {
+      title: 'SSH',
+      checks: [
+        { name: 'SSH key', status: 'fail', detail: '/k (not readable)', remedy: 'check the path' },
+      ],
+    },
+  ],
+  ok: false,
+  counts: { pass: 0, fail: 1, warn: 0, info: 0 },
+}
+
+let writes: string[]
+let errors: string[]
+
 beforeEach(async () => {
   vi.clearAllMocks()
-  mockGetConfigDir.mockReturnValue('/tmp/clawops-test')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  mockGetConfig.mockReturnValue(baseConfig as any)
-  mockValidateConfig.mockResolvedValue({ ok: true, errors: [] })
-  mockMkdirSync.mockImplementation(() => undefined)
-
-  // Default to a passing Node version so other tests don't trip the exit(1) guard
-  vi.spyOn(process, 'version', 'get').mockReturnValue('v22.0.0')
-
-  vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-  vi.spyOn(console, 'log').mockImplementation(() => {})
-  vi.spyOn(console, 'warn').mockImplementation(() => {})
-  vi.spyOn(console, 'error').mockImplementation(() => {})
-
-  const mod = await import('../../src/cli/commands/doctor.js')
-  cmd = mod.default
+  writes = []
+  errors = []
+  mockRunDiagnostics.mockResolvedValue(HEALTHY)
+  vi.spyOn(process.stdout, 'write').mockImplementation((s) => { writes.push(String(s)); return true })
+  vi.spyOn(console, 'log').mockImplementation((...a) => { writes.push(a.join(' ')) })
+  vi.spyOn(console, 'warn').mockImplementation((...a) => { writes.push(a.join(' ')) })
+  vi.spyOn(console, 'error').mockImplementation((...a) => { errors.push(a.join(' ')) })
+  cmd = (await import('../../src/cli/commands/doctor.js')).default
 })
 
 afterEach(() => {
@@ -68,95 +51,64 @@ afterEach(() => {
 })
 
 describe('doctor command', () => {
-  it('runs successfully when config and credentials are present', async () => {
-    await expect((cmd.run as AnyRunFn)({ args: {} })).resolves.not.toThrow()
-  })
-
-  it('calls validateConfig for each configured provider', async () => {
+  it('renders every section and check', async () => {
     await (cmd.run as AnyRunFn)({ args: {} })
-    expect(mockValidateConfig).toHaveBeenCalledOnce()
+    const out = writes.join('\n')
+    expect(out).toContain('Runtime')
+    expect(out).toContain('Node.js')
+    expect(out).toContain('v22.0.0')
+    expect(out).toContain('known_hosts')
   })
 
-  it('shows warning when no config file is found', async () => {
-    mockGetConfig.mockReturnValue(null)
-    const warns: string[] = []
-    vi.spyOn(console, 'warn').mockImplementation((...args) => { warns.push(args.join(' ')) })
-
-    await (cmd.run as AnyRunFn)({ args: {} })
-
-    expect(warns.join('\n')).toMatch(/No config file/)
+  it('prints a remedy when a check has one', async () => {
+    mockRunDiagnostics.mockResolvedValue(BROKEN)
+    vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit') })
+    await expect((cmd.run as AnyRunFn)({ args: {} })).rejects.toThrow('exit')
+    expect([...writes, ...errors].join('\n')).toContain('check the path')
   })
 
-  it('shows failure when SSH key is not readable', async () => {
-    mockAccessSync.mockImplementation((p: string, flag: number) => {
-      // Only fail for key file reads (not known_hosts existence check)
-      if (String(p).includes('id_ed25519') && flag !== undefined) {
-        throw new Error('ENOENT')
-      }
-    })
-    const errors: string[] = []
-    vi.spyOn(console, 'error').mockImplementation((...args) => { errors.push(args.join(' ')) })
-
-    await (cmd.run as AnyRunFn)({ args: {} })
-
-    expect(errors.join('\n')).toMatch(/SSH key|not found|not readable/)
+  it('passes the stack through', async () => {
+    await (cmd.run as AnyRunFn)({ args: { stack: 'prod' } })
+    expect(mockRunDiagnostics).toHaveBeenCalledWith(
+      expect.objectContaining({ stack: 'prod' }),
+    )
   })
 
-  it('shows failure when validateConfig returns errors', async () => {
-    mockValidateConfig.mockResolvedValue({ ok: false, errors: ['AWS_PROFILE not set'] })
-    const errors: string[] = []
-    vi.spyOn(console, 'error').mockImplementation((...args) => { errors.push(args.join(' ')) })
-
-    await (cmd.run as AnyRunFn)({ args: {} })
-
-    expect(errors.join('\n')).toMatch(/AWS_PROFILE/)
-  })
-
-  it('skips duplicate provider checks for multiple stacks on same provider', async () => {
-    mockGetConfig.mockReturnValue({
-      ...baseConfig,
-      stacks: {
-        default: { provider: 'aws' as const, region: 'us-east-1', stateUrl: 's3://b/c' },
-        staging: { provider: 'aws' as const, region: 'eu-west-1', stateUrl: 's3://b/c2' },
-      },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any)
-
-    await (cmd.run as AnyRunFn)({ args: {} })
-
-    expect(mockValidateConfig).toHaveBeenCalledOnce()
-  })
-
-  it('exits with code 1 when Node.js version is too old', async () => {
-    vi.spyOn(process, 'version', 'get').mockReturnValue('v18.0.0')
+  it('exits 0 on a report with warnings but no failures', async () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit') })
+    await (cmd.run as AnyRunFn)({ args: {} })
+    expect(exitSpy).not.toHaveBeenCalled()
+  })
 
+  it('exits 1 on any failed check, not only an old Node.js', async () => {
+    // The old command exited 1 solely on the Node version. An unreadable SSH key or an
+    // unsupported gateway exited 0, so a CI step running `clawops doctor` read a broken
+    // deployment as success.
+    mockRunDiagnostics.mockResolvedValue(BROKEN)
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit') })
     await expect((cmd.run as AnyRunFn)({ args: {} })).rejects.toThrow('exit')
     expect(exitSpy).toHaveBeenCalledWith(1)
   })
 
-  it('skips remote health section when --stack is not provided', async () => {
-    const writes: string[] = []
-    vi.spyOn(process.stdout, 'write').mockImplementation((s) => { writes.push(String(s)); return true })
-
-    await (cmd.run as AnyRunFn)({ args: {} })
-
-    expect(writes.join('')).not.toContain('Remote health')
+  it('emits the report as JSON under --json, and nothing else', async () => {
+    await (cmd.run as AnyRunFn)({ args: { json: true } })
+    const parsed = JSON.parse(writes.join(''))
+    expect(parsed.ok).toBe(true)
+    expect(parsed.data.sections).toHaveLength(2)
   })
 
-  it('prints remote health header when --stack is provided but SSH fails', async () => {
-    const { buildContext } = await import('../../src/cli/context.js')
-    vi.mocked(buildContext).mockImplementation(() => { throw new Error('no stack') })
-    vi.mock('../../src/cli/context.js', () => ({ buildContext: vi.fn(() => { throw new Error('no stack') }) }))
+  it('keeps --json parseable when the report failed', async () => {
+    // The human path prints a "run clawops bug" line after the report. Under --json that
+    // would land after the closing brace and break every consumer.
+    mockRunDiagnostics.mockResolvedValue(BROKEN)
+    vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit') })
+    await expect((cmd.run as AnyRunFn)({ args: { json: true } })).rejects.toThrow('exit')
+    expect(() => JSON.parse(writes.join(''))).not.toThrow()
+  })
 
-    const writes: string[] = []
-    vi.spyOn(process.stdout, 'write').mockImplementation((s) => { writes.push(String(s)); return true })
-    const errors: string[] = []
-    vi.spyOn(console, 'error').mockImplementation((...a) => { errors.push(a.join(' ')) })
-
-    await (cmd.run as AnyRunFn)({ args: { stack: 'prod' } })
-
-    expect(writes.join('')).toContain('Remote health')
-    expect(errors.join(' ')).toMatch(/failed|no stack/i)
+  it('removes its signal handlers when it finishes', async () => {
+    const before = process.listenerCount('SIGINT')
+    await (cmd.run as AnyRunFn)({ args: {} })
+    expect(process.listenerCount('SIGINT')).toBe(before)
   })
 })

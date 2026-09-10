@@ -99,6 +99,91 @@ describe('agents command', () => {
       expect(execCommands[0]).toContain('docker exec openclaw')
       expect(execCommands[0]).toContain('agents list --json')
     })
+
+    it('reports a failed listing rather than printing "No agents running."', async () => {
+      // `|| echo '[]'` plus a catch that fell back to an empty array turned every failure
+      // — stopped container, gateway still starting, docker permission denied — into the
+      // same reassuring line.
+      const session = new FakeSshSession()
+      session.onExec(() => ({ stdout: '', stderr: 'Error: No such container: openclaw', code: 1 }))
+
+      const { buildContext, acquireSession } = await getMocks()
+      buildContext.mockReturnValue(makeFakeContext())
+      acquireSession.mockImplementation(wireSession(session))
+
+      const writes: string[] = []
+      const errors: string[] = []
+      vi.spyOn(process.stdout, 'write').mockImplementation((s) => { writes.push(String(s)); return true })
+      vi.spyOn(console, 'error').mockImplementation((...a) => { errors.push(a.join(' ')) })
+
+      const cmd = await getCmd()
+      await (cmd.run as AnyRunFn)({ args: { _: ['list'], stack: undefined, json: false } })
+
+      expect(errors.join(' ')).toMatch(/Cannot list agents/)
+      expect(errors.join(' ')).toMatch(/No such container/)
+      expect(writes.join('')).not.toContain('No agents running')
+      expect(process.exitCode).toBe(1)
+      process.exitCode = 0
+    })
+
+    it('fails on output that is not JSON instead of showing an empty list', async () => {
+      const session = new FakeSshSession()
+      session.onExec(() => ({ stdout: 'Usage: openclaw agents [command]', stderr: '', code: 0 }))
+
+      const { buildContext, acquireSession } = await getMocks()
+      buildContext.mockReturnValue(makeFakeContext())
+      acquireSession.mockImplementation(wireSession(session))
+
+      const writes: string[] = []
+      const errors: string[] = []
+      vi.spyOn(process.stdout, 'write').mockImplementation((s) => { writes.push(String(s)); return true })
+      vi.spyOn(console, 'error').mockImplementation((...a) => { errors.push(a.join(' ')) })
+
+      const cmd = await getCmd()
+      await (cmd.run as AnyRunFn)({ args: { _: ['list'], stack: undefined, json: false } })
+
+      expect(errors.join(' ')).toMatch(/Cannot list agents/)
+      expect(writes.join('')).not.toContain('No agents running')
+      expect(process.exitCode).toBe(1)
+      process.exitCode = 0
+    })
+
+    it('still says "No agents running." when there really are none', async () => {
+      const session = new FakeSshSession()
+      session.onExec(() => ({ stdout: '[]', stderr: '', code: 0 }))
+
+      const { buildContext, acquireSession } = await getMocks()
+      buildContext.mockReturnValue(makeFakeContext())
+      acquireSession.mockImplementation(wireSession(session))
+
+      const infos: string[] = []
+      vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+      vi.spyOn(console, 'log').mockImplementation((...a) => { infos.push(a.join(' ')) })
+
+      const cmd = await getCmd()
+      await (cmd.run as AnyRunFn)({ args: { _: ['list'], stack: undefined, json: false } })
+
+      expect(infos.join(' ')).toMatch(/No agents running/)
+      expect(process.exitCode).not.toBe(1)
+    })
+
+    it('does not silence stderr in the command it runs', async () => {
+      const execCommands: string[] = []
+      const session = new FakeSshSession()
+      session.onExec((cmd) => { execCommands.push(cmd); return { stdout: '[]', stderr: '', code: 0 } })
+
+      const { buildContext, acquireSession } = await getMocks()
+      buildContext.mockReturnValue(makeFakeContext())
+      acquireSession.mockImplementation(wireSession(session))
+      vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+      const cmd = await getCmd()
+      await (cmd.run as AnyRunFn)({ args: { _: ['list'], stack: undefined, json: false } })
+
+      // 2>/dev/null threw away the only explanation of why the listing failed.
+      expect(execCommands[0]).not.toContain('2>/dev/null')
+      expect(execCommands[0]).not.toContain("echo '[]'")
+    })
   })
 
   describe('restart (removed)', () => {

@@ -8,6 +8,7 @@ import {
   TOOLSETS,
   type Toolset,
   clawops_statusSchema,          clawops_statusAnnotations,
+  clawops_doctorSchema,          clawops_doctorAnnotations,
   clawops_logs_tailSchema,       clawops_logs_tailAnnotations,
   clawops_monitorSchema,         clawops_monitorAnnotations,
   clawops_stacks_listSchema,     clawops_stacks_listAnnotations,
@@ -25,7 +26,7 @@ import {
   clawops_workflow_recoverSchema,    clawops_workflow_recoverAnnotations,
   clawops_task_statusSchema,     clawops_task_statusAnnotations,
   type StatusInput, type LogsTailInput, type StacksListInput,
-  type ConfigGetInput, type AgentsListInput, type UpInput,
+  type DoctorInput, type ConfigGetInput, type AgentsListInput, type UpInput,
   type DestroyInput, type ApplyInput, type PlanInput,
   type ConfigSetInput, type ConfigUnsetInput, type ConfigValidateInput,
   type GatewayRestartInput,
@@ -37,6 +38,7 @@ import type { McpServeOpts } from '../server.js'
 
 // ── Handler imports ──────────────────────────────────────────────────────────
 import { handleStatus } from './cli/status.js'
+import { handleDoctor } from './cli/doctor.js'
 import { handleLogsTail } from './cli/logs.js'
 import { handleStacksList } from './cli/stacks.js'
 import { handleConfigGet, handleConfigSet, handleConfigUnset, handleConfigValidate } from './cli/config.js'
@@ -76,6 +78,7 @@ function makeEntry<T>(
 
 const TOOL_REGISTRY: Record<string, ToolEntry> = {
   clawops_status:           makeEntry<StatusInput>(clawops_statusSchema, clawops_statusAnnotations, handleStatus),
+  clawops_doctor:           makeEntry<DoctorInput>(clawops_doctorSchema, clawops_doctorAnnotations, handleDoctor),
   clawops_logs_tail:        makeEntry<LogsTailInput>(clawops_logs_tailSchema, clawops_logs_tailAnnotations, handleLogsTail),
   clawops_monitor:          makeEntry<MonitorInput>(clawops_monitorSchema, clawops_monitorAnnotations, handleMonitor),
   clawops_stacks_list:      makeEntry<StacksListInput>(clawops_stacks_listSchema, clawops_stacks_listAnnotations, handleStacksList),
@@ -93,6 +96,9 @@ const TOOL_REGISTRY: Record<string, ToolEntry> = {
   clawops_workflow_recover: makeEntry<WorkflowRecoverInput>(clawops_workflow_recoverSchema, clawops_workflow_recoverAnnotations, handleWorkflowRecover),
   clawops_task_status:      makeEntry<TaskStatusInput>(clawops_task_statusSchema, clawops_task_statusAnnotations, handleTaskStatus),
 }
+
+/** Every tool this server can serve. Asserted against spec/mcp-tools.yaml in tests. */
+export const TOOL_NAMES: readonly string[] = Object.keys(TOOL_REGISTRY)
 
 /** Resolve which tool names should be registered given the serve opts. */
 export function resolveEnabledTools(opts: McpServeOpts): string[] {

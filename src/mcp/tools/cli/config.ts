@@ -1,4 +1,12 @@
 // clawops_config_get + clawops_config_set + clawops_config_unset + clawops_config_validate handlers
+//
+// All four read through readRemoteConfig rather than `cat`-ing a path of their own. They
+// used to hand-roll `session.exec('cat /var/lib/clawops/openclaw/openclaw.json')`, which
+// hardcodes the Linux path — wrong on a macOS target — and runs unprivileged, so the read
+// depended on the SSH user happening to be uid 1000. remote-config.ts was extracted for
+// exactly these callers ("so the MCP config handler and plan layer share one
+// implementation") and they never adopted it, which is how clawops_gateway_restart came to
+// hand-roll its own run command too (G32).
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
@@ -6,7 +14,9 @@ import type { ConfigGetInput, ConfigSetInput, ConfigUnsetInput, ConfigValidateIn
 import { buildContext } from '../../../cli/context.js'
 import { acquireSession, drainPool } from '../../../transport/pool.js'
 import { resolveConn, okText, errText } from '../_conn.js'
-import { OPENCLAW_CONFIG, atomicWriteConfig, restartGateway as restartGatewayShared } from '../../../plan/remote-config.js'
+import {
+  readRemoteConfig, atomicWriteConfig, restartGateway as restartGatewayShared,
+} from '../../../plan/remote-config.js'
 
 
 export async function handleConfigGet(input: ConfigGetInput, _server: McpServer): Promise<CallToolResult> {
@@ -15,12 +25,11 @@ export async function handleConfigGet(input: ConfigGetInput, _server: McpServer)
   const conn = await resolveConn(ctx)
   const { session, release } = await acquireSession(conn)
   try {
-    const result = await session.exec(`cat ${OPENCLAW_CONFIG}`, ac.signal)
     let cfg: Record<string, unknown>
     try {
-      cfg = JSON.parse(result.stdout) as Record<string, unknown>
-    } catch {
-      return errText(`Cannot parse ${OPENCLAW_CONFIG}: ${result.stderr || result.stdout}`)
+      cfg = await readRemoteConfig(session, ac.signal)
+    } catch (err) {
+      return errText((err as Error).message)
     }
     const value = input.key ? getPath(cfg, input.key) : cfg
     return okText(JSON.stringify(value, null, 2))
@@ -48,12 +57,11 @@ export async function handleConfigSet(input: ConfigSetInput, server: McpServer):
   const conn = await resolveConn(ctx)
   const { session, release } = await acquireSession(conn)
   try {
-    const readResult = await session.exec(`cat ${OPENCLAW_CONFIG}`, ac.signal)
     let cfg: Record<string, unknown>
     try {
-      cfg = JSON.parse(readResult.stdout) as Record<string, unknown>
-    } catch {
-      return errText(`Cannot parse ${OPENCLAW_CONFIG}: ${readResult.stderr}`)
+      cfg = await readRemoteConfig(session, ac.signal)
+    } catch (err) {
+      return errText((err as Error).message)
     }
 
     let parsedValue: unknown = input.value
@@ -100,12 +108,11 @@ export async function handleConfigUnset(input: ConfigUnsetInput, server: McpServ
   const conn = await resolveConn(ctx)
   const { session, release } = await acquireSession(conn)
   try {
-    const readResult = await session.exec(`cat ${OPENCLAW_CONFIG}`, ac.signal)
     let cfg: Record<string, unknown>
     try {
-      cfg = JSON.parse(readResult.stdout) as Record<string, unknown>
-    } catch {
-      return errText(`Cannot parse ${OPENCLAW_CONFIG}: ${readResult.stderr}`)
+      cfg = await readRemoteConfig(session, ac.signal)
+    } catch (err) {
+      return errText((err as Error).message)
     }
 
     deletePath(cfg, input.key)
@@ -138,12 +145,13 @@ export async function handleConfigValidate(input: ConfigValidateInput, _server: 
   const conn = await resolveConn(ctx)
   const { session, release } = await acquireSession(conn)
   try {
-    const result = await session.exec(`cat ${OPENCLAW_CONFIG}`, ac.signal)
     let cfg: Record<string, unknown>
     try {
-      cfg = JSON.parse(result.stdout) as Record<string, unknown>
-    } catch {
-      return okText(JSON.stringify({ valid: false, issues: [`Invalid JSON: ${result.stderr || result.stdout}`] }))
+      cfg = await readRemoteConfig(session, ac.signal)
+    } catch (err) {
+      // A config that cannot be read or parsed is a validation result, not a tool error:
+      // "your config is unreadable" is the answer to "is my config valid".
+      return okText(JSON.stringify({ valid: false, issues: [(err as Error).message] }))
     }
     const { validateConfig } = await import('../../../openclaw/config-validate.js')
     const yaml = await import('js-yaml')

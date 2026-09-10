@@ -58,6 +58,52 @@ describe('handleAgentsList', () => {
     const { handleAgentsList } = await import('../../src/mcp/tools/cli/agents.js')
     await expect(handleAgentsList({ stackName: 'default' }, makeServer())).rejects.toThrow('connection refused')
   })
+
+  it('reports a failed listing instead of returning an empty list', async () => {
+    // The command used to end in `|| echo "[]"`, so a stopped container, a gateway still
+    // starting, or a docker permission error all came back as "no agents" — a wrong
+    // answer an agent then acts on, rather than an error it can report.
+    const session = new FakeSshSession()
+    session.onExec(() => ({ stdout: '', stderr: 'Error: No such container: openclaw', code: 1 }))
+    const { acquireSession } = await getMocks()
+    acquireSession.mockResolvedValue({ session, release: vi.fn() })
+
+    const { handleAgentsList } = await import('../../src/mcp/tools/cli/agents.js')
+    const result = await handleAgentsList({ stackName: 'default' }, makeServer())
+
+    expect(result.isError).toBe(true)
+    const text = (result.content[0] as { type: 'text'; text: string }).text
+    expect(text).toMatch(/No such container/)
+    expect(text).not.toBe('[]')
+  })
+
+  it('does not fold stderr into the JSON it returns', async () => {
+    // `2>&1` put error text on stdout, where it was returned as though it were the list.
+    const session = new FakeSshSession()
+    session.onExec(() => ({ stdout: '[]', stderr: '', code: 0 }))
+    const { acquireSession } = await getMocks()
+    acquireSession.mockResolvedValue({ session, release: vi.fn() })
+
+    const { handleAgentsList } = await import('../../src/mcp/tools/cli/agents.js')
+    await handleAgentsList({ stackName: 'default' }, makeServer())
+
+    expect(session.execCalls().join(' ')).not.toContain('2>&1')
+    expect(session.execCalls().join(' ')).not.toContain('echo "[]"')
+  })
+
+  it('returns an empty list when the deployment genuinely has no agents', async () => {
+    const session = new FakeSshSession()
+    session.onExec(() => ({ stdout: '[]', stderr: '', code: 0 }))
+    const { acquireSession } = await getMocks()
+    acquireSession.mockResolvedValue({ session, release: vi.fn() })
+
+    const { handleAgentsList } = await import('../../src/mcp/tools/cli/agents.js')
+    const result = await handleAgentsList({ stackName: 'default' }, makeServer())
+
+    expect(result.isError).toBeFalsy()
+    expect((result.content[0] as { type: 'text'; text: string }).text).toBe('[]')
+  })
+
 })
 
 describe('clawops_agents_restart is gone', () => {
