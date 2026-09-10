@@ -110,6 +110,44 @@ flowchart LR
     E -- yes --> F["done"]
 ```
 
+### Migrating an existing 1.x deployment
+
+```mermaid
+flowchart TD
+    A["clawops migrate"] --> B{"1.x container running?"}
+    B -- no --> B1["nothing to rescue — state was<br/>already lost to an earlier restart"]
+    B -- yes --> C["verified backup, inside the running container"]
+    C -- "backup fails" --> C1["refused — nothing touched"]
+    C --> D["extract state from the RUNNING container"]
+    D --> E["chown 1000:1000"]
+    E --> F["stop and remove 1.x"]
+    F --> G["synthesise a valid 2.0 config"]
+    G --> H["start 2.0 with the state directory"]
+    H --> I{"/startupz started?"}
+    I -- "no — schema still migrating" --> J["restart once"]
+    J --> K{"started?"}
+    K -- no --> K1["failed — points at the backup"]
+    K --> L["report"]
+    I -- yes --> L
+    L --> M["what carried over,<br/>device identity, config to review"]
+```
+
+Two things about that shape are not obvious, and both came from running a real migration:
+
+**State is extracted from the *running* container.** All 1.x state lived inside it — clawops
+mounted none — so stopping first destroys what the migration came to save.
+
+**The config is synthesised, not carried forward.** 1.x never had one that applied; the file
+clawops mounted was read by nothing. Your old settings are reported as *intent to review*,
+never applied blindly — their channel blocks would not validate against 2.0 anyway.
+
+The gateway also needs two starts: the first performs the state-schema migration and reports
+it as pending. `migrate` waits for the second rather than declaring success early.
+
+If you ran `gateway restart`, `gateway update` or `config set` on a clawops before 2.0, your
+state is already gone — nothing was mounted to survive the container replacement. `migrate`
+says so plainly rather than pretending to rescue it.
+
 ### `clawops backup restore` works again, and never in place
 
 v1.7.5 made restore fail with an explanation, because the OpenClaw it supported had no

@@ -614,7 +614,7 @@ The byte assertion was also weak — it asserted the mocked stream's own payload
 pass even if the command opened a different file. It now asserts that **the archive the user named**
 is the file read, verified by pointing the code at a different path and watching it fail.
 
-**WO-52 — `clawops migrate`** *(D2 — L; rewritten after SP-07)*
+**WO-52 — `clawops migrate`** *(D2 — L; rewritten after SP-07)* — ✅ **done**
 The drafted sequence was wrong in two ways:
 1. **There is no 1.x host layout to relocate.** All 1.x state is *inside the container*. Migration must
    extract from the **running** container; stopping it first destroys what it came to save.
@@ -631,6 +631,28 @@ with no pairings).
 
 It should also say plainly when there was nothing to rescue: given G2, any user who ran
 `gateway restart`/`update`/`config set` already lost their state.
+
+**Done.** `clawops migrate` implements the verified sequence, with two corrections to the text above:
+
+- **`OPENCLAW_CONFIG_PATH` is not used** — WO-39 deleted it. The synthesised config goes *into* the
+  mounted state directory, which is OpenClaw's own default location.
+- **The gateway needs two starts.** Measured 2026-09-09: the first reports
+  `state database schema migration required (audit-events-v2)` and is healthy only after a second.
+  So the sequence gates, restarts once, and re-gates. Declaring success on the first start would
+  report a deployment still converging.
+
+**Device identity continuity is closed**, by measurement rather than inference: `deviceId` is
+preserved and `identity/` is emptied — relocation into SQLite, not loss. The command still compares
+before and after and reports `preserved` / `changed` / **`unknown`**, because a value it could not
+read must never be reported as continuity.
+
+The version guard runs against the **target only**. The source is a 1.x release this line refuses by
+design — which is the entire reason to migrate — so guarding it would refuse the deployment the
+command exists to rescue.
+
+**Mutation-checked before closing**, per the practice above. One survived: deleting the numeric
+`chown` left the test green, because `indexOf(a) < indexOf(b)` is satisfied when `a` never ran —
+`indexOf` returns `-1`. Every ordering assertion in that file had the same flaw. 28/28 now caught.
 
 ### Phase 4 — surface, hardening, release
 

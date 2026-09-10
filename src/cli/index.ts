@@ -12,6 +12,7 @@ import tunnelCmd from './commands/tunnel.js'
 import logsCmd from './commands/logs.js'
 import configCmd from './commands/config.js'
 import agentsCmd from './commands/agents.js'
+import migrateCmd from './commands/migrate.js'
 import gatewayCmd from './commands/gateway.js'
 import backupCmd from './commands/backup.js'
 import stacksCmd from './commands/stacks.js'
@@ -61,6 +62,7 @@ const main = defineCommand({
     logs: logsCmd,
     config: configCmd,
     agents: agentsCmd,
+    migrate: migrateCmd,
     gateway: gatewayCmd,
     backup: backupCmd,
     stacks: stacksCmd,
