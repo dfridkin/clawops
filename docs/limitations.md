@@ -158,6 +158,5 @@ The following limitations are tracked in the roadmap and expected to be addresse
 | Config validation command | R5 — Configuration and Secrets |
 | Monitoring hooks | R4 — Production Operations (later) |
 | Cost estimate output | R6 — Provider Reliability (later) |
-| `backup restore` | clawops 2.x, on OpenClaw 2.0's restore subcommand |
 
 See [`docs/roadmap.md`](roadmap.md) for the full adoption roadmap.

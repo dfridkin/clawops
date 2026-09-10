@@ -27,7 +27,7 @@ contains:
 | SSH private key | `~/.clawops/config.json → ssh.keyPath` (local) | Include in your machine backup |
 | `~/.clawops/config.json` | Local machine | Include in your machine backup |
 | Cloud infra (EC2, VMs, etc.) | Pulumi-managed; recreatable via `clawops apply` | Re-apply the plan |
-| `openclaw.json` on the host | `/home/clawops/openclaw.json` | Committed to your config repo, or backed up separately |
+| `openclaw.json` on the host | `/var/lib/clawops/openclaw/openclaw.json` | Committed to your config repo, or backed up separately |
 
 Pulumi state is authoritative for infrastructure. If you lose it, you may need to use
 `pulumi import` to re-adopt existing resources. Keep your state backend durable (versioning

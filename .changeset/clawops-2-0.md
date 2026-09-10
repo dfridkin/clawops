@@ -323,6 +323,15 @@ gateway starts without its model providers.
 entries, device tokens — unencrypted. clawops now writes it `0600` locally; it previously
 used the default `0644`.
 
+## Docs
+
+`docs/security/egress.md` is new: every outbound destination clawops needs, from which
+machine, when, and what it looks like when one is blocked. ClawHub is the new one in 2.0.
+
+The pre-2.0 contract had outlived itself in the docs — the old config path, a `docker run`
+line mounting a config file read-only, `backup restore` described as unavailable, and
+`:stable` image tags the version guard now refuses. All corrected.
+
 ## Removed
 
 **`clawops agents restart`** and the `clawops_agents_restart` MCP tool. OpenClaw 2.0 has no

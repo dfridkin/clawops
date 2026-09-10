@@ -112,6 +112,11 @@ pulumi config set gatewayCidrs "203.0.113.5/32"
 
 **Default security-group rules are deny-all (N10).** Never use `open` in production.
 
+**Egress.** Unrestricted by default. The host needs outbound access to `download.docker.com`
+and your package mirrors at first bootstrap, `ghcr.io` for the image, and — new in 2.0 —
+`clawhub.ai` **during `apply`** to install model-provider plugins. See
+[required outbound access](../security/egress.md) for what each failure looks like.
+
 ## Bedrock Integration
 
 Set `bedrockEnabled = true` in stack config to:

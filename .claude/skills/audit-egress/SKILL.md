@@ -19,7 +19,12 @@ Audit all outbound network calls in a source file or module.
    - Does the tool set `openWorldHint: true` if it makes external calls?
    - Is the output trimmed to 8KB before returning (R14)?
 
-4. **Report findings** as a structured list:
+4. **Check the destination is documented.** Every host clawops or a deployed box reaches must
+   appear in `docs/security/egress.md`, with when it is needed and what the failure looks
+   like when it is blocked. An undocumented destination is one an operator with a deny-all
+   network cannot allow, and they find out from a broken deployment rather than from a doc.
+
+5. **Report findings** as a structured list:
    ```
    [PASS] src/transport/ssh.ts:42 — AbortSignal present ✓
    [FAIL] src/providers/aws/index.ts:17 — missing AbortSignal
@@ -28,5 +33,6 @@ Audit all outbound network calls in a source file or module.
 ## When to run
 
 - Before submitting a PR that adds network calls
+- When a new outbound destination is introduced — ClawHub in 2.0 was one
 - When the `/add-provider` or `/mcp-tool` skill is used
 - During security review
