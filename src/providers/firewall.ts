@@ -77,3 +77,38 @@ export async function detectEgressIp(checkUrl: string): Promise<EgressIpResult> 
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 }
+
+/**
+ * Ingress CIDRs for the gateway port, given how the gateway is published.
+ *
+ * Under `publishGateway: "loopback"` — the default since 2.0 — the container binds
+ * 127.0.0.1 on the host, so nothing is listening on a routable interface. A security-group
+ * rule for the gateway port then admits traffic to a closed port: it grants no access, and
+ * it reads to an auditor as though the gateway were exposed. Both readings are wrong, so no
+ * rule is created.
+ *
+ * `clawops plan` refuses the combination outright, so reaching here with CIDRs and loopback
+ * means a stack configured outside the plan flow. Dropping them is still the right answer;
+ * the caller reports it.
+ */
+export function resolveGatewayIngressCidrs(
+  publishGateway: string,
+  accessMode: string,
+  allowedCidrs: string,
+  portOverride: string,
+  egressResult: EgressIpResult,
+): string[] {
+  if (publishGateway !== 'all') return []
+  return resolveIngressCidrs(accessMode, allowedCidrs, portOverride, egressResult)
+}
+
+/**
+ * The gateway port for a stack, from Pulumi config.
+ *
+ * Falls back to the default rather than throwing: a stack created before the port was
+ * plan-driven has no such config value, and it is on the default.
+ */
+export function resolveGatewayPort(raw: string | undefined, fallback: number): number {
+  const port = Number(raw)
+  return Number.isInteger(port) && port > 0 && port < 65536 ? port : fallback
+}

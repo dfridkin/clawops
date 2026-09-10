@@ -202,6 +202,58 @@ was listening on the port, not that the gateway was healthy. Probes now read the
 body, and the restart gate uses `/startupz` rather than liveness — after a restart the
 process listens long before startup finishes.
 
+### The firewall follows the deployment
+
+```mermaid
+flowchart TD
+    A["clawops plan"] --> B{"publishGateway?"}
+    B -- "loopback (default)" --> C{"allowedGatewayCidrs empty?"}
+    C -- no --> C1["refuse — those rules would admit<br/>traffic to a closed port"]
+    C -- yes --> D["SSH rules only"]
+    B -- all --> E["SSH rules + gateway rules<br/>on spec.network.gatewayPort"]
+    D --> F["clawops harden"]
+    E --> F
+    F --> G["read the container's port bindings"]
+    G --> H{"published to the network?"}
+    H -- no --> H1["ufw: SSH only"]
+    H -- yes --> H2["ufw: SSH + the published port"]
+```
+
+Three security controls were doing the opposite of what they say.
+
+**`clawops harden` opened the gateway port on every deployment.** The `ufw` module ran
+`ufw allow 18789/tcp` unconditionally. Since the gateway publishes on `127.0.0.1`, that
+opened a port nothing was listening on — a hardening step widening the firewall past what the
+deployment exposes. It now reads the running container's port bindings and adds the rule only
+when the gateway is really published, on whatever port it is published on.
+
+**The AWS security-group audit exempted the two ports it exists to check.** Ports 22 and
+18789 were on an "expected" list, so a group opening SSH *or the gateway* to `0.0.0.0/0` came
+back as "No unexpected open ingress rules found". It also never read IPv6 rules, so `::/0`
+was invisible.
+
+**The setup wizard defaulted SSH access to `0.0.0.0/0`.** Pressing Enter opened SSH to the
+whole internet, on the path most first-time users take. It offers your own IP as a `/32` now,
+and when that cannot be detected it offers no default and requires an answer.
+
+### The gateway port comes from the plan
+
+```jsonc
+"network": {
+  "allowedSshCidrs": ["203.0.113.4/32"],
+  "allowedGatewayCidrs": [],
+  "publishGateway": "loopback",
+  "gatewayPort": 9443
+}
+```
+
+One value now reaches the security-group rules, the container publish flag, the default
+`gateway.port` and the gateway URL. It was a constant redeclared in eleven places, so
+changing it meant finding all of them — and missing one produced a container publishing one
+port, a gateway listening on another, and a firewall opening a third.
+
+Local deployments use `clawops up --gateway-port 9443`.
+
 ### `clawops doctor` answers whether it works, and says so in its exit code
 
 ```mermaid
@@ -456,7 +508,7 @@ clawops down --yes          # Destroy local-provider stack
 |---|---|
 | `setup` | First-run wizard — guided LLM, integrations, and deploy-plan generation |
 | `init` | Register a stack in `~/.clawops/config.json` without provisioning |
-| `up` | Provision or update stack (`--dry-run` for preview) |
+| `up` | Provision or update stack (`--dry-run` for preview, `--gateway-port` for a non-default port) |
 | `down` | Destroy local-provider stack (requires `--yes`; `--dry-run` shows current outputs) |
 | `destroy` | Destroy cloud-provider stack with confirmation prompt (`--dry-run` shows current outputs) |
 | `status` | Show stack outputs: IP, gateway URL, region, provisioned time |
@@ -755,7 +807,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (1026 tests, ~10s)
+pnpm test                  # vitest (1097 tests, ~11s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm typecheck             # tsc --noEmit

@@ -6,11 +6,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { acquireSession } from '../../transport/pool.js'
 import type { SshSession } from '../../transport/ssh.js'
-import { gatewayRunArgs, gatewayRunCommand } from '../../openclaw/runtime.js'
+import { gatewayRunArgs, gatewayRunCommand, GATEWAY_PORT } from '../../openclaw/runtime.js'
 import { writeLocalState, type LocalState } from './state.js'
 import { ProviderError } from '../../errors/index.js'
 
-const GATEWAY_PORT = 18789
 const HEALTH_POLL_INTERVAL_MS = 3_000
 const HEALTH_TIMEOUT_MS = 120_000
 
@@ -22,6 +21,8 @@ export interface BootstrapOpts {
   knownHostsPath: string
   openclawVersion: string
   stackName: string
+  /** Host port to publish the gateway on. Defaults to GATEWAY_PORT. */
+  gatewayPort?: number
   noWait?: boolean
   /** Sudo password for hosts that require one. When set, sudo -S is used so no TTY is needed. */
   sudoPassword?: string
@@ -49,7 +50,7 @@ function loadTemplate(): string {
 }
 
 /** Exported so tests assert the rendered provisioning script, not the template. */
-export function renderScript(openclawVersion: string): string {
+export function renderScript(openclawVersion: string, gatewayPort: number = GATEWAY_PORT): string {
   // The two run commands are built by src/openclaw/runtime.ts rather than written into
   // the template. They differ only in supervision — systemd runs it in the foreground and
   // owns restarts; the macOS branch detaches — and when they were hand-written they drifted
@@ -64,6 +65,7 @@ export function renderScript(openclawVersion: string): string {
     .replace(/\{\{GATEWAY_RUN_SYSTEMD\}\}/g, gatewayRunArgs({ ...shared, supervisor: 'systemd' }))
     .replace(/\{\{GATEWAY_RUN_DARWIN\}\}/g, gatewayRunCommand(shared))
     .replace(/\{\{OPENCLAW_VERSION\}\}/g, openclawVersion)
+    .replace(/\{\{OPENCLAW_PORT\}\}/g, String(gatewayPort))
 }
 
 /**
@@ -71,7 +73,8 @@ export function renderScript(openclawVersion: string): string {
  * The script is base64-encoded and piped to bash to avoid any quoting issues.
  */
 export async function localBootstrap(opts: BootstrapOpts): Promise<LocalState> {
-  const script = renderScript(opts.openclawVersion)
+  const gatewayPort = opts.gatewayPort ?? GATEWAY_PORT
+  const script = renderScript(opts.openclawVersion, gatewayPort)
   const b64 = Buffer.from(script, 'utf-8').toString('base64')
   // When a sudo password is provided, use `sudo -S` (reads password from stdin).
   // The password is fed via printf so stdin remains free for the inline -c command.
@@ -102,7 +105,7 @@ export async function localBootstrap(opts: BootstrapOpts): Promise<LocalState> {
 
     // Inside the session: the gateway now publishes on the host's loopback only, so the
     // probe has to run on the host.
-    if (!opts.noWait) await waitForGateway(session, opts.signal)
+    if (!opts.noWait) await waitForGateway(session, gatewayPort, opts.signal)
   } finally {
     release()
   }
@@ -110,7 +113,7 @@ export async function localBootstrap(opts: BootstrapOpts): Promise<LocalState> {
   const state: LocalState = {
     instanceId: `local:${opts.host}`,
     publicIp: opts.host,
-    gatewayUrl: `http://${opts.host}:${GATEWAY_PORT}`,
+    gatewayUrl: `http://${opts.host}:${gatewayPort}`,
     sshHost: opts.host,
     sshPort: opts.port,
     sshUser: opts.user,
@@ -125,7 +128,7 @@ export async function localBootstrap(opts: BootstrapOpts): Promise<LocalState> {
   return state
 }
 
-async function waitForGateway(session: SshSession, signal?: AbortSignal): Promise<void> {
+async function waitForGateway(session: SshSession, gatewayPort: number, signal?: AbortSignal): Promise<void> {
   // Probed over the SSH session against the host's loopback, not with a fetch() from the
   // operator's machine.
   //
@@ -137,7 +140,7 @@ async function waitForGateway(session: SshSession, signal?: AbortSignal): Promis
   const { probeCommand, interpretProbe } = await import('../../openclaw/health.js')
   // /startupz, and the BODY is judged. `-o /dev/null -w '%{http_code}'` could not tell a
   // healthy gateway from a typo'd path: the Control UI answers 200 on any unmatched route.
-  const probe = probeCommand('started', GATEWAY_PORT)
+  const probe = probeCommand('started', gatewayPort)
   const deadline = Date.now() + HEALTH_TIMEOUT_MS
 
   while (Date.now() < deadline) {

@@ -144,7 +144,7 @@ describe('azureProgram — accessMode=restricted (default)', () => {
     expect((nsg!.inputs['securityRules'] as unknown[]) ?? []).toHaveLength(0)
   })
 
-  it('creates 2 security rules when 1 allowedCidr is set (1 CIDR × 2 ports)', async () => {
+  it('creates an SSH rule only, while the gateway publishes on loopback', async () => {
     setConfig({
       sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
       accessMode: 'restricted',
@@ -154,8 +154,40 @@ describe('azureProgram — accessMode=restricted (default)', () => {
     await runProgram()
 
     const nsg = created.find(r => r.type === 'azure-native:network:NetworkSecurityGroup')
+    const rules = (nsg!.inputs['securityRules'] as Array<{ destinationPortRange: string }>) ?? []
+    expect(rules).toHaveLength(1)
+    expect(rules[0]!.destinationPortRange).toBe('22')
+  })
+
+  it('creates 2 security rules when the gateway is published (1 CIDR × 2 ports)', async () => {
+    setConfig({
+      sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
+      accessMode: 'restricted',
+      allowedCidrs: '10.0.0.1/32',
+      publishGateway: 'all',
+    })
+
+    await runProgram()
+
+    const nsg = created.find(r => r.type === 'azure-native:network:NetworkSecurityGroup')
     const rules = (nsg!.inputs['securityRules'] as unknown[]) ?? []
     expect(rules).toHaveLength(2)
+  })
+
+  it('opens the plan\'s gateway port, not the default', async () => {
+    setConfig({
+      sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
+      accessMode: 'restricted',
+      allowedCidrs: '10.0.0.1/32',
+      publishGateway: 'all',
+      gatewayPort: '9443',
+    })
+
+    await runProgram()
+
+    const nsg = created.find(r => r.type === 'azure-native:network:NetworkSecurityGroup')
+    const rules = nsg!.inputs['securityRules'] as Array<{ destinationPortRange: string }>
+    expect(rules.map(r => r.destinationPortRange).sort()).toEqual(['22', '9443'])
   })
 })
 
@@ -168,6 +200,7 @@ describe('azureProgram — accessMode=auto', () => {
     setConfig({
       sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAATEST test',
       accessMode: 'auto',
+      publishGateway: 'all',
     })
 
     await runProgram()

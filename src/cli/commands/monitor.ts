@@ -4,9 +4,8 @@ import { chalk, failure } from '../../output/human.js'
 import type { SshSession } from '../../transport/ssh.js'
 import { execPrivileged } from '../../transport/privileged.js'
 import { probeCommand, interpretProbe } from '../../openclaw/health.js'
-import { STATE_DIR_HOST_LINUX, configPathForOS } from '../../openclaw/runtime.js'
+import { STATE_DIR_HOST_LINUX, configPathForOS, GATEWAY_PORT } from '../../openclaw/runtime.js'
 
-const GATEWAY_PORT = 18789
 
 // ─── Snapshot types and helpers ───────────────────────────────────────────────
 

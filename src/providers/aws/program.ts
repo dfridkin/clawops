@@ -5,12 +5,12 @@
 
 import type { PulumiFn } from '../types.js'
 import { makeStartupScript } from '../startup.js'
+import { GATEWAY_PORT as DEFAULT_GATEWAY_PORT } from '../../openclaw/run-flags.js'
 
-const GATEWAY_PORT = 18789
 const SSH_PORT = 22
 
 export const awsProgram: PulumiFn = async () => {
-  const [pulumi, aws, { resolveIngressCidrs, detectEgressIp }] = await Promise.all([
+  const [pulumi, aws, { resolveIngressCidrs, resolveGatewayIngressCidrs, resolveGatewayPort, detectEgressIp }] = await Promise.all([
     import('@pulumi/pulumi'),
     import('@pulumi/aws'),
     import('../firewall.js'),
@@ -24,6 +24,7 @@ export const awsProgram: PulumiFn = async () => {
   // wizard fills that from the SSH CIDR, so inferring would publish plaintext HTTP
   // to whatever network someone picked for shell access.
   const publishGateway = cfg.get('publishGateway') === 'all' ? 'all' : 'loopback'
+  const gatewayPort = resolveGatewayPort(cfg.get('gatewayPort'), DEFAULT_GATEWAY_PORT)
   const accessMode = cfg.get('accessMode') ?? 'restricted'
   const allowedCidrs = cfg.get('allowedCidrs') ?? ''
   const sshCidrs = cfg.get('sshCidrs') ?? ''
@@ -55,7 +56,11 @@ export const awsProgram: PulumiFn = async () => {
   }
 
   const sshIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, sshCidrs, egressResult)
-  const gatewayIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, gatewayCidrs, egressResult)
+  // Empty under loopback publishing: a rule for a port nothing routable is listening on
+  // grants no access and misreads as exposure.
+  const gatewayIngressCidrs = resolveGatewayIngressCidrs(
+    publishGateway, accessMode, allowedCidrs, gatewayCidrs, egressResult,
+  )
 
   // --- Networking ---
   const vpc = new aws.ec2.Vpc('clawops-vpc', {
@@ -125,8 +130,8 @@ export const awsProgram: PulumiFn = async () => {
     new aws.vpc.SecurityGroupIngressRule(`clawops-sg-gw-${i}`, {
       securityGroupId: sg.id,
       ipProtocol: 'tcp',
-      fromPort: GATEWAY_PORT,
-      toPort: GATEWAY_PORT,
+      fromPort: gatewayPort,
+      toPort: gatewayPort,
       cidrIpv4: cidr,
       tags: { Name: `clawops-gateway-${i}` },
     })
@@ -208,7 +213,7 @@ export const awsProgram: PulumiFn = async () => {
     vpcSecurityGroupIds: [sg.id],
     iamInstanceProfile: instanceProfile.name,
     keyName: keyPair.keyName,
-    userData: makeStartupScript({ openclawVersion, os: 'ubuntu', bedrockEnabled, publishGateway }),
+    userData: makeStartupScript({ openclawVersion, os: 'ubuntu', bedrockEnabled, publishGateway, gatewayPort }),
     // IMDSv2 with hopLimit=2 so Docker containers on this host can reach IMDS
     // and obtain the instance role credentials (required for Bedrock access).
     metadataOptions: {
@@ -232,7 +237,7 @@ export const awsProgram: PulumiFn = async () => {
   return {
     instanceId: instance.id,
     publicIp: eip.publicIp,
-    gatewayUrl: pulumi.interpolate`https://${eip.publicIp}:${GATEWAY_PORT}`,
+    gatewayUrl: pulumi.interpolate`https://${eip.publicIp}:${gatewayPort}`,
     sshHost: eip.publicIp,
     sshPort: SSH_PORT,
     sshUser: 'ubuntu',

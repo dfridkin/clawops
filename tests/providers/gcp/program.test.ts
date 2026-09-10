@@ -153,16 +153,40 @@ describe('gcpProgram — firewall / accessMode=restricted (default)', () => {
     expect(firewalls).toHaveLength(0)
   })
 
-  it('creates separate SSH and gateway firewall rules when allowedCidrs is set', async () => {
+  it('creates an SSH rule only, while the gateway publishes on loopback', async () => {
     setConfig({ ...BASE_CONFIG, accessMode: 'restricted', allowedCidrs: '10.0.0.1/32' })
     await runProgram()
 
     const firewalls = created.filter(r => r.type === 'gcp:compute/firewall:Firewall')
+    expect(firewalls).toHaveLength(1)
+    expect(firewalls[0]!.name).toContain('ssh')
+  })
+
+  it('creates separate SSH and gateway rules when the gateway is published', async () => {
+    setConfig({
+      ...BASE_CONFIG, accessMode: 'restricted', allowedCidrs: '10.0.0.1/32',
+      publishGateway: 'all',
+    })
+    await runProgram()
+
+    const firewalls = created.filter(r => r.type === 'gcp:compute/firewall:Firewall')
     expect(firewalls).toHaveLength(2)
-    const sshFw = firewalls.find(r => r.name.includes('ssh'))
-    const gwFw  = firewalls.find(r => r.name.includes('gateway'))
-    expect(sshFw).toBeDefined()
-    expect(gwFw).toBeDefined()
+    expect(firewalls.find(r => r.name.includes('ssh'))).toBeDefined()
+    expect(firewalls.find(r => r.name.includes('gateway'))).toBeDefined()
+  })
+
+  it('opens the plan\'s gateway port, not the default', async () => {
+    setConfig({
+      ...BASE_CONFIG, accessMode: 'restricted', allowedCidrs: '10.0.0.1/32',
+      publishGateway: 'all', gatewayPort: '9443',
+    })
+    await runProgram()
+
+    const gwFw = created
+      .filter(r => r.type === 'gcp:compute/firewall:Firewall')
+      .find(r => r.name.includes('gateway'))!
+    const allows = gwFw.inputs['allows'] as Array<{ ports: string[] }>
+    expect(allows[0]!.ports).toEqual(['9443'])
   })
 })
 
@@ -171,7 +195,7 @@ describe('gcpProgram — firewall / accessMode=auto', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('203.0.113.42\n', { status: 200 }),
     )
-    setConfig({ ...BASE_CONFIG, accessMode: 'auto' })
+    setConfig({ ...BASE_CONFIG, accessMode: 'auto', publishGateway: 'all' })
     await runProgram()
 
     const firewalls = created.filter(r => r.type === 'gcp:compute/firewall:Firewall')
@@ -191,7 +215,7 @@ describe('gcpProgram — firewall / accessMode=auto', () => {
 describe('gcpProgram — firewall / accessMode=open', () => {
   it('uses 0.0.0.0/0 and emits a warning', async () => {
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-    setConfig({ ...BASE_CONFIG, accessMode: 'open' })
+    setConfig({ ...BASE_CONFIG, accessMode: 'open', publishGateway: 'all' })
     await runProgram()
 
     const firewalls = created.filter(r => r.type === 'gcp:compute/firewall:Firewall')

@@ -91,3 +91,79 @@ export async function validatePlanConfig(plan: {
   })
   return { ok: errors.length === 0, errors, warnings }
 }
+
+/**
+ * Network rules the JSON Schema cannot express usefully.
+ *
+ * These are contract errors, not schema errors: each shape below is valid JSON that
+ * describes a deployment which will not behave the way it reads.
+ */
+export function validatePlanNetwork(plan: {
+  spec?: {
+    network?: {
+      allowedGatewayCidrs?: string[]
+      allowedSshCidrs?: string[]
+      publishGateway?: string
+      gatewayPort?: number
+    }
+    openclaw?: { config?: unknown }
+  }
+}): ValidationResult & { warnings: string[] } {
+  const net = plan.spec?.network
+  if (!net) return { ok: true, errors: [], warnings: [] }
+
+  const errors: string[] = []
+  const warnings: string[] = []
+  const publish = net.publishGateway ?? 'loopback'
+  const gatewayCidrs = net.allowedGatewayCidrs ?? []
+
+  // Rules for a port nothing routable is listening on. They grant no access, and to anyone
+  // auditing the security group they read as an exposed gateway. Silently dropping them
+  // would leave the plan saying one thing and the infrastructure doing another, so the plan
+  // is refused while it is still a file the operator can edit.
+  if (publish === 'loopback' && gatewayCidrs.length > 0) {
+    errors.push(
+      `network.allowedGatewayCidrs lists ${gatewayCidrs.length} CIDR(s) but ` +
+        `network.publishGateway is "loopback", so the gateway binds 127.0.0.1 on the host ` +
+        `and nothing is listening on a routable interface. Those rules would admit traffic ` +
+        `to a closed port. Either drop them and reach the gateway with \`clawops tunnel\`, ` +
+        `or set publishGateway to "all" — which serves plaintext HTTP, so put TLS in front ` +
+        `of it.`,
+    )
+  }
+
+  // N10. clawops never defaults to this; a plan can still ask for it.
+  for (const [field, cidrs] of [
+    ['allowedSshCidrs', net.allowedSshCidrs ?? []],
+    ['allowedGatewayCidrs', gatewayCidrs],
+  ] as const) {
+    if (cidrs.some((c) => c === '0.0.0.0/0' || c === '::/0')) {
+      warnings.push(
+        `network.${field} admits the whole internet. clawops will create the rule you asked ` +
+          `for, but \`clawops harden\` reports it as a finding.`,
+      )
+    }
+  }
+
+  // The published port and the port the gateway listens on are set separately and must
+  // agree: a container publishing one while the gateway binds another starts, satisfies a
+  // container-level check, and answers nothing.
+  const configured = gatewayPortFromConfig(plan.spec?.openclaw?.config)
+  if (net.gatewayPort !== undefined && configured !== undefined && configured !== net.gatewayPort) {
+    errors.push(
+      `network.gatewayPort is ${net.gatewayPort} but the config overlay sets ` +
+        `gateway.port to ${configured}. The container would publish one port while the ` +
+        `gateway listened on the other. Set one of them, not both.`,
+    )
+  }
+
+  return { ok: errors.length === 0, errors, warnings }
+}
+
+function gatewayPortFromConfig(config: unknown): number | undefined {
+  if (config === null || typeof config !== 'object') return undefined
+  const gateway = (config as Record<string, unknown>)['gateway']
+  if (gateway === null || typeof gateway !== 'object') return undefined
+  const port = (gateway as Record<string, unknown>)['port']
+  return typeof port === 'number' ? port : undefined
+}

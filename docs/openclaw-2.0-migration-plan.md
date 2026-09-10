@@ -178,7 +178,7 @@ Findings so far, by where they landed:
 | **G32** MCP `clawops_gateway_restart` hand-rolled its own run command — same defect as G30, missed by the v1.7.5 sweep | `src/mcp/tools/cli/gateway.ts` | fixed, v1.7.6 |
 | **G33** restart paths fell back to `:latest`/`:stable` when no container was found — resolving to 2.0, *past* the version guard | 3 restart paths | fixed, v1.7.6 |
 | G7 wrong registry | `src/pulumi/components/gateway.ts` | dead code → WO-38 |
-| Port hardcoded in 16 files | widespread | WO-42 / WO-48 |
+| Port hardcoded in 16 files | widespread | **WO-48** — fixed. The real count was 11 definitions (16 counted tests and comments); the two the WO-58 audit's list of 9 missed, `harden/modules/{ufw,aws-sg-audit}.ts`, were the two where it was a correctness bug rather than a maintenance one |
 | `logs.ts` assumes a `journalctl -u openclaw` unit only the local provider creates | `src/cli/commands/logs.ts` | 2.0; falls through to `docker logs` by accident today |
 | `monitor.ts` reads `/home/clawops/openclaw.json` directly | `src/cli/commands/monitor.ts` | WO-39 |
 
@@ -721,7 +721,52 @@ was also wrong rather than the code — `execPrivileged` tries direct and escala
 denial, so asserting `sudo` on the first call failed; the real guarantee is that a denied
 read is retried, which is what the test asserts now. 49/49 caught.
 
-**WO-48 — Plan-driven firewall, and the hardcoded port** *(G16 — S)*
+**WO-48 — Plan-driven firewall, and the hardcoded port** *(G16 — S)* — ✅ **done, and it was
+not an (S)**
+
+The port half was the tidy-up. The firewall half turned out to contain three defects, each of
+which made a security control do the opposite of what it says.
+
+**`clawops harden` opened the gateway port on every deployment.** The `ufw` module ran
+`ufw allow 18789/tcp` unconditionally. Since WO-38 the container publishes on `127.0.0.1`, so
+that rule opened a port nothing was listening on — a hardening step *widening* the firewall
+past what the deployment exposes. It now reads `PortBindings` off the running container and
+adds the rule only when the gateway is actually published, on whatever port it is published
+on. The container is the authority here, not the plan: `harden` runs after a deployment
+exists, and the plan may have been superseded.
+
+**The AWS SG audit exempted the two ports it exists to check.** `EXPECTED_OPEN_PORTS` held
+`22` and `18789`, so a security group opening SSH *or the gateway* to `0.0.0.0/0` was reported
+as "No unexpected open ingress rules found". Those are precisely the two N10 forbids opening
+to the world. It also read only `IpRanges`, so an IPv6 rule admitting `::/0` was invisible.
+Both fixed; a wide rule on any port is a finding now, and the named ones say what is exposed.
+
+**The setup wizard defaulted SSH to `0.0.0.0/0`.** The prompt's `default` was the whole
+internet, so the fastest path through the wizard — pressing Enter — produced the exact rule
+N10 exists to forbid, on the path most first-time users take. It now offers the operator's own
+egress IP as a `/32`, and when detection fails it offers *no* default and requires an answer.
+An unanswerable prompt is better than a wide one.
+
+**Cloud programs no longer create gateway ingress rules under loopback publishing.** They
+grant no access, and to anyone auditing the security group they read as an exposed gateway —
+both readings wrong. `clawops plan` refuses the combination outright rather than silently
+dropping the rules, while the plan is still a file the operator can edit.
+
+**The port.** `spec.network.gatewayPort` now carries it: plan → Pulumi config → security-group
+rules, the container publish flag, the default `gateway.port`, and the gateway URL. The local
+path gets `clawops up --gateway-port`, which refuses a nonsense value rather than falling back
+to the default and publishing somewhere the operator did not ask for. `tests/openclaw/port-single-source.test.ts`
+asserts `18789` appears in exactly one file.
+
+**The nine-file count in the work order was wrong: it was eleven,** and the two the audit
+missed were the ones that mattered — `harden/modules/ufw.ts` and `harden/modules/aws-sg-audit.ts`,
+where the hardcoded port was not a maintenance annoyance but a correctness bug.
+
+**Mutation-checked before closing.** One stale anchor surfaced: the WO-40 mutation for
+`gateway.mode` pointed at a literal that this work order parameterised, so it silently stopped
+applying. Re-anchored — a mutation that cannot apply is not a passing mutation.
+
+*Original text follows.*
 
 **Carried in from the WO-58 audit:** the gateway port `18789` is hardcoded in **9 files** —
 `providers/{aws,azure,gcp}/program.ts`, `providers/local/bootstrap.{ts,sh.tmpl}`,
@@ -878,6 +923,7 @@ before marking that owner done.
 | `output:` blocks in `spec/mcp-tools.yaml` are descriptive only — no `outputSchema`, no `structuredContent` | WO-47 | **open** | needs a change to all 18 handlers; too big for an (S) |
 | `clawops_migrate` and `clawops_gateway_update` have no MCP tool | WO-47 | **open** | needs their effects extracted from `cli/commands/*.ts` first, or the handler duplicates them |
 | `clawops_workflow_recover` still reports "systemd service status" | WO-47 | WO-44 | same systemd assumption as `logs.ts`; it should call the diagnostics module |
+| `clawops harden` cannot be told which ports to open | WO-48 | **open** | it reads the container instead, which is more honest but means a reverse-proxy port still has to be opened by hand |
 | Plan fields `workspace`, `permissionMode`, `image.variant`, mounts | WO-42 | **WO-53** (2.1) | open |
 | README *What's new in 2.0* — update per flow change, audit at the end | user request | **every WO**, audited by WO-49 | standing |
 | Pulumi `Gateway` component (G7) | WO-58 audit | WO-38 | ✅ deleted |

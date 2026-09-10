@@ -6,8 +6,8 @@
 
 import type { PulumiFn } from '../types.js'
 import { makeStartupScript } from '../startup.js'
+import { GATEWAY_PORT as DEFAULT_GATEWAY_PORT } from '../../openclaw/run-flags.js'
 
-const GATEWAY_PORT = 18789
 const SSH_PORT = 22
 
 /**
@@ -15,7 +15,7 @@ const SSH_PORT = 22
  * Reads instance type and region from Pulumi stack config at runtime.
  */
 export const gcpProgram: PulumiFn = async () => {
-  const [pulumi, gcp, { resolveIngressCidrs, detectEgressIp }] = await Promise.all([
+  const [pulumi, gcp, { resolveIngressCidrs, resolveGatewayIngressCidrs, resolveGatewayPort, detectEgressIp }] = await Promise.all([
     import('@pulumi/pulumi'),
     import('@pulumi/gcp'),
     import('../firewall.js'),
@@ -29,6 +29,7 @@ export const gcpProgram: PulumiFn = async () => {
   // wizard fills that from the SSH CIDR, so inferring would publish plaintext HTTP
   // to whatever network someone picked for shell access.
   const publishGateway = cfg.get('publishGateway') === 'all' ? 'all' : 'loopback'
+  const gatewayPort = resolveGatewayPort(cfg.get('gatewayPort'), DEFAULT_GATEWAY_PORT)
   const zone = cfg.get('zone') ?? `${region}-a`
   const accessMode = cfg.get('accessMode') ?? 'restricted'
   const allowedCidrs = cfg.get('allowedCidrs') ?? ''
@@ -56,7 +57,11 @@ export const gcpProgram: PulumiFn = async () => {
   }
 
   const sshIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, sshCidrs, egressResult)
-  const gatewayIngressCidrs = resolveIngressCidrs(accessMode, allowedCidrs, gatewayCidrs, egressResult)
+  // Empty under loopback publishing: a rule for a port nothing routable is listening on
+  // grants no access and misreads as exposure.
+  const gatewayIngressCidrs = resolveGatewayIngressCidrs(
+    publishGateway, accessMode, allowedCidrs, gatewayCidrs, egressResult,
+  )
 
   // Network
   const network = new gcp.compute.Network('clawops-network', {
@@ -83,7 +88,7 @@ export const gcpProgram: PulumiFn = async () => {
   if (gatewayIngressCidrs.length > 0) {
     new gcp.compute.Firewall('clawops-firewall-gateway', {
       network: network.selfLink,
-      allows: [{ protocol: 'tcp', ports: [String(GATEWAY_PORT)] }],
+      allows: [{ protocol: 'tcp', ports: [String(gatewayPort)] }],
       sourceRanges: gatewayIngressCidrs,
       targetTags: ['clawops'],
     })
@@ -118,7 +123,7 @@ export const gcpProgram: PulumiFn = async () => {
     metadata: {
       // GCP guest agent reads 'ssh-keys' and populates /home/<user>/.ssh/authorized_keys
       'ssh-keys': `clawops:${sshPublicKey}`,
-      'startup-script': makeStartupScript({ openclawVersion, os: 'debian', publishGateway }),
+      'startup-script': makeStartupScript({ openclawVersion, os: 'debian', publishGateway, gatewayPort }),
     },
     serviceAccount: {
       scopes: ['https://www.googleapis.com/auth/cloud-platform'],
@@ -128,7 +133,7 @@ export const gcpProgram: PulumiFn = async () => {
   return {
     instanceId: instance.id,
     publicIp: address.address,
-    gatewayUrl: pulumi.interpolate`https://${address.address}:${GATEWAY_PORT}`,
+    gatewayUrl: pulumi.interpolate`https://${address.address}:${gatewayPort}`,
     sshHost: address.address,
     sshPort: SSH_PORT,
     sshUser: 'clawops',

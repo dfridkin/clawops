@@ -162,7 +162,14 @@
                 "type": "string",
                 "format": "cidr"
               },
-              "description": "CIDRs allowed to reach the OpenClaw gateway port (default 18789)"
+              "description": "CIDRs allowed to reach the gateway port. Only meaningful with publishGateway \"all\" — under \"loopback\" nothing listens on a routable interface, so these rules would admit traffic to a closed port. clawops refuses that combination rather than creating rules that do nothing."
+            },
+            "gatewayPort": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "default": 18789,
+              "description": "Host port the gateway is published on. Carried in the plan so the firewall rules, the container publish flag, the startup config and the gateway URL all come from one place; it used to be a constant redeclared in six files, which made a port change a six-file edit that could half-apply."
             },
             "tailscale": {
               "type": "object",
