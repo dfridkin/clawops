@@ -202,6 +202,52 @@ was listening on the port, not that the gateway was healthy. Probes now read the
 body, and the restart gate uses `/startupz` rather than liveness — after a restart the
 process listens long before startup finishes.
 
+### `clawops mcp wire` actually wires something now
+
+It has never worked — not on 2.0, not on any 1.x release. It wrote `gateway.mcpClients`,
+which is **not a key OpenClaw has**: checked against the config schemas of `2026.4.5`,
+`2026.7.1-2` and `2026.9.2`. The real key is top-level `mcp.servers`. And the entry it wrote
+was `command: "clawops"` over stdio, which spawns *inside the gateway container* — where
+clawops is not installed and nothing installs it.
+
+On 1.x nothing validated the write, so clawops stored a key nothing read, restarted your
+gateway, and reported: *"The gateway's AI can now run clawops commands."* It could not.
+
+```mermaid
+flowchart TD
+    A["clawops mcp wire"] --> B["openclaw mcp add --transport streamable-http"]
+    B --> C{"gateway connects<br/>to the URL?"}
+    C -- no --> C1["probe fails, nothing saved,<br/>clawops prints the reason"]
+    C -- yes --> D["saved to mcp.servers.clawops"]
+    D --> E["openclaw mcp reload"]
+```
+
+It delegates to `openclaw mcp add` now, which **probes the server before saving** — so
+"wired" means the gateway connected, not that a file was written.
+
+**You have to run the server yourself.** clawops is not installed on the gateway host:
+
+```bash
+clawops mcp serve --http 18790 --bind 0.0.0.0 --token "$(openssl rand -hex 16)"
+clawops mcp wire --stack prod --token <same token>
+```
+
+Installing clawops on the gateway host is a deliberate follow-up, not part of 2.0: it puts
+deployment credentials on the deployed box, and the gateway's AI is reachable from every
+channel it is connected to. See `docs/security/threat-model.md` T11.
+
+### `clawops mcp serve --http` serves more than one client, and asks who you are
+
+Two bugs, found by testing against a real gateway rather than a mock.
+
+It built **one transport for the whole process**, so the first client to connect claimed it
+and every later one — a second editor, a reconnect, the gateway's own probe — was answered
+`"Server already initialized"`. HTTP mode is the multi-client mode.
+
+It had **no authentication**, while exposing every tool including `clawops_destroy`. It now
+takes a bearer token, compares it in constant time, and refuses to bind anywhere but loopback
+without one.
+
 ### The firewall follows the deployment
 
 ```mermaid
@@ -525,9 +571,9 @@ clawops down --yes          # Destroy local-provider stack
 | `doctor` | Check the local machine; with `--stack`, the deployment's health too. `--json` for the report. Exits 1 on any failure |
 | `secret` | Manage secrets: `list`, `set`, `delete`, `rotate`, `audit` |
 | `monitor` | Live dashboard: gateway health, container stats, log tail, stack picker |
-| `mcp serve` | Start the embedded MCP server (stdio or HTTP) |
+| `mcp serve` | Start the embedded MCP server (stdio, or HTTP with `--http <port> --token <t>`) |
 | `mcp install` | Interactively wire clawops into AI editors |
-| `mcp wire` | Wire the gateway's AI as an MCP client of clawops |
+| `mcp wire` | Wire the gateway's AI as an MCP client of clawops (verifies the connection before saving) |
 | `help` | List all commands and global flags |
 | `harden` | Apply security hardening to a deployed stack (SSH, UFW, fail2ban, unattended-upgrades, Docker socket; AWS: SG audit, SSM check, Flow Logs, GuardDuty) |
 | `bug` | Open a pre-filled GitHub issue with system context from `doctor` |
@@ -807,7 +853,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (1097 tests, ~11s)
+pnpm test                  # vitest (1120 tests, ~12s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm typecheck             # tsc --noEmit

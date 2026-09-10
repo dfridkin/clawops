@@ -778,6 +778,79 @@ be plan-validation work — so WO-48 owns it alone now.
 Ports from the plan, not module constants. With
 loopback publishing, the default set may be **SSH only**.
 
+**WO-61 — The MCP wiring was never wired** *(new — found while scoping WO-49)* — ✅ **done**
+
+Nothing in this plan covered `clawops mcp serve|install|wire`; WO-47 covered the tool
+*catalog*, not the commands that run and wire the server. Checking them found that
+`clawops mcp wire` has never worked, on any version clawops has shipped.
+
+**`gateway.mcpClients` is not a key OpenClaw has.** Verified against the config schema of
+**both** lines — `2026.7.1-2` and `2026.9.2` — neither has `gateway.mcpClients`; both use
+top-level `mcp.servers.<name>`, with an identical entry shape. WO-28 specified the key in
+`SPEC.md`, the spec was implemented faithfully, and it was marked ✅ in `SPEC.md` and
+`docs/roadmap.md` and shipped in v1.5. On 1.x nothing validated the write, so clawops stored
+a key nothing read, restarted the gateway, and printed *"The gateway's AI can now run clawops
+commands."* On 2.0, WO-41's validator rejects it — which is how it surfaced at all.
+
+**And the entry could not have worked either.** It was `command: "clawops"` over stdio, which
+spawns *inside the gateway container*. `clawops` is not on PATH there and nothing installs
+it — checked against the image.
+
+**The fix is delegation, as in WO-45 and WO-46.** Both lines ship an identical `openclaw mcp`
+CLI — `add`, `probe`, `status`, `doctor`, `reload`, `unset`. `openclaw mcp add` **probes the
+server before saving**, so clawops cannot write a working-looking entry for a server that is
+not answering: "wired" now means the gateway connected. A failed probe reports the upstream
+error and changes nothing. `add` refuses an existing name, so a rewire is `unset` then `add`,
+behind an explicit `--rewire`.
+
+**Verified end to end, locally:** container → `host.docker.internal` → clawops MCP server,
+probed and saved by `openclaw mcp add`. The `--add-host` flag that makes the alias resolvable
+was already in the run command for host-local model runtimes.
+
+**Two bugs in `clawops mcp serve --http` came out of testing it:**
+
+- **It was single-client.** One `StreamableHTTPServerTransport` for the whole process, so the
+  first client to initialize claimed it and every later one — a second editor, a reconnect,
+  the gateway's own probe — got `"Server already initialized"`. The README advertises HTTP
+  mode as "remote / multi-client". Now one transport per session.
+- **It had no authentication at all**, while exposing every tool including `clawops_destroy`.
+  It now takes a bearer token, compared in constant time, and **refuses to bind anywhere but
+  loopback without one**.
+
+The existing `tests/mcp/http.test.ts` mocks the SDK, the HTTP module and the transport, so it
+could only ever check which transport was selected — which is how a single-client server
+passed it. `tests/mcp/http-live.test.ts` runs a real server on a real port.
+
+**Not in scope, deliberately:** clawops still does not run on the gateway host, so `mcp wire`
+wires a server the operator runs themselves and says so plainly instead of pretending. That
+is WO-62.
+
+**WO-62 — clawops as a host agent** *(fast follow, after 2.0)*
+
+For the gateway's AI to manage a stack unattended, clawops has to be installed and running on
+the gateway host. That is a bigger change than it sounds, and it is deferred past 2.0 on
+purpose.
+
+**The risks, stated plainly:**
+
+- **Deployment credentials land on the deployed box.** Every useful tool needs them — even
+  `clawops_status` reads Pulumi state from the state backend. An agent host that can reach
+  S3 state and an instance role can `clawops destroy` its own stack. R6 says clawops never
+  *stores* credentials, and an instance role honours the letter of that while changing the
+  posture completely.
+- **The blast radius is the whole account, not the host.** A prompt injection through any
+  channel the gateway is connected to reaches a tool surface that creates and destroys
+  infrastructure. The MCP server for gateway use runs **without** `--read-only` by WO-28's
+  own design note.
+- **The token sits in plaintext in the gateway config**, alongside channel credentials, and
+  is therefore in every backup archive (see WO-46's warnings).
+- **It needs Node on the host**, which clawops does not currently install; the host runs
+  Docker and nothing else of ours.
+
+Anyone building it should start from `docs/security/threat-model.md`, add an ADR under
+`docs/decisions/` per R-meta-3, and default the host agent to `--read-only` with the
+destructive surface opt-in.
+
 **WO-60 — Channel catalog for 2.0** *(M — new, carried in from WO-43)*
 `spec/integrations.yaml` is read by the setup wizard and has not been checked against the 2.0
 channel surface. WO-43 covered model providers, which are startup-blocking; channels are not, which

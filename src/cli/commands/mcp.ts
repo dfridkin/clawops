@@ -11,7 +11,8 @@ const serveCmd = defineCommand({
   },
   args: {
     http: { type: 'string', description: 'HTTP port for standalone mode' },
-    bind: { type: 'string', description: 'Bind address for HTTP mode' },
+    bind: { type: 'string', description: 'Bind address for HTTP mode (default 127.0.0.1)' },
+    token: { type: 'string', description: 'Bearer token required on every HTTP request. Required unless bound to loopback; also read from CLAWOPS_MCP_TOKEN' },
     'read-only': { type: 'boolean', description: 'Only register read toolset' },
     'no-destructive': { type: 'boolean', description: 'Filter out destructive tools' },
     toolsets: { type: 'string', description: 'Comma-separated toolsets to enable' },
@@ -22,6 +23,7 @@ const serveCmd = defineCommand({
     await serveMcp({
       port: args.http ? Number(args.http) : undefined,
       bind: args.bind,
+      token: args.token,
       readOnly: Boolean(args['read-only']),
       noDestructive: Boolean(args['no-destructive']),
       toolsets: args.toolsets ? args.toolsets.split(',').map((s) => s.trim()) : undefined,
@@ -108,13 +110,16 @@ const wireCmd = defineCommand({
   },
   args: {
     stack: { type: 'string', description: 'Target stack name' },
-    force: { type: 'boolean', description: 'Apply even if gateway version is below minimum' },
+    url: { type: 'string', description: 'Where the gateway should reach clawops (default http://host.docker.internal:18790/)' },
+    token: { type: 'string', description: 'Bearer token the clawops MCP server requires' },
+    rewire: { type: 'boolean', description: 'Replace an existing clawops entry' },
   },
   async run({ args }) {
     const { buildContext } = await import('../context.js')
     const { acquireSession, drainPool } = await import('../../transport/pool.js')
     const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
     const { wireGatewayMcp } = await import('../mcp-wire.js')
+    const { MCP_HTTP_PORT } = await import('../../mcp/server.js')
 
     const ac = new AbortController()
     process.on('SIGINT', () => { ac.abort(); process.exit(130) })
@@ -154,23 +159,38 @@ const wireCmd = defineCommand({
     const spin = spinner(`Connecting to ${conn.host}...`)
     const { session, release } = await acquireSession({ ...conn, signal: ac.signal })
     try {
-      spin.text = 'Reading gateway config...'
-      const result = await wireGatewayMcp(session, ac.signal, { force: Boolean(args.force) })
+      spin.text = 'Asking the gateway to connect to clawops...'
+      const result = await wireGatewayMcp(session, ac.signal, {
+        url: typeof args.url === 'string' ? args.url : undefined,
+        token: typeof args.token === 'string' ? args.token : undefined,
+        rewire: Boolean(args.rewire),
+      })
 
-      if (result.status === 'version-blocked') {
-        spin.fail('Gateway version is too old for MCP client support.')
-        warn(`Gateway version ${result.version} requires at least 2026.4 for MCP client support.`)
-        info('Upgrade OpenClaw and re-run, or bypass with: clawops mcp wire --force')
+      if (result.status === 'exists') {
+        spin.info('The gateway already has a clawops MCP server configured.')
+        info(`Pointing at ${result.url}. Replace it with: clawops mcp wire --rewire`)
+        return
+      }
+
+      if (result.status === 'probe-failed') {
+        // `openclaw mcp add` probes before saving, so nothing was written. The old code
+        // wrote a config key nothing read and reported success regardless.
+        spin.fail('The gateway could not connect to clawops. Nothing was changed.')
+        failure(result.error)
+        warn('clawops does not run on the gateway host. Start it where the gateway can reach it:')
+        info(`  clawops mcp serve --http ${MCP_HTTP_PORT} --bind 0.0.0.0 --token <token>`)
+        info(`Then re-run: clawops mcp wire --url ${result.url} --token <token>`)
         process.exit(1)
       }
 
-      if (result.rewired) {
-        spin.succeed('Re-wiring clawops MCP client — previous entry replaced.')
-      } else {
-        spin.succeed('Gateway MCP client wired.')
-      }
+      spin.succeed(
+        result.rewired
+          ? 'Re-wired the gateway to clawops — previous entry replaced.'
+          : 'Gateway wired to clawops, and the connection was verified.',
+      )
       success('The gateway\'s AI can now run clawops commands.')
       info('Try asking it: "check if my stack is healthy"')
+      warn('The MCP server exposes destructive tools. Keep it bound where only the gateway can reach it.')
     } catch (err) {
       spin.fail('Failed to wire gateway MCP client.')
       failure(err instanceof Error ? err.message : String(err))

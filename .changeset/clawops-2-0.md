@@ -152,6 +152,48 @@ one repair, and failing that **rolls back to the image that was running before**
 you which state you ended up in rather than leaving you to work it out. If the rollback
 will not start either, the message names the snapshot to restore.
 
+## `clawops mcp wire` actually wires something now
+
+It has never worked. It wrote `gateway.mcpClients`, which is **not a key OpenClaw has** —
+checked against the config schemas of both `2026.7.1-2` and `2026.9.2`. The real key is
+top-level `mcp.servers`. And the entry it wrote was `command: "clawops"` over stdio, which
+spawns inside the gateway container, where clawops is not installed.
+
+On 1.x nothing validated the write, so it stored a key nothing read, restarted your gateway,
+and told you *"The gateway's AI can now run clawops commands."* It could not.
+
+It now delegates to `openclaw mcp add`, which **probes the server before saving** — so
+"wired" means the gateway connected, not that a file was written. A failed probe prints the
+reason and changes nothing. Use `--rewire` to replace an existing entry.
+
+**You have to run the server.** clawops does not run on the gateway host:
+
+```bash
+clawops mcp serve --http 18790 --bind 0.0.0.0 --token "$(openssl rand -hex 16)"
+clawops mcp wire --stack prod --token <same token>
+```
+
+Installing clawops on the gateway host is a follow-up, deliberately not in 2.0 — it puts
+deployment credentials on the deployed box, and that needs its own design.
+
+## `clawops mcp serve --http` serves more than one client, and asks who you are
+
+Two bugs, found by testing it against a real gateway rather than a mock.
+
+It built **one transport for the whole process**, so the first client to connect claimed it
+and every later one — a second editor, a reconnect, the gateway's own probe — was answered
+`"Server already initialized"`. HTTP mode is the multi-client mode. It now creates one
+session per client.
+
+It had **no authentication**, while exposing every tool including `clawops_destroy`. It takes
+a bearer token now, compares it in constant time, and **refuses to bind anywhere but loopback
+without one**:
+
+```
+Refusing to serve MCP on 0.0.0.0 without a token. This server exposes every clawops tool,
+including destructive ones, and has no other authentication.
+```
+
 ## The firewall follows the deployment, not a constant
 
 Three security controls were doing the opposite of what they say.
