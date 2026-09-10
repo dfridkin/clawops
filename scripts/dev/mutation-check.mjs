@@ -227,6 +227,24 @@ const MUTATIONS = [
     file: 'spec/integrations.yaml', from: '        envDefault: SLACK_APP_TOKEN', to: '        envDefault: SLACK_SIGNING_SECRET', test: 'tests/spec/integrations.test.ts' },
   { name: 'a channel default is set to a value the schema rejects',
     file: 'spec/integrations.yaml', from: '      mode: socket', to: '      mode: webhook', test: 'tests/spec/integrations.test.ts' },
+
+  // ── WO-44 carried: the observability surface ────────────────────────────────
+  { name: 'logs go back to the journalctl-or-docker chain',
+    file: 'src/openclaw/logs.ts', from: "    'docker exec openclaw openclaw logs',", to: "    'journalctl -u openclaw 2>/dev/null || docker logs openclaw',", test: 'tests/openclaw/logs.test.ts tests/cli/logs.test.ts tests/mcp/logs.test.ts' },
+  { name: 'a --since window is silently served by a source that cannot honour it',
+    file: 'src/openclaw/logs.ts', from: '  if (opts.since) {', to: '  if (false) {', test: 'tests/openclaw/logs.test.ts tests/cli/logs.test.ts tests/mcp/logs.test.ts' },
+  { name: 'logs are read from a gateway that is not answering',
+    file: 'src/openclaw/logs.ts', from: '  if (!opts.gatewayReachable) {', to: '  if (false) {', test: 'tests/openclaw/logs.test.ts tests/mcp/logs.test.ts tests/cli/logs.test.ts' },
+  { name: 'the log source is chosen but never reported',
+    file: 'src/cli/commands/logs.ts', from: '      info(`Logs: ${choice.source} — ${choice.reason}`)', to: '      void choice', test: 'tests/cli/logs.test.ts' },
+  { name: 'the MCP tool stops saying which source answered',
+    file: 'src/mcp/tools/cli/logs.ts', from: '    let output = `[source: ${choice.source} — ${choice.reason}]\\n${result.stdout}`', to: '    let output = result.stdout', test: 'tests/mcp/logs.test.ts' },
+  { name: 'agent logs go back to the removed agents-logs command',
+    file: 'src/openclaw/logs.ts', from: "    'docker exec openclaw openclaw audit',", to: "    'docker exec -t openclaw openclaw agents logs',", test: 'tests/openclaw/logs.test.ts tests/cli/agents.test.ts' },
+  { name: 'agent activity is no longer scoped to the agent',
+    file: 'src/openclaw/logs.ts', from: '    `--agent ${shellQuote(opts.agentId)}`,', to: "    '',", test: 'tests/openclaw/logs.test.ts tests/cli/agents.test.ts' },
+  { name: 'a failed audit query shows an empty list instead of an error',
+    file: 'src/cli/commands/agents.ts', from: '        if (result.code !== 0) {\n          failure(`Cannot read activity', to: '        if (false) {\n          failure(`Cannot read activity', test: 'tests/cli/agents.test.ts' },
 ]
 
 let survived = []

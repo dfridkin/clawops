@@ -40,8 +40,11 @@ afterEach(() => {
 
 describe('logs command — exec (no --follow)', () => {
   it('calls exec and writes stdout to process.stdout', async () => {
+    // The probe runs first, so a single queued handler would answer it and leave the log
+    // command unanswered — match on the command instead.
     const session = new FakeSshSession()
-    session.onExec(() => ({ stdout: 'log line 1\nlog line 2\n', stderr: '', code: 0 }))
+      .respond(/openclaw logs/, { stdout: 'log line 1\nlog line 2\n' })
+      .respond(/openclaw logs --limit 1 >/, { stdout: 'ok' })
 
     const { buildContext, acquireSession } = await getMocks()
     buildContext.mockReturnValue(makeFakeContext())
@@ -54,10 +57,8 @@ describe('logs command — exec (no --follow)', () => {
     expect(stdoutCalls.some(s => s.includes('log line 1'))).toBe(true)
   })
 
-  it('passes --tail value to the log command', async () => {
-    const session = new FakeSshSession()
-    const execSpy = vi.fn().mockResolvedValue({ stdout: '', stderr: '', code: 0 })
-    session.onExec(execSpy)
+  it('passes the tail count to the gateway log command', async () => {
+    const session = new FakeSshSession().respond(/openclaw logs --limit 1 >/, { stdout: 'ok' })
 
     const { buildContext, acquireSession } = await getMocks()
     buildContext.mockReturnValue(makeFakeContext())
@@ -66,13 +67,13 @@ describe('logs command — exec (no --follow)', () => {
     const cmd = await getCmd()
     await (cmd.run as AnyRunFn)({ args: { tail: '20' } })
 
-    expect(execSpy).toHaveBeenCalledWith(expect.stringContaining('-n 20'))
+    expect(session.execCalls().some((c) => c.includes('openclaw logs --limit 20'))).toBe(true)
   })
 
-  it('passes --since flag to the log command', async () => {
+  it('serves --since from container output, which is the source that has it', async () => {
+    // `openclaw logs` has no --since; honouring it from the gateway would silently ignore
+    // the window the operator asked for.
     const session = new FakeSshSession()
-    const execSpy = vi.fn().mockResolvedValue({ stdout: '', stderr: '', code: 0 })
-    session.onExec(execSpy)
 
     const { buildContext, acquireSession } = await getMocks()
     buildContext.mockReturnValue(makeFakeContext())
@@ -81,7 +82,41 @@ describe('logs command — exec (no --follow)', () => {
     const cmd = await getCmd()
     await (cmd.run as AnyRunFn)({ args: { since: '5m' } })
 
-    expect(execSpy).toHaveBeenCalledWith(expect.stringContaining('5m'))
+    const call = session.execCalls().find((c) => c.includes('docker logs'))!
+    expect(call).toContain("--since '5m'")
+    // And it does not probe a gateway it has already decided not to use.
+    expect(session.execCalls().some((c) => c.includes('--limit 1 >'))).toBe(false)
+  })
+
+  it('never runs journalctl — only the local provider has that unit', async () => {
+    // Both this command and the MCP tool ran `journalctl -u openclaw || docker logs`, so on
+    // every cloud VM the fallback won and nothing said which source had answered.
+    const session = new FakeSshSession().respond(/openclaw logs --limit 1 >/, { stdout: 'ok' })
+    const { buildContext, acquireSession } = await getMocks()
+    buildContext.mockReturnValue(makeFakeContext())
+    acquireSession.mockResolvedValue({ session, release: vi.fn() })
+
+    const cmd = await getCmd()
+    await (cmd.run as AnyRunFn)({ args: {} })
+
+    expect(session.execCalls().join(' ')).not.toContain('journalctl')
+  })
+
+  it('falls back to container output when the gateway is not answering, and says which', async () => {
+    const session = new FakeSshSession()
+      .respond(/docker logs/, { stdout: 'container line\n' })
+      .respond(/openclaw logs --limit 1 >/, { stdout: 'no' })
+    const { buildContext, acquireSession } = await getMocks()
+    buildContext.mockReturnValue(makeFakeContext())
+    acquireSession.mockResolvedValue({ session, release: vi.fn() })
+    const logs: string[] = []
+    vi.spyOn(console, 'log').mockImplementation((...a) => { logs.push(a.join(' ')) })
+
+    const cmd = await getCmd()
+    await (cmd.run as AnyRunFn)({ args: {} })
+
+    expect(logs.join(' ')).toMatch(/container/)
+    expect(logs.join(' ')).toMatch(/not answering/)
   })
 })
 

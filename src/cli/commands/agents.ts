@@ -3,7 +3,7 @@ import process from 'node:process'
 import { failure, info } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
 import { renderTable } from '../../output/table.js'
-import { execPrivileged, streamPrivileged } from '../../transport/privileged.js'
+import { execPrivileged } from '../../transport/privileged.js'
 
 export default defineCommand({
   meta: {
@@ -12,7 +12,9 @@ export default defineCommand({
   },
   args: {
     stack: { type: 'string', description: 'Target stack name' },
-    json: { type: 'boolean', description: 'Emit JSON (for list)' },
+    json: { type: 'boolean', description: 'Emit JSON (for list and logs)' },
+    limit: { type: 'string', description: 'Max activity records for `logs` (default 50)' },
+    cursor: { type: 'string', description: 'Continue from a previous `logs` result cursor' },
   },
   async run({ args }) {
     const { buildContext } = await import('../context.js')
@@ -112,16 +114,30 @@ export default defineCommand({
         }
       } else {
         // logs <name>
-        const logStream = await streamPrivileged(session, 
-          `docker exec -t openclaw openclaw agents logs ${name!} --follow`,
+        //
+        // OpenClaw 2.0 removed `agents logs`, so the command this used to run does not exist
+        // — it would have failed on every 2.0 gateway. Agent-scoped records live in the audit
+        // log now. `openclaw logs` is gateway-wide and its envelope carries no agent key, so
+        // filtering that would mean substring-matching a message field and hoping.
+        const { agentAuditCommand } = await import('../../openclaw/logs.js')
+        const limit = typeof args.limit === 'string' ? parseInt(args.limit, 10) : 50
+        const result = await execPrivileged(
+          session,
+          agentAuditCommand({ agentId: name!, limit, cursor: typeof args.cursor === 'string' ? args.cursor : undefined }),
           abortController.signal,
         )
-        logStream.pipe(process.stdout)
-        await new Promise<void>((resolve) => {
-          logStream.on('end', resolve)
-          logStream.on('close', resolve)
-          abortController.signal.addEventListener('abort', () => resolve(), { once: true })
-        })
+
+        if (result.code !== 0) {
+          failure(`Cannot read activity for "${name}": ${result.stderr.trim() || result.stdout.trim() || `exit ${result.code}`}`)
+          process.exitCode = 1
+          return
+        }
+
+        if (args.json) {
+          process.stdout.write(result.stdout)
+        } else {
+          renderAgentRuns(name!, result.stdout)
+        }
       }
     } finally {
       release()
@@ -129,3 +145,41 @@ export default defineCommand({
     }
   },
 })
+
+/**
+ * Render an audit page as a table.
+ *
+ * `--follow` is not offered. `openclaw audit` is a paged query, not a stream: it returns a
+ * cursor to continue from. Presenting a poll loop as a follow would be a different thing
+ * wearing the old command's clothes.
+ */
+function renderAgentRuns(agentId: string, stdout: string): void {
+  interface Run { at?: string; status?: string; kind?: string; summary?: string; message?: string }
+  let page: { records?: Run[]; cursor?: string }
+  try {
+    page = JSON.parse(stdout.trim() || '{}') as typeof page
+  } catch {
+    failure(`Cannot read activity for "${agentId}": unexpected output: ${stdout.trim().slice(0, 200)}`)
+    process.exitCode = 1
+    return
+  }
+
+  const records = page.records ?? []
+  if (records.length === 0) {
+    info(`No recorded activity for agent "${agentId}".`)
+    return
+  }
+
+  process.stdout.write(
+    '\n' +
+      renderTable(
+        ['When', 'Status', 'Detail'],
+        records.map((r) => [r.at ?? '—', r.status ?? '—', r.summary ?? r.message ?? '—']),
+      ) +
+      '\n',
+  )
+  if (page.cursor) {
+    info(`More records: clawops agents logs ${agentId} --cursor ${page.cursor}`)
+  }
+  process.stdout.write('\n')
+}

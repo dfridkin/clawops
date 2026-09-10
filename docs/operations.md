@@ -43,16 +43,29 @@ clawops logs --since 30m --follow     # combined
 clawops logs --stack prod             # specific stack
 ```
 
-Logs are read from `journalctl -u openclaw` on the remote host, falling back to
-`docker logs openclaw`. Output is piped directly to your terminal; press `Ctrl-C` to stop
+Logs come from the gateway's own `openclaw logs`, which reads its structured log file. Add
+`--json` for machine-readable lines. Output is piped to your terminal; press `Ctrl-C` to stop
 following.
 
-**Which of the two you get depends on the provider, and clawops does not tell you.** Only the
-local provider creates a systemd unit named `openclaw`; on AWS, GCP and Azure the container is
-started directly, so `journalctl -u openclaw` finds nothing and the fallback produces the
-output — the right answer for the wrong reason. The two differ: the systemd journal carries the
-unit's own start/stop records, `docker logs` carries only the container's stdout. Worth knowing
-when a log line you expect is missing.
+**clawops tells you which source answered**, because there are two and they carry different
+things:
+
+| Source | When | Carries |
+|---|---|---|
+| `gateway` | normally | the gateway's own structured log, `--json` capable |
+| `container` | the gateway is not answering, or you passed `--since` | the container's stdout |
+
+`openclaw logs` reaches the gateway over RPC, so a gateway that is down cannot serve its own
+logs — which is exactly when you want them. clawops probes first and falls back to
+`docker logs`, saying so rather than leaving you to guess.
+
+`--since` is a container-log filter; the gateway command has no time window, so asking for one
+selects the container source. That is reported too.
+
+Before 2.0 both this command and the MCP tool ran `journalctl -u openclaw || docker logs
+openclaw`. Only the local provider creates that systemd unit, so on every cloud VM the first
+command failed and the fallback answered — the right output for the wrong reason, with nothing
+saying which had run.
 
 ### Run a health check
 
@@ -98,9 +111,20 @@ OpenClaw agents are long-running processes managed inside the OpenClaw container
 clawops agents list
 clawops agents list --json            # machine-readable
 
-# Stream logs for a specific agent (Ctrl-C to stop)
+# Recent activity for one agent
 clawops agents logs slack-bot
+clawops agents logs slack-bot --limit 100 --json
+clawops agents logs slack-bot --cursor <cursor>   # continue a previous page
 ```
+
+**This is a query, not a stream.** OpenClaw 2.0 removed `agents logs`; agent-scoped records
+live in the audit log, and clawops reads them with
+`openclaw audit --agent <id> --kind agent_run --json`. It returns a page and a cursor to
+continue from, so there is no `--follow` — presenting a poll loop as one would be a different
+thing wearing the old command's name.
+
+`clawops logs` remains gateway-wide. Its envelope carries no agent key, so it cannot be
+filtered to one agent without substring-matching a message field.
 
 There is no per-agent restart. OpenClaw 2.0 removed the subcommand, and the only restart
 it offers is gateway-wide:

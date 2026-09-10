@@ -1,7 +1,7 @@
 // Unit tests for the `agents` command (list / logs; restart was removed in 2.0).
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { FakeSshSession, fakeReadable } from '../helpers/ssh.js'
+import { FakeSshSession } from '../helpers/ssh.js'
 import { makeFakeContext } from '../helpers/context.js'
 
 vi.mock('../../src/cli/context.js', () => ({ buildContext: vi.fn() }))
@@ -224,41 +224,102 @@ describe('agents command', () => {
   })
 
   describe('logs', () => {
-    it('streams logs for named agent to stdout', async () => {
-      const session = new FakeSshSession()
-      const logChunks = ['line1\n', 'line2\n']
-      session.onStream(() => fakeReadable(logChunks))
+    // OpenClaw 2.0 removed `agents logs`, so the streamed `docker exec -t openclaw openclaw
+    // agents logs <name> --follow` this used to run does not exist on any supported gateway.
+    // Agent-scoped records come from the audit log now, which is a paged query rather than a
+    // stream.
+    const PAGE = JSON.stringify({
+      records: [
+        { at: '2026-09-10T04:00:00Z', status: 'succeeded', summary: 'ran a thing' },
+        { at: '2026-09-10T04:01:00Z', status: 'failed', summary: 'did not' },
+      ],
+      cursor: 'abc123',
+    })
 
-      const { buildContext, acquireSession } = await getMocks()
-      buildContext.mockReturnValue(makeFakeContext())
-      acquireSession.mockImplementation(wireSession(session))
+    function wire(session: FakeSshSession) {
+      return async () => {
+        const { buildContext, acquireSession } = await getMocks()
+        buildContext.mockReturnValue(makeFakeContext())
+        acquireSession.mockImplementation(wireSession(session))
+      }
+    }
 
+    it('reads the agent audit log, not the removed agents-logs command', async () => {
+      const session = new FakeSshSession().respond(/audit/, { stdout: PAGE })
+      await wire(session)()
       const written: string[] = []
       vi.spyOn(process.stdout, 'write').mockImplementation((s) => { written.push(String(s)); return true })
 
       const cmd = await getCmd()
       await (cmd.run as AnyRunFn)({ args: { _: ['logs', 'claude'], stack: undefined, json: false } })
 
-      expect(written.join('')).toContain('line1')
+      const call = session.execCalls().find((c) => c.includes('audit'))!
+      expect(call).toContain('openclaw audit')
+      expect(call).toContain("--agent 'claude'")
+      expect(call).toContain('--kind agent_run')
+      expect(call).toContain('--json')
+      expect(session.execCalls().join(' ')).not.toContain('agents logs')
+      expect(written.join('')).toContain('ran a thing')
     })
 
-    it('sends correct docker exec -t stream command', async () => {
-      const streamCommands: string[] = []
-      const session = new FakeSshSession()
-      session.onStream((cmd) => { streamCommands.push(cmd); return fakeReadable([]) })
-
-      const { buildContext, acquireSession } = await getMocks()
-      buildContext.mockReturnValue(makeFakeContext())
-      acquireSession.mockImplementation(wireSession(session))
-
+    it('offers the cursor to continue, rather than pretending to follow', async () => {
+      // `openclaw audit` is a paged query. Presenting a poll loop as `--follow` would be a
+      // different thing wearing the old command's clothes.
+      const session = new FakeSshSession().respond(/audit/, { stdout: PAGE })
+      await wire(session)()
+      const logs: string[] = []
       vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+      vi.spyOn(console, 'log').mockImplementation((...a) => { logs.push(a.join(' ')) })
 
       const cmd = await getCmd()
-      await (cmd.run as AnyRunFn)({ args: { _: ['logs', 'myagent'], stack: undefined, json: false } })
+      await (cmd.run as AnyRunFn)({ args: { _: ['logs', 'claude'], stack: undefined, json: false } })
 
-      expect(streamCommands[0]).toContain('docker exec -t openclaw')
-      expect(streamCommands[0]).toContain('logs myagent')
-      expect(streamCommands[0]).toContain('--follow')
+      expect(logs.join(' ')).toContain('--cursor abc123')
+      expect(session.execCalls().join(' ')).not.toContain('--follow')
+    })
+
+    it('passes --limit and --cursor through', async () => {
+      const session = new FakeSshSession().respond(/audit/, { stdout: PAGE })
+      await wire(session)()
+      vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      const cmd = await getCmd()
+      await (cmd.run as AnyRunFn)({
+        args: { _: ['logs', 'claude'], stack: undefined, json: false, limit: '5', cursor: 'zz' },
+      })
+
+      const call = session.execCalls().find((c) => c.includes('audit'))!
+      expect(call).toContain('--limit 5')
+      expect(call).toContain("--cursor 'zz'")
+    })
+
+    it('reports a failed query instead of showing nothing', async () => {
+      const session = new FakeSshSession().respond(/audit/, { stderr: 'no such agent', code: 1 })
+      await wire(session)()
+      const errors: string[] = []
+      vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+      vi.spyOn(console, 'error').mockImplementation((...a) => { errors.push(a.join(' ')) })
+
+      const cmd = await getCmd()
+      await (cmd.run as AnyRunFn)({ args: { _: ['logs', 'ghost'], stack: undefined, json: false } })
+
+      expect(errors.join(' ')).toMatch(/Cannot read activity/)
+      expect(process.exitCode).toBe(1)
+      process.exitCode = 0
+    })
+
+    it('says so when an agent has no recorded activity', async () => {
+      const session = new FakeSshSession().respond(/audit/, { stdout: '{"records":[]}' })
+      await wire(session)()
+      const logs: string[] = []
+      vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+      vi.spyOn(console, 'log').mockImplementation((...a) => { logs.push(a.join(' ')) })
+
+      const cmd = await getCmd()
+      await (cmd.run as AnyRunFn)({ args: { _: ['logs', 'quiet'], stack: undefined, json: false } })
+
+      expect(logs.join(' ')).toMatch(/No recorded activity/)
     })
 
     it('exits with code 2 when logs is called without a name', async () => {
