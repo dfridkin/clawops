@@ -954,6 +954,25 @@ Anyone building it should start from `docs/security/threat-model.md`, add an ADR
 `docs/decisions/` per R-meta-3, and default the host agent to `--read-only` with the
 destructive surface opt-in.
 
+**Also in scope — the committed `server.json` shows a stale version.** Found 2026-09-11 while
+confirming the MCP registry listing for 2.0.0. The registry is correct (`2.0.0`, `isLatest:
+true`), but the committed `server.json` still says `1.7.3`: the release workflow rewrites
+`version` and `packages[0].version` in CI just before registering, and never commits the change.
+It is harmless to the registry and misleading to anyone reading the repo — it misled the check
+that found it.
+
+Two ways to fix it; the first is preferred:
+
+- **Sync at version time, not publish time.** Run the same rewrite after `changeset version`, so
+  the bump lands in the Version Packages PR alongside `package.json` and is reviewed with it.
+  No CI push to `main` is needed, which branch protection would block anyway.
+- Replace the numbers with a placeholder that CI fills in, and add a test that the committed
+  file carries the placeholder, so nobody reads it as a real version.
+
+Either way, add a test asserting `server.json` agrees with `package.json`, so the file cannot
+drift silently again. Publishing to the registry stays restricted to `main` — the 1.x line must
+not register, or a maintenance patch would take `isLatest` back from 2.x.
+
 **WO-60 — Channel catalog for 2.0** *(M — new, carried in from WO-43)* — ✅ **catalog done;
 install flow carried forward**
 
@@ -1191,6 +1210,7 @@ before marking that owner done.
 | `clawops harden` cannot be told which ports to open | WO-48 | **open** | it reads the container instead, which is more honest but means a reverse-proxy port still has to be opened by hand |
 | clawops does not install channel plugins; the wizard prints the command instead | WO-60 | **WO-63** | scheduled, not just noted |
 | WhatsApp and Microsoft Teams have no `--use-env` path at all | WO-60 | **WO-63** | the flag is rejected outright, so no non-interactive setup exists |
+| Committed `server.json` shows `1.7.3`; CI rewrites the version before registering but never commits it | release | **WO-62** | registry itself is correct; sync at `changeset version` time and test it against `package.json` |
 | Plan fields `workspace`, `permissionMode`, `image.variant`, mounts | WO-42 | **WO-53** (2.1) | open |
 | README *What's new in 2.0* — update per flow change, audit at the end | user request | **every WO**, audited by WO-49 | standing |
 | Pulumi `Gateway` component (G7) | WO-58 audit | WO-38 | ✅ deleted |
