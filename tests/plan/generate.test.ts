@@ -207,3 +207,27 @@ describe('preview parsing', () => {
     expect(diff.totalChanges).toBe(2)
   })
 })
+
+describe('a stack that is not registered', () => {
+  it('fails the plan instead of returning one with no diff', async () => {
+    // The preview's catch swallowed everything, so an unregistered stack produced a plan with
+    // an empty diff and a warning three screens up — and the real error surfaced at
+    // `clawops apply`, after the operator had already reviewed and approved a plan.
+    const { UsageError } = await import('../../src/errors/index.js')
+    const { generatePlan } = await import('../../src/plan/generate.js')
+    mockGetStack.mockRejectedValue(
+      new UsageError('Stack "e2e-1" not found in config. Run `clawops init`…'),
+    )
+    await expect(
+      generatePlan({ stackName: 'e2e-1', provider: 'gcp' }),
+    ).rejects.toThrow(/not found in config/)
+  })
+
+  it('still tolerates a preview that fails for a Pulumi reason', async () => {
+    const { generatePlan } = await import('../../src/plan/generate.js')
+    mockGetStack.mockRejectedValue(new Error('error: could not reach the backend'))
+    const plan = await generatePlan({ stackName: 'default', provider: 'gcp' })
+    expect(plan.spec.stackName).toBe('default')
+    expect(plan.diff).toBeUndefined()
+  })
+})

@@ -26,6 +26,11 @@ fail() { echo "  ✗ $*" >&2; FAILURES=$((FAILURES + 1)); }
 pass() { echo "  ✓ $*"; }
 FAILURES=0
 DESTROYED=no
+# Whether anything could exist yet. A destroy that fails because nothing was ever created is
+# not the failure the loud banner is for, and crying wolf about a bill teaches people to
+# ignore it.
+CREATED=no
+REGISTERED=no
 
 cleanup() {
   local code=$?
@@ -35,6 +40,12 @@ cleanup() {
     echo "   Destroy it with: pnpm dev destroy --stack ${STACK} --yes"
     exit "$code"
   fi
+  if [ "$DESTROYED" = "no" ] && [ "$CREATED" = "no" ]; then
+    echo
+    echo "Nothing was provisioned — no resources to destroy."
+    DESTROYED=yes
+  fi
+
   if [ "$DESTROYED" = "no" ]; then
     echo
     echo "── Destroying ${STACK} ─────────────────────────────────────────"
@@ -52,6 +63,13 @@ cleanup() {
     }
     DESTROYED=yes
   fi
+
+  # The stack entry outlives its resources otherwise, and every run would leave one behind.
+  if [ "$REGISTERED" = "yes" ]; then
+    pnpm dev stacks delete "$STACK" --yes --force >/dev/null 2>&1 ||
+      echo "   note: could not remove ${STACK} from ~/.clawops/config.json"
+  fi
+
   echo
   if [ "$FAILURES" -gt 0 ]; then echo "✗ ${FAILURES} assertion(s) failed"; exit 1; fi
   echo "✓ all assertions passed, stack destroyed"
@@ -70,10 +88,21 @@ fi
 
 echo
 echo "── Deploying ${STACK} on ${PROVIDER} (OpenClaw ${FLOOR}) ───────"
+# apply resolves the stack's state backend from ~/.clawops/config.json, so a stack name that
+# has never been registered cannot be applied. Register this run's throwaway name against the
+# same bucket and region as the configured default stack.
+STATE_URL=$(node -e "const c=require(require('os').homedir()+'/.clawops/config.json');const s=c.stacks[c.defaults.stack];process.stdout.write(s.stateUrl)")
+REGION=$(node -e "const c=require(require('os').homedir()+'/.clawops/config.json');const s=c.stacks[c.defaults.stack];process.stdout.write(s.region??'')")
+echo "Registering ${STACK} → ${STATE_URL} (${REGION})"
+pnpm dev init --provider "$PROVIDER" --stack "$STACK" --state "$STATE_URL" \
+  ${REGION:+--region "$REGION"} --non-interactive || exit 1
+REGISTERED=yes
+
 # --ssh-cidr auto: every assertion below runs over SSH, so a plan with no ingress fails all
 # of them for a reason that has nothing to do with the runtime contract being tested.
 pnpm dev plan --provider "$PROVIDER" --stack "$STACK" --openclaw-version "$FLOOR" \
   --ssh-cidr auto --out "/tmp/${STACK}.plan.json" || exit 1
+CREATED=yes
 pnpm dev apply "/tmp/${STACK}.plan.json" --yes || exit 1
 
 echo

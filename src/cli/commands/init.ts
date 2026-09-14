@@ -58,11 +58,20 @@ export default defineCommand({
       )
     }
 
+    // Registering a second stack used to delete the first. `init` built a whole config object
+    // with a single `stacks` entry and wrote it over the file, so `clawops init --stack
+    // staging` dropped every other stack — with its stateUrl, which is the only pointer to
+    // where that stack's Pulumi state lives. The infrastructure stayed up and clawops could no
+    // longer see, reach or destroy it.
+    //
+    // Adding a stack is now additive and needs no --force. Overwriting an existing entry still
+    // does, because changing a stateUrl orphans state just as thoroughly.
     const existing = getConfig()
-    if (existing && !forceOverwrite && !nonInteractive) {
+    if (existing?.stacks[stackName] && !forceOverwrite) {
       failure(
-        `Config already exists at ${path.join(getConfigDir(), 'config.json')}. ` +
-          'Use --force to overwrite.',
+        `Stack "${stackName}" already exists in ${path.join(getConfigDir(), 'config.json')} ` +
+          `(${existing.stacks[stackName].stateUrl}). Use --force to overwrite its settings, ` +
+          'or pass a different --stack name to add another one.',
       )
       process.exit(1)
     }
@@ -119,19 +128,12 @@ export default defineCommand({
       const sshUser = typeof args['ssh-user'] === 'string' ? args['ssh-user'] : 'root'
       const sshPort = typeof args['ssh-port'] === 'string' ? parseInt(args['ssh-port'], 10) : 22
 
-      config = {
-        version: 1,
-        defaults: { stack: stackName, provider },
-        stacks: {
-          [stackName]: {
-            provider,
-            stateUrl: 'file://~/.clawops/state',
-            credentialsRef: { source: 'file', envVars: [] },
-            localOpts: { host, sshUser, sshPort, sshKeyPath: keyPath },
-          },
-        },
-        ssh: { keyPath, knownHostsPath },
-      }
+      config = merge(existing, stackName, provider, keyPath, knownHostsPath, {
+        provider,
+        stateUrl: 'file://~/.clawops/state',
+        credentialsRef: { source: 'file', envVars: [] },
+        localOpts: { host, sshUser, sshPort, sshKeyPath: keyPath },
+      })
     } else {
       const defaults = PROVIDER_DEFAULTS[provider]
       const region = typeof args.region === 'string' ? args.region : defaults.region
@@ -140,19 +142,12 @@ export default defineCommand({
           ? args.state
           : `${defaults.stateScheme}CHANGEME/clawops`
 
-      config = {
-        version: 1,
-        defaults: { stack: stackName, provider },
-        stacks: {
-          [stackName]: {
-            provider,
-            stateUrl,
-            region,
-            credentialsRef: { source: 'env', envVars: [defaults.credEnv] },
-          },
-        },
-        ssh: { keyPath, knownHostsPath },
-      }
+      config = merge(existing, stackName, provider, keyPath, knownHostsPath, {
+        provider,
+        stateUrl,
+        region,
+        credentialsRef: { source: 'env', envVars: [defaults.credEnv] },
+      })
 
       if (stateUrl.includes('CHANGEME')) {
         process.stdout.write('\n')
@@ -175,3 +170,27 @@ export default defineCommand({
     success(`Provider: ${provider}  Stack: ${stackName}`)
   },
 })
+
+/**
+ * The new stack added to whatever was already there.
+ *
+ * Everything outside `stacks` survives: the MCP block, and the SSH paths unless this run
+ * generated or was given a key. `defaults` moves to the stack just initialised — that is what
+ * running `init` for it means — and the command prints which stack that is.
+ */
+function merge(
+  existing: ClawopsConfig | null,
+  stackName: string,
+  provider: SupportedProvider,
+  keyPath: string,
+  knownHostsPath: string,
+  stack: ClawopsConfig['stacks'][string],
+): ClawopsConfig {
+  return {
+    ...(existing ?? {}),
+    version: 1,
+    defaults: { stack: stackName, provider },
+    stacks: { ...(existing?.stacks ?? {}), [stackName]: stack },
+    ssh: { keyPath, knownHostsPath },
+  }
+}

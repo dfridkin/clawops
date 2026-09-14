@@ -406,6 +406,19 @@ const MUTATIONS = [
   { name: 'the init suite writes into the real home again',
     file: 'tests/cli/init.test.ts', from: "  process.env['CLAWOPS_HOME'] = suiteHome", to: '  void suiteHome', test: 'tests/cli/init.test.ts' },
 
+  { name: 'init overwrites the whole config again',
+    file: 'src/cli/commands/init.ts', from: '    stacks: { ...(existing?.stacks ?? {}), [stackName]: stack },', to: '    stacks: { [stackName]: stack },', test: 'tests/cli/init.test.ts' },
+  { name: 'init drops config outside stacks',
+    file: 'src/cli/commands/init.ts', from: '    ...(existing ?? {}),\n', to: '', test: 'tests/cli/init.test.ts' },
+  { name: 'an existing stack is silently overwritten',
+    file: 'src/cli/commands/init.ts', from: '    if (existing?.stacks[stackName] && !forceOverwrite) {', to: '    if (false) {', test: 'tests/cli/init.test.ts' },
+  { name: '--force is required to add a brand new stack',
+    file: 'src/cli/commands/init.ts', from: '    if (existing?.stacks[stackName] && !forceOverwrite) {', to: '    if (existing && !forceOverwrite) {', test: 'tests/cli/init.test.ts' },
+  { name: 'plan swallows an unregistered stack again',
+    file: 'src/plan/generate.ts', from: '    if (err instanceof UsageError) throw err\n', to: '', test: 'tests/plan/generate.test.ts' },
+  { name: 'plan rethrows every preview failure',
+    file: 'src/plan/generate.ts', from: '    if (err instanceof UsageError) throw err', to: '    if (err) throw err', test: 'tests/plan/generate.test.ts' },
+
 ]
 
 let survived = []

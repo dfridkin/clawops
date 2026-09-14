@@ -384,6 +384,28 @@ way. `clawops doctor` reports which one it found, from where, and at what versio
 
 See [ADR 0010](docs/decisions/0010-pulumi-cli-bootstrap.md), which supersedes ADR 0006.
 
+### Registering a second stack deleted the first
+
+Fixed in 2.0.1. `clawops init` built a fresh config object with a single `stacks` entry and
+wrote it over `~/.clawops/config.json`, so:
+
+```bash
+clawops init --provider gcp --stack staging --force
+```
+
+dropped every other stack — and with it their `stateUrl`, the only pointer to where that
+stack's Pulumi state lives. The infrastructure stayed up, and clawops could no longer list,
+reach or destroy it. There was no other way to register a second stack.
+
+`init` is additive now. A stack that is not in the config is simply added, no `--force`
+required; `--force` is needed to overwrite a stack that *is* there, because changing a
+registered `stateUrl` orphans state just as thoroughly as deleting the entry. Everything
+outside `stacks` survives, and the default moves to the stack you just initialised.
+
+Related: `clawops plan` for an unregistered stack used to emit a plan with an empty `diff` and
+a warning far up the output, then fail at `apply` — after you had reviewed and approved it. It
+now fails at plan time and says to run `clawops init`.
+
 ### `plan` → `apply` had never deployed anything
 
 Fixed in 2.0.1. Three things stood between a plan and an instance, and each hid the next:
@@ -693,7 +715,7 @@ clawops down --yes          # Destroy local-provider stack
 | Command | Description |
 |---|---|
 | `setup` | First-run wizard — guided LLM, integrations, and deploy-plan generation |
-| `init` | Register a stack in `~/.clawops/config.json` without provisioning |
+| `init` | Register a stack in `~/.clawops/config.json` without provisioning. Additive — existing stacks are kept; `--force` is needed only to overwrite one |
 | `up` | Provision or update stack (`--dry-run` for preview, `--gateway-port` for a non-default port) |
 | `down` | Destroy local-provider stack (requires `--yes`; `--dry-run` shows current outputs) |
 | `destroy` | Destroy cloud-provider stack with confirmation prompt (`--dry-run` shows current outputs) |
