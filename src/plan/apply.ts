@@ -13,6 +13,13 @@ import { GATEWAY_PORT } from '../openclaw/run-flags.js'
 
 export interface ApplyPlanOpts {
   onOutput?: (line: string) => void
+  /**
+   * Notes about waiting — for SSH, then for the gateway — as opposed to Pulumi's own output.
+   * Kept separate because there are at most a couple of these per minute and they are worth
+   * showing even where a spinner cannot render, which `onOutput` carries far too much traffic
+   * for.
+   */
+  onProgress?: (line: string) => void
   signal?: AbortSignal
   /** Called when drift is detected, before stack.up(). Implementations should prompt the user or throw to abort. */
   confirmDrift?: () => Promise<void>
@@ -92,7 +99,7 @@ export async function applyPlan(
   const conn = await connectionInfoFor(ctx, outputs)
   await waitForSsh(conn, {
     signal: opts?.signal,
-    onProgress: (line) => opts?.onOutput?.(line),
+    onProgress: (line) => reportProgress(opts, line),
   })
 
   // The machine answering is not the deployment working. The startup script is still pulling
@@ -106,7 +113,7 @@ export async function applyPlan(
     await waitForGateway(readySession, {
       signal: opts?.signal,
       port: plan.spec.network?.gatewayPort ?? GATEWAY_PORT,
-      onProgress: (line) => opts?.onOutput?.(line),
+      onProgress: (line) => reportProgress(opts, line),
     })
   } finally {
     readySession.close()
@@ -123,6 +130,12 @@ export async function applyPlan(
     changeSummary,
     durationMs: Date.now() - start,
   }
+}
+
+/** Progress goes to whoever asked for it, falling back to the general output stream. */
+function reportProgress(opts: ApplyPlanOpts | undefined, line: string): void {
+  if (opts?.onProgress) opts.onProgress(line)
+  else opts?.onOutput?.(line)
 }
 
 /**
