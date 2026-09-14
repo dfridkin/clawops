@@ -9,6 +9,8 @@ vi.mock('../../src/plan/ssh-key.js', () => ({
   resolvePublicKey: () => 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFIXTURE clawops',
 }))
 vi.mock('../../src/cli/context.js', () => ({ buildContext: vi.fn() }))
+// Never dial a host from a unit test; the wait itself is covered in tests/transport/wait.test.ts.
+vi.mock('../../src/transport/wait.js', () => ({ waitForSsh: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('../../src/config/store.js', () => ({
   getConfig: vi.fn(),
   requireConfig: vi.fn(),
@@ -60,6 +62,14 @@ beforeEach(async () => {
       defaultRegion: () => 'us-east-1',
       normalizeInstanceType: (a: string) => `${a}.large`,
       validateConfig: vi.fn().mockResolvedValue({ ok: true, errors: [] }),
+      // apply waits for the instance to accept SSH before reporting success.
+      getConnectionInfo: () => ({
+        host: '203.0.113.4',
+        port: 22,
+        user: 'clawops',
+        privateKeyPath: '/tmp/key',
+        knownHostsPath: '/tmp/known_hosts',
+      }),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any,
     getStack: mockGetStack,

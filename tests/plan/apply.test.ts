@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { ProviderAdapter } from '../../src/providers/types.js'
 
+const { mockWaitForSsh } = vi.hoisted(() => ({ mockWaitForSsh: vi.fn() }))
+vi.mock('../../src/transport/wait.js', () => ({ waitForSsh: mockWaitForSsh }))
 vi.mock('../../src/cli/context.js', () => ({
   buildContext: vi.fn(),
 }))
@@ -49,6 +52,7 @@ const basePlan = {
 }
 
 beforeEach(async () => {
+  mockWaitForSsh.mockReset().mockResolvedValue(undefined)
   vi.clearAllMocks()
 
   mockUp.mockResolvedValue({
@@ -72,8 +76,18 @@ beforeEach(async () => {
   vi.mocked(buildContext).mockReturnValue({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     config: {} as any,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    adapter: { name: 'aws' } as any,
+    // apply waits for the instance to accept SSH before it reports success, so the adapter
+    // has to answer where that instance is.
+    adapter: {
+      name: 'aws',
+      getConnectionInfo: () => ({
+        host: '203.0.113.4',
+        port: 22,
+        user: 'clawops',
+        privateKeyPath: '/tmp/key',
+        knownHostsPath: '/tmp/known_hosts',
+      }),
+    } as unknown as ProviderAdapter,
     stackName: 'default',
     getStack: mockGetStack,
   })
@@ -281,5 +295,42 @@ describe('applyPlan()', () => {
       await applyPlan(planWithVersion, { confirmDrift })
       expect(confirmDrift).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('applyPlan waits for the instance to be reachable', () => {
+  it('waits before reporting success', async () => {
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan)
+    // Pulumi returns as soon as the API accepts the resource; sshd starts a good half-minute
+    // later. apply used to print the gateway URL while every following command failed with
+    // ECONNREFUSED.
+    expect(mockWaitForSsh).toHaveBeenCalledWith(
+      expect.objectContaining({ host: '203.0.113.4', port: 22, user: 'clawops' }),
+      expect.anything(),
+    )
+  })
+
+  it('fails the apply when the instance never becomes reachable', async () => {
+    mockWaitForSsh.mockRejectedValue(new Error('did not accept SSH within 300s'))
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    // Reporting success for a machine nothing can reach is the bug this replaced.
+    await expect(applyPlan(basePlan)).rejects.toThrow(/did not accept SSH/)
+  })
+
+  it('waits before writing the config overlay, which connects immediately', async () => {
+    const order: string[] = []
+    mockWaitForSsh.mockImplementation(async () => void order.push('wait'))
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    try {
+      await applyPlan({
+        ...basePlan,
+        spec: { ...basePlan.spec, openclaw: { version: '2026.9.2', config: { gateway: {} } } },
+      } as unknown as typeof basePlan)
+    } catch {
+      // The overlay step dials a host that does not exist in this suite; the ordering is what
+      // matters, and it is recorded before that happens.
+    }
+    expect(order).toEqual(['wait'])
   })
 })
