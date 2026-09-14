@@ -422,6 +422,15 @@ const MUTATIONS = [
   { name: 'plan rethrows every preview failure',
     file: 'src/plan/generate.ts', from: '    if (err instanceof UsageError) throw err', to: '    if (err) throw err', test: 'tests/plan/generate.test.ts' },
 
+  { name: 'the plan emits the clawops alias instead of a machine type',
+    file: 'src/plan/generate.ts', from: '  const instanceType = resolveInstanceType(intent)', to: "  const instanceType = intent.instanceType ?? 'small'", test: 'tests/plan/generate.test.ts' },
+  { name: 'a provider-native instance type is rewritten by the table',
+    file: 'src/plan/generate.ts', from: '  if (!isInstanceAlias(requested)) {', to: '  if (false) {', test: 'tests/plan/generate.test.ts' },
+  { name: 'an unknown size is passed through in silence',
+    file: 'src/plan/generate.ts', from: "      `[clawops] note: \"${requested}\" is not a clawops size ` +", to: "      `` +", test: 'tests/plan/generate.test.ts' },
+  { name: 'every size normalises to the same machine',
+    file: 'src/plan/generate.ts', from: '    .adapter.normalizeInstanceType(requested)', to: "    .adapter.normalizeInstanceType('small')", test: 'tests/plan/generate.test.ts' },
+
 ]
 
 let survived = []
