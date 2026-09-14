@@ -355,6 +355,14 @@ was invisible.
 whole internet, on the path most first-time users take. It offers your own IP as a `/32` now,
 and when that cannot be detected it offers no default and requires an answer.
 
+**And `apply` never passed any of it to Pulumi** (fixed in 2.0.1). The plan validated the
+CIDRs, refused contradictory combinations, printed them in the summary — and then `apply` set
+six pieces of stack config, none of them the network ones. The programs read them from there,
+so they resolved empty and every stack was created with **no ingress rules at all**: not a
+narrower rule than intended, none. clawops builds its own VPC, so nothing else opened SSH
+either, and a freshly deployed instance was unreachable by `ssh`, `logs`, `tunnel` and
+`harden`. The whole firewall section of the plan was decorative.
+
 ### The gateway port comes from the plan
 
 ```jsonc

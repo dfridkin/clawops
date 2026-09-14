@@ -307,6 +307,12 @@ const MUTATIONS = [
     file: 'src/providers/gcp/index.ts', from: 'registerProvider(gcpAdapter)', to: 'void gcpAdapter', test: 'tests/providers/gcp/preflight.test.ts' },
   { name: 'a long check name runs into its detail again',
     file: 'src/cli/commands/doctor.ts', from: "${check.name.length >= NAME_COLUMN ? '  ' : ''}", to: '', test: 'tests/cli/doctor.test.ts' },
+  { name: 'the plan\'s SSH CIDRs are dropped on the way to Pulumi again',
+    file: 'src/plan/apply.ts', from: "  await stack.setConfig('sshCidrs', {", to: "  await stack.setConfig('sshCidrsX', {", test: 'tests/plan/apply.test.ts' },
+  { name: 'accessMode defaults to open instead of restricted',
+    file: 'src/plan/apply.ts', from: "  await stack.setConfig('accessMode', { value: 'restricted' })", to: "  await stack.setConfig('accessMode', { value: 'open' })", test: 'tests/plan/apply.test.ts' },
+  { name: 'gateway CIDRs are dropped',
+    file: 'src/plan/apply.ts', from: "  await stack.setConfig('gatewayCidrs', {", to: "  await stack.setConfig('gatewayCidrsX', {", test: 'tests/plan/apply.test.ts' },
 ]
 
 let survived = []

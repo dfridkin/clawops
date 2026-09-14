@@ -92,3 +92,21 @@ provider. Doctor's Credentials section reported this for any cloud stack:
 Deploys were unaffected — `up`, `plan` and `apply` resolve the adapter directly — so the only
 symptom was a diagnostic that said something alarming and untrue. Adapters register on import
 now, and doctor validates credentials as it always claimed to.
+
+---
+
+**Every cloud stack was deployed with no ingress rules at all.**
+
+`clawops apply` validated the plan's `network.allowedSshCidrs`, printed them in the plan
+summary, and then never passed them to Pulumi. The programs read them from stack config, so
+they resolved empty:
+
+```
+resolveIngressCidrs('restricted', '', '', …) → []
+```
+
+Not a narrower rule — **none**. clawops creates its own VPC, so nothing else opened SSH, and a
+freshly deployed instance was unreachable by `ssh`, `logs`, `tunnel`, `harden` and every other
+day-two command. The plan said who could connect and apply ignored it.
+
+Fixed, with the deny-all default (`accessMode: restricted`) passed explicitly alongside.
