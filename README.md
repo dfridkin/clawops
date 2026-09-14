@@ -352,6 +352,12 @@ was invisible.
 whole internet, on the path most first-time users take. It offers your own IP as a `/32` now,
 and when that cannot be detected it offers no default and requires an answer.
 
+**`clawops plan` could not express any of it** (fixed in 2.0.1). The flags did not exist, so
+every plan generated outside the wizard fell through to an empty network block: a deployment
+that admits nothing, including clawops' own day-two commands. `--ssh-cidr`, `--gateway-cidr`
+and `--publish-gateway` fill it now, `auto` resolves this machine's address while the plan is
+written, and a plan that admits nothing says so.
+
 **And `apply` never passed any of it to Pulumi** (fixed in 2.0.1). The plan validated the
 CIDRs, refused contradictory combinations, printed them in the summary — and then `apply` set
 six pieces of stack config, none of them the network ones. The programs read them from there,
@@ -573,9 +579,13 @@ clawops init --provider aws
 
 # Edit ~/.clawops/config.json — set stateUrl to your S3 bucket
 
-clawops plan --provider aws --stack default --out /tmp/plan.json
+clawops plan --provider aws --stack default --ssh-cidr auto --out /tmp/plan.json
 clawops apply /tmp/plan.json
 ```
+
+`--ssh-cidr auto` allows SSH from this machine's public IP, resolved while the plan is
+generated and written into it. Without it the plan allows no ingress at all and nothing —
+including clawops — will be able to connect.
 
 ---
 
@@ -657,7 +667,7 @@ clawops down --yes          # Destroy local-provider stack
 | `down` | Destroy local-provider stack (requires `--yes`; `--dry-run` shows current outputs) |
 | `destroy` | Destroy cloud-provider stack with confirmation prompt (`--dry-run` shows current outputs) |
 | `status` | Show stack outputs: IP, gateway URL, region, provisioned time |
-| `plan` | Generate a deploy-plan JSON artifact (dry-run safe) |
+| `plan` | Generate a deploy-plan JSON artifact (dry-run safe). `--ssh-cidr <list\|auto>` and `--gateway-cidr` decide who may connect; `--publish-gateway loopback\|all` decides what is listening |
 | `apply` | Apply a previously reviewed plan file (`--dry-run` validates and shows diff without applying) |
 | `ssh` | Interactive SSH session or run a remote command |
 | `logs` | Stream OpenClaw logs (`-f`, `--tail N`, `--since 5m`) |
@@ -687,7 +697,8 @@ For non-local providers, clawops enforces a review-before-apply discipline:
 
 ```bash
 # 1. Generate a plan — runs `pulumi preview` internally, produces JSON
-clawops plan --provider aws --region us-east-1 --out /tmp/plan.json
+#    --ssh-cidr decides who may connect. `auto` means this machine; omit it and nobody can.
+clawops plan --provider aws --region us-east-1 --ssh-cidr auto --out /tmp/plan.json
 
 # 2. Review plan.json — the `diff` field shows projected changes at plan-generation time
 cat /tmp/plan.json | jq .diff

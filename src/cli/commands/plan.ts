@@ -17,11 +17,16 @@ export default defineCommand({
     region:            { type: 'string', description: 'Cloud region' },
     'instance-type':   { type: 'string', description: 'Instance size alias (micro|small|medium|large|gpu)' },
     'openclaw-version':{ type: 'string', description: "semver or 'stable'/'dev'" },
+    'ssh-cidr':        { type: 'string', description: "CIDR(s) allowed to reach SSH, comma-separated, or 'auto' for this machine's IP. Omitted = none, and nothing will be able to connect" },
+    'gateway-cidr':    { type: 'string', description: "CIDR(s) allowed to reach the gateway port, comma-separated, or 'auto'. Requires --publish-gateway all" },
+    'publish-gateway': { type: 'string', description: 'loopback (default) or all. "all" serves plaintext HTTP — put TLS in front of it' },
     out:               { type: 'string', description: 'Write plan JSON to this absolute path (default: stdout)' },
   },
   async run({ args }) {
     const { buildContext } = await import('../context.js')
     const { generatePlan } = await import('../../plan/generate.js')
+    const { resolveNetworkFlags } = await import('../../plan/network-args.js')
+    const { detectEgressIp } = await import('../../providers/firewall.js')
 
     const ctx = buildContext(args)
 
@@ -38,6 +43,17 @@ export default defineCommand({
       throw new UsageError('--out path must be absolute (R7). Use an absolute path like /tmp/plan.json.')
     }
 
+    // Before the spinner: a bad CIDR should be an immediate usage error, not something that
+    // surfaces after a preview has run against the cloud.
+    const network = await resolveNetworkFlags(
+      {
+        sshCidr: strArg(args['ssh-cidr']),
+        gatewayCidr: strArg(args['gateway-cidr']),
+        publishGateway: strArg(args['publish-gateway']),
+      },
+      { detectEgressIp: () => detectEgressIp('https://ifconfig.me') },
+    )
+
     const abortController = new AbortController()
     process.on('SIGINT', () => abortController.abort())
     process.on('SIGTERM', () => abortController.abort())
@@ -52,6 +68,7 @@ export default defineCommand({
           region: typeof args.region === 'string' ? args.region : undefined,
           instanceType: typeof args['instance-type'] === 'string' ? args['instance-type'] : undefined,
           openclawVersion: typeof args['openclaw-version'] === 'string' ? args['openclaw-version'] : undefined,
+          network,
         },
         { signal: abortController.signal },
       )
@@ -104,3 +121,8 @@ export default defineCommand({
     }
   },
 })
+
+/** citty hands through unparsed values; only a real string is an answer. */
+function strArg(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
