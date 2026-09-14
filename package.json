@@ -34,6 +34,7 @@
     "test:pulumi": "vitest run tests/providers/aws/program.test.ts tests/providers/azure/program.test.ts",
     "test:changed": "vitest --changed",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:cloud": "bash scripts/e2e/cloud.sh",
     "typecheck": "NODE_OPTIONS=--max-old-space-size=4096 tsc --noEmit",
     "lint": "eslint --max-warnings=0 src tests scripts",
     "gen:schemas": "tsx scripts/gen-schemas.ts",

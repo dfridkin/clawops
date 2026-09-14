@@ -33,7 +33,7 @@ clawops uses the GCP [Application Default Credentials](https://cloud.google.com/
 | gcloud ADC | `gcloud auth application-default login` | Recommended for local dev |
 | Service account key | `GOOGLE_APPLICATION_CREDENTIALS=/path/key.json` | CI / non-interactive |
 | GCE instance metadata | *(auto-detected)* | When running on a GCP VM |
-| `CLOUDSDK_AUTH_ACCESS_TOKEN` | Set directly | Short-lived; expires |
+| `GOOGLE_OAUTH_ACCESS_TOKEN` | Set directly | Short-lived; expires. **Not** `CLOUDSDK_AUTH_ACCESS_TOKEN`, which is gcloud-internal and the adapter does not read |
 
 `clawops doctor` validates which credential path will be used before attempting a deploy.
 
@@ -108,7 +108,13 @@ The exact resource graph is visible via `clawops plan`.
 
 ## Firewall Model
 
-The current GCP adapter opens SSH (22) and gateway (18789) to `0.0.0.0/0` on the `clawops` network tag. Per-CIDR restriction is on the roadmap (tracked in `docs/limitations.md`).
+Per-CIDR, controlled by the `accessMode` stack config key, the same as AWS and Azure — this
+doc previously said the adapter opened both ports to `0.0.0.0/0` with per-CIDR "on the
+roadmap", which stopped being true in clawops 2.0.
+
+Since 2.0 the gateway publishes on the host's loopback by default, so **no gateway firewall
+rule is created at all** unless `network.publishGateway` is `"all"`. A rule for a port nothing
+routable is listening on grants no access and reads to an auditor as an exposed gateway.
 
 In the interim, restrict access at the OS level using the OpenClaw gateway's auth mode:
 

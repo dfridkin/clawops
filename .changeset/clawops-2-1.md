@@ -38,3 +38,16 @@ records the concrete profile in the plan. It prefers your own geography, falls b
 This needs `bedrock:ListInferenceProfiles` on the identity running `clawops`.
 
 Verified end to end against real Bedrock.
+
+---
+
+**Documentation corrections found while writing the cloud end-to-end plan.**
+
+`docs/providers/gcp.md` listed `CLOUDSDK_AUTH_ACCESS_TOKEN` as a supported credential source.
+The adapter reads `GOOGLE_OAUTH_ACCESS_TOKEN`; the other is gcloud-internal. It also still said
+the GCP firewall opens both ports to `0.0.0.0/0` with per-CIDR "on the roadmap" — per-CIDR
+landed in 2.0, and since 2.0 no gateway rule is created at all under loopback publishing.
+
+The smoke-test plan was 1.x-era throughout. It now leads with what 2.0 changed and the
+assertions that follow from it, and `pnpm test:cloud gcp|azure` runs them against a real
+deployment and destroys it afterwards — including when an assertion fails.
