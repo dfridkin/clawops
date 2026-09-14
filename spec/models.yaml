@@ -60,9 +60,20 @@ providers:
   - id: bedrock
     displayName: AWS Bedrock
     credentialSource: aws-profile
-    # No API key — uses EC2 instance role (AmazonBedrockFullAccess) via IMDS.
-    # The Pulumi program attaches AmazonBedrockFullAccess to the instance profile
-    # and passes AWS_PROFILE=default into the container via --env-file.
+    # Bedrock is a plugin provider, so OpenClaw does not resolve its transport on its own:
+    # without `api` the call routes through the OpenAI-compatible transport and fails with
+    # "requires an explicit base URL". Bundled providers do resolve it — `anthropic` selects
+    # anthropic-messages with nothing in the config — so this key is set here and nowhere
+    # else. See docs/spikes/SP-12-bedrock-config-shape.md.
+    api: bedrock-converse-stream
+    # No API key — credentials come from the EC2 instance role via IMDS, resolved by the AWS
+    # SDK chain at call time. The old `AWS_PROFILE=default` env-file mechanism is obsolete
+    # (SP-08); so is the `auth: "aws-sdk"` marker as a *requirement* — Bedrock was reached
+    # with it absent (SP-12 §4) — though clawops still writes it to document the auth route.
+    #
+    # modelId below is the FOUNDATION model id. Bedrock refuses these for on-demand
+    # inference; clawops resolves each to a regional inference profile at plan time, because
+    # the right profile depends on the deployment region and cannot be written down here.
     iamPolicy: AmazonBedrockFullAccess
     iamNote: >
       Credentials are provided by the EC2 instance role. clawops attaches
