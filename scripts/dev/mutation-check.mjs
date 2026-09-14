@@ -287,6 +287,22 @@ const MUTATIONS = [
     file: 'src/openclaw/bedrock.ts', from: "  if (prefix === 'ap') return 'apac'", to: '  void prefix', test: 'tests/openclaw/bedrock.test.ts' },
   { name: 'bedrock catalog loses the transport declaration',
     file: 'spec/models.yaml', from: '    api: bedrock-converse-stream', to: '    apiX: bedrock-converse-stream', test: 'tests/openclaw/models-block.test.ts' },
+
+  // ── WO-66: account preflight ─────────────────────────────────────────────────
+  { name: 'a failed service listing reports the APIs as enabled',
+    file: 'src/providers/gcp/preflight.ts', from: '    const on = enabled?.has(api.service) ?? false', to: '    const on = enabled?.has(api.service) ?? true', test: 'tests/providers/gcp/preflight.test.ts' },
+  { name: 'preflight offers a fix without naming what it changes',
+    file: 'src/providers/gcp/preflight.ts', from: '      mutates: on ? undefined : `Enables ${api.service} on project ${project}`,', to: '      mutates: undefined,', test: 'tests/providers/gcp/preflight.test.ts' },
+  { name: 'preflight runs every check against a project it does not know',
+    file: 'src/providers/gcp/preflight.ts', from: '  if (!project) return checks', to: '  void project', test: 'tests/providers/gcp/preflight.test.ts' },
+  { name: 'the state bucket is created without versioning',
+    file: 'src/providers/gcp/preflight.ts', from: '        versioning: { enabled: true },', to: '        versioning: { enabled: false },', test: 'tests/providers/gcp/preflight.test.ts' },
+  { name: 'unusable ADC is reported as an API problem',
+    file: 'src/providers/gcp/preflight.ts', from: '  if (!token) {', to: '  if (false) {', test: 'tests/providers/gcp/preflight.test.ts' },
+  { name: 'the bucket check treats any response as existing',
+    file: 'src/providers/gcp/preflight.ts', from: '  return res.ok', to: '  return true', test: 'tests/providers/gcp/preflight.test.ts' },
+  { name: 'the ADC-file test mocks nothing again',
+    file: 'tests/providers/gcp/adapter.test.ts', from: '    mockAccessSync.mockImplementation(() => { throw new Error(\'ENOENT\') })', to: '    void mockAccessSync', test: 'tests/providers/gcp/adapter.test.ts' },
 ]
 
 let survived = []

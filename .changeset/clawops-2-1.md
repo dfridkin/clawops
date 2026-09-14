@@ -51,3 +51,29 @@ landed in 2.0, and since 2.0 no gateway rule is created at all under loopback pu
 The smoke-test plan was 1.x-era throughout. It now leads with what 2.0 changed and the
 assertions that follow from it, and `pnpm test:cloud gcp|azure` runs them against a real
 deployment and destroys it afterwards — including when an assertion fails.
+
+---
+
+**`clawops setup` checks your cloud account is ready, and offers to fix what it can.**
+
+A GCP project with working credentials and the Compute API disabled passes every check clawops
+used to make, and then fails partway through a deploy:
+
+```
+Compute Engine API has not been used in project <id> before or it is disabled
+```
+
+The wizard now checks before provisioning anything — required APIs enabled, the state bucket
+present, the project resolvable — and **asks** before changing anything, naming the exact
+mutation:
+
+```
+? Fix this now? Enables compute.googleapis.com on project my-project (Y/n)
+```
+
+`clawops doctor` reports the same checks without offering to change anything.
+
+Neither is infrastructure, which is why neither lives in the Pulumi program: the state bucket
+has to exist before Pulumi can run at all, so a deploy cannot create it on its way past. When
+clawops creates one it enables versioning — Pulumi state with no history is a stack that can
+no longer be updated or destroyed.

@@ -269,6 +269,23 @@ export default defineCommand({
       },
     ])
 
+    // ── Account preflight ──────────────────────────────────────────────────────
+    //
+    // Before anything is provisioned, and before the operator has answered another dozen
+    // questions. A GCP project with credentials that resolve and the Compute API disabled
+    // passes every other check and then fails partway through a deploy.
+    //
+    // Nothing is changed without being asked. The prompt names the exact mutation, because
+    // consent to "fix it" is not consent to something unnamed.
+    if (provider !== 'local') {
+      await runAccountPreflight({
+        provider,
+        region: typeof stackAnswers.region === 'string' ? stackAnswers.region : undefined,
+        bucket: stackAnswers.stateBucket,
+        inquirer,
+      })
+    }
+
     if (provider !== 'local' && admitsInternet(stackAnswers.sshCidr)) {
       warn(
         'SSH will be reachable from anywhere on the internet. `clawops harden` reports this ' +
@@ -1561,4 +1578,65 @@ export function wizardChannels(integrations: Integration[]): Integration[] {
  */
 export function startChannelConfig(integ: Integration): Record<string, unknown> {
   return { ...(integ.defaults ?? {}) }
+}
+
+/**
+ * Check the cloud account is ready, and offer to fix what clawops can.
+ *
+ * Reported and remediated here rather than left to fail during `apply`: enabling an API or
+ * creating a state bucket happens outside the Pulumi program — the state backend has to exist
+ * before Pulumi can run at all — so a deploy cannot fix them on its way past.
+ */
+async function runAccountPreflight(opts: {
+  provider: 'aws' | 'gcp' | 'azure'
+  region?: string
+  bucket?: string
+  inquirer: InquirerInstance
+}): Promise<void> {
+  const { getProvider } = await import('../../providers/index.js')
+  let checks
+  try {
+    const adapter = getProvider(opts.provider)
+    if (!adapter.preflight) return
+    checks = await adapter.preflight({ region: opts.region, bucket: opts.bucket })
+  } catch (err) {
+    warn(`Could not check the ${opts.provider} account: ${err instanceof Error ? err.message : String(err)}`)
+    return
+  }
+
+  const failed = checks.filter((c) => !c.ok)
+  if (failed.length === 0) {
+    success(`${opts.provider} account is ready.`)
+    return
+  }
+
+  process.stdout.write('\n')
+  for (const check of failed) {
+    warn(check.label)
+    if (check.detail) info(`  ${check.detail}`)
+
+    if (!check.fix) {
+      // Nothing to offer. A missing permission or an unpaid billing account is not clawops's
+      // to resolve, and a prompt that cannot deliver is worse than none.
+      continue
+    }
+
+    const { apply } = await opts.inquirer.prompt<{ apply: boolean }>([{
+      type: 'confirm',
+      name: 'apply',
+      message: `Fix this now? ${check.mutates}`,
+      default: true,
+    }])
+    if (!apply) {
+      info('  Left as is. The deploy will fail until this is resolved.')
+      continue
+    }
+    try {
+      await check.fix()
+      success(`  Done — ${check.mutates}`)
+    } catch (err) {
+      failure(`  Could not fix it: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+  process.stdout.write('\n')
 }

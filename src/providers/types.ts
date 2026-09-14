@@ -66,4 +66,43 @@ export interface ProviderAdapter {
 
   /** Validate provider-specific config (env vars, profiles) at startup. */
   validateConfig(): Promise<ValidationResult>
+
+  /**
+   * Account-level setup this provider needs before anything can be provisioned.
+   *
+   * Not infrastructure: enabling an API or creating a state bucket happens outside the
+   * Pulumi program, because the state backend has to exist before Pulumi can run at all.
+   * Optional — a provider with nothing to check omits it.
+   */
+  preflight?(opts: PreflightOpts): Promise<PreflightCheck[]>
+}
+
+export interface PreflightOpts {
+  /** Where the stack will be deployed, when that changes what must be enabled. */
+  region?: string
+  /** State backend bucket or container, when the check covers it. */
+  bucket?: string
+  signal?: AbortSignal
+}
+
+export interface PreflightCheck {
+  /** Stable kebab-case id, e.g. "compute-api-enabled". */
+  id: string
+  /** What is being checked, in the operator's terms. */
+  label: string
+  ok: boolean
+  /** Why it failed, and what it means — shown when ok is false. */
+  detail?: string
+  /**
+   * Applies the fix. Absent when clawops cannot fix it: a missing permission or an unpaid
+   * billing account is not clawops's to resolve, and pretending otherwise wastes a prompt.
+   */
+  fix?: () => Promise<void>
+  /**
+   * What the fix changes in the operator's cloud account.
+   *
+   * Shown in the prompt, and required alongside fix(): consent to 'fix it' is not consent to
+   * something unnamed.
+   */
+  mutates?: string
 }

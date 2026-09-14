@@ -43,6 +43,7 @@
     "test:mutation": "node scripts/dev/mutation-check.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock": "^3.1063.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.1063.0",
     "@aws-sdk/client-ec2": "^3.1063.0",
     "@aws-sdk/client-guardduty": "^3.1063.0",
@@ -60,11 +61,11 @@
     "chalk": "^5.0.0",
     "citty": "^0.1.0",
     "conf": "^12.0.0",
+    "google-auth-library": "^11.0.2",
     "inquirer": "^9.0.0",
     "ora": "^8.0.0",
     "ssh2": "^1.0.0",
-    "zod": "^3.0.0",
-    "@aws-sdk/client-bedrock": "^3.1063.0"
+    "zod": "^3.0.0"
   },
   "devDependencies": {
     "@changesets/cli": "^2.0.0",

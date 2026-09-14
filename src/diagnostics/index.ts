@@ -87,6 +87,8 @@ export async function runDiagnostics(
   sections.push({ title: 'SSH', checks: sshChecks(config) })
   sections.push({ title: 'Credentials', checks: await credentialChecks(config) })
   sections.push({ title: 'OpenClaw', checks: await versionChecks() })
+  const account = await accountChecks(config, opts.stack)
+  if (account.length > 0) sections.push({ title: 'Cloud account', checks: account })
 
   if (opts.stack) {
     const open = deps.openSession ?? defaultOpenSession
@@ -443,4 +445,45 @@ async function defaultOpenSession(stack: string, signal?: AbortSignal) {
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
+}
+
+/**
+ * Account-level setup the provider needs before anything can be provisioned.
+ *
+ * Reported here rather than discovered during a deploy: a project with credentials that
+ * resolve and an API that is not enabled looks healthy to every other check, and then fails
+ * partway through provisioning.
+ */
+async function accountChecks(
+  config: ClawopsConfig | null,
+  stack?: string,
+): Promise<Check[]> {
+  if (!config) return []
+  const stackName = stack ?? config.defaults?.stack
+  const stackCfg = stackName ? config.stacks[stackName] : undefined
+  if (!stackCfg || stackCfg.provider === 'local') return []
+
+  try {
+    const { getProvider } = await import('../providers/index.js')
+    const adapter = getProvider(stackCfg.provider as 'aws' | 'gcp' | 'azure')
+    if (!adapter.preflight) return []
+
+    const bucket = bucketFromStateUrl(stackCfg.stateUrl)
+    const results = await adapter.preflight({ region: stackCfg.region, bucket })
+    return results.map((r) => ({
+      name: r.label,
+      status: r.ok ? ('pass' as const) : ('fail' as const),
+      detail: r.detail,
+      remedy: r.mutates ? `clawops setup can fix this: ${r.mutates}` : undefined,
+    }))
+  } catch (err) {
+    return [{ name: 'Account preflight', status: 'warn', detail: messageOf(err) }]
+  }
+}
+
+/** The bucket or container out of a state URL like `gs://bucket/clawops`. */
+export function bucketFromStateUrl(stateUrl?: string): string | undefined {
+  if (!stateUrl) return undefined
+  const match = /^[a-z0-9]+:\/\/([^/]+)/.exec(stateUrl)
+  return match?.[1]
 }
