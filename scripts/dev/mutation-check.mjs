@@ -313,6 +313,25 @@ const MUTATIONS = [
     file: 'src/plan/apply.ts', from: "  await stack.setConfig('accessMode', { value: 'restricted' })", to: "  await stack.setConfig('accessMode', { value: 'open' })", test: 'tests/plan/apply.test.ts' },
   { name: 'gateway CIDRs are dropped',
     file: 'src/plan/apply.ts', from: "  await stack.setConfig('gatewayCidrs', {", to: "  await stack.setConfig('gatewayCidrsX', {", test: 'tests/plan/apply.test.ts' },
+
+  { name: 'the workspace goes back to spawning bare `pulumi`',
+    file: 'src/pulumi/automation.ts', from: '      pulumiCommand,\n', to: '', test: 'tests/pulumi/automation.test.ts' },
+  { name: 'a CLI on PATH is ignored in favour of downloading one',
+    file: 'src/pulumi/cli.ts', from: "    return { kind: 'path', version: versionOf(await PulumiCommand.get()) }", to: "    return { kind: 'missing' }", test: 'tests/pulumi/cli.test.ts' },
+  { name: 'our pinned copy loses to whatever is on PATH',
+    file: 'src/pulumi/cli.ts', from: '  const root = pulumiCliRoot(configDir)\n  try {\n    return { kind:', to: '  const root = pulumiCliRoot(configDir)\n  if (await PulumiCommand.get().then(() => true, () => false)) return { kind: \'path\', version: versionOf(await PulumiCommand.get()) }\n  try {\n    return { kind:', test: 'tests/pulumi/cli.test.ts' },
+  { name: 'the CLI is looked for next to the CWD rather than the config dir (R7)',
+    file: 'src/diagnostics/index.ts', from: '  const cli = await pulumiCliStatus(configDir)', to: '  const cli = await pulumiCliStatus(process.cwd())', test: 'tests/diagnostics/doctor.test.ts' },
+  { name: 'the missing CLI is reported as a pass',
+    file: 'src/diagnostics/index.ts', from: "            name: 'Pulumi CLI',\n            status: 'warn',", to: "            name: 'Pulumi CLI',\n            status: 'pass',", test: 'tests/diagnostics/doctor.test.ts' },
+  { name: 'the install announcement goes to stdout (R15)',
+    file: 'src/pulumi/cli.ts', from: 'process.stderr.write(`Pulumi CLI not found', to: 'process.stdout.write(`Pulumi CLI not found', test: 'tests/pulumi/cli.test.ts' },
+  { name: 'the install is announced only after it finishes',
+    file: 'src/pulumi/cli.ts', from: "  announce({ root })\n  try {\n    return await PulumiCommand.install({ root })", to: "  try {\n    const c = await PulumiCommand.install({ root })\n    announce({ root })\n    return c", test: 'tests/pulumi/cli.test.ts' },
+  { name: 'a failed install loses the reason it failed',
+    file: 'src/pulumi/cli.ts', from: '`could not install the Pulumi CLI into ${root}: ${reason}\\n` +', to: '`could not install the Pulumi CLI into ${root}\\n` +', test: 'tests/pulumi/cli.test.ts' },
+  { name: 'the CLI root collides with the Pulumi home',
+    file: 'src/pulumi/cli.ts', from: "return path.join(configDir, '.pulumi-cli')", to: "return path.join(configDir, '.pulumi')", test: 'tests/pulumi/cli.test.ts' },
 ]
 
 let survived = []

@@ -38,7 +38,7 @@ We considered three approaches:
 
 2. **Terraform via shellout** — well-known, huge module ecosystem. Rejected because (a) requires user to install Terraform, (b) no programmatic state inspection, (c) HCL templating from TS is awkward.
 
-3. **Pulumi Automation API (embedded engine)** — chosen. Pulumi as a TypeScript library means inline programs (no `pulumi.yaml` on disk), in-process state, native typed outputs. Cost: ~50MB bundle increase. Worth it.
+3. **Pulumi Automation API** — chosen. Pulumi as a TypeScript library means inline programs (no `pulumi.yaml` on disk), typed outputs, and a version we pin. The API drives a CLI subprocess rather than an in-process engine, so clawops installs that CLI into `~/.clawops/.pulumi-cli` on first use and the user still installs nothing (ADR 0010).
 
 The Automation API specifically (vs. requiring `pulumi` CLI) is the unlock — see ADR 0006.
 

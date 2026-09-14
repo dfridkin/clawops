@@ -104,7 +104,7 @@ provider is a separately installed plugin requiring OpenClaw >= 2026.9.1. The ol
 | `@pulumi/gcp` | 7.x |
 | `@pulumi/azure-native` | 2.x |
 
-User does NOT need Pulumi CLI installed (ADR 0006). The engine is embedded.
+The user does not install the Pulumi CLI — but one is required, and clawops installs it into `~/.clawops/.pulumi-cli` on first use, matching the bundled SDK (ADR 0010, superseding ADR 0006). A compatible `pulumi` already on `$PATH` is used instead, and `clawops doctor` reports which. `$PATH` is never edited.
 
 ## Package Manager
 

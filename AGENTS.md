@@ -2,7 +2,7 @@
 
 clawops is a TypeScript CLI that generates and applies infrastructure to deploy
 self-hosted OpenClaw across AWS, GCP, Azure, and local VMs. It uses the Pulumi
-Automation API (embedded engine, not user-installed) and exposes its operations
+Automation API (whose CLI clawops installs itself — ADR 0010) and exposes its operations
 as both a CLI surface and an MCP server so Claude Code, Cursor, and other agents
 can drive deployments deterministically.
 

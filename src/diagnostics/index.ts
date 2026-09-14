@@ -75,7 +75,7 @@ export async function runDiagnostics(
   const config = getConfig()
   const sections: Section[] = []
 
-  sections.push({ title: 'Runtime', checks: runtimeChecks(getConfigDir()) })
+  sections.push({ title: 'Runtime', checks: await runtimeChecks(getConfigDir()) })
   sections.push({
     title: 'Config',
     checks: [
@@ -130,7 +130,7 @@ export function summarise(sections: Section[]): DiagnosticsReport {
 
 // ── Local checks ──────────────────────────────────────────────────────────────
 
-function runtimeChecks(configDir: string): Check[] {
+async function runtimeChecks(configDir: string): Promise<Check[]> {
   const checks: Check[] = []
   const nodeMajor = parseInt(process.version.slice(1).split('.')[0] ?? '0', 10)
   checks.push(
@@ -151,6 +151,24 @@ function runtimeChecks(configDir: string): Check[] {
   } catch {
     checks.push({ name: 'Pulumi home', status: 'fail', detail: `${pulumiHome} (not writable)` })
   }
+
+  // The Automation API spawns the Pulumi CLI; without one, every stack command fails at the
+  // spawn. Report it, but do not install it here — `doctor` reports the machine's state
+  // rather than changing it. The first `apply` installs it.
+  const { pulumiCliStatus } = await import('../pulumi/cli.js')
+  const cli = await pulumiCliStatus(configDir)
+  checks.push(
+    cli.kind === 'managed'
+      ? { name: 'Pulumi CLI', status: 'pass', detail: `${cli.version} (${cli.root})` }
+      : cli.kind === 'path'
+        ? { name: 'Pulumi CLI', status: 'pass', detail: `${cli.version} (on PATH)` }
+        : {
+            name: 'Pulumi CLI',
+            status: 'warn',
+            detail: 'not installed',
+            remedy: `clawops installs it into ${path.join(configDir, '.pulumi-cli')} on first apply`,
+          },
+  )
   return checks
 }
 

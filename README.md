@@ -26,9 +26,6 @@ Pin the tag in CI — `latest` moves to 2.x, so an unpinned pipeline will change
 [`CHANGELOG.md`](CHANGELOG.md) carries the full history; this section covers what changed
 about *how clawops behaves*.
 
-> **Release in progress.** 2.0 has not shipped yet. This section is written as the work
-> lands so the flows stay documented while they are being changed, not reconstructed after.
-
 ### Your deployment keeps its state
 
 OpenClaw 2.0 stores sessions, transcripts and credentials in SQLite. clawops mounted no
@@ -363,6 +360,24 @@ narrower rule than intended, none. clawops builds its own VPC, so nothing else o
 either, and a freshly deployed instance was unreachable by `ssh`, `logs`, `tunnel` and
 `harden`. The whole firewall section of the plan was decorative.
 
+### Cloud deployments work on a machine without Pulumi
+
+clawops has always said you do not install Pulumi. The Automation API it uses is not an
+embedded engine, though — it spawns the `pulumi` binary for every operation, and with no
+binary on `$PATH` that is where `apply` stopped:
+
+```
+Error: spawn pulumi ENOENT
+```
+
+before any provider code ran, naming a tool the docs said was not required. The claim is now
+true rather than merely stated: clawops installs the CLI matching its bundled SDK into
+`~/.clawops/.pulumi-cli` the first time it needs one, announcing the one-time download. A
+compatible `pulumi` already on `$PATH` is used instead, and `$PATH` is never edited either
+way. `clawops doctor` reports which one it found, from where, and at what version.
+
+See [ADR 0010](docs/decisions/0010-pulumi-cli-bootstrap.md), which supersedes ADR 0006.
+
 ### The gateway port comes from the plan
 
 ```jsonc
@@ -385,7 +400,7 @@ Local deployments use `clawops up --gateway-port 9443`.
 
 ```mermaid
 flowchart TD
-    A["clawops doctor"] --> B["local: Node, Pulumi home,<br/>config, SSH key, credentials"]
+    A["clawops doctor"] --> B["local: Node, Pulumi CLI + home,<br/>config, SSH key, credentials"]
     B --> C{"--stack given?"}
     C -- no --> Z["report"]
     C -- yes --> D["container state"]
@@ -452,7 +467,8 @@ every agent on the host. Use `clawops gateway restart`, or stay on `@clawops/cli
 ## What clawops does
 
 - Provisions and tears down OpenClaw infrastructure on **AWS, GCP, Azure, and local VMs** using
-  the Pulumi Automation API (embedded — no `pulumi` binary required).
+  the Pulumi Automation API — you do not install Pulumi; clawops installs the CLI it needs into
+  `~/.clawops/.pulumi-cli` on first use.
 - Manages day-to-day operations: status, logs, SSH, tunnels, config, agents, gateway, backups.
 - Exposes every operation as a **typed MCP tool** so AI agents can drive ops safely.
 - Enforces a **plan → review → apply** discipline for cloud deployments.
@@ -523,6 +539,8 @@ and prints a direct dashboard URL:
 
 **Prerequisites:** Node.js ≥ 22, an SSH key, and either an SSH-reachable Linux/macOS host or a
 cloud account with CLI credentials configured (`aws configure`, `gcloud auth login`, or `az login`).
+You do not need Pulumi — the first cloud deployment installs the CLI clawops drives into
+`~/.clawops/.pulumi-cli` and says so while it does.
 
 For a full narrated walkthrough with example output, see [`docs/demo-script.md`](docs/demo-script.md).
 
@@ -835,7 +853,7 @@ clawops
 
 Key design decisions:
 
-- **Pulumi Automation API (embedded):** no `pulumi` binary required; Pulumi home is sandboxed to `~/.clawops/.pulumi`; stack programs are inline TypeScript closures
+- **Pulumi Automation API:** the user installs no Pulumi — clawops installs the CLI the API drives into `~/.clawops/.pulumi-cli`, pinned to the bundled SDK, without editing `$PATH` (ADR 0010); Pulumi home is sandboxed to `~/.clawops/.pulumi`; stack programs are inline TypeScript closures
 - **State in cloud blob storage:** GCS (`gs://`), S3 (`s3://`), Azure Blob — no local state files, no `pulumi.yaml`
 - **SSH via `ssh2`:** never shells out to `/usr/bin/ssh`; TOFU host verification against `~/.clawops/known_hosts`; connection pool with 5-min idle TTL
 - **Plan → apply discipline:** every non-local deployment goes through `generatePlan()` → review → `applyPlan()`; destructive changes always require human review of the plan JSON
