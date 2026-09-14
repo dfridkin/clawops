@@ -164,3 +164,40 @@ describe('generatePlan()', () => {
     expect(mockSetConfig).toHaveBeenCalledWith('openclawVersion', { value: '2026.9.2' })
   })
 })
+
+describe('preview parsing', () => {
+  it('counts a resource once however often the preview prints it', async () => {
+    // Pulumi prints the stack resource in more than one section. Counting each line inflated
+    // "7 to create" for a stack that creates four resources — a number an operator approves.
+    const lines = [
+      '    +   pulumi:pulumi:Stack   clawops-e2e         create',
+      '    +   gcp:compute:Network   clawops-network     create',
+      '    +   pulumi:pulumi:Stack   clawops-e2e         create',
+      '    +   gcp:compute:Network   clawops-network     create',
+    ]
+    const { parseDiffForTest } = await import('../../src/plan/generate.js')
+    const diff = parseDiffForTest(lines)!
+    expect(diff.create).toHaveLength(2)
+    expect(diff.totalChanges).toBe(2)
+  })
+
+  it('keeps two different resources of the same type apart', async () => {
+    const { parseDiffForTest } = await import('../../src/plan/generate.js')
+    const diff = parseDiffForTest([
+      '    +   gcp:compute:Firewall   clawops-firewall-ssh      create',
+      '    +   gcp:compute:Firewall   clawops-firewall-gateway  create',
+    ])!
+    expect(diff.create).toHaveLength(2)
+  })
+
+  it('does not merge a create and a delete of the same resource', async () => {
+    const { parseDiffForTest } = await import('../../src/plan/generate.js')
+    const diff = parseDiffForTest([
+      '    +   gcp:compute:Instance   clawops-instance   create',
+      '    -   gcp:compute:Instance   clawops-instance   delete',
+    ])!
+    expect(diff.create).toHaveLength(1)
+    expect(diff.delete).toHaveLength(1)
+    expect(diff.totalChanges).toBe(2)
+  })
+})

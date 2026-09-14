@@ -64,7 +64,14 @@ export function resolveIngressCidrs(
  */
 export async function detectEgressIp(checkUrl: string): Promise<EgressIpResult> {
   try {
-    const res = await fetch(checkUrl, { signal: AbortSignal.timeout(3_000) })
+    // ifconfig.me and its kind serve a full HTML page to anything that does not look like
+    // curl, and Node's fetch does not. Asking for text/plain is what makes the response an
+    // address; without it the "detected IP" was a 4KB document, which then travelled into a
+    // plan as a firewall rule.
+    const res = await fetch(checkUrl, {
+      signal: AbortSignal.timeout(3_000),
+      headers: { accept: 'text/plain' },
+    })
     if (!res.ok) {
       return { ok: false, error: `HTTP ${res.status} from ${checkUrl}` }
     }
@@ -72,10 +79,34 @@ export async function detectEgressIp(checkUrl: string): Promise<EgressIpResult> 
     if (!ip) {
       return { ok: false, error: `empty response from ${checkUrl}` }
     }
+    // Whatever came back has to be an address before anything downstream treats it as one.
+    // Every caller turns this into a firewall rule, and a rule built from a stray response
+    // body is either refused by the provider or, worse, not.
+    if (!isIpAddress(ip)) {
+      return {
+        ok: false,
+        error: `${checkUrl} did not return an IP address (got ${summarise(ip)})`,
+      }
+    }
     return { ok: true, ip }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
+}
+
+/** A bare IPv4 or IPv6 address — no prefix, no surrounding text. */
+export function isIpAddress(value: string): boolean {
+  const v = value.trim()
+  if (/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(v)) {
+    return v.split('.').every((o) => Number(o) <= 255)
+  }
+  return /^[0-9a-fA-F:]+$/.test(v) && v.includes(':')
+}
+
+/** Enough of an unexpected response to recognise it, never the whole body. */
+function summarise(body: string): string {
+  const oneLine = body.replace(/\s+/g, ' ').trim()
+  return oneLine.length > 40 ? `${oneLine.slice(0, 40)}…` : oneLine
 }
 
 /**

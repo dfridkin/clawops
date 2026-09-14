@@ -1525,7 +1525,7 @@ async function maybeHarden(opts: {
  */
 export async function detectSshCidrDefault(): Promise<string | undefined> {
   const { detectEgressIp } = await import('../../providers/firewall.js')
-  const result = await detectEgressIp('https://ifconfig.me')
+  const result = await detectEgressIp('https://ifconfig.me/ip')
   if (!result.ok) return undefined
   const ip = result.ip.trim()
   return ip === '' ? undefined : ip.includes('/') ? ip : `${ip}/32`

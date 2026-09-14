@@ -9,7 +9,8 @@
 // report. Neither owns the logic.
 
 import process from 'node:process'
-import { accessSync, mkdirSync, constants } from 'node:fs'
+import { accessSync, mkdirSync, readFileSync, constants } from 'node:fs'
+import ssh2 from 'ssh2'
 import path from 'node:path'
 import {
   PUBLISH_INSPECT_CMD, publishForRestart, STATE_DIR_HOST_LINUX,
@@ -169,6 +170,33 @@ async function runtimeChecks(configDir: string): Promise<Check[]> {
             remedy: `clawops installs it into ${path.join(configDir, '.pulumi-cli')} on first apply`,
           },
   )
+
+  // A self-managed backend cannot create a stack without one, and clawops generates one on
+  // first use. Reported because losing the file makes that stack's secrets unreadable — this
+  // is the one piece of clawops state that cannot be regenerated.
+  const { passphraseStatus, passphrasePath } = await import('../pulumi/passphrase.js')
+  const passphrase = passphraseStatus(configDir)
+  checks.push(
+    passphrase === 'environment'
+      ? {
+          name: 'State passphrase',
+          status: 'pass',
+          detail: 'PULUMI_CONFIG_PASSPHRASE set in the environment',
+        }
+      : passphrase === 'stored'
+        ? {
+            name: 'State passphrase',
+            status: 'pass',
+            detail: passphrasePath(configDir),
+            remedy: 'back this up — without it, an existing stack\'s secrets cannot be read',
+          }
+        : {
+            name: 'State passphrase',
+            status: 'warn',
+            detail: 'not created yet',
+            remedy: `clawops generates one at ${passphrasePath(configDir)} on first apply`,
+          },
+  )
   return checks
 }
 
@@ -183,7 +211,23 @@ function sshChecks(config: ClawopsConfig | null): Check[] {
   const keyPath = expandHome(config.ssh.keyPath)
   try {
     accessSync(keyPath, constants.R_OK)
-    checks.push({ name: 'SSH key', status: 'pass', detail: keyPath })
+    // Readable is not usable. clawops connects with ssh2, which supports fewer formats than
+    // OpenSSH: a PKCS#8 PEM is a perfectly good key file that ssh2 cannot parse, and this
+    // check used to pass on one — every SSH command then failed at connect time, long after
+    // doctor said the key was fine.
+    const parsed = ssh2.utils.parseKey(readFileSync(keyPath))
+    checks.push(
+      parsed instanceof Error
+        ? {
+            name: 'SSH key',
+            status: 'fail',
+            detail: `${keyPath} (${parsed.message.toLowerCase()})`,
+            remedy:
+              'clawops connects with ssh2. Regenerate in OpenSSH format: ' +
+              `ssh-keygen -t ed25519 -f ${keyPath} -N '' -C clawops`,
+          }
+        : { name: 'SSH key', status: 'pass', detail: `${keyPath} (${parsed.type})` },
+    )
   } catch {
     checks.push({
       name: 'SSH key',

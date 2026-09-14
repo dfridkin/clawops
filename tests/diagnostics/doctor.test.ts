@@ -7,10 +7,11 @@ vi.mock('../../src/config/store.js', () => ({
   getConfigDir: vi.fn(() => '/tmp/clawops-test'),
 }))
 
-const { mockValidateConfig, mockAccessSync, mockMkdirSync } = vi.hoisted(() => ({
+const { mockValidateConfig, mockAccessSync, mockMkdirSync, mockReadFileSync } = vi.hoisted(() => ({
   mockValidateConfig: vi.fn(),
   mockAccessSync: vi.fn(),
   mockMkdirSync: vi.fn(),
+  mockReadFileSync: vi.fn(),
 }))
 vi.mock('../../src/providers/index.js', () => ({
   getProvider: vi.fn(() => ({ validateConfig: mockValidateConfig })),
@@ -22,6 +23,11 @@ vi.mock('../../src/providers/local/index.js', () => ({}))
 vi.mock('../../src/transport/pool.js', () => ({ acquireSession: vi.fn(), drainPool: vi.fn() }))
 const { mockCliStatus } = vi.hoisted(() => ({ mockCliStatus: vi.fn() }))
 vi.mock('../../src/pulumi/cli.js', () => ({ pulumiCliStatus: mockCliStatus }))
+const { mockPassphraseStatus } = vi.hoisted(() => ({ mockPassphraseStatus: vi.fn() }))
+vi.mock('../../src/pulumi/passphrase.js', () => ({
+  passphraseStatus: mockPassphraseStatus,
+  passphrasePath: (dir: string) => `${dir}/secrets/pulumi-passphrase`,
+}))
 vi.mock('../../src/cli/context.js', () => ({
   buildContext: vi.fn(() => ({ adapter: { name: 'aws' } })),
 }))
@@ -33,10 +39,33 @@ vi.mock('../../src/harden/index.js', () => ({
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>()
-  return { ...actual, accessSync: mockAccessSync, mkdirSync: mockMkdirSync }
+  return {
+    ...actual,
+    accessSync: mockAccessSync,
+    mkdirSync: mockMkdirSync,
+    // Defaults to the real one in beforeEach; individual tests override it to hand the SSH
+    // key check specific key material.
+    readFileSync: mockReadFileSync,
+  }
 })
 
+import { execFileSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
+import nodePath from 'node:path'
 import { getConfig, getConfigDir } from '../../src/config/store.js'
+
+const { readFileSync: realReadFileSync, mkdtempSync: realMkdtemp, rmSync: realRm } =
+  await vi.importActual<typeof import('node:fs')>('node:fs')
+
+/** A real OpenSSH key, because the check under test is "can ssh2 parse this". */
+const REAL_ED25519_KEY = (() => {
+  const dir = realMkdtemp(nodePath.join(tmpdir(), 'clawops-doctor-key-'))
+  const keyPath = nodePath.join(dir, 'id_ed25519')
+  execFileSync('ssh-keygen', ['-t', 'ed25519', '-f', keyPath, '-N', '', '-C', 'clawops', '-q'])
+  const contents = realReadFileSync(keyPath)
+  realRm(dir, { recursive: true, force: true })
+  return contents
+})()
 import { runDiagnostics, summarise, type Check, type DiagnosticsReport } from '../../src/diagnostics/index.js'
 
 const mockGetConfig = vi.mocked(getConfig)
@@ -89,6 +118,8 @@ function withHost(session: FakeSshSession) {
 }
 
 beforeEach(() => {
+  mockPassphraseStatus.mockReset().mockReturnValue('stored')
+  mockReadFileSync.mockReset().mockImplementation(realReadFileSync)
   mockCliStatus.mockReset().mockResolvedValue({ kind: 'managed', version: 'v3.201.0', root: '/tmp/clawops-test/.pulumi-cli' })
   vi.clearAllMocks()
   mockGetConfigDir.mockReturnValue('/tmp/clawops-test')
@@ -330,5 +361,59 @@ describe('the Pulumi CLI check', () => {
     const report = await runDiagnostics()
     const runtime = report.sections.find((s) => s.title === 'Runtime')
     expect(runtime?.checks.map((c) => c.name)).toContain('Pulumi CLI')
+  })
+})
+
+describe('the state passphrase check', () => {
+  it('passes and names the file, telling the operator to keep it', async () => {
+    mockGetConfig.mockReturnValue(null)
+    const check = find(await runDiagnostics(), 'State passphrase')
+    expect(check?.status).toBe('pass')
+    expect(check?.detail).toBe('/tmp/clawops-test/secrets/pulumi-passphrase')
+    // Losing it makes an existing stack's secrets unreadable — the one piece of clawops state
+    // that cannot be regenerated.
+    expect(check?.remedy).toMatch(/back this up/)
+  })
+
+  it('says so when the operator supplies their own', async () => {
+    mockGetConfig.mockReturnValue(null)
+    mockPassphraseStatus.mockReturnValue('environment')
+    const check = find(await runDiagnostics(), 'State passphrase')
+    expect(check?.status).toBe('pass')
+    expect(check?.detail).toMatch(/PULUMI_CONFIG_PASSPHRASE/)
+  })
+
+  it('warns before first use without failing a fresh machine', async () => {
+    mockGetConfig.mockReturnValue(null)
+    mockPassphraseStatus.mockReturnValue('absent')
+    const report = await runDiagnostics()
+    expect(find(report, 'State passphrase')?.status).toBe('warn')
+    expect(report.ok).toBe(true)
+  })
+})
+
+describe('the SSH key check', () => {
+  it('fails a readable key that ssh2 cannot use, and says how to replace it', async () => {
+    // Readable is not usable: a PKCS#8 PEM is a perfectly good key file that ssh2 cannot
+    // parse. This check passed on one, and every SSH command then failed at connect time.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockGetConfig.mockReturnValue(baseConfig as any)
+    mockAccessSync.mockImplementation(() => undefined)
+    mockReadFileSync.mockReturnValue(
+      '-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIPPf60xCO0DaINAtOfOAMqn1MD4023YeF98CSxEQy2lG\n-----END PRIVATE KEY-----\n',
+    )
+    const check = find(await runDiagnostics(), 'SSH key')
+    expect(check?.status).toBe('fail')
+    expect(check?.remedy).toMatch(/ssh-keygen -t ed25519/)
+  })
+
+  it('passes a usable key and names its type', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockGetConfig.mockReturnValue(baseConfig as any)
+    mockAccessSync.mockImplementation(() => undefined)
+    mockReadFileSync.mockReturnValue(REAL_ED25519_KEY)
+    const check = find(await runDiagnostics(), 'SSH key')
+    expect(check?.status).toBe('pass')
+    expect(check?.detail).toMatch(/ssh-ed25519/)
   })
 })

@@ -195,11 +195,15 @@ jobs:
 
 ## Shared Best Practices
 
-1. **Use `accessMode=auto`** for MCP-driven and CI deployments. clawops detects the
-   runner's egress IP at deploy time and opens only that `/32` — no hardcoded CIDRs needed.
+1. **Use `clawops plan --ssh-cidr auto`** for CI deployments. The runner's egress IP is
+   resolved as a `/32` while the plan is generated and recorded in it, so the plan states
+   which address it admits and the apply cannot open a different one.
 
 2. **Store `PULUMI_CONFIG_PASSPHRASE`** as a GitHub secret. This is the passphrase for the
-   Pulumi stack config file (contains `sshPublicKey` and other non-secret stack values).
+   self-managed backend's secrets manager. Locally clawops generates one at
+   `~/.clawops/secrets/pulumi-passphrase` (ADR 0011); in CI, set the variable — a runner is
+   disposable and a generated passphrase would not survive to the next run, leaving each run
+   unable to read the state the last one wrote.
 
 3. **Scope the OIDC trust to a branch**, not `repo:*`, to prevent pull requests from
    triggering deploys.

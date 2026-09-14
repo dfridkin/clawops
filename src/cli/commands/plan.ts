@@ -51,7 +51,7 @@ export default defineCommand({
         gatewayCidr: strArg(args['gateway-cidr']),
         publishGateway: strArg(args['publish-gateway']),
       },
-      { detectEgressIp: () => detectEgressIp('https://ifconfig.me') },
+      { detectEgressIp: () => detectEgressIp('https://ifconfig.me/ip') },
     )
 
     const abortController = new AbortController()

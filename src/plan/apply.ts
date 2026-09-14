@@ -8,7 +8,7 @@ import { saveOverlay } from './overlay-store.js'
 import { readRemoteConfig, atomicWriteConfig, restartGateway, deepMerge } from './remote-config.js'
 import type { DeployPlan } from './generate.js'
 import type { StackOutputs } from '../providers/types.js'
-import { GATEWAY_PORT } from '../openclaw/run-flags.js'
+import { writeStackConfig } from './stack-config.js'
 
 export interface ApplyPlanOpts {
   onOutput?: (line: string) => void
@@ -52,48 +52,7 @@ export async function applyPlan(
 
   const stack = await ctx.getStack()
 
-  await stack.setConfig('instanceType', { value: plan.spec.instanceType })
-  if (plan.spec.region) {
-    await stack.setConfig('region', { value: plan.spec.region })
-  }
-  await stack.setConfig('openclawVersion', { value: plan.spec.openclaw.version })
-  await stack.setConfig('publishGateway', {
-    value: plan.spec.network?.publishGateway ?? 'loopback',
-  })
-  await stack.setConfig('gatewayPort', {
-    value: String(plan.spec.network?.gatewayPort ?? GATEWAY_PORT),
-  })
-
-  // The plan's firewall rules, which apply used to validate, print, and then drop on the
-  // floor. Every Pulumi program reads these from stack config — `cfg.get('sshCidrs')` and
-  // friends — so without them `resolveIngressCidrs` returned an empty list and the stack was
-  // created with NO ingress rules at all. Not a weaker rule: none. clawops builds its own
-  // VPC, so there is no default rule to fall back on, and the instance was unreachable by
-  // SSH — which is every day-two command.
-  //
-  // `accessMode: restricted` is the deny-all default (N10). The CIDRs decide what opens.
-  // GCP resolves the project from ambient config, so a deploy could land in whichever project
-  // the environment happened to name — not necessarily the one preflight checked APIs and the
-  // state bucket in. Pinning it here makes the two agree.
-  if (plan.spec.provider === 'gcp') {
-    const { resolveProjectId } = await import('../providers/gcp/preflight.js')
-    const project = resolveProjectId()
-    if (project) await stack.setConfig('gcp:project', { value: project })
-  }
-
-  await stack.setConfig('accessMode', { value: 'restricted' })
-  await stack.setConfig('sshCidrs', {
-    value: (plan.spec.network?.allowedSshCidrs ?? []).join(','),
-  })
-  await stack.setConfig('gatewayCidrs', {
-    value: (plan.spec.network?.allowedGatewayCidrs ?? []).join(','),
-  })
-
-  // Enable Bedrock IAM attachment when the plan selects the bedrock provider.
-  const modelProvider = (plan.spec.openclaw.config?.['models'] as Record<string, unknown> | undefined)?.['provider']
-  if (modelProvider === 'bedrock') {
-    await stack.setConfig('bedrockEnabled', { value: 'true' })
-  }
+  await writeStackConfig(stack, plan)
 
   // Drift detection (ADR 0008): warn if stack was updated after the plan was generated.
   if (plan.metadata.stackVersion !== undefined) {

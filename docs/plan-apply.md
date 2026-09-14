@@ -51,6 +51,18 @@ A bare IP is refused rather than assumed to be a `/32`, and `auto` failing to re
 the plan rather than falling back — neither an empty list nor `0.0.0.0/0` is a safe guess
 about who should be let in.
 
+## Which key can log in
+
+The plan carries the SSH public key the instance will accept, in `spec.ssh.publicKey`, resolved
+from `ssh.keyPath` in `~/.clawops/config.json` — the `.pub` beside the private key, or derived
+from the private key when there is none. Every cloud program requires it and refuses to run
+without it.
+
+It is derived through `ssh2`, the library clawops connects with, rather than through node's
+`crypto`, which reads more formats. A key ssh2 cannot parse cannot log in, so installing a
+public key derived some other way would produce an instance that admits a key clawops is unable
+to present. `clawops doctor` reports a key it cannot use.
+
 ## What `clawops plan` produces
 
 `clawops plan` runs `pulumi preview` against your stack and wraps the result in a JSON artifact

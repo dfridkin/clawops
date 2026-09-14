@@ -6,6 +6,7 @@ import { LocalWorkspace, type Stack } from '@pulumi/pulumi/automation'
 import type { PulumiFn } from '../providers/types.js'
 import { getConfigDir } from '../config/store.js'
 import { ensurePulumiCli } from './cli.js'
+import { ensurePassphrase } from './passphrase.js'
 
 export interface StackOpts {
   stack: string
@@ -28,6 +29,7 @@ export interface StackOpts {
 export async function getOrCreateStack(opts: StackOpts): Promise<Stack> {
   const configDir = opts.configDir ?? getConfigDir()
   const pulumiCommand = await ensurePulumiCli({ configDir, onInstall: opts.onInstall })
+  const passphrase = ensurePassphrase(configDir)
   return await LocalWorkspace.createOrSelectStack(
     {
       stackName: opts.stack,
@@ -40,6 +42,11 @@ export async function getOrCreateStack(opts: StackOpts): Promise<Stack> {
       envVars: {
         PULUMI_BACKEND_URL: opts.stateUrl,
         PULUMI_SKIP_UPDATE_CHECK: '1',
+        // A self-managed backend has no key service, so a new stack cannot be created without
+        // a secrets manager, and the only one available is a passphrase. Undefined when the
+        // operator supplies their own — overriding it would orphan their existing stacks.
+        // See ./passphrase.ts and ADR 0011.
+        ...(passphrase ? { PULUMI_CONFIG_PASSPHRASE: passphrase } : {}),
         // R6: cloud credentials inherited from process.env, never set here
       },
     },

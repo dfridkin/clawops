@@ -45,7 +45,7 @@ export const awsProgram: PulumiFn = async () => {
 
   // Detect egress IP for 'auto' mode — returns a Result so failures are explicit.
   const egressResult = accessMode === 'auto'
-    ? await detectEgressIp('https://ifconfig.me')
+    ? await detectEgressIp('https://ifconfig.me/ip')
     : { ok: true as const, ip: '' }
 
   if (accessMode === 'open') {

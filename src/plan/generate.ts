@@ -81,12 +81,20 @@ function parseDiff(lines: string[]): DeployPlan['diff'] {
   const update: Array<{ resource: ResourceRef; before: unknown; after: unknown }> = []
   const del: ResourceRef[] = []
 
+  // Pulumi prints the stack resource in more than one section of a preview, so the same line
+  // arrives repeatedly. Counting it each time inflated "7 to create" for a stack that creates
+  // four resources — a number an operator is being asked to approve.
+  const seen = new Set<string>()
+
   for (const line of lines) {
     const m = PREVIEW_LINE_RE.exec(line.trimStart())
     if (!m) continue
     const [, op, resourceType, name] = m as unknown as [string, string, string, string | undefined]
+    const urn = `urn:pulumi:::clawops::${resourceType}::${name ?? ''}`
+    if (seen.has(`${op}${urn}`)) continue
+    seen.add(`${op}${urn}`)
     const ref: ResourceRef = {
-      urn: `urn:pulumi:::clawops::${resourceType}::${name ?? ''}`,
+      urn,
       type: resourceType,
       ...(name ? { name } : {}),
     }
@@ -102,6 +110,9 @@ function parseDiff(lines: string[]): DeployPlan['diff'] {
     totalChanges: create.length + update.length + del.length,
   }
 }
+
+/** Exposed for tests: the preview parser is otherwise unreachable without a live stack. */
+export const parseDiffForTest = parseDiff
 
 export async function generatePlan(
   intent: GeneratePlanIntent,
@@ -125,6 +136,21 @@ export async function generatePlan(
     allowedGatewayCidrs: [],
   }
 
+  // Every cloud program refuses to run without stack config `sshPublicKey`, and nothing filled
+  // it outside the wizard, so a plan generated from the CLI failed at preview. The key goes in
+  // the plan rather than being read during apply: "which key can log into this machine" is
+  // exactly what a plan review is for.
+  const { resolvePublicKey } = await import('./ssh-key.js')
+  const publicKey = config ? resolvePublicKey(expandHome(config.ssh.keyPath)) : undefined
+  if (!publicKey) {
+    process.stderr.write(
+      '[clawops] warning: no SSH public key could be resolved' +
+        (config ? ` from ${config.ssh.keyPath}` : ' — no config file') +
+        '. `clawops apply` will refuse this plan: the instance would have no way to admit ' +
+        'anyone. Run `clawops doctor` to see why the key is unusable.\n',
+    )
+  }
+
   const stackName = intent.stackName
   const region = intent.region ?? config?.stacks[stackName]?.region
 
@@ -144,6 +170,7 @@ export async function generatePlan(
       instanceType,
       openclaw: { version: openclawVersion },
       network,
+      ...(publicKey ? { ssh: { publicKey } } : {}),
       ...(intent.tags ? { tags: intent.tags } : {}),
     },
   }
@@ -153,9 +180,11 @@ export async function generatePlan(
     const ctx = buildContext({ stack: stackName, provider: intent.provider })
     const stack = await ctx.getStack()
 
-    await stack.setConfig('instanceType', { value: instanceType })
-    if (region) await stack.setConfig('region', { value: region })
-    await stack.setConfig('openclawVersion', { value: openclawVersion })
+    // The same writer apply uses. Previously this set three keys and apply set six, so the
+    // preview was of a stack that would never be deployed — and, missing sshPublicKey, of one
+    // that could not even be previewed.
+    const { writeStackConfig } = await import('./stack-config.js')
+    await writeStackConfig(stack, plan)
 
     const outputLines: string[] = []
     const preview = await stack.preview({
@@ -222,4 +251,9 @@ export async function generatePlan(
 /** Short ID for use in plan metadata.name when no stack name is given. */
 export function planId(): string {
   return randomUUID().slice(0, 8)
+}
+
+/** `~` in a configured path is the operator's home, not a directory called "~". */
+function expandHome(p: string): string {
+  return p.replace(/^~/, process.env['HOME'] ?? '~')
 }
