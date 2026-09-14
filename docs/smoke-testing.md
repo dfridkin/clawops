@@ -22,6 +22,29 @@ before starting any provider test.
 
 ---
 
+## What 2.0 changed, and what to check because of it
+
+These apply to every provider, and they are the assertions that matter most — each one is a
+failure the 1.x line had and could not see.
+
+| Check | Why | How |
+|---|---|---|
+| State survives a container replacement | Before 2.0 nothing was mounted; `gateway restart` discarded every session | hash `/var/lib/clawops/openclaw/openclaw.json`, `gateway restart`, hash again |
+| The gateway actually answers | A running container means the process started, not that it serves | `clawops doctor --stack <name>` — it probes `/startupz` and reads the body |
+| `doctor` exit code | It now exits 1 on any failed check, so it works in a script | `clawops doctor --stack <name>; echo $?` |
+| Published on loopback | A security group admitting the port is not the same as a port listening | `docker inspect openclaw --format '{{json .HostConfig.PortBindings}}'` → `127.0.0.1` |
+| Provider plugins installed | A configured-but-missing provider starts healthy with no model backend | `clawops apply` warns; `openclaw plugins list --json` confirms |
+| Channel plugins installed | Every channel in 2.0 is install-gated | `openclaw channels list --all --json` → `installed: true` |
+| Logs come from the gateway | The old `journalctl \|\| docker logs` chain never said which answered | `clawops logs --stack <name>` prints `source: gateway` |
+
+`scripts/e2e/cloud.sh gcp|azure` runs the whole sequence and destroys the stack afterwards,
+including when an assertion fails. Prefer it to doing this by hand — the failure mode here is
+not a wrong answer, it is a VM nobody remembers leaving on.
+
+Migrating from 1.x has its own procedure; see [migrating](https://clawops.fyi/docs/migrating).
+
+---
+
 ## AWS
 
 ### Prerequisites
@@ -222,10 +245,11 @@ clawops destroy --stack smoke-gcp --yes
 
 ### Known quirks
 
-- **Firewall is open by default**: GCP provider does not yet implement `accessMode`.
-  The firewall rule allows `0.0.0.0/0` on ports 22 and 18789. This is a known gap
-  (see `src/providers/gcp/program.ts`). Restrict at the VPC firewall level manually
-  for production.
+- **Firewall**: per-CIDR via `accessMode`, the same as AWS and Azure. Since 2.0 no gateway
+  rule is created at all while `network.publishGateway` is `loopback` (the default) — the
+  port is not listening on a routable interface, so a rule for it would grant no access and
+  misread as exposure. This entry previously said `accessMode` was unimplemented; that
+  stopped being true in 2.0.
 - **GPU instances**: `n1-standard-4` alias is mapped but accelerator config is not
   implemented (TODO). Do not smoke-test the `gpu` alias on GCP.
 - **Zone suffix**: Zone defaults to `<region>-a`. If that zone has insufficient capacity,

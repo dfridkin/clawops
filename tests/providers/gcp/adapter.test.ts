@@ -1,5 +1,16 @@
 // GCP provider adapter unit tests.
 
+// `accessSync` is mocked at module scope with a controllable implementation. It used to be
+// mocked inside the test body, which does nothing: vi.mock is hoisted to the top of the file.
+// The test passed anyway, because a machine with no `gcloud auth application-default login`
+// has no ADC file and the real accessSync threw on its own — so it asserted the environment,
+// not the code. It started failing the moment this machine had gcloud configured.
+const { mockAccessSync } = vi.hoisted(() => ({ mockAccessSync: vi.fn() }))
+vi.mock('node:fs', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('node:fs')>()
+  return { ...orig, accessSync: mockAccessSync }
+})
+
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import gcpAdapter from '../../../src/providers/gcp/index.js'
 import process from 'node:process'
@@ -90,11 +101,8 @@ describe('gcpAdapter.validateConfig()', () => {
   })
 
   it('returns ok:false with error message when no credentials and no ADC file', async () => {
-    // Mock fs.accessSync to throw (ADC file absent) and fetch to reject (not on GCP)
-    vi.mock('node:fs', async (importOriginal) => {
-      const orig = await importOriginal<typeof import('node:fs')>()
-      return { ...orig, accessSync: vi.fn().mockImplementation(() => { throw new Error('ENOENT') }) }
-    })
+    // ADC file absent, and not running on a GCP VM.
+    mockAccessSync.mockImplementation(() => { throw new Error('ENOENT') })
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'))
 
     try {
@@ -103,7 +111,7 @@ describe('gcpAdapter.validateConfig()', () => {
       expect(result.errors[0]).toContain('GOOGLE_APPLICATION_CREDENTIALS')
     } finally {
       fetchSpy.mockRestore()
-      vi.unmock('node:fs')
+      mockAccessSync.mockReset()
     }
   })
 })

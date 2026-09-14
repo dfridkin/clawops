@@ -9,6 +9,8 @@ import type {
   StackOutputs,
   ValidationResult,
   PulumiFn,
+  PreflightCheck,
+  PreflightOpts,
 } from '../types.js'
 import { gcpProgram } from './program.js'
 
@@ -80,6 +82,11 @@ const gcpAdapter: ProviderAdapter = {
 
     return { ok: errors.length === 0, errors }
   },
+
+  async preflight(opts: PreflightOpts): Promise<PreflightCheck[]> {
+    const { gcpPreflight } = await import('./preflight.js')
+    return gcpPreflight(opts)
+  }
 }
 
 async function checkAdcFile(): Promise<boolean> {

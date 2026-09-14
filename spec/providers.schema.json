@@ -4,25 +4,46 @@
   "title": "ProviderAdapter",
   "description": "Contract every cloud provider adapter must satisfy. Source of truth for src/providers/types.ts (generated). Per R-meta-1.",
   "type": "object",
-  "required": ["name", "credentials", "regions", "instanceTypes", "stateBackend", "operations"],
+  "required": [
+    "name",
+    "credentials",
+    "regions",
+    "instanceTypes",
+    "stateBackend",
+    "operations"
+  ],
   "properties": {
     "name": {
       "type": "string",
-      "enum": ["aws", "gcp", "azure", "local"],
+      "enum": [
+        "aws",
+        "gcp",
+        "azure",
+        "local"
+      ],
       "description": "Lowercase provider id"
     },
     "credentials": {
       "type": "object",
       "description": "How this provider's credentials are sourced (R6: never in tool args)",
-      "required": ["source"],
+      "required": [
+        "source"
+      ],
       "properties": {
         "source": {
-          "enum": ["env", "cli-profile", "file", "instance-metadata"],
+          "enum": [
+            "env",
+            "cli-profile",
+            "file",
+            "instance-metadata"
+          ],
           "description": "Credential resolution mechanism"
         },
         "envVars": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Environment variables checked at startup (e.g., AWS_PROFILE)"
         },
         "profileName": {
@@ -37,7 +58,9 @@
     },
     "regions": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "minItems": 1,
       "description": "Region IDs supported by this adapter (e.g., us-east-1, us-central1, eastus)"
     },
@@ -47,28 +70,59 @@
       "description": "Mapping from clawops aliases to provider-native instance types",
       "items": {
         "type": "object",
-        "required": ["alias", "nativeId", "vcpu", "memoryGB", "arch"],
+        "required": [
+          "alias",
+          "nativeId",
+          "vcpu",
+          "memoryGB",
+          "arch"
+        ],
         "properties": {
           "alias": {
-            "enum": ["micro", "small", "medium", "large", "gpu"],
+            "enum": [
+              "micro",
+              "small",
+              "medium",
+              "large",
+              "gpu"
+            ],
             "description": "Normalized clawops alias"
           },
           "nativeId": {
             "type": "string",
             "description": "Provider-native instance type (e.g., t3.small, e2-small, Standard_B2s)"
           },
-          "vcpu": { "type": "number", "minimum": 1 },
-          "memoryGB": { "type": "number", "minimum": 0.5 },
-          "arch": { "enum": ["x86_64", "arm64"] }
+          "vcpu": {
+            "type": "number",
+            "minimum": 1
+          },
+          "memoryGB": {
+            "type": "number",
+            "minimum": 0.5
+          },
+          "arch": {
+            "enum": [
+              "x86_64",
+              "arm64"
+            ]
+          }
         }
       }
     },
     "stateBackend": {
       "type": "object",
-      "required": ["scheme", "urlPattern"],
+      "required": [
+        "scheme",
+        "urlPattern"
+      ],
       "properties": {
         "scheme": {
-          "enum": ["s3", "gs", "azblob", "file"],
+          "enum": [
+            "s3",
+            "gs",
+            "azblob",
+            "file"
+          ],
           "description": "Pulumi state backend URL scheme"
         },
         "urlPattern": {
@@ -79,41 +133,122 @@
     },
     "operations": {
       "type": "object",
-      "required": ["provision", "destroy", "describe"],
+      "required": [
+        "provision",
+        "destroy",
+        "describe"
+      ],
       "description": "Lifecycle operations every adapter must implement",
       "properties": {
-        "provision": { "$ref": "#/$defs/Operation" },
-        "destroy": { "$ref": "#/$defs/Operation" },
-        "describe": { "$ref": "#/$defs/Operation" },
-        "refresh": { "$ref": "#/$defs/Operation" }
+        "provision": {
+          "$ref": "#/$defs/Operation"
+        },
+        "destroy": {
+          "$ref": "#/$defs/Operation"
+        },
+        "describe": {
+          "$ref": "#/$defs/Operation"
+        },
+        "refresh": {
+          "$ref": "#/$defs/Operation"
+        }
       }
     },
     "supportedOpenclawVersions": {
       "type": "object",
       "properties": {
-        "min": { "type": "string", "description": "semver, e.g., 2026.4.5" },
-        "max": { "type": "string" },
-        "tested": { "type": "array", "items": { "type": "string" } }
+        "min": {
+          "type": "string",
+          "description": "semver, e.g., 2026.4.5"
+        },
+        "max": {
+          "type": "string"
+        },
+        "tested": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "preflight": {
+      "type": "object",
+      "description": "Account-level setup a provider needs before anything can be provisioned, and which clawops can detect and offer to fix. These are not infrastructure \u2014 enabling an API or creating a state bucket happens outside the Pulumi program, because the state backend must exist before Pulumi can run at all. Detected in `doctor`; the setup wizard PROMPTS before changing anything in someone's cloud account.",
+      "required": [
+        "checks"
+      ],
+      "properties": {
+        "checks": {
+          "type": "array",
+          "description": "What must be true before a first deploy.",
+          "items": {
+            "$ref": "#/$defs/PreflightCheck"
+          }
+        }
       }
     }
   },
   "$defs": {
     "Operation": {
       "type": "object",
-      "required": ["estimatedDurationSec", "idempotent", "destructive"],
+      "required": [
+        "estimatedDurationSec",
+        "idempotent",
+        "destructive"
+      ],
       "properties": {
         "estimatedDurationSec": {
           "type": "object",
           "properties": {
-            "min": { "type": "number" },
-            "max": { "type": "number" },
-            "median": { "type": "number" }
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            },
+            "median": {
+              "type": "number"
+            }
           },
           "description": "Used by R12 to pick streaming tier (sync / progress / Tasks)"
         },
-        "idempotent": { "type": "boolean" },
-        "destructive": { "type": "boolean" },
-        "supportsCancellation": { "type": "boolean", "default": true }
+        "idempotent": {
+          "type": "boolean"
+        },
+        "destructive": {
+          "type": "boolean"
+        },
+        "supportsCancellation": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "PreflightCheck": {
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "remediable"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable kebab-case id, e.g. `compute-api-enabled`"
+        },
+        "label": {
+          "type": "string",
+          "description": "What is being checked, in the operator's terms"
+        },
+        "remediable": {
+          "type": "boolean",
+          "description": "Whether clawops can fix it after asking. False means it can only be reported \u2014 a missing permission or an unpaid billing account is not clawops's to resolve."
+        },
+        "mutates": {
+          "type": "string",
+          "description": "What the fix changes in the operator's account, shown in the prompt. Required when remediable is true: consent to 'fix it' is not consent to something unnamed."
+        }
       }
     }
   }
