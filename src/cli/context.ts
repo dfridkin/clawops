@@ -7,6 +7,8 @@ import { requireConfig, getConfigDir, type ClawopsConfig } from '../config/store
 import type { ProviderAdapter, ProviderName } from '../providers/types.js'
 import { readLocalState, type LocalState } from '../providers/local/state.js'
 import { UsageError } from '../errors/index.js'
+import { getProvider } from '../providers/index.js'
+import '../providers/register.js'
 
 export interface ClawopsContext {
   config: ClawopsConfig
@@ -90,72 +92,34 @@ export function buildContext(args: ContextArgs): ClawopsContext {
 /**
  * The real adapter for a provider.
  *
- * `buildContext().adapter` is a proxy whose synchronous methods — `normalizeInstanceType`,
- * `defaultRegion`, `getConnectionInfo` — throw until something async has loaded the module
- * behind it. `clawops up` gets away with calling them because it happens to `await
- * validateConfig()` first; `generatePlan` did not, and a deploy died at plan time with
- * "Provider not yet loaded. Call getStack() first." Anything that needs a synchronous adapter
- * method without needing a stack awaits this instead of depending on call order.
+ * This used to hand back a proxy that loaded the module on its first *async* call, so every
+ * synchronous method on it — `getConnectionInfo`, `normalizeInstanceType`, `defaultRegion` —
+ * threw "Provider not yet loaded. Call getStack() first." until something else had happened to
+ * load it. Eighteen call sites depended on that ordering and nothing enforced it: `clawops up`
+ * worked because it awaits `validateConfig()` first, `clawops plan` did not, and `doctor
+ * --stack`, `ssh`, `logs` and `gateway restart` all failed against a running instance with an
+ * error about provider loading.
+ *
+ * The adapters are registered eagerly instead (see ../providers/register.js). They are small,
+ * and the Pulumi packages they eventually need are imported inside the program function rather
+ * than at module scope, so this costs a few milliseconds and removes the failure mode.
+ */
+function loadProvider(name: ProviderName): ProviderAdapter {
+  try {
+    return getProvider(name)
+  } catch {
+    throw new UsageError(
+      `Provider "${name}" is not yet supported. Supported providers: gcp, aws, azure, local`,
+    )
+  }
+}
+
+/**
+ * Kept for callers that resolve an adapter without building a context. Now that adapters are
+ * registered at import, this is the same lookup; it stays async because its callers await it
+ * and because a future adapter may genuinely need loading.
  */
 export async function loadAdapterModule(name: ProviderName): Promise<ProviderAdapter> {
-  switch (name) {
-    case 'gcp':
-      return (await import('../providers/gcp/index.js')).default
-    case 'aws':
-      return (await import('../providers/aws/index.js')).default
-    case 'azure':
-      return (await import('../providers/azure/index.js')).default
-    case 'local':
-      return (await import('../providers/local/index.js')).default
-    default:
-      throw new UsageError(
-        `Provider "${name}" is not yet supported. Supported providers: gcp, aws, azure, local`,
-      )
-  }
+  return loadProvider(name)
 }
 
-const NOT_LOADED =
-  'Provider not yet loaded. Await `getStack()`, or `loadAdapterModule(provider)` when no stack ' +
-  'is needed, before calling this.'
-
-function loadProvider(name: ProviderName): ProviderAdapter {
-  return makeProviderProxy(name)
-}
-
-function makeProviderProxy(name: ProviderName): ProviderAdapter {
-  let resolved: ProviderAdapter | null = null
-
-  const resolve = async (): Promise<ProviderAdapter> => {
-    if (resolved) return resolved
-    resolved = await loadAdapterModule(name)
-    return resolved
-  }
-
-  // Return a synchronous-looking adapter that lazily loads on first async call
-  return {
-    name,
-    get program() {
-      return async () => {
-        const adapter = await resolve()
-        return adapter.program()
-      }
-    },
-    getConnectionInfo: (outputs) => {
-      if (!resolved) throw new UsageError(NOT_LOADED)
-      return resolved.getConnectionInfo(outputs)
-    },
-    normalizeInstanceType: (alias) => {
-      if (!resolved) throw new UsageError(NOT_LOADED)
-      return resolved.normalizeInstanceType(alias)
-    },
-    defaultRegion: () => {
-      if (!resolved) throw new UsageError(NOT_LOADED)
-      return resolved.defaultRegion()
-    },
-    stateBackendUrl: (bucket) => {
-      if (!resolved) throw new UsageError(NOT_LOADED)
-      return resolved.stateBackendUrl(bucket)
-    },
-    validateConfig: () => resolve().then((a) => a.validateConfig()),
-  }
-}
