@@ -97,5 +97,14 @@ async function autoCidr(
     )
   }
   const ip = result.ip.trim()
-  return ip.includes('/') ? ip : `${ip}/32`
+  const cidr = ip.includes('/') ? ip : `${ip}/32`
+  // Belt and braces: detection validates its own response, and this is the last point before
+  // the value becomes a firewall rule in a file someone will approve.
+  if (!isCidr(cidr)) {
+    throw new UsageError(
+      `${flag} auto: the detected address "${ip}" is not usable as a CIDR. ` +
+        'Pass the CIDR explicitly, e.g. 203.0.113.4/32.',
+    )
+  }
+  return cidr
 }

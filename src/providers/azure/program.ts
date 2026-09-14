@@ -49,7 +49,7 @@ export const azureProgram: PulumiFn = async () => {
 
   // Detect egress IP for 'auto' mode using a provider-neutral service.
   const egressResult = accessMode === 'auto'
-    ? await detectEgressIp('https://ifconfig.me')
+    ? await detectEgressIp('https://ifconfig.me/ip')
     : { ok: true as const, ip: '' }
 
   if (accessMode === 'open') {

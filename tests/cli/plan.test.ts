@@ -202,7 +202,7 @@ describe('plan network flags', () => {
 
   it('resolves --ssh-cidr auto at plan time, so the plan says which address it admits', async () => {
     await (cmd.run as AnyRunFn)({ args: { 'ssh-cidr': 'auto' } })
-    expect(mockDetectEgressIp).toHaveBeenCalledWith('https://ifconfig.me')
+    expect(mockDetectEgressIp).toHaveBeenCalledWith('https://ifconfig.me/ip')
     expect(intent().network).toMatchObject({ allowedSshCidrs: ['203.0.113.4/32'] })
   })
 

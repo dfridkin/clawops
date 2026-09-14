@@ -1,7 +1,7 @@
 // Unit tests for the `init` command.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
@@ -15,6 +15,26 @@ async function getCmd() {
   return cmd
 }
 
+
+// `clawops init` generates a key and writes a config. Three tests here asserted only that it
+// throws, and it throws *after* creating the config directory — so running this suite wrote an
+// SSH key into the developer's real ~/.clawops. It is also what made the doctor suite pass
+// locally and fail in CI: the key it found had been left there by this file.
+//
+// Every test gets its own CLAWOPS_HOME, whether it asked for one or not.
+let suiteHome: string
+const savedHome = { value: undefined as string | undefined }
+
+beforeEach(() => {
+  savedHome.value = process.env['CLAWOPS_HOME']
+  suiteHome = mkdtempSync(path.join(os.tmpdir(), 'clawops-init-suite-'))
+  process.env['CLAWOPS_HOME'] = suiteHome
+})
+afterEach(() => {
+  if (savedHome.value === undefined) delete process.env['CLAWOPS_HOME']
+  else process.env['CLAWOPS_HOME'] = savedHome.value
+  rmSync(suiteHome, { recursive: true, force: true })
+})
 
 describe('init command — cloud providers', () => {
   beforeEach(() => {
@@ -228,6 +248,99 @@ describe('init command — local provider', () => {
       if (prevHome === undefined) delete process.env['CLAWOPS_HOME']
       else process.env['CLAWOPS_HOME'] = prevHome
       rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('the generated SSH key', () => {
+  it('is one ssh2 can parse — the library every clawops SSH command uses', async () => {
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'clawops-init-test-'))
+    const saved = process.env['CLAWOPS_HOME']
+    process.env['CLAWOPS_HOME'] = tmpDir
+    try {
+      const cmd = (await import('../../src/cli/commands/init.js')).default
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (cmd.run as any)({ args: { provider: 'local', host: 'example.com' } })
+
+      const ssh2 = (await import('ssh2')).default
+      const parsed = ssh2.utils.parseKey(readFileSync(path.join(tmpDir, 'id_ed25519')))
+      // `crypto.generateKeyPairSync` writes a PKCS#8 PEM — a valid ed25519 key that ssh2
+      // cannot parse and OpenSSH calls "invalid format". init produced one of those, so the
+      // key it generated could not be used by the tool that generated it.
+      expect(parsed).not.toBeInstanceOf(Error)
+      expect((parsed as { type: string }).type).toBe('ssh-ed25519')
+    } finally {
+      if (saved === undefined) delete process.env['CLAWOPS_HOME']
+      else process.env['CLAWOPS_HOME'] = saved
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('writes the .pub beside it', async () => {
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'clawops-init-test-'))
+    const saved = process.env['CLAWOPS_HOME']
+    process.env['CLAWOPS_HOME'] = tmpDir
+    try {
+      const cmd = (await import('../../src/cli/commands/init.js')).default
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (cmd.run as any)({ args: { provider: 'local', host: 'example.com' } })
+      expect(readFileSync(path.join(tmpDir, 'id_ed25519.pub'), 'utf-8')).toMatch(/^ssh-ed25519 /)
+    } finally {
+      if (saved === undefined) delete process.env['CLAWOPS_HOME']
+      else process.env['CLAWOPS_HOME'] = saved
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('init and the filesystem it writes to', () => {
+  it('generates the key before it validates --host, and puts it under CLAWOPS_HOME', async () => {
+    // init creates the config directory and key, then throws. Three tests in this file
+    // exercise that path, and without the suite's own CLAWOPS_HOME they wrote an SSH key into
+    // the developer's real ~/.clawops — which is what made the doctor suite pass locally and
+    // fail in CI.
+    const cmd = await getCmd()
+    const { UsageError } = await import('../../src/errors/index.js')
+    await expect(
+      (cmd.run as AnyRunFn)({ args: { provider: 'local', 'non-interactive': true } }),
+    ).rejects.toBeInstanceOf(UsageError)
+    expect(existsSync(path.join(suiteHome, 'id_ed25519'))).toBe(true)
+  })
+
+  it('refuses rather than reporting success when ssh-keygen fails', async () => {
+    vi.resetModules()
+    vi.doMock('node:child_process', () => ({
+      spawnSync: () => ({ status: 1, stderr: Buffer.from('ssh-keygen: not found'), error: undefined }),
+    }))
+    try {
+      const cmd = (await import('../../src/cli/commands/init.js')).default
+      // Carrying on would write a config pointing at a key that does not exist, and the
+      // failure would surface much later as a connection error.
+      await expect(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (cmd.run as any)({ args: { provider: 'gcp', 'non-interactive': true } }),
+      ).rejects.toThrow(/Could not generate an SSH key.*ssh-keygen: not found/s)
+      expect(existsSync(path.join(suiteHome, 'config.json'))).toBe(false)
+    } finally {
+      vi.doUnmock('node:child_process')
+      vi.resetModules()
+    }
+  })
+
+  it('names the manual way out when it cannot generate one', async () => {
+    vi.resetModules()
+    vi.doMock('node:child_process', () => ({
+      spawnSync: () => ({ status: null, stderr: undefined, error: new Error('spawn ENOENT') }),
+    }))
+    try {
+      const cmd = (await import('../../src/cli/commands/init.js')).default
+      await expect(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (cmd.run as any)({ args: { provider: 'gcp', 'non-interactive': true } }),
+      ).rejects.toThrow(/ssh-keygen -t ed25519[\s\S]*clawops init --key-path/)
+    } finally {
+      vi.doUnmock('node:child_process')
+      vi.resetModules()
     }
   })
 })

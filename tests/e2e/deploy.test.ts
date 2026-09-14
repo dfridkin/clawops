@@ -2,6 +2,12 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// The SSH key never comes from the machine running the tests. `~/.ssh/id_ed25519` exists on
+// a developer's laptop and not on a CI runner, and these suites passed locally and failed
+// there for exactly that reason.
+vi.mock('../../src/plan/ssh-key.js', () => ({
+  resolvePublicKey: () => 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFIXTURE clawops',
+}))
 vi.mock('../../src/cli/context.js', () => ({ buildContext: vi.fn() }))
 vi.mock('../../src/config/store.js', () => ({
   getConfig: vi.fn(),

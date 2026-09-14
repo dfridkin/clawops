@@ -384,6 +384,37 @@ way. `clawops doctor` reports which one it found, from where, and at what versio
 
 See [ADR 0010](docs/decisions/0010-pulumi-cli-bootstrap.md), which supersedes ADR 0006.
 
+### `plan` → `apply` had never deployed anything
+
+Fixed in 2.0.1. Three things stood between a plan and an instance, and each hid the next:
+
+**Stack config was written twice, differently.** `plan` set three keys before its preview;
+`apply` set six. Neither set `sshPublicKey`, which every cloud program requires and refuses to
+run without — so the preview failed on every cloud plan ever generated, reported as one line:
+
+```
+[clawops] Warning: preview failed, diff section omitted
+```
+
+and the plan's `diff` section was quietly empty. Both sides now write stack config through the
+same function, so a preview shows what an apply would do.
+
+**The plan did not record the key.** It does now, in `spec.ssh.publicKey`, resolved from
+`ssh.keyPath` — the `.pub` beside the private key, or derived from the private key when there
+is none.
+
+**A self-managed state backend needs a passphrase.** `gs://`, `s3://` and Azure Blob have no
+key service behind them, so a new stack cannot create a secrets manager without one and
+`apply` stopped there. clawops generates one at `~/.clawops/secrets/pulumi-passphrase` and
+leaves an operator who sets `PULUMI_CONFIG_PASSPHRASE` alone. **Back that file up** — losing it
+makes that stack's secrets unreadable ([ADR 0011](docs/decisions/0011-state-passphrase.md)).
+
+Along the way: `doctor` now checks that your SSH key is one `ssh2` can actually use — a
+readable PKCS#8 key passed the old check and then failed at every connect — and reports the
+Pulumi CLI and the state passphrase. Egress-IP detection asks for `text/plain`, because
+`ifconfig.me` serves an HTML page to anything that does not look like curl, and the "detected
+IP" was a 4KB document on its way into a firewall rule.
+
 ### The gateway port comes from the plan
 
 ```jsonc

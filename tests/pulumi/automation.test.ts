@@ -1,13 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockCreateOrSelect, mockEnsure } = vi.hoisted(() => ({
+const { mockCreateOrSelect, mockEnsure, mockPassphrase } = vi.hoisted(() => ({
   mockCreateOrSelect: vi.fn(),
   mockEnsure: vi.fn(),
+  mockPassphrase: vi.fn(),
 }))
 vi.mock('@pulumi/pulumi/automation', () => ({
   LocalWorkspace: { createOrSelectStack: mockCreateOrSelect },
 }))
 vi.mock('../../src/pulumi/cli.js', () => ({ ensurePulumiCli: mockEnsure }))
+vi.mock('../../src/pulumi/passphrase.js', () => ({ ensurePassphrase: mockPassphrase }))
 vi.mock('../../src/config/store.js', () => ({ getConfigDir: () => '/default/.clawops' }))
 
 import { getOrCreateStack } from '../../src/pulumi/automation.js'
@@ -18,6 +20,7 @@ const program = async () => ({})
 beforeEach(() => {
   mockCreateOrSelect.mockReset().mockResolvedValue({ name: 'stack' })
   mockEnsure.mockReset().mockResolvedValue(PULUMI_COMMAND)
+  mockPassphrase.mockReset().mockReturnValue('generated-passphrase')
 })
 
 function optsOf() {
@@ -68,5 +71,31 @@ describe('getOrCreateStack', () => {
       projectName: 'clawops',
     })
     expect(optsOf()['envVars']).toMatchObject({ PULUMI_BACKEND_URL: 's3://b/clawops' })
+  })
+})
+
+describe('the state passphrase', () => {
+  it('is passed to the workspace, since a self-managed backend cannot create a stack without one', async () => {
+    await getOrCreateStack({ stack: 'prod', stateUrl: 'gs://b/clawops', program })
+    expect((optsOf()['envVars'] as Record<string, string>)['PULUMI_CONFIG_PASSPHRASE']).toBe(
+      'generated-passphrase',
+    )
+  })
+
+  it('is left out entirely when the operator supplies their own', async () => {
+    // Setting ours over theirs would make their existing stacks undecryptable.
+    mockPassphrase.mockReturnValue(undefined)
+    await getOrCreateStack({ stack: 'prod', stateUrl: 'gs://b/clawops', program })
+    expect(optsOf()['envVars']).not.toHaveProperty('PULUMI_CONFIG_PASSPHRASE')
+  })
+
+  it('is resolved against the same config dir as everything else', async () => {
+    await getOrCreateStack({
+      stack: 'prod',
+      stateUrl: 'gs://b/clawops',
+      program,
+      configDir: '/home/u/.clawops',
+    })
+    expect(mockPassphrase).toHaveBeenCalledWith('/home/u/.clawops')
   })
 })

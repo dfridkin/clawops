@@ -150,3 +150,52 @@ describe('detectEgressIp', () => {
     expect(result).toEqual({ ok: true, ip: '10.0.0.1' })
   })
 })
+
+describe('detectEgressIp — responses that are not an address', () => {
+  it('asks for text, because ifconfig.me serves HTML to anything that is not curl', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('203.0.113.42\n', { status: 200 }),
+    )
+    await detectEgressIp('https://ifconfig.me/ip')
+    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit
+    expect((init.headers as Record<string, string>)['accept']).toBe('text/plain')
+  })
+
+  it('refuses an HTML page instead of reporting it as an IP', async () => {
+    // This shipped: the "detected IP" was a 4KB document, and it travelled into a plan as a
+    // firewall rule because the value was never checked for being an address.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('<!DOCTYPE html>\n<html><body>203.0.113.42</body></html>', { status: 200 }),
+    )
+    const result = await detectEgressIp('https://ifconfig.me')
+    expect(result.ok).toBe(false)
+    expect((result as { ok: false; error: string }).error).toMatch(/did not return an IP address/)
+  })
+
+  it('quotes only a fragment of an unexpected body, never the whole thing', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('x'.repeat(4096), { status: 200 }))
+    const result = await detectEgressIp('https://ifconfig.me')
+    expect((result as { ok: false; error: string }).error.length).toBeLessThan(120)
+  })
+
+  it('accepts a plain IPv4 address', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('203.0.113.42', { status: 200 }))
+    await expect(detectEgressIp('u')).resolves.toEqual({ ok: true, ip: '203.0.113.42' })
+  })
+
+  it('accepts IPv6', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('2001:db8::1', { status: 200 }))
+    await expect(detectEgressIp('u')).resolves.toEqual({ ok: true, ip: '2001:db8::1' })
+  })
+
+  it('refuses an octet out of range', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('999.0.113.42', { status: 200 }))
+    expect((await detectEgressIp('u')).ok).toBe(false)
+  })
+
+  it('refuses an address that arrives with a prefix already attached', async () => {
+    // Callers append /32 themselves; a value that already has one would become a /32/32.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('203.0.113.42/32', { status: 200 }))
+    expect((await detectEgressIp('u')).ok).toBe(false)
+  })
+})
