@@ -1,13 +1,13 @@
 // Maker plan apply — per SPEC.md §12.6.
 
 import { buildContext } from '../cli/context.js'
+import process from 'node:process'
 import { UsageError } from '../errors/index.js'
 import { validatePlan } from './validate.js'
 import { resolveSecrets } from './secrets.js'
 import { saveOverlay } from './overlay-store.js'
 import { readRemoteConfig, atomicWriteConfig, restartGateway, deepMerge } from './remote-config.js'
 import type { DeployPlan } from './generate.js'
-import type { StackOutputs } from '../providers/types.js'
 import { writeStackConfig } from './stack-config.js'
 
 export interface ApplyPlanOpts {
@@ -88,17 +88,10 @@ export async function applyPlan(
   // line, the gateway URL and the public IP while every command that followed failed with
   // ECONNREFUSED, including its own config overlay a few lines below this.
   const { waitForSsh } = await import('../transport/wait.js')
-  const connInfo = ctx.adapter.getConnectionInfo(outputs as StackOutputs)
-  await waitForSsh(
-    {
-      host: connInfo.host,
-      port: connInfo.port,
-      user: connInfo.user,
-      privateKeyPath: connInfo.privateKeyPath,
-      knownHostsPath: connInfo.knownHostsPath,
-    },
-    { signal: opts?.signal, onProgress: (line) => opts?.onOutput?.(line) },
-  )
+  await waitForSsh(await connectionInfoFor(ctx, outputs), {
+    signal: opts?.signal,
+    onProgress: (line) => opts?.onOutput?.(line),
+  })
 
   // Post-provisioning: write config overlay + channels to the remote openclaw.json.
   const hasOverlay = plan.spec.openclaw.config !== undefined || plan.spec.openclaw.channels !== undefined
@@ -113,6 +106,42 @@ export async function applyPlan(
   }
 }
 
+/**
+ * Where the instance is, and which key opens it.
+ *
+ * `getConnectionInfo` reads `privateKeyPath` and `knownHostsPath` out of the object it is
+ * handed, and a stack's outputs do not contain them — they are the operator's, from
+ * `~/.clawops/config.json`. Every other caller merges them in first; apply passed raw outputs,
+ * so it built a connection with an empty key path:
+ *
+ *   Cannot read SSH private key at : ENOENT: no such file or directory, open ''
+ *
+ * That was true of the config-overlay step from the beginning. It had simply never run against
+ * a real deployment.
+ */
+async function connectionInfoFor(
+  ctx: Awaited<ReturnType<typeof buildContext>>,
+  outputs: Record<string, unknown>,
+): Promise<{
+  host: string
+  port: number
+  user: string
+  privateKeyPath: string
+  knownHostsPath: string
+}> {
+  const { extractBaseOutputs } = await import('../pulumi/outputs.js')
+  return ctx.adapter.getConnectionInfo({
+    ...extractBaseOutputs(outputs),
+    privateKeyPath: expandHome(ctx.config.ssh.keyPath),
+    knownHostsPath: expandHome(ctx.config.ssh.knownHostsPath),
+  })
+}
+
+/** `~` in a configured path is the operator's home, not a directory called "~". */
+function expandHome(p: string): string {
+  return p.replace(/^~/, process.env['HOME'] ?? '~')
+}
+
 async function applyConfigOverlay(
   plan: DeployPlan,
   outputs: Record<string, unknown>,
@@ -121,15 +150,7 @@ async function applyConfigOverlay(
 ): Promise<void> {
   const { connect } = await import('../transport/ssh.js')
 
-  const connInfo = ctx.adapter.getConnectionInfo(outputs as StackOutputs)
-  const session = await connect({
-    host: connInfo.host,
-    port: connInfo.port,
-    user: connInfo.user,
-    privateKeyPath: connInfo.privateKeyPath,
-    knownHostsPath: connInfo.knownHostsPath,
-    signal,
-  })
+  const session = await connect({ ...(await connectionInfoFor(ctx, outputs)), signal })
 
   try {
     const remote = await readRemoteConfig(session, signal)
