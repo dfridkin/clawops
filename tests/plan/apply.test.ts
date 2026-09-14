@@ -5,8 +5,10 @@ const { mockWaitForSsh, mockConnect } = vi.hoisted(() => ({
   mockWaitForSsh: vi.fn(),
   mockConnect: vi.fn(),
 }))
-// The overlay step opens a real session; without this the suite dials 1.2.3.4 and times out.
+// The overlay and readiness steps open real sessions; without this the suite dials 1.2.3.4.
 vi.mock('../../src/transport/ssh.js', () => ({ connect: mockConnect }))
+const { mockWaitForGateway } = vi.hoisted(() => ({ mockWaitForGateway: vi.fn() }))
+vi.mock('../../src/openclaw/ready.js', () => ({ waitForGateway: mockWaitForGateway }))
 vi.mock('../../src/transport/wait.js', () => ({ waitForSsh: mockWaitForSsh }))
 vi.mock('../../src/cli/context.js', () => ({
   buildContext: vi.fn(),
@@ -74,7 +76,8 @@ const basePlan = {
 
 beforeEach(async () => {
   mockWaitForSsh.mockReset().mockResolvedValue(undefined)
-  mockConnect.mockReset().mockRejectedValue(new Error('no host in a unit test'))
+  mockConnect.mockReset().mockResolvedValue({ close: vi.fn(), exec: vi.fn() })
+  mockWaitForGateway.mockReset().mockResolvedValue({ waitedMs: 0, lastContainerStatus: 'running' })
   vi.clearAllMocks()
 
   mockUp.mockResolvedValue({
@@ -378,5 +381,66 @@ describe('the connection apply waits on', () => {
     const conn = mockWaitForSsh.mock.calls[0]?.[0] as { privateKeyPath: string }
     // ssh2 opens the path verbatim; "~" is a directory name to it.
     expect(conn.privateKeyPath.startsWith('~')).toBe(false)
+  })
+})
+
+describe('applyPlan waits for the deployment, not just the machine', () => {
+  it('waits for the gateway before reporting success', async () => {
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan)
+    // A reachable machine is not a working deployment: the startup script is still pulling a
+    // ~3GB image, and every command clawops offers next assumes a gateway that answers.
+    expect(mockWaitForGateway).toHaveBeenCalled()
+  })
+
+  it('waits for SSH first — the probe runs over it', async () => {
+    const order: string[] = []
+    mockWaitForSsh.mockImplementation(async () => void order.push('ssh'))
+    mockWaitForGateway.mockImplementation(async () => {
+      order.push('gateway')
+      return { waitedMs: 0, lastContainerStatus: 'running' }
+    })
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan)
+    expect(order).toEqual(['ssh', 'gateway'])
+  })
+
+  it('probes the port the plan published', async () => {
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan({
+      ...basePlan,
+      spec: {
+        ...basePlan.spec,
+        network: { allowedSshCidrs: [], allowedGatewayCidrs: [], gatewayPort: 9999 },
+      },
+    } as unknown as typeof basePlan)
+    expect(mockWaitForGateway).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ port: 9999 }),
+    )
+  })
+
+  it('fails the apply when the gateway never answers', async () => {
+    mockWaitForGateway.mockRejectedValue(new Error('The OpenClaw gateway did not answer'))
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await expect(applyPlan(basePlan)).rejects.toThrow(/gateway did not answer/)
+  })
+
+  it('closes the session it opened for the probe', async () => {
+    const close = vi.fn()
+    mockConnect.mockResolvedValue({ close, exec: vi.fn() })
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan)
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('closes it even when the gateway never answers', async () => {
+    const close = vi.fn()
+    mockConnect.mockResolvedValue({ close, exec: vi.fn() })
+    mockWaitForGateway.mockRejectedValue(new Error('timed out'))
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await expect(applyPlan(basePlan)).rejects.toThrow()
+    // One leaked SSH session per failed apply otherwise.
+    expect(close).toHaveBeenCalled()
   })
 })
