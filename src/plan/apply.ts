@@ -72,6 +72,15 @@ export async function applyPlan(
   // SSH — which is every day-two command.
   //
   // `accessMode: restricted` is the deny-all default (N10). The CIDRs decide what opens.
+  // GCP resolves the project from ambient config, so a deploy could land in whichever project
+  // the environment happened to name — not necessarily the one preflight checked APIs and the
+  // state bucket in. Pinning it here makes the two agree.
+  if (plan.spec.provider === 'gcp') {
+    const { resolveProjectId } = await import('../providers/gcp/preflight.js')
+    const project = resolveProjectId()
+    if (project) await stack.setConfig('gcp:project', { value: project })
+  }
+
   await stack.setConfig('accessMode', { value: 'restricted' })
   await stack.setConfig('sshCidrs', {
     value: (plan.spec.network?.allowedSshCidrs ?? []).join(','),

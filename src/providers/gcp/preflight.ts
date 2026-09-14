@@ -13,6 +13,8 @@
 // which is a fine error message to get before provisioning and a poor one to get during it.
 
 import process from 'node:process'
+import path from 'node:path'
+import { readFileSync } from 'node:fs'
 import type { PreflightCheck, PreflightOpts } from '../types.js'
 
 /** Every API the Pulumi program's resources need. */
@@ -34,13 +36,83 @@ async function accessToken(): Promise<string | undefined> {
   }
 }
 
+/**
+ * The project a deploy will land in.
+ *
+ * The env vars come first and in the Pulumi GCP provider's own order, so preflight resolves
+ * what the deploy resolves. `GOOGLE_PROJECT` was missing from this list and is the provider's
+ * first choice.
+ *
+ * gcloud's configured project is last, and is read here because this check's own remedy told
+ * the operator to set it — `gcloud config set project` is the obvious thing to do and did
+ * nothing, since the provider never reads gcloud's config. Rather than withdraw the advice,
+ * clawops honours it: the resolved project is written to stack config as `gcp:project` during
+ * apply, so the deploy uses the value this check measured instead of whatever the environment
+ * happens to hold later.
+ */
 export function resolveProjectId(): string | undefined {
   return (
+    process.env['GOOGLE_PROJECT'] ??
     process.env['GOOGLE_CLOUD_PROJECT'] ??
     process.env['GCLOUD_PROJECT'] ??
     process.env['CLOUDSDK_CORE_PROJECT'] ??
+    gcloudConfiguredProject() ??
     undefined
   )
+}
+
+/**
+ * `core/project` from the active gcloud configuration, read from disk rather than by spawning
+ * gcloud: the file is a documented layout, and clawops should not require the CLI on PATH to
+ * answer a question about a file.
+ *
+ * Honours CLOUDSDK_CONFIG (the config directory) and CLOUDSDK_ACTIVE_CONFIG_NAME (which
+ * configuration is active), the two env vars gcloud itself uses to redirect this.
+ */
+export function gcloudConfiguredProject(): string | undefined {
+  try {
+    const home = process.env['HOME'] ?? process.env['USERPROFILE']
+    const dir =
+      process.env['CLOUDSDK_CONFIG'] ?? (home ? path.join(home, '.config', 'gcloud') : undefined)
+    if (!dir) return undefined
+
+    const active =
+      process.env['CLOUDSDK_ACTIVE_CONFIG_NAME'] ??
+      readFileSync(path.join(dir, 'active_config'), 'utf-8').trim() ??
+      'default'
+    if (!active) return undefined
+
+    const ini = readFileSync(path.join(dir, 'configurations', `config_${active}`), 'utf-8')
+    return projectFromIni(ini)
+  } catch {
+    // No gcloud, no config, unreadable file — all mean "no answer", never an error. This is
+    // the last fallback in a chain, not a requirement.
+    return undefined
+  }
+}
+
+/**
+ * `project = <id>` from the `[core]` section. Sections matter: `project` under `[compute]` or
+ * any other section is a different setting.
+ */
+export function projectFromIni(ini: string): string | undefined {
+  let section = ''
+  for (const line of ini.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (trimmed === '' || trimmed.startsWith('#') || trimmed.startsWith(';')) continue
+    const header = /^\[(.+)\]$/.exec(trimmed)
+    if (header) {
+      section = header[1]?.trim() ?? ''
+      continue
+    }
+    if (section !== 'core') continue
+    const eq = trimmed.indexOf('=')
+    if (eq === -1) continue
+    if (trimmed.slice(0, eq).trim() !== 'project') continue
+    const value = trimmed.slice(eq + 1).trim()
+    return value === '' ? undefined : value
+  }
+  return undefined
 }
 
 export async function gcpPreflight(opts: PreflightOpts = {}): Promise<PreflightCheck[]> {
@@ -55,7 +127,7 @@ export async function gcpPreflight(opts: PreflightOpts = {}): Promise<PreflightC
     ok: Boolean(project),
     detail: project
       ? `Deploying into ${project}`
-      : 'No project resolved. Set GOOGLE_CLOUD_PROJECT, or run `gcloud config set project <id>`.',
+      : 'No project resolved. Run `gcloud config set project <id>`, or set GOOGLE_PROJECT.',
   })
   if (!project) return checks
 

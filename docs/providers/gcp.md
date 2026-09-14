@@ -15,7 +15,7 @@ export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 # No env var needed — detected automatically
 
 # 2. Set your GCP project
-export CLOUDSDK_CORE_PROJECT=my-project-id   # or: gcloud config set project my-project-id
+gcloud config set project my-project-id      # or: export GOOGLE_PROJECT=my-project-id
 
 # 3. Initialize clawops for GCP
 clawops init --provider gcp --region us-central1 --state gs://my-bucket/clawops
@@ -23,6 +23,26 @@ clawops init --provider gcp --region us-central1 --state gs://my-bucket/clawops
 # 4. Deploy
 clawops up
 ```
+
+## Which project clawops deploys into
+
+Resolved in this order, the first answer winning:
+
+| Source | Notes |
+|---|---|
+| `GOOGLE_PROJECT` | The Pulumi GCP provider's own first choice |
+| `GOOGLE_CLOUD_PROJECT` | |
+| `GCLOUD_PROJECT` | |
+| `CLOUDSDK_CORE_PROJECT` | |
+| `core/project` in the active gcloud configuration | What `gcloud config set project` writes. Read from `$CLOUDSDK_CONFIG` (default `~/.config/gcloud`), following `active_config` |
+
+`clawops doctor` names the project it resolved, and `clawops apply` pins it as the stack's
+`gcp:project` — so the deploy lands in the project whose APIs and state bucket were checked,
+rather than in whichever project the environment happens to name at apply time.
+
+Nothing is resolved from the credentials themselves: a service-account key names a project,
+but the project you authenticate *as* and the project you deploy *into* are different
+questions.
 
 ## Credentials
 

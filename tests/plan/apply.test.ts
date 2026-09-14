@@ -126,6 +126,29 @@ describe('applyPlan()', () => {
     expect(mockSetConfig).toHaveBeenCalledWith('accessMode', { value: 'restricted' })
   })
 
+  it('pins the GCP project so the deploy lands where preflight looked', async () => {
+    vi.stubEnv('GOOGLE_PROJECT', 'clawops-test')
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan({
+      ...basePlan,
+      spec: { ...basePlan.spec, provider: 'gcp' },
+    } as unknown as typeof basePlan)
+
+    // GCP resolves the project from ambient config, so without this a deploy could land in
+    // whichever project the environment named — not the one whose APIs and state bucket
+    // `doctor` checked.
+    expect(mockSetConfig).toHaveBeenCalledWith('gcp:project', { value: 'clawops-test' })
+    vi.unstubAllEnvs()
+  })
+
+  it('does not pin a GCP project on another provider', async () => {
+    vi.stubEnv('GOOGLE_PROJECT', 'clawops-test')
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan)
+    expect(mockSetConfig).not.toHaveBeenCalledWith('gcp:project', expect.anything())
+    vi.unstubAllEnvs()
+  })
+
   it('passes gateway CIDRs when the plan publishes the gateway', async () => {
     const { applyPlan } = await import('../../src/plan/apply.js')
     await applyPlan({
