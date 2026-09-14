@@ -102,6 +102,56 @@ describe('applyPlan()', () => {
     expect(mockSetConfig).toHaveBeenCalledWith('openclawVersion', { value: '2026.9.2' })
   })
 
+  it('passes the plan\'s firewall rules to Pulumi', async () => {
+    // apply validated these, printed them in the plan summary, and then dropped them. Every
+    // program reads them from stack config, so an empty value meant resolveIngressCidrs
+    // returned [] and the stack was created with NO ingress rules — not a weaker rule, none.
+    // clawops builds its own VPC, so nothing else opens SSH, and the instance was
+    // unreachable by every day-two command.
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan({
+      ...basePlan,
+      spec: {
+        ...basePlan.spec,
+        network: {
+          allowedSshCidrs: ['203.0.113.4/32', '10.0.0.0/8'],
+          allowedGatewayCidrs: [],
+        },
+      },
+    } as unknown as typeof basePlan)
+
+    expect(mockSetConfig).toHaveBeenCalledWith('sshCidrs', { value: '203.0.113.4/32,10.0.0.0/8' })
+    expect(mockSetConfig).toHaveBeenCalledWith('gatewayCidrs', { value: '' })
+    // Deny-all is the default the CIDRs open holes in (N10).
+    expect(mockSetConfig).toHaveBeenCalledWith('accessMode', { value: 'restricted' })
+  })
+
+  it('passes gateway CIDRs when the plan publishes the gateway', async () => {
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan({
+      ...basePlan,
+      spec: {
+        ...basePlan.spec,
+        network: {
+          allowedSshCidrs: ['203.0.113.4/32'],
+          allowedGatewayCidrs: ['203.0.113.4/32'],
+          publishGateway: 'all',
+        },
+      },
+    } as unknown as typeof basePlan)
+
+    expect(mockSetConfig).toHaveBeenCalledWith('gatewayCidrs', { value: '203.0.113.4/32' })
+    expect(mockSetConfig).toHaveBeenCalledWith('publishGateway', { value: 'all' })
+  })
+
+  it('sends empty CIDRs rather than omitting them, when the plan has no network', async () => {
+    // An omitted key and an empty one are the same to the program, but sending it explicitly
+    // keeps the stack config a faithful copy of the plan rather than a partial one.
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan)
+    expect(mockSetConfig).toHaveBeenCalledWith('sshCidrs', { value: '' })
+  })
+
   it('omits region setConfig when plan has no region', async () => {
     const { applyPlan } = await import('../../src/plan/apply.js')
     const planNoRegion = { ...basePlan, spec: { ...basePlan.spec, region: undefined } }

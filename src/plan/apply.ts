@@ -64,6 +64,22 @@ export async function applyPlan(
     value: String(plan.spec.network?.gatewayPort ?? GATEWAY_PORT),
   })
 
+  // The plan's firewall rules, which apply used to validate, print, and then drop on the
+  // floor. Every Pulumi program reads these from stack config — `cfg.get('sshCidrs')` and
+  // friends — so without them `resolveIngressCidrs` returned an empty list and the stack was
+  // created with NO ingress rules at all. Not a weaker rule: none. clawops builds its own
+  // VPC, so there is no default rule to fall back on, and the instance was unreachable by
+  // SSH — which is every day-two command.
+  //
+  // `accessMode: restricted` is the deny-all default (N10). The CIDRs decide what opens.
+  await stack.setConfig('accessMode', { value: 'restricted' })
+  await stack.setConfig('sshCidrs', {
+    value: (plan.spec.network?.allowedSshCidrs ?? []).join(','),
+  })
+  await stack.setConfig('gatewayCidrs', {
+    value: (plan.spec.network?.allowedGatewayCidrs ?? []).join(','),
+  })
+
   // Enable Bedrock IAM attachment when the plan selects the bedrock provider.
   const modelProvider = (plan.spec.openclaw.config?.['models'] as Record<string, unknown> | undefined)?.['provider']
   if (modelProvider === 'bedrock') {
