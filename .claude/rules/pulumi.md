@@ -6,7 +6,7 @@ globs:
 
 # Pulumi rules
 
-1. **Embedded engine only:** Use `LocalWorkspace` from `@pulumi/pulumi/automation`. Never shell out to the `pulumi` binary. No `pulumi.yaml` written to disk — programs are inline closures.
+1. **Go through `LocalWorkspace`:** Use `LocalWorkspace` from `@pulumi/pulumi/automation`, never a hand-rolled `pulumi` invocation. The Automation API spawns the CLI itself; `getOrCreateStack` resolves which binary via `src/pulumi/cli.ts` and passes it as `pulumiCommand`, so no code outside that module names the binary. No `pulumi.yaml` written to disk — programs are inline closures. (ADR 0010)
 
 2. **pulumiHome sandboxed:** Always set `pulumiHome: path.join(configDir, '.pulumi')` to avoid clobbering the user's other Pulumi projects.
 

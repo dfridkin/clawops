@@ -208,7 +208,7 @@ clawops/
 | Command Handlers | Orchestrate a single verb (up, down, etc.) | `src/cli/commands/` | All output via `output/*.ts` only |
 | MCP Server | Expose every command as MCP tool + composite workflows | `src/mcp/` | R1–R25 |
 | Plan/Apply | Generate, validate, apply Maker plans | `src/plan/` | Borrowed from Clanker pattern |
-| Pulumi Engine | Stack lifecycle via Automation API | `src/pulumi/automation.ts` | Embedded engine, no user-installed Pulumi |
+| Pulumi Engine | Stack lifecycle via Automation API | `src/pulumi/automation.ts` | CLI installed by clawops into `~/.clawops/.pulumi-cli`, never by the user (ADR 0010) |
 | Provider Adapters | Cloud-specific provisioning + connection info | `src/providers/<name>/` | R6 (env credentials), R-meta-1 (schema-validated) |
 | SSH Transport | Remote command exec, log streaming, port forward | `src/transport/` | R13 (cancellation) |
 | State Backend | Per-stack JSON state in cloud blob | Pulumi-managed | Configured via `clawops init` |

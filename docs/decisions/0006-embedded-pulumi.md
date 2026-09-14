@@ -1,8 +1,14 @@
 # ADR 0006 — Embedded Pulumi Automation API (Not User-Installed Pulumi CLI)
 
-**Status:** Accepted
+**Status:** Superseded by [ADR 0010](0010-pulumi-cli-bootstrap.md)
 **Date:** 2026-05-04
 **Deciders:** Project author
+
+> **Superseded.** Its central premise is false: `@pulumi/pulumi/automation` is a client for
+> the Pulumi CLI, not an embedded engine — it spawns the binary for every operation. The
+> conclusion (the user installs nothing) still holds, but only because clawops now installs the
+> CLI itself. See [ADR 0010](0010-pulumi-cli-bootstrap.md). Kept for the rationale against
+> direct SDKs, which is unaffected.
 
 ## Context
 

@@ -20,6 +20,8 @@ vi.mock('../../src/providers/gcp/index.js', () => ({}))
 vi.mock('../../src/providers/azure/index.js', () => ({}))
 vi.mock('../../src/providers/local/index.js', () => ({}))
 vi.mock('../../src/transport/pool.js', () => ({ acquireSession: vi.fn(), drainPool: vi.fn() }))
+const { mockCliStatus } = vi.hoisted(() => ({ mockCliStatus: vi.fn() }))
+vi.mock('../../src/pulumi/cli.js', () => ({ pulumiCliStatus: mockCliStatus }))
 vi.mock('../../src/cli/context.js', () => ({
   buildContext: vi.fn(() => ({ adapter: { name: 'aws' } })),
 }))
@@ -87,6 +89,7 @@ function withHost(session: FakeSshSession) {
 }
 
 beforeEach(() => {
+  mockCliStatus.mockReset().mockResolvedValue({ kind: 'managed', version: 'v3.201.0', root: '/tmp/clawops-test/.pulumi-cli' })
   vi.clearAllMocks()
   mockGetConfigDir.mockReturnValue('/tmp/clawops-test')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -279,5 +282,53 @@ describe('summarise', () => {
 
   it('is not ok when any check failed', () => {
     expect(summarise([{ title: 'A', checks: [{ name: 'a', status: 'fail' }] }]).ok).toBe(false)
+  })
+})
+
+describe('the Pulumi CLI check', () => {
+  it('passes with the version and location of our own copy', async () => {
+    mockGetConfig.mockReturnValue(null)
+    mockCliStatus.mockResolvedValue({
+      kind: 'managed',
+      version: 'v3.201.0',
+      root: '/tmp/clawops-test/.pulumi-cli',
+    })
+    const check = find(await runDiagnostics(), 'Pulumi CLI')
+    expect(check?.status).toBe('pass')
+    expect(check?.detail).toBe('v3.201.0 (/tmp/clawops-test/.pulumi-cli)')
+  })
+
+  it('says so when the CLI came from PATH rather than from us', async () => {
+    mockGetConfig.mockReturnValue(null)
+    mockCliStatus.mockResolvedValue({ kind: 'path', version: 'v3.150.0' })
+    const check = find(await runDiagnostics(), 'Pulumi CLI')
+    expect(check?.status).toBe('pass')
+    expect(check?.detail).toBe('v3.150.0 (on PATH)')
+  })
+
+  it('warns when there is none, and names where the first apply will put it', async () => {
+    mockGetConfig.mockReturnValue(null)
+    mockCliStatus.mockResolvedValue({ kind: 'missing' })
+    const report = await runDiagnostics()
+    const check = find(report, 'Pulumi CLI')
+    expect(check?.status).toBe('warn')
+    expect(check?.detail).toBe('not installed')
+    expect(check?.remedy).toContain('/tmp/clawops-test/.pulumi-cli')
+    // A machine that has never deployed is not a broken machine — `ok` stays with the fails.
+    expect(report.ok).toBe(true)
+  })
+
+  it('is measured against the config dir, not the process CWD (R7)', async () => {
+    mockGetConfig.mockReturnValue(null)
+    mockGetConfigDir.mockReturnValue('/elsewhere/.clawops')
+    await runDiagnostics()
+    expect(mockCliStatus).toHaveBeenCalledWith('/elsewhere/.clawops')
+  })
+
+  it('is reported in the Runtime section, beside the other prerequisites', async () => {
+    mockGetConfig.mockReturnValue(null)
+    const report = await runDiagnostics()
+    const runtime = report.sections.find((s) => s.title === 'Runtime')
+    expect(runtime?.checks.map((c) => c.name)).toContain('Pulumi CLI')
   })
 })
