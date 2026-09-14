@@ -245,6 +245,35 @@ class Ssh2Session implements SshSession {
  * Entries are read in standard OpenSSH format, including hashed hostnames and
  * `[host]:port` forms; clawops's own legacy two-field hex lines are still accepted.
  */
+/**
+ * Turn an ssh2 error into something an operator can act on.
+ *
+ * ssh2 says "Host denied (verification failed)", which is accurate and says nothing about what
+ * to do. On a cloud that almost always means a recycled address: the instance that pinned this
+ * key is gone and a new one answers on its IP. `clawops destroy` now forgets the key of an
+ * instance it tears down, so reaching this usually means a host clawops did not destroy — or
+ * one destroyed by an older version.
+ *
+ * The advice stops short of "just delete it": an address changing hands unexpectedly is the
+ * one case where this error is doing its job.
+ */
+export function describeConnectError(
+  message: string,
+  opts: { host: string; port: number; knownHostsPath: string },
+): string {
+  if (!/host.*(denied|verification)/i.test(message)) {
+    return `SSH connection failed: ${message}`
+  }
+  const entry = opts.port === 22 ? opts.host : `[${opts.host}]:${opts.port}`
+  return (
+    `the host key for ${opts.host}:${opts.port} does not match the one recorded in ` +
+    `${opts.knownHostsPath}. If your cloud reassigned this address — the usual cause — drop ` +
+    'the stale entry and retry:\n' +
+    `  ssh-keygen -R ${entry} -f ${opts.knownHostsPath}\n` +
+    'If you did not expect this address to change hands, do not connect.'
+  )
+}
+
 export async function connect(opts: SshConnectOpts): Promise<SshSession> {
   let privateKey: Buffer
   try {
@@ -276,7 +305,7 @@ export async function connect(opts: SshConnectOpts): Promise<SshSession> {
 
     client.on('error', (err) => {
       opts.signal?.removeEventListener('abort', onAbort)
-      reject(new NetworkError(`SSH connection failed: ${err.message}`))
+      reject(new NetworkError(describeConnectError(err.message, opts)))
     })
 
     const config: ConnectConfig = {

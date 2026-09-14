@@ -171,6 +171,36 @@ export function verifyAgainstKnownHosts(
 }
 
 /**
+ * The file without any entry for this host.
+ *
+ * A cloud provider hands out addresses and takes them back: destroy an instance, deploy
+ * another, and the new one can land on the address the old one just released — with a
+ * different host key. Trust-on-first-use then refuses to connect, correctly, and the operator
+ * is stuck with an error about a machine that no longer exists.
+ *
+ * clawops creates these hosts and destroys them, so at the moment it destroys one, that host's
+ * pinned key is stale by construction. Removing it then is precise; loosening verification
+ * would not be.
+ *
+ * Comments, blank lines and every other host's entries are preserved — this file may be the
+ * operator's own `~/.ssh/known_hosts`.
+ */
+export function withoutHost(content: string, host: string, port: number): string {
+  const hostEntry = hostEntryFor(host, port)
+  const kept: string[] = []
+
+  for (const raw of content.split('\n')) {
+    // parseKnownHosts yields nothing for a comment, a blank line or anything malformed, so
+    // those fall through to be kept verbatim — this file may be the operator's own.
+    const [entry] = parseKnownHosts(raw)
+    if (entry && entryMatchesHost(entry, hostEntry)) continue
+    kept.push(raw)
+  }
+
+  return kept.join('\n')
+}
+
+/**
  * Render a standard OpenSSH known_hosts line.
  *
  * Standard format specifically: clawops's private file may be pointed at
