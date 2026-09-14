@@ -1,6 +1,9 @@
 // Azure provider adapter unit tests.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import path from 'node:path'
+import { tmpdir } from 'node:os'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import azureAdapter from '../../../src/providers/azure/index.js'
 import process from 'node:process'
 
@@ -62,12 +65,19 @@ describe('azureAdapter.validateConfig()', () => {
     'AZURE_TENANT_ID',
     'AZURE_CLIENT_SECRET',
     'AZURE_FEDERATED_TOKEN_FILE',
+    'AZURE_CONFIG_DIR',
   ]
   let saved: Record<string, string | undefined> = {}
+  let cliDir: string
 
   beforeEach(() => {
     saved = Object.fromEntries(envVars.map(k => [k, process.env[k]]))
     envVars.forEach(k => delete process.env[k])
+    // An empty config dir, so "no credentials" does not depend on whether whoever runs this
+    // happens to have done `az login`. Two suites passed locally and failed in CI today for
+    // exactly that reason.
+    cliDir = mkdtempSync(path.join(tmpdir(), 'azure-empty-'))
+    process.env['AZURE_CONFIG_DIR'] = cliDir
   })
 
   afterEach(() => {
@@ -75,7 +85,16 @@ describe('azureAdapter.validateConfig()', () => {
       if (saved[k] === undefined) delete process.env[k]
       else process.env[k] = saved[k]
     })
+    rmSync(cliDir, { recursive: true, force: true })
   })
+
+  /** What `az login` leaves on disk. */
+  function writeCliLogin() {
+    writeFileSync(
+      path.join(cliDir, 'azureProfile.json'),
+      JSON.stringify({ subscriptions: [{ id: 'sub-1', name: 'Pay-As-You-Go', isDefault: true }] }),
+    )
+  }
 
   it('returns ok:true when service principal env vars are set', async () => {
     process.env['AZURE_CLIENT_ID'] = 'client-123'
@@ -99,6 +118,35 @@ describe('azureAdapter.validateConfig()', () => {
       const result = await azureAdapter.validateConfig()
       expect(result.ok).toBe(false)
       expect(result.errors[0]).toContain('AZURE_CLIENT_ID')
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it('accepts an `az login`, which is a credential Pulumi will use', async () => {
+    // azure-native falls back to the Azure CLI when no service principal is set, so refusing
+    // this turned away a credential clawops was about to rely on.
+    writeCliLogin()
+    const result = await azureAdapter.validateConfig()
+    expect(result.ok).toBe(true)
+  })
+
+  it('still refuses when the CLI profile has no subscriptions', async () => {
+    // What `az logout` leaves behind.
+    writeFileSync(path.join(cliDir, 'azureProfile.json'), JSON.stringify({ subscriptions: [] }))
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'))
+    try {
+      expect((await azureAdapter.validateConfig()).ok).toBe(false)
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it('names `az login` first in the error, as the thing most people will do', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'))
+    try {
+      const result = await azureAdapter.validateConfig()
+      expect(result.errors[0]).toMatch(/Run `az login`/)
     } finally {
       fetchSpy.mockRestore()
     }

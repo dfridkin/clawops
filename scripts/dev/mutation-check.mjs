@@ -510,6 +510,25 @@ const MUTATIONS = [
   { name: 'a rewritten error stops being recognised as retryable',
     file: 'src/transport/ssh.ts', from: '    return `SSH connection failed: ${message}`', to: '    return `SSH failed: ${message}`', test: 'tests/transport/known-hosts.test.ts' },
 
+  { name: 'azure refuses an `az login` again',
+    file: 'src/providers/azure/index.ts', from: '    const hasCliLogin = Boolean(azureCliAccount())', to: '    const hasCliLogin = false', test: 'tests/providers/azure/adapter.test.ts' },
+  { name: 'a logged-out CLI profile counts as a credential',
+    file: 'src/providers/azure/cli-auth.ts', from: '  if (!chosen) return undefined', to: '  if (!chosen) return { subscriptionId: \'\', name: \'\' }', test: 'tests/providers/azure/cli-auth.test.ts tests/providers/azure/adapter.test.ts' },
+  { name: 'the BOM the Azure CLI writes is left in place',
+    file: 'src/providers/azure/cli-auth.ts', from: "    parsed = JSON.parse(body.replace(/^\\uFEFF/, ''))", to: '    parsed = JSON.parse(body)', test: 'tests/providers/azure/cli-auth.test.ts' },
+  { name: 'the default subscription flag is ignored',
+    file: 'src/providers/azure/cli-auth.ts', from: "  const chosen = entries.find((s) => s['isDefault'] === true) ?? entries[0]", to: '  const chosen = entries[0]', test: 'tests/providers/azure/cli-auth.test.ts' },
+  { name: 'ARM_SUBSCRIPTION_ID stops taking precedence',
+    file: 'src/providers/azure/cli-auth.ts', from: "    process.env['ARM_SUBSCRIPTION_ID'] ??\n", to: '', test: 'tests/providers/azure/cli-auth.test.ts' },
+  { name: 'AZURE_CONFIG_DIR is ignored',
+    file: 'src/providers/azure/cli-auth.ts', from: "  const explicit = process.env['AZURE_CONFIG_DIR']\n  if (explicit) return explicit\n", to: '', test: 'tests/providers/azure/cli-auth.test.ts tests/providers/azure/adapter.test.ts' },
+  { name: 'doctor --provider is ignored and the config decides',
+    file: 'src/diagnostics/index.ts', from: "  if (provider) return [await providerCredentialCheck(provider, 'requested with --provider')]", to: '', test: 'tests/diagnostics/doctor.test.ts' },
+  { name: 'doctor --provider reports a failure as a pass',
+    file: 'src/diagnostics/index.ts', from: "      ? { name: provider, status: 'pass', detail: why }\n      : { name: provider, status: 'fail', detail: result.errors.join('; ') }", to: "      ? { name: provider, status: 'pass', detail: why }\n      : { name: provider, status: 'pass', detail: result.errors.join('; ') }", test: 'tests/diagnostics/doctor.test.ts' },
+  { name: 'the doctor command drops the --provider flag',
+    file: 'src/cli/commands/doctor.ts', from: "        provider: typeof args.provider === 'string' ? args.provider : undefined,\n", to: '', test: 'tests/cli/doctor.test.ts tests/diagnostics/doctor.test.ts' },
+
 ]
 
 let survived = []

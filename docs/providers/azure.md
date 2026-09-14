@@ -33,7 +33,15 @@ clawops checks the following in order (first match wins):
 |---|---|---|
 | Service principal | `AZURE_CLIENT_ID` + `AZURE_TENANT_ID` + `AZURE_CLIENT_SECRET` | Static credentials |
 | Federated / OIDC | `AZURE_CLIENT_ID` + `AZURE_TENANT_ID` + `AZURE_FEDERATED_TOKEN_FILE` | GitHub Actions, workload identity |
+| Azure CLI | *(none — `az login`)* | Recommended for local dev. Read from `azureProfile.json` under `$AZURE_CONFIG_DIR` or `~/.azure` |
 | Managed identity | *(auto-detected)* | Only when running on an Azure VM |
+
+The CLI login is last in that list and first in practice. Pulumi's `azure-native` provider
+falls back to it when no service principal is set, so a deploy will use it — clawops used to
+refuse it and demand a service principal for a credential it was about to rely on anyway.
+
+The subscription a deploy lands in is `ARM_SUBSCRIPTION_ID`, then `AZURE_SUBSCRIPTION_ID`, then
+the CLI's default — Pulumi's own order, so `doctor` reports what `apply` will use.
 
 `clawops doctor --provider azure` validates which path will be used.
 

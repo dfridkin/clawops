@@ -15,6 +15,7 @@ export default defineCommand({
   },
   args: {
     stack: { type: 'string', description: 'Stack name to include remote health checks' },
+    provider: { type: 'string', description: 'Check this provider\'s credentials and account setup, with or without a stack' },
     json: { type: 'boolean', description: 'Emit the report as JSON' },
   },
   async run({ args }) {
@@ -25,7 +26,11 @@ export default defineCommand({
 
     let report: DiagnosticsReport
     try {
-      report = await runDiagnostics({ stack: args.stack, signal: ac.signal })
+      report = await runDiagnostics({
+        stack: args.stack,
+        provider: typeof args.provider === 'string' ? args.provider : undefined,
+        signal: ac.signal,
+      })
     } finally {
       process.off('SIGINT', abort)
       process.off('SIGTERM', abort)

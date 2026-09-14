@@ -11,6 +11,7 @@ import type {
   PulumiFn,
 } from '../types.js'
 import { registerProvider } from '../index.js'
+import { azureCliAccount } from './cli-auth.js'
 import { azureProgram } from './program.js'
 
 const INSTANCE_TYPE_MAP: Record<InstanceAlias, string> = {
@@ -62,13 +63,17 @@ const azureAdapter: ProviderAdapter = {
 
     const hasServicePrincipal = Boolean(clientId && tenantId && clientSecret)
     const hasOidc = Boolean(clientId && tenantId && federatedToken)
+    // Pulumi's azure-native provider falls back to the Azure CLI when no service principal is
+    // set, so `az login` is a credential a deploy will actually use. Refusing it here meant
+    // clawops turned away something it was about to rely on.
+    const hasCliLogin = Boolean(azureCliAccount())
 
-    if (!hasServicePrincipal && !hasOidc) {
+    if (!hasServicePrincipal && !hasOidc && !hasCliLogin) {
       const onAzure = await checkImds()
       if (!onAzure) {
         errors.push(
-          'No Azure credentials found. ' +
-          'Set AZURE_CLIENT_ID + AZURE_TENANT_ID + AZURE_CLIENT_SECRET (service principal), ' +
+          'No Azure credentials found. Run `az login`, ' +
+          'or set AZURE_CLIENT_ID + AZURE_TENANT_ID + AZURE_CLIENT_SECRET (service principal), ' +
           'or AZURE_CLIENT_ID + AZURE_TENANT_ID + AZURE_FEDERATED_TOKEN_FILE (OIDC), ' +
           'or run on an Azure VM with a managed identity.',
         )
