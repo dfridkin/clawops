@@ -349,6 +349,19 @@ const MUTATIONS = [
   { name: 'a plan that admits nobody says nothing about it',
     file: 'src/plan/validate.ts', from: "  if ((net.allowedSshCidrs ?? []).length === 0) {", to: '  if (false) {', test: 'tests/plan/network-validate.test.ts' },
 
+  { name: 'the gcloud-configured project is ignored again',
+    file: 'src/providers/gcp/preflight.ts', from: '    gcloudConfiguredProject() ??', to: '', test: 'tests/providers/gcp/preflight.test.ts' },
+  { name: 'a project under any INI section is accepted',
+    file: 'src/providers/gcp/preflight.ts', from: "    if (section !== 'core') continue", to: '    if (false) continue', test: 'tests/providers/gcp/preflight.test.ts' },
+  { name: 'a key merely ending in project matches',
+    file: 'src/providers/gcp/preflight.ts', from: "    if (trimmed.slice(0, eq).trim() !== 'project') continue", to: "    if (!trimmed.slice(0, eq).trim().endsWith('project')) continue", test: 'tests/providers/gcp/preflight.test.ts' },
+  { name: 'active_config is ignored and default assumed',
+    file: 'src/providers/gcp/preflight.ts', from: "      readFileSync(path.join(dir, 'active_config'), 'utf-8').trim() ??", to: "      'default' ??", test: 'tests/providers/gcp/preflight.test.ts' },
+  { name: 'the deploy no longer pins the GCP project it checked',
+    file: 'src/plan/apply.ts', from: "    if (project) await stack.setConfig('gcp:project', { value: project })", to: '    void project', test: 'tests/plan/apply.test.ts' },
+  { name: 'every provider gets a gcp project pinned',
+    file: 'src/plan/apply.ts', from: "  if (plan.spec.provider === 'gcp') {", to: '  if (true) {', test: 'tests/plan/apply.test.ts' },
+
 ]
 
 let survived = []

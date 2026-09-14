@@ -5,7 +5,13 @@ vi.mock('google-auth-library', () => ({
   GoogleAuth: vi.fn().mockImplementation(() => ({ getClient: mockGetClient })),
 }))
 
-import { gcpPreflight, resolveProjectId } from '../../../src/providers/gcp/preflight.js'
+import path from 'node:path'
+import process from 'node:process'
+import { tmpdir } from 'node:os'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import {
+  gcpPreflight, resolveProjectId, projectFromIni,
+} from '../../../src/providers/gcp/preflight.js'
 
 // A GCP project with credentials that resolve and the Compute API disabled passes every other
 // check clawops makes, then fails partway through a deploy with
@@ -37,19 +43,46 @@ const json = (body: unknown, status = 200) =>
 const servicesPage = (names: string[]) =>
   json({ services: names.map((n) => ({ config: { name: n } })) })
 
+// Every project-resolution source, cleared for every test. The suite used to clear one env
+// var and call that "no project resolved" — which held only on a machine with no gcloud
+// config. It has one now, and the assertion started failing on a change that broke nothing:
+// the test was reading the developer's machine, not the code.
+const PROJECT_ENV = [
+  'GOOGLE_PROJECT',
+  'GOOGLE_CLOUD_PROJECT',
+  'GCLOUD_PROJECT',
+  'CLOUDSDK_CORE_PROJECT',
+  'CLOUDSDK_CONFIG',
+  'CLOUDSDK_ACTIVE_CONFIG_NAME',
+] as const
+const savedEnv: Record<string, string | undefined> = {}
+let emptyGcloudDir: string
+
 beforeEach(() => {
   mockGetClient.mockReset()
   mockGetClient.mockResolvedValue({ getAccessToken: async () => ({ token: 'tok' }) })
+  for (const v of PROJECT_ENV) {
+    savedEnv[v] = process.env[v]
+    delete process.env[v]
+  }
+  // An empty directory, so the gcloud fallback finds nothing rather than the real machine's
+  // configured project.
+  emptyGcloudDir = mkdtempSync(path.join(tmpdir(), 'gcloud-empty-'))
+  process.env['CLOUDSDK_CONFIG'] = emptyGcloudDir
   process.env['GOOGLE_CLOUD_PROJECT'] = 'proj'
 })
 afterEach(() => {
   restoreFetch?.()
   restoreFetch = undefined
-  delete process.env['GOOGLE_CLOUD_PROJECT']
+  for (const v of PROJECT_ENV) {
+    if (savedEnv[v] === undefined) delete process.env[v]
+    else process.env[v] = savedEnv[v]
+  }
+  rmSync(emptyGcloudDir, { recursive: true, force: true })
 })
 
 describe('resolveProjectId', () => {
-  it.each(['GOOGLE_CLOUD_PROJECT', 'GCLOUD_PROJECT', 'CLOUDSDK_CORE_PROJECT'])(
+  it.each(['GOOGLE_PROJECT', 'GOOGLE_CLOUD_PROJECT', 'GCLOUD_PROJECT', 'CLOUDSDK_CORE_PROJECT'])(
     'reads %s',
     (key) => {
       delete process.env['GOOGLE_CLOUD_PROJECT']
@@ -163,5 +196,120 @@ describe('provider registration', () => {
     for (const name of ['aws', 'gcp', 'azure', 'local'] as const) {
       expect(getProvider(name).name, name).toBe(name)
     }
+  })
+})
+
+describe('projectFromIni', () => {
+  it('reads project from the [core] section', () => {
+    expect(projectFromIni('[core]\naccount = a@b.c\nproject = clawops-test\n')).toBe('clawops-test')
+  })
+
+  it('ignores a project setting in another section', () => {
+    // `compute/project` is a different setting; taking it would deploy somewhere unasked.
+    expect(projectFromIni('[compute]\nproject = other\n')).toBeUndefined()
+    expect(projectFromIni('[compute]\nproject = other\n[core]\nproject = mine\n')).toBe('mine')
+  })
+
+  it('stops reading [core] once another section starts', () => {
+    expect(projectFromIni('[core]\nproject = mine\n[compute]\nproject = other\n')).toBe('mine')
+    expect(projectFromIni('[core]\naccount = a\n[compute]\nproject = other\n')).toBeUndefined()
+  })
+
+  it('tolerates spacing, comments and blank lines', () => {
+    expect(projectFromIni('\n# a comment\n; another\n[core]\n\n  project   =   spaced  \n')).toBe(
+      'spaced',
+    )
+  })
+
+  it('treats an empty value as no answer', () => {
+    expect(projectFromIni('[core]\nproject =\n')).toBeUndefined()
+  })
+
+  it('does not match a key that merely ends in project', () => {
+    expect(projectFromIni('[core]\nquota_project = q\n')).toBeUndefined()
+  })
+
+  it('returns undefined for a file with no project at all', () => {
+    expect(projectFromIni('[core]\naccount = a@b.c\n')).toBeUndefined()
+  })
+})
+
+describe('resolveProjectId', () => {
+  const VARS = [
+    'GOOGLE_PROJECT',
+    'GOOGLE_CLOUD_PROJECT',
+    'GCLOUD_PROJECT',
+    'CLOUDSDK_CORE_PROJECT',
+    'CLOUDSDK_CONFIG',
+    'CLOUDSDK_ACTIVE_CONFIG_NAME',
+  ] as const
+  const saved: Record<string, string | undefined> = {}
+  let dir: string
+
+  beforeEach(() => {
+    for (const v of VARS) {
+      saved[v] = process.env[v]
+      delete process.env[v]
+    }
+    dir = mkdtempSync(path.join(tmpdir(), 'gcloud-'))
+    process.env['CLOUDSDK_CONFIG'] = dir
+  })
+  afterEach(() => {
+    for (const v of VARS) {
+      if (saved[v] === undefined) delete process.env[v]
+      else process.env[v] = saved[v]
+    }
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  function writeConfig(name: string, project: string) {
+    mkdirSync(path.join(dir, 'configurations'), { recursive: true })
+    writeFileSync(path.join(dir, 'configurations', `config_${name}`), `[core]\nproject = ${project}\n`)
+  }
+
+  it('prefers GOOGLE_PROJECT, the provider\'s own first choice', () => {
+    process.env['GOOGLE_PROJECT'] = 'from-google-project'
+    process.env['GOOGLE_CLOUD_PROJECT'] = 'from-cloud-project'
+    writeConfig('default', 'from-gcloud')
+    writeFileSync(path.join(dir, 'active_config'), 'default')
+    expect(resolveProjectId()).toBe('from-google-project')
+  })
+
+  it('falls through the env vars in the provider\'s order', () => {
+    process.env['GCLOUD_PROJECT'] = 'third'
+    process.env['CLOUDSDK_CORE_PROJECT'] = 'fourth'
+    expect(resolveProjectId()).toBe('third')
+  })
+
+  it('reads the active gcloud configuration when no env var answers', () => {
+    // The check's remedy says `gcloud config set project`. This is what makes that true.
+    writeFileSync(path.join(dir, 'active_config'), 'default')
+    writeConfig('default', 'from-gcloud')
+    expect(resolveProjectId()).toBe('from-gcloud')
+  })
+
+  it('follows active_config to a non-default configuration', () => {
+    writeFileSync(path.join(dir, 'active_config'), 'work')
+    writeConfig('work', 'work-project')
+    writeConfig('default', 'default-project')
+    expect(resolveProjectId()).toBe('work-project')
+  })
+
+  it('lets CLOUDSDK_ACTIVE_CONFIG_NAME override active_config', () => {
+    writeFileSync(path.join(dir, 'active_config'), 'default')
+    writeConfig('default', 'default-project')
+    writeConfig('work', 'work-project')
+    process.env['CLOUDSDK_ACTIVE_CONFIG_NAME'] = 'work'
+    expect(resolveProjectId()).toBe('work-project')
+  })
+
+  it('is undefined when there is no gcloud config at all', () => {
+    expect(resolveProjectId()).toBeUndefined()
+  })
+
+  it('is undefined, not an error, when the config names a file that is not there', () => {
+    writeFileSync(path.join(dir, 'active_config'), 'missing')
+    expect(() => resolveProjectId()).not.toThrow()
+    expect(resolveProjectId()).toBeUndefined()
   })
 })
