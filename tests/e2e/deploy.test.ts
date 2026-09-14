@@ -9,8 +9,15 @@ vi.mock('../../src/plan/ssh-key.js', () => ({
   resolvePublicKey: () => 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFIXTURE clawops',
 }))
 vi.mock('../../src/cli/context.js', () => ({ buildContext: vi.fn() }))
-// Never dial a host from a unit test; the wait itself is covered in tests/transport/wait.test.ts.
+// Never dial a host from a unit test. Both waits are covered in their own suites:
+// tests/transport/wait.test.ts and tests/openclaw/ready.test.ts.
 vi.mock('../../src/transport/wait.js', () => ({ waitForSsh: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../../src/openclaw/ready.js', () => ({
+  waitForGateway: vi.fn().mockResolvedValue({ waitedMs: 0, lastContainerStatus: 'running' }),
+}))
+vi.mock('../../src/transport/ssh.js', () => ({
+  connect: vi.fn().mockResolvedValue({ close: vi.fn(), exec: vi.fn() }),
+}))
 vi.mock('../../src/config/store.js', () => ({
   getConfig: vi.fn(),
   requireConfig: vi.fn(),

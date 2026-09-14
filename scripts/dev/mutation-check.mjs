@@ -8,7 +8,7 @@
 //
 //   node scripts/dev/mutation-check.mjs
 
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 
 /** Each: what we break, and which suite must notice. */
@@ -444,7 +444,7 @@ const MUTATIONS = [
     file: 'src/cli/context.ts', from: '  } catch {\n    throw new UsageError(\n      `Provider "${name}" is not yet supported.', to: '  } catch {\n    return getProvider(\'gcp\') ?? new UsageError(\n      `Provider "${name}" is not yet supported.', test: 'tests/cli/context.test.ts' },
 
   { name: 'apply reports success without waiting for the host',
-    file: 'src/plan/apply.ts', from: '  await waitForSsh(await connectionInfoFor(ctx, outputs), {', to: '  void waitForSsh; await Promise.resolve(); if (false) await waitForSsh(await connectionInfoFor(ctx, outputs), {', test: 'tests/plan/apply.test.ts' },
+    file: 'src/plan/apply.ts', from: '  await waitForSsh(conn, {', to: '  void waitForSsh; await Promise.resolve(); if (false) await waitForSsh(conn, {', test: 'tests/plan/apply.test.ts' },
   { name: 'the readiness wait gives up on the first refusal',
     file: 'src/transport/wait.ts', from: '      if (!isTransient(lastError)) {', to: '      if (true) {', test: 'tests/transport/wait.test.ts' },
   { name: 'a wrong key is retried until the deadline',
@@ -469,10 +469,80 @@ const MUTATIONS = [
   { name: 'a ~ in a configured path is passed to ssh2 verbatim',
     file: 'src/plan/apply.ts', from: "  return p.replace(/^~/, process.env['HOME'] ?? '~')", to: '  return p', test: 'tests/plan/apply.test.ts' },
 
+  { name: 'apply reports success before the gateway answers',
+    file: 'src/plan/apply.ts', from: '    await waitForGateway(readySession, {', to: '    if (false) await waitForGateway(readySession, {', test: 'tests/plan/apply.test.ts' },
+  { name: 'a running container is accepted as a working gateway',
+    file: 'src/openclaw/ready.ts', from: '      if (verdict.ok) return { waitedMs: now() - started, lastContainerStatus }', to: '      return { waitedMs: now() - started, lastContainerStatus }', test: 'tests/openclaw/ready.test.ts' },
+  { name: 'the readiness probe ignores the container state',
+    file: 'src/openclaw/ready.ts', from: "    if (lastContainerStatus === 'running') {", to: '    if (true) {', test: 'tests/openclaw/ready.test.ts' },
+  { name: 'the gateway wait never times out',
+    file: 'src/openclaw/ready.ts', from: '    if (now() + intervalMs >= deadline) {', to: '    if (false) {', test: 'tests/openclaw/ready.test.ts' },
+  { name: 'the timeout no longer says what the container was doing',
+    file: 'src/openclaw/ready.ts', from: '          `Container: ${lastContainerStatus}. Last check: ${lastReason}. ` +', to: '          `` +', test: 'tests/openclaw/ready.test.ts' },
+  { name: 'the readiness session is left open',
+    file: 'src/plan/apply.ts', from: '    readySession.close()', to: '    void readySession', test: 'tests/plan/apply.test.ts' },
+  { name: 'the gateway is probed on the default port whatever the plan says',
+    file: 'src/plan/apply.ts', from: '      port: plan.spec.network?.gatewayPort ?? GATEWAY_PORT,', to: '      port: GATEWAY_PORT,', test: 'tests/plan/apply.test.ts' },
+  { name: 'the gateway wait runs before SSH is up',
+    file: 'src/plan/apply.ts', from: '  await waitForSsh(conn, {\n    signal: opts?.signal,\n    onProgress: (line) => opts?.onOutput?.(line),\n  })\n', to: '', test: 'tests/plan/apply.test.ts' },
+  { name: 'progress is reported on every poll',
+    file: 'src/openclaw/ready.ts', from: '    if (elapsed - announcedAt >= 30_000 || announcedAt === 0) {', to: '    if (true) {', test: 'tests/openclaw/ready.test.ts' },
+
 ]
 
 let survived = []
 let caught = 0
+
+// A mutation is a temporary edit to a real source file, and this process was killed mid-run
+// once — the OS reclaiming memory — leaving `if (false)` in src/openclaw/ready.ts. Only the
+// next run noticed, and only because the anchor it wanted had been mutated out from under it.
+// The file was untracked, so it did not even show up in `git diff`.
+//
+// Signal handlers are not enough on their own for two reasons: SIGKILL cannot be caught, and
+// the loop spends its life inside a synchronous execSync, where a queued handler cannot run
+// until the child exits. So the original is written to a sentinel file BEFORE the source is
+// touched, and the next run restores from it. The handlers stay for the ordinary Ctrl-C case.
+const SENTINEL = new URL('./.mutation-inflight.json', import.meta.url)
+
+function beginMutation(file, original) {
+  writeFileSync(SENTINEL, JSON.stringify({ file, original }), 'utf8')
+}
+
+function endMutation() {
+  if (existsSync(SENTINEL)) rmSync(SENTINEL)
+}
+
+/** Put back whatever a killed run left mutated, before doing anything else. */
+function restoreFromSentinel() {
+  if (!existsSync(SENTINEL)) return
+  const { file, original } = JSON.parse(readFileSync(SENTINEL, 'utf8'))
+  writeFileSync(file, original)
+  rmSync(SENTINEL)
+  console.log(`  restored ${file} — a previous run was killed while it was mutated\n`)
+}
+
+let inFlight = null
+
+function restoreInFlight() {
+  if (!inFlight) return
+  writeFileSync(inFlight.file, inFlight.original)
+  inFlight = null
+  endMutation()
+}
+
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(sig, () => {
+    restoreInFlight()
+    process.exit(130)
+  })
+}
+process.on('exit', restoreInFlight)
+process.on('uncaughtException', (err) => {
+  restoreInFlight()
+  throw err
+})
+
+restoreFromSentinel()
 
 for (const m of MUTATIONS) {
   const original = readFileSync(m.file, 'utf8')
@@ -480,6 +550,8 @@ for (const m of MUTATIONS) {
     survived.push({ ...m, why: 'ANCHOR NOT FOUND — mutation could not be applied' })
     continue
   }
+  inFlight = { file: m.file, original }
+  beginMutation(m.file, original)
   writeFileSync(m.file, original.replace(m.from, m.to))
   let failed = false
   try {
@@ -487,7 +559,7 @@ for (const m of MUTATIONS) {
   } catch {
     failed = true   // the suite noticed
   }
-  writeFileSync(m.file, original)
+  restoreInFlight()
   if (failed) { caught++; console.log(`  caught   ${m.name}`) }
   else { survived.push({ ...m, why: 'no test failed' }); console.log(`  SURVIVED ${m.name}`) }
 }

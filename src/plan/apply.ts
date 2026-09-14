@@ -9,6 +9,7 @@ import { saveOverlay } from './overlay-store.js'
 import { readRemoteConfig, atomicWriteConfig, restartGateway, deepMerge } from './remote-config.js'
 import type { DeployPlan } from './generate.js'
 import { writeStackConfig } from './stack-config.js'
+import { GATEWAY_PORT } from '../openclaw/run-flags.js'
 
 export interface ApplyPlanOpts {
   onOutput?: (line: string) => void
@@ -88,10 +89,28 @@ export async function applyPlan(
   // line, the gateway URL and the public IP while every command that followed failed with
   // ECONNREFUSED, including its own config overlay a few lines below this.
   const { waitForSsh } = await import('../transport/wait.js')
-  await waitForSsh(await connectionInfoFor(ctx, outputs), {
+  const conn = await connectionInfoFor(ctx, outputs)
+  await waitForSsh(conn, {
     signal: opts?.signal,
     onProgress: (line) => opts?.onOutput?.(line),
   })
+
+  // The machine answering is not the deployment working. The startup script is still pulling
+  // OpenClaw — around 3GB on a first deploy — and every command clawops offers next assumes a
+  // gateway that answers. Reporting success before one exists hands the operator a deployment
+  // that fails at whatever they try first.
+  const { waitForGateway } = await import('../openclaw/ready.js')
+  const { connect } = await import('../transport/ssh.js')
+  const readySession = await connect({ ...conn, signal: opts?.signal })
+  try {
+    await waitForGateway(readySession, {
+      signal: opts?.signal,
+      port: plan.spec.network?.gatewayPort ?? GATEWAY_PORT,
+      onProgress: (line) => opts?.onOutput?.(line),
+    })
+  } finally {
+    readySession.close()
+  }
 
   // Post-provisioning: write config overlay + channels to the remote openclaw.json.
   const hasOverlay = plan.spec.openclaw.config !== undefined || plan.spec.openclaw.channels !== undefined

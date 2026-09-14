@@ -148,3 +148,4 @@ openclaw-local-test*.json
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+.mutation-inflight.json

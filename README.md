@@ -384,6 +384,27 @@ way. `clawops doctor` reports which one it found, from where, and at what versio
 
 See [ADR 0010](docs/decisions/0010-pulumi-cli-bootstrap.md), which supersedes ADR 0006.
 
+### `apply` reported success before OpenClaw existed
+
+Fixed in 2.0.1. Waiting for SSH is not the same as waiting for the deployment. The startup
+script pulls a ~3GB image, so for the first few minutes after a successful `apply`:
+
+```
+Remote health
+✗  Container    not found
+✗  Gateway      no response from the gateway
+```
+
+and `logs`, `gateway`, `config`, `agents` and `doctor --stack` all fail at whatever you try
+first. `apply` now waits for the gateway to answer `/startupz` — the same probe `doctor` uses —
+before reporting success, and says what it is waiting for every half minute rather than going
+silent through a long download.
+
+A running container is not accepted as a working gateway: that distinction is the whole reason
+`/startupz` exists. The container's state is read alongside the probe, so a timeout can say
+whether an image was still downloading or a container started and exited — both look like "no
+response" from outside, and they need different answers.
+
 ### `apply` reported success while the instance was still booting
 
 Fixed in 2.0.1. Pulumi returns as soon as the cloud API accepts the resource; `sshd` starts a
