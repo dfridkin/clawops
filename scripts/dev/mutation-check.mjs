@@ -403,8 +403,11 @@ const MUTATIONS = [
     file: 'src/cli/commands/init.ts', from: "['-t', 'ed25519', '-f', keyPath, '-N', '', '-C', 'clawops', '-q']", to: "['-t', 'rsa', '-m', 'PKCS8', '-f', keyPath, '-N', '', '-C', 'clawops', '-q']", test: 'tests/cli/init.test.ts' },
   { name: 'a failed ssh-keygen is ignored and init reports success',
     file: 'src/cli/commands/init.ts', from: '      if (gen.error || gen.status !== 0) {', to: '      if (false) {', test: 'tests/cli/init.test.ts' },
-  { name: 'the init suite writes into the real home again',
-    file: 'tests/cli/init.test.ts', from: "  process.env['CLAWOPS_HOME'] = suiteHome", to: '  void suiteHome', test: 'tests/cli/init.test.ts' },
+  // Redirected, not unset. Unsetting it is the truer mutation and it is not worth running: the
+  // suite would then write its fixtures — three stacks, a new default — straight into the
+  // developer's own ~/.clawops. Running the mutation checker should not cost you your config.
+  { name: 'the init suite stops isolating CLAWOPS_HOME',
+    file: 'tests/cli/init.test.ts', from: "  process.env['CLAWOPS_HOME'] = suiteHome", to: "  process.env['CLAWOPS_HOME'] = `${suiteHome}-elsewhere`", test: 'tests/cli/init.test.ts' },
 
   { name: 'init overwrites the whole config again',
     file: 'src/cli/commands/init.ts', from: '    stacks: { ...(existing?.stacks ?? {}), [stackName]: stack },', to: '    stacks: { [stackName]: stack },', test: 'tests/cli/init.test.ts' },
