@@ -1,7 +1,8 @@
 // Maker plan generation — per SPEC.md §12.6 and spec/deploy-plan.schema.json.
 
 import { randomUUID } from 'node:crypto'
-import { buildContext } from '../cli/context.js'
+import { buildContext, loadAdapterModule } from '../cli/context.js'
+import type { ProviderName } from '../providers/types.js'
 import { getConfig } from '../config/store.js'
 import { UsageError } from '../errors/index.js'
 import { validatePlan } from './validate.js'
@@ -136,7 +137,7 @@ export function isInstanceAlias(value: string): value is InstanceAliasName {
  * machine type knows what their cloud offers better than this table does. It is announced,
  * because a mistyped alias would otherwise reach the cloud unremarked.
  */
-function resolveInstanceType(intent: GeneratePlanIntent): string {
+async function resolveInstanceType(intent: GeneratePlanIntent): Promise<string> {
   const requested = intent.instanceType ?? 'small'
   if (!isInstanceAlias(requested)) {
     process.stderr.write(
@@ -145,8 +146,11 @@ function resolveInstanceType(intent: GeneratePlanIntent): string {
     )
     return requested
   }
-  return buildContext({ stack: intent.stackName, provider: intent.provider })
-    .adapter.normalizeInstanceType(requested)
+  // The adapter module, not `buildContext().adapter`: the latter is a proxy whose synchronous
+  // methods throw until something has loaded the module behind it, and nothing here needs a
+  // stack. Reaching through the proxy failed at plan time with "Provider not yet loaded".
+  const adapter = await loadAdapterModule(intent.provider as ProviderName)
+  return adapter.normalizeInstanceType(requested)
 }
 
 /** Exposed for tests: the preview parser is otherwise unreachable without a live stack. */
@@ -164,7 +168,7 @@ export async function generatePlan(
 
   const { version } = await import('../../package.json', { assert: { type: 'json' } })
   const config = getConfig()
-  const instanceType = resolveInstanceType(intent)
+  const instanceType = await resolveInstanceType(intent)
   const { guardOpenclawVersion, defaultOpenclawVersion } = await import('../cli/version-guard.js')
   const openclawVersion = await guardOpenclawVersion(
     intent.openclawVersion ?? (await defaultOpenclawVersion()),
