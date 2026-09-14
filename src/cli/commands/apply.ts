@@ -95,6 +95,15 @@ export default defineCommand({
     try {
       const result = await applyPlan(typedPlan, {
         onOutput: (line) => { spin.text = line.trim() || spin.text },
+        // A spinner renders nothing without a TTY, so a scripted or CI deploy sat silent
+        // through the minutes an image pull takes. These lines are rare — one per half
+        // minute at most — so they are cheap to print outright where nothing else will.
+        onProgress: (line) => {
+          const text = line.trim()
+          if (!text) return
+          spin.text = text
+          if (!process.stderr.isTTY) process.stderr.write(`${text}\n`)
+        },
         signal: abortController.signal,
         confirmDrift: args.yes ? undefined : async () => {
           spin.stop()

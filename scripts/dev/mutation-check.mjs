@@ -484,9 +484,14 @@ const MUTATIONS = [
   { name: 'the gateway is probed on the default port whatever the plan says',
     file: 'src/plan/apply.ts', from: '      port: plan.spec.network?.gatewayPort ?? GATEWAY_PORT,', to: '      port: GATEWAY_PORT,', test: 'tests/plan/apply.test.ts' },
   { name: 'the gateway wait runs before SSH is up',
-    file: 'src/plan/apply.ts', from: '  await waitForSsh(conn, {\n    signal: opts?.signal,\n    onProgress: (line) => opts?.onOutput?.(line),\n  })\n', to: '', test: 'tests/plan/apply.test.ts' },
+    file: 'src/plan/apply.ts', from: '  await waitForSsh(conn, {\n    signal: opts?.signal,\n    onProgress: (line) => reportProgress(opts, line),\n  })\n', to: '', test: 'tests/plan/apply.test.ts' },
   { name: 'progress is reported on every poll',
     file: 'src/openclaw/ready.ts', from: '    if (elapsed - announcedAt >= 30_000 || announcedAt === 0) {', to: '    if (true) {', test: 'tests/openclaw/ready.test.ts' },
+
+  { name: 'progress is folded back into the Pulumi output stream',
+    file: 'src/plan/apply.ts', from: '  if (opts?.onProgress) opts.onProgress(line)\n  else opts?.onOutput?.(line)', to: '  opts?.onOutput?.(line)', test: 'tests/plan/apply.test.ts' },
+  { name: 'a caller with only onOutput stops seeing progress',
+    file: 'src/plan/apply.ts', from: '  else opts?.onOutput?.(line)', to: '', test: 'tests/plan/apply.test.ts' },
 
 ]
 

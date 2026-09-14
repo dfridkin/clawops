@@ -156,9 +156,19 @@ else
   fail "gateway is not published on loopback"
 fi
 
-# Logs must come from the gateway itself, not the journalctl fallback.
-if pnpm dev logs --stack "$STACK" --tail 5 2>&1 | grep -q "source: gateway"; then
+# Logs must come from the gateway itself, not the container fallback. `clawops logs` announces
+# which one it used and why:
+#
+#   Logs: gateway — read from the gateway over RPC
+#
+# This grepped for "source: gateway", a string the command has never printed, so the assertion
+# could only ever fail. A fixture that does not match the real command tests nothing — and the
+# failure said "logs did not come from the gateway", which was a claim about clawops rather
+# than about this script. The line it actually saw is now part of the failure.
+LOG_OUT=$(pnpm dev logs --stack "$STACK" --tail 5 2>&1)
+LOG_SOURCE=$(printf '%s\n' "$LOG_OUT" | grep -o 'Logs: [a-z]*' | head -1)
+if [ "$LOG_SOURCE" = "Logs: gateway" ]; then
   pass "logs read from the gateway"
 else
-  fail "logs did not come from the gateway"
+  fail "logs did not come from the gateway (saw: ${LOG_SOURCE:-no source line at all})"
 fi

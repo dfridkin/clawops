@@ -444,3 +444,42 @@ describe('applyPlan waits for the deployment, not just the machine', () => {
     expect(close).toHaveBeenCalled()
   })
 })
+
+describe('progress while waiting', () => {
+  it('goes to onProgress, not into the Pulumi output stream', async () => {
+    mockWaitForSsh.mockImplementation(async (_conn: unknown, o: { onProgress?: (l: string) => void }) => {
+      o.onProgress?.('Waiting for 203.0.113.4:22 to accept SSH')
+    })
+    const progress: string[] = []
+    const output: string[] = []
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan, {
+      onProgress: (l) => progress.push(l),
+      onOutput: (l) => output.push(l),
+    })
+    expect(progress).toEqual(['Waiting for 203.0.113.4:22 to accept SSH'])
+    // Pulumi's stream carries hundreds of lines; these few need to be separable from it.
+    expect(output).toEqual([])
+  })
+
+  it('falls back to onOutput for a caller that only offers that', async () => {
+    mockWaitForSsh.mockImplementation(async (_conn: unknown, o: { onProgress?: (l: string) => void }) => {
+      o.onProgress?.('still waiting')
+    })
+    const output: string[] = []
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan, { onOutput: (l) => output.push(l) })
+    expect(output).toContain('still waiting')
+  })
+
+  it('carries the gateway wait too', async () => {
+    mockWaitForGateway.mockImplementation(async (_s: unknown, o: { onProgress?: (l: string) => void }) => {
+      o.onProgress?.('Waiting for OpenClaw to start')
+      return { waitedMs: 0, lastContainerStatus: 'running' }
+    })
+    const progress: string[] = []
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan, { onProgress: (l) => progress.push(l) })
+    expect(progress).toContain('Waiting for OpenClaw to start')
+  })
+})
