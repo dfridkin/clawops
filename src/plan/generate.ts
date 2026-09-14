@@ -209,6 +209,11 @@ export async function generatePlan(
       plan.metadata.stackVersion = info.version
     }
   } catch (err) {
+    // A UsageError is not a preview failure: the stack is not registered, or the provider
+    // cannot be resolved. Swallowing it produced a plan with an empty diff and a warning three
+    // screens up, and the real error only surfaced at apply — which is how a plan for an
+    // unregistered stack got as far as `clawops apply`.
+    if (err instanceof UsageError) throw err
     // Preview failure is non-fatal — return the structural plan without diff
     process.stderr.write(
       `[clawops] Warning: preview failed, diff section omitted: ${err instanceof Error ? err.message : String(err)}\n`,

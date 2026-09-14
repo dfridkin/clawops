@@ -344,3 +344,101 @@ describe('init and the filesystem it writes to', () => {
     }
   })
 })
+
+describe('init with a config that already exists', () => {
+  /** Write a config with one registered stack, the way a first `init` would have. */
+  function seed(stack: string) {
+    writeFileSync(
+      path.join(suiteHome, 'config.json'),
+      JSON.stringify({
+        version: 1,
+        defaults: { stack, provider: 'gcp' },
+        stacks: {
+          [stack]: {
+            provider: 'gcp',
+            stateUrl: 'gs://first-bucket/clawops',
+            region: 'us-central1',
+            credentialsRef: { source: 'env', envVars: ['GOOGLE_APPLICATION_CREDENTIALS'] },
+          },
+        },
+        ssh: {
+          keyPath: path.join(suiteHome, 'id_ed25519'),
+          knownHostsPath: path.join(suiteHome, 'known_hosts'),
+        },
+        mcp: { auditLogPath: '/var/log/clawops-audit.jsonl' },
+      }) + '\n',
+    )
+  }
+
+  it('adds a second stack without deleting the first', async () => {
+    // This is the bug: init wrote a whole new config with one stacks entry, so registering a
+    // second stack dropped the first — along with its stateUrl, the only pointer to where that
+    // stack's Pulumi state lives. The infrastructure stayed up and clawops could no longer
+    // see, reach or destroy it.
+    seed('production')
+    const cmd = await getCmd()
+    await (cmd.run as AnyRunFn)({
+      args: { provider: 'gcp', stack: 'staging', state: 'gs://second-bucket/clawops' },
+    })
+
+    const config = getConfig()!
+    expect(Object.keys(config.stacks).sort()).toEqual(['production', 'staging'])
+    expect(config.stacks['production']?.stateUrl).toBe('gs://first-bucket/clawops')
+    expect(config.stacks['staging']?.stateUrl).toBe('gs://second-bucket/clawops')
+  })
+
+  it('needs no --force to add a stack that is not there yet', async () => {
+    seed('production')
+    const cmd = await getCmd()
+    await expect(
+      (cmd.run as AnyRunFn)({ args: { provider: 'gcp', stack: 'staging' } }),
+    ).resolves.not.toThrow()
+  })
+
+  it('points defaults at the stack just initialised', async () => {
+    seed('production')
+    const cmd = await getCmd()
+    await (cmd.run as AnyRunFn)({ args: { provider: 'gcp', stack: 'staging' } })
+    expect(getConfig()!.defaults.stack).toBe('staging')
+  })
+
+  it('keeps config outside stacks, such as the MCP block', async () => {
+    seed('production')
+    const cmd = await getCmd()
+    await (cmd.run as AnyRunFn)({ args: { provider: 'gcp', stack: 'staging' } })
+    expect(getConfig()!.mcp?.auditLogPath).toBe('/var/log/clawops-audit.jsonl')
+  })
+
+  it('refuses to overwrite an existing stack without --force, naming its state', async () => {
+    // Changing a registered stack's stateUrl orphans its state as thoroughly as deleting it.
+    seed('production')
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit')
+    }) as never)
+    try {
+      const cmd = await getCmd()
+      await expect(
+        (cmd.run as AnyRunFn)({
+          args: { provider: 'gcp', stack: 'production', state: 'gs://somewhere-else/clawops' },
+        }),
+      ).rejects.toThrow('exit')
+      expect(getConfig()!.stacks['production']?.stateUrl).toBe('gs://first-bucket/clawops')
+    } finally {
+      exit.mockRestore()
+    }
+  })
+
+  it('overwrites that stack when --force is given', async () => {
+    seed('production')
+    const cmd = await getCmd()
+    await (cmd.run as AnyRunFn)({
+      args: {
+        provider: 'gcp',
+        stack: 'production',
+        state: 'gs://somewhere-else/clawops',
+        force: true,
+      },
+    })
+    expect(getConfig()!.stacks['production']?.stateUrl).toBe('gs://somewhere-else/clawops')
+  })
+})
