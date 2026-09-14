@@ -31,6 +31,8 @@ DESTROYED=no
 # ignore it.
 CREATED=no
 REGISTERED=no
+# Whether the run got as far as checking anything.
+ASSERTED=no
 
 cleanup() {
   local code=$?
@@ -72,6 +74,13 @@ cleanup() {
 
   echo
   if [ "$FAILURES" -gt 0 ]; then echo "✗ ${FAILURES} assertion(s) failed"; exit 1; fi
+  # A run that stopped at preflight has no failed assertions and no passed ones. Reporting
+  # "all assertions passed" for it is worse than reporting nothing: the line this script exists
+  # to print is the one that says the cloud is empty again, and it has to be true.
+  if [ "$ASSERTED" = "no" ]; then
+    echo "✗ stopped before the assertions ran — nothing was verified"
+    exit "$code"
+  fi
   echo "✓ all assertions passed, stack destroyed"
   exit "$code"
 }
@@ -107,6 +116,7 @@ pnpm dev apply "/tmp/${STACK}.plan.json" --yes || exit 1
 
 echo
 echo "── Asserting the 2.0 runtime contract ──────────────────────────"
+ASSERTED=yes
 
 # `doctor --stack` exits 1 on any failed check, so it is the single strongest assertion here:
 # container running, the deployed version in range, the gateway answering /startupz with a
