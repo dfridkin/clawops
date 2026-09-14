@@ -83,6 +83,23 @@ export async function applyPlan(
     }
   }
 
+  // The instance exists; it is not necessarily up. Pulumi returns as soon as the API accepts
+  // the resource, and sshd starts a good half-minute later — so apply used to print its success
+  // line, the gateway URL and the public IP while every command that followed failed with
+  // ECONNREFUSED, including its own config overlay a few lines below this.
+  const { waitForSsh } = await import('../transport/wait.js')
+  const connInfo = ctx.adapter.getConnectionInfo(outputs as StackOutputs)
+  await waitForSsh(
+    {
+      host: connInfo.host,
+      port: connInfo.port,
+      user: connInfo.user,
+      privateKeyPath: connInfo.privateKeyPath,
+      knownHostsPath: connInfo.knownHostsPath,
+    },
+    { signal: opts?.signal, onProgress: (line) => opts?.onOutput?.(line) },
+  )
+
   // Post-provisioning: write config overlay + channels to the remote openclaw.json.
   const hasOverlay = plan.spec.openclaw.config !== undefined || plan.spec.openclaw.channels !== undefined
   if (hasOverlay) {

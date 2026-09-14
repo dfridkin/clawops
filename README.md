@@ -384,6 +384,25 @@ way. `clawops doctor` reports which one it found, from where, and at what versio
 
 See [ADR 0010](docs/decisions/0010-pulumi-cli-bootstrap.md), which supersedes ADR 0006.
 
+### `apply` reported success while the instance was still booting
+
+Fixed in 2.0.1. Pulumi returns as soon as the cloud API accepts the resource; `sshd` starts a
+good half-minute later. `clawops apply` printed its success line, the gateway URL and the
+public IP at that moment, and every command run after it failed:
+
+```
+✗  Connection   SSH connection failed: connect ECONNREFUSED 34.70.45.162:22
+```
+
+So did apply's own config-overlay step, which connects immediately after the stack is up —
+meaning any plan carrying `openclaw.config` raced the boot. Nothing in clawops waited for
+anything.
+
+`apply` now waits for the host to accept SSH before it reports success, saying so once if the
+wait is more than momentary. `ECONNREFUSED` and a handshake timeout are expected in the first
+minute of a VM's life and are retried; a host-key mismatch or an unreadable key is raised
+immediately, because waiting will not fix it.
+
 ### Day-two commands failed with an error about provider loading
 
 Fixed in 2.0.1. `buildContext().adapter` was a proxy that loaded the provider module on its

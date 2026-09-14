@@ -443,6 +443,25 @@ const MUTATIONS = [
   { name: 'an unknown provider resolves to something',
     file: 'src/cli/context.ts', from: '  } catch {\n    throw new UsageError(\n      `Provider "${name}" is not yet supported.', to: '  } catch {\n    return getProvider(\'gcp\') ?? new UsageError(\n      `Provider "${name}" is not yet supported.', test: 'tests/cli/context.test.ts' },
 
+  { name: 'apply reports success without waiting for the host',
+    file: 'src/plan/apply.ts', from: '  await waitForSsh(\n', to: '  await Promise.resolve(); void waitForSsh; if (false) await waitForSsh(\n', test: 'tests/plan/apply.test.ts' },
+  { name: 'the readiness wait gives up on the first refusal',
+    file: 'src/transport/wait.ts', from: '      if (!isTransient(lastError)) {', to: '      if (true) {', test: 'tests/transport/wait.test.ts' },
+  { name: 'a wrong key is retried until the deadline',
+    file: 'src/transport/wait.ts', from: '      if (!isTransient(lastError)) {', to: '      if (false) {', test: 'tests/transport/wait.test.ts' },
+  { name: 'the proving session is left open',
+    file: 'src/transport/wait.ts', from: '      session.close()\n', to: '', test: 'tests/transport/wait.test.ts' },
+  { name: 'the wait spins without pausing',
+    file: 'src/transport/wait.ts', from: '    await sleep(intervalMs, opts.signal)', to: '    await sleep(0, opts.signal)', test: 'tests/transport/wait.test.ts' },
+  { name: 'an aborted signal is ignored',
+    file: 'src/transport/wait.ts', from: "    if (opts.signal?.aborted) throw new NetworkError('Waiting for SSH was aborted')", to: '    void opts.signal', test: 'tests/transport/wait.test.ts' },
+  { name: 'the signal never reaches the connection attempt',
+    file: 'src/transport/wait.ts', from: '      const session = await connect({ ...conn, signal: opts.signal })', to: '      const session = await connect({ ...conn })', test: 'tests/transport/wait.test.ts' },
+  { name: 'the wait announces itself on every attempt',
+    file: 'src/transport/wait.ts', from: '      if (attempts === 1) {', to: '      if (true) {', test: 'tests/transport/wait.test.ts' },
+  { name: 'authentication failures are treated as permanent',
+    file: 'src/transport/wait.ts', from: "  'All configured authentication methods failed',\n", to: '', test: 'tests/transport/wait.test.ts' },
+
 ]
 
 let survived = []
