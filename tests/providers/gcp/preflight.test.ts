@@ -18,12 +18,17 @@ import { gcpPreflight, resolveProjectId } from '../../../src/providers/gcp/prefl
 // implementation on the hoisted GoogleAuth mock, which makes accessToken() fail and every
 // later test see a preflight that stopped at "ADC unusable" — three tests failed that way
 // before this was narrowed.
-let fetchSpy: ReturnType<typeof vi.spyOn> | undefined
+// Typed off `fetch` itself rather than named DOM types: `RequestInfo` is not in the lib set
+// this project compiles against, and a loose ReturnType<typeof vi.spyOn> does not match the
+// spy's own signature. Both only showed up in CI, because typecheck was skipped locally.
+let restoreFetch: (() => void) | undefined
 function mockFetch(handler: (url: string, init?: RequestInit) => Response) {
-  fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(
-    (input: RequestInfo | URL, init?: RequestInit) => Promise.resolve(handler(String(input), init)),
+  const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(
+    (...args: Parameters<typeof fetch>) =>
+      Promise.resolve(handler(String(args[0]), args[1])),
   )
-  return fetchSpy
+  restoreFetch = () => spy.mockRestore()
+  return spy
 }
 
 const json = (body: unknown, status = 200) =>
@@ -38,8 +43,8 @@ beforeEach(() => {
   process.env['GOOGLE_CLOUD_PROJECT'] = 'proj'
 })
 afterEach(() => {
-  fetchSpy?.mockRestore()
-  fetchSpy = undefined
+  restoreFetch?.()
+  restoreFetch = undefined
   delete process.env['GOOGLE_CLOUD_PROJECT']
 })
 
