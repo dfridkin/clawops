@@ -111,6 +111,44 @@ function parseDiff(lines: string[]): DeployPlan['diff'] {
   }
 }
 
+/** The sizes clawops names. Each adapter maps them to something its cloud recognises. */
+export const INSTANCE_ALIASES = ['micro', 'small', 'medium', 'large', 'gpu'] as const
+export type InstanceAliasName = (typeof INSTANCE_ALIASES)[number]
+
+export function isInstanceAlias(value: string): value is InstanceAliasName {
+  return (INSTANCE_ALIASES as readonly string[]).includes(value)
+}
+
+/**
+ * A machine type the cloud will accept.
+ *
+ * `spec/deploy-plan.schema.json` has always said this field holds a "provider-native instance
+ * type. Adapter normalizes from clawops alias before plan emission" — and the plan emitted the
+ * alias. Every adapter has had `normalizeInstanceType` from the start and `clawops up` calls
+ * it; `generatePlan` never did, so apply handed `small` to the cloud:
+ *
+ *   Error 400: Invalid value for field 'resource.machineType':
+ *   '…/machineTypes/small'. Machine type with name 'small' does not exist in zone …
+ *
+ * The same on AWS, where the type is `t3.small`, and on Azure, where it is `Standard_B2s`.
+ *
+ * A value that is not one of our aliases is passed through: an operator who names a real
+ * machine type knows what their cloud offers better than this table does. It is announced,
+ * because a mistyped alias would otherwise reach the cloud unremarked.
+ */
+function resolveInstanceType(intent: GeneratePlanIntent): string {
+  const requested = intent.instanceType ?? 'small'
+  if (!isInstanceAlias(requested)) {
+    process.stderr.write(
+      `[clawops] note: "${requested}" is not a clawops size ` +
+        `(${INSTANCE_ALIASES.join(', ')}), so it is passed to ${intent.provider} as written.\n`,
+    )
+    return requested
+  }
+  return buildContext({ stack: intent.stackName, provider: intent.provider })
+    .adapter.normalizeInstanceType(requested)
+}
+
 /** Exposed for tests: the preview parser is otherwise unreachable without a live stack. */
 export const parseDiffForTest = parseDiff
 
@@ -126,7 +164,7 @@ export async function generatePlan(
 
   const { version } = await import('../../package.json', { assert: { type: 'json' } })
   const config = getConfig()
-  const instanceType = intent.instanceType ?? 'small'
+  const instanceType = resolveInstanceType(intent)
   const { guardOpenclawVersion, defaultOpenclawVersion } = await import('../cli/version-guard.js')
   const openclawVersion = await guardOpenclawVersion(
     intent.openclawVersion ?? (await defaultOpenclawVersion()),

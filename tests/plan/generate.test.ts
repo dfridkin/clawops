@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { ProviderAdapter } from '../../src/providers/types.js'
 
 // Mock buildContext and its dependencies
 // The SSH key never comes from the machine running the tests. `~/.ssh/id_ed25519` exists on
@@ -50,8 +51,13 @@ beforeEach(async () => {
   vi.mocked(buildContext).mockReturnValue({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     config: {} as any,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    adapter: { name: 'aws' } as any,
+    // A real adapter maps clawops' size names to something its cloud recognises. The plan
+    // used to emit the alias, and the cloud rejected it.
+    adapter: {
+      name: 'aws',
+      normalizeInstanceType: (alias: string) =>
+        ({ micro: 't3.micro', small: 't3.small', medium: 't3.medium', large: 't3.large', gpu: 'g4dn.xlarge' })[alias],
+    } as unknown as ProviderAdapter,
     stackName: 'default',
     getStack: mockGetStack,
   })
@@ -73,7 +79,8 @@ describe('generatePlan()', () => {
     expect(plan.metadata.generator).toBe('clawops')
     expect(plan.spec.provider).toBe('aws')
     expect(plan.spec.stackName).toBe('default')
-    expect(plan.spec.instanceType).toBe('small')
+    // The plan records what the cloud will be asked for, not what the operator typed.
+    expect(plan.spec.instanceType).toBe('t3.small')
     expect(plan.spec.region).toBe('us-east-1')
     // Default is a concrete pin from the support matrix, not a moving tag:
     // `latest` and `stable` both now resolve to OpenClaw 2.0, which this line
@@ -131,10 +138,10 @@ describe('generatePlan()', () => {
     expect(plan.diff?.totalChanges).toBe(3)
   })
 
-  it('applies default instanceType of small', async () => {
+  it('applies the default size, normalised for the provider', async () => {
     const { generatePlan } = await import('../../src/plan/generate.js')
     const plan = await generatePlan({ stackName: 'default', provider: 'aws' })
-    expect(plan.spec.instanceType).toBe('small')
+    expect(plan.spec.instanceType).toBe('t3.small')
   })
 
   it('applies a concrete default openclawVersion, not a moving tag', async () => {
@@ -165,7 +172,7 @@ describe('generatePlan()', () => {
       instanceType: 'medium',
       openclawVersion: '2026.9.2',
     })
-    expect(mockSetConfig).toHaveBeenCalledWith('instanceType', { value: 'medium' })
+    expect(mockSetConfig).toHaveBeenCalledWith('instanceType', { value: 't3.medium' })
     expect(mockSetConfig).toHaveBeenCalledWith('region', { value: 'eu-west-1' })
     expect(mockSetConfig).toHaveBeenCalledWith('openclawVersion', { value: '2026.9.2' })
   })
@@ -229,5 +236,46 @@ describe('a stack that is not registered', () => {
     const plan = await generatePlan({ stackName: 'default', provider: 'gcp' })
     expect(plan.spec.stackName).toBe('default')
     expect(plan.diff).toBeUndefined()
+  })
+})
+
+describe('instance sizes', () => {
+  it('emits a machine type the cloud will accept, not the clawops alias', async () => {
+    // `small` is not a machine type anywhere. GCP answered:
+    //   Error 400: Invalid value for field 'resource.machineType': '…/machineTypes/small'
+    // after creating the network, subnet, address and firewall rule.
+    const { generatePlan } = await import('../../src/plan/generate.js')
+    const plan = await generatePlan({ stackName: 'default', provider: 'aws', instanceType: 'small' })
+    expect(plan.spec.instanceType).toBe('t3.small')
+  })
+
+  it('normalises the default size too', async () => {
+    const { generatePlan } = await import('../../src/plan/generate.js')
+    const plan = await generatePlan({ stackName: 'default', provider: 'aws' })
+    expect(plan.spec.instanceType).toBe('t3.small')
+  })
+
+  it.each(['micro', 'medium', 'large', 'gpu'])('normalises %s', async (alias) => {
+    const { generatePlan } = await import('../../src/plan/generate.js')
+    const plan = await generatePlan({ stackName: 'default', provider: 'aws', instanceType: alias })
+    expect(plan.spec.instanceType).not.toBe(alias)
+  })
+
+  it('passes a provider-native type through, and says so', async () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    try {
+      const { generatePlan } = await import('../../src/plan/generate.js')
+      const plan = await generatePlan({
+        stackName: 'default',
+        provider: 'aws',
+        instanceType: 'c6g.metal',
+      })
+      // An operator naming a real machine type knows their cloud's catalogue better than our
+      // table does. A mistyped alias would reach the cloud unremarked without the note.
+      expect(plan.spec.instanceType).toBe('c6g.metal')
+      expect(stderr.mock.calls.map((c) => String(c[0])).join('')).toMatch(/is not a clawops size/)
+    } finally {
+      stderr.mockRestore()
+    }
   })
 })
