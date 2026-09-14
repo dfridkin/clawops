@@ -12,6 +12,7 @@ import {
   formatKnownHostsLine,
   keyTypeFromBlob,
   hostEntryFor,
+  withoutHost,
 } from '../../src/transport/known-hosts.js'
 
 /** Build a realistic SSH public-key blob: length-prefixed type, then body. */
@@ -240,5 +241,106 @@ describe('formatKnownHostsLine', () => {
   it('uses the bracket form for a non-default port', () => {
     expect(formatKnownHostsLine('example.com', 2222, 'ssh-rsa', KEY))
       .toBe(`[example.com]:2222 ssh-rsa ${B64}\n`)
+  })
+})
+
+describe('withoutHost', () => {
+  const KEY_A = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAA'
+  const KEY_B = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBB'
+
+  it('removes the entry for that host', () => {
+    const content = `203.0.113.4 ${KEY_A}\n198.51.100.7 ${KEY_B}\n`
+    expect(withoutHost(content, '203.0.113.4', 22)).toBe(`198.51.100.7 ${KEY_B}\n`)
+  })
+
+  it('leaves every other host alone', () => {
+    const content = `198.51.100.7 ${KEY_B}\n203.0.113.4 ${KEY_A}\n`
+    const result = withoutHost(content, '203.0.113.4', 22)
+    expect(result).toContain('198.51.100.7')
+    expect(result).not.toContain('203.0.113.4')
+  })
+
+  it('keeps comments and blank lines — this may be the operator\'s own file', () => {
+    const content = `# my hosts\n\n203.0.113.4 ${KEY_A}\n\n# another\n198.51.100.7 ${KEY_B}\n`
+    const result = withoutHost(content, '203.0.113.4', 22)
+    expect(result).toContain('# my hosts')
+    expect(result).toContain('# another')
+    expect(result).toContain('198.51.100.7')
+    expect(result).not.toContain('203.0.113.4')
+  })
+
+  it('matches the bracketed form for a non-default port', () => {
+    const content = `[203.0.113.4]:2222 ${KEY_A}\n203.0.113.4 ${KEY_B}\n`
+    const result = withoutHost(content, '203.0.113.4', 2222)
+    // Port 22 and port 2222 on one address are two different hosts to OpenSSH.
+    expect(result).not.toContain('[203.0.113.4]:2222')
+    expect(result).toContain(`203.0.113.4 ${KEY_B}`)
+  })
+
+  it('removes every entry for the host, not just the first', () => {
+    // A host with both an ed25519 and an RSA key has two lines.
+    const content = `203.0.113.4 ${KEY_A}\n203.0.113.4 ssh-rsa AAAAB3Nz\n198.51.100.7 ${KEY_B}\n`
+    const result = withoutHost(content, '203.0.113.4', 22)
+    expect(result).not.toContain('203.0.113.4')
+    expect(result).toContain('198.51.100.7')
+  })
+
+  it('leaves a file with no entry for that host unchanged', () => {
+    const content = `198.51.100.7 ${KEY_B}\n`
+    expect(withoutHost(content, '203.0.113.4', 22)).toBe(content)
+  })
+
+  it('leaves an unparseable line exactly as it is', () => {
+    const content = `garbage-with-no-key\n203.0.113.4 ${KEY_A}\n`
+    const result = withoutHost(content, '203.0.113.4', 22)
+    expect(result).toContain('garbage-with-no-key')
+  })
+
+  it('handles an empty file', () => {
+    expect(withoutHost('', '203.0.113.4', 22)).toBe('')
+  })
+})
+
+describe('describeConnectError', () => {
+  const OPTS = { host: '203.0.113.4', port: 22, knownHostsPath: '/home/u/.clawops/known_hosts' }
+
+  it('explains a host-key mismatch and gives the exact command to clear it', async () => {
+    const { describeConnectError } = await import('../../src/transport/ssh.js')
+    const message = describeConnectError('Host denied (verification failed)', OPTS)
+    // ssh2's own wording is accurate and useless: it names no file and no remedy.
+    expect(message).toContain('/home/u/.clawops/known_hosts')
+    expect(message).toContain('ssh-keygen -R 203.0.113.4 -f /home/u/.clawops/known_hosts')
+  })
+
+  it('does not tell the operator to delete a key they should be suspicious of', async () => {
+    const { describeConnectError } = await import('../../src/transport/ssh.js')
+    const message = describeConnectError('Host denied (verification failed)', OPTS)
+    // An address changing hands unexpectedly is the one case where this error is doing its job.
+    expect(message).toMatch(/did not expect this address to change hands, do not connect/)
+  })
+
+  it('brackets the host for a non-default port, as known_hosts does', async () => {
+    const { describeConnectError } = await import('../../src/transport/ssh.js')
+    const message = describeConnectError('Host denied (verification failed)', {
+      ...OPTS,
+      port: 2222,
+    })
+    expect(message).toContain('ssh-keygen -R [203.0.113.4]:2222')
+  })
+
+  it('leaves every other failure as it was', async () => {
+    const { describeConnectError } = await import('../../src/transport/ssh.js')
+    expect(describeConnectError('connect ECONNREFUSED 203.0.113.4:22', OPTS)).toBe(
+      'SSH connection failed: connect ECONNREFUSED 203.0.113.4:22',
+    )
+  })
+
+  it('keeps a refused connection classified as worth retrying', async () => {
+    const { describeConnectError } = await import('../../src/transport/ssh.js')
+    const { isTransient } = await import('../../src/transport/wait.js')
+    // The readiness wait reads these messages; rewording one into something it no longer
+    // recognises would turn a booting instance into a hard failure.
+    expect(isTransient(describeConnectError('connect ECONNREFUSED', OPTS))).toBe(true)
+    expect(isTransient(describeConnectError('Host denied (verification failed)', OPTS))).toBe(false)
   })
 })

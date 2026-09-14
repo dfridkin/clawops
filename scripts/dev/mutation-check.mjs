@@ -493,6 +493,23 @@ const MUTATIONS = [
   { name: 'a caller with only onOutput stops seeing progress',
     file: 'src/plan/apply.ts', from: '  else opts?.onOutput?.(line)', to: '', test: 'tests/plan/apply.test.ts' },
 
+  { name: 'destroy leaves a stale host key behind',
+    file: 'src/cli/commands/destroy.ts', from: '      const removed = forgetHost(', to: '      const removed = false && forgetHost(', test: 'tests/cli/destroy.test.ts' },
+  { name: 'the host is read after the instance is gone',
+    file: 'src/cli/commands/destroy.ts', from: '    const doomedHost = await hostOf(stack, ctx)\n', to: '', test: 'tests/cli/destroy.test.ts' },
+  { name: 'a ~ in the known_hosts path is passed through',
+    file: 'src/cli/commands/destroy.ts', from: "  return p.replace(/^~/, process.env['HOME'] ?? '~')", to: '  return p', test: 'tests/cli/destroy.test.ts' },
+  { name: 'forgetting a host takes every other host with it',
+    file: 'src/transport/known-hosts.ts', from: '    if (entry && entryMatchesHost(entry, hostEntry)) continue', to: '    if (entry) continue', test: 'tests/transport/known-hosts.test.ts' },
+  { name: 'the port is ignored when forgetting a host',
+    file: 'src/transport/known-hosts.ts', from: '  const hostEntry = hostEntryFor(host, port)\n  const kept', to: '  const hostEntry = hostEntryFor(host, 22)\n  const kept', test: 'tests/transport/known-hosts.test.ts' },
+  { name: 'a host-key mismatch is reported in ssh2 jargon again',
+    file: 'src/transport/ssh.ts', from: '  if (!/host.*(denied|verification)/i.test(message)) {', to: '  if (true) {', test: 'tests/transport/known-hosts.test.ts' },
+  { name: 'the mismatch advice drops the caveat',
+    file: 'src/transport/ssh.ts', from: "    'If you did not expect this address to change hands, do not connect.'", to: "    ''", test: 'tests/transport/known-hosts.test.ts' },
+  { name: 'a rewritten error stops being recognised as retryable',
+    file: 'src/transport/ssh.ts', from: '    return `SSH connection failed: ${message}`', to: '    return `SSH failed: ${message}`', test: 'tests/transport/known-hosts.test.ts' },
+
 ]
 
 let survived = []

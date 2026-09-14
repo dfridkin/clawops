@@ -384,6 +384,27 @@ way. `clawops doctor` reports which one it found, from where, and at what versio
 
 See [ADR 0010](docs/decisions/0010-pulumi-cli-bootstrap.md), which supersedes ADR 0006.
 
+### Redeploying onto a recycled cloud address failed host-key verification
+
+Fixed in 2.0.1. A cloud hands addresses back out: destroy a stack, deploy another, and the new
+instance can land on the address the old one just released — with a different host key.
+Trust-on-first-use then refused to connect, correctly, over a machine that no longer existed:
+
+```
+ERROR  SSH to 136.116.28.199:22 failed for a reason waiting will not fix:
+       Host denied (verification failed)
+```
+
+clawops creates these hosts and destroys them, so the moment it destroys one, that host's
+pinned key is stale by construction. `clawops destroy` forgets it — every other entry, every
+comment and the rest of the file are untouched, since `ssh.knownHostsPath` may be your own
+`~/.ssh/known_hosts`. Loosening verification would have been the other way to make this go
+away, and is not one clawops takes.
+
+When a mismatch does happen, the error names the file and the exact command to clear one
+entry — and still says that an address changing hands unexpectedly is the case where you
+should not.
+
 ### `apply` reported success before OpenClaw existed
 
 Fixed in 2.0.1. Waiting for SSH is not the same as waiting for the deployment. The startup
