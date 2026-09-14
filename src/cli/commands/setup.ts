@@ -291,6 +291,8 @@ export default defineCommand({
     const modelProvider = catalogs.models.find((p) => p.id === modelProviderId)!
     const modelConfig: Record<string, unknown> = {}
     const secrets: Array<{ name: string; source: 'env' | 'file'; ref: string }> = []
+    let resolvedModelId: string | undefined
+    let bedrockRegion: string | undefined
 
     const { selectedModelId } = await inquirer.prompt<{ selectedModelId: string }>([{
       type: 'list',
@@ -313,7 +315,29 @@ export default defineCommand({
     } else if (modelProvider.credentialSource === 'aws-profile') {
       process.stdout.write('\n')
       info(modelProvider.iamNote ?? 'Bedrock uses your AWS server\'s IAM role — no API key needed.')
-      info('Make sure your EC2 instance has the AmazonBedrockFullAccess IAM policy attached.\n')
+
+      // Bedrock refuses bare foundation-model ids for on-demand inference, and the usable
+      // inference profile depends on the region. Resolved here, while this is still a
+      // question someone can answer, rather than at first use on a deployed gateway.
+      bedrockRegion = typeof stackAnswers.region === 'string' && stackAnswers.region
+        ? stackAnswers.region
+        : defaultRegion('aws')
+      const { fetchInferenceProfiles, resolveInferenceProfile } =
+        await import('../../openclaw/bedrock.js')
+      const listed = await fetchInferenceProfiles(bedrockRegion)
+      if (!listed.ok) {
+        warn(listed.error)
+        info('Continuing with the foundation-model id; Bedrock will refuse it until this is fixed.')
+      } else {
+        const wanted = selectedModel.modelId ?? selectedModel.id
+        const resolution = resolveInferenceProfile(wanted, listed.profiles, bedrockRegion)
+        if (!resolution.ok) {
+          const { UsageError } = await import('../../errors/index.js')
+          throw new UsageError(resolution.error)
+        }
+        resolvedModelId = resolution.profileId
+        info(`Using inference profile ${resolution.profileId} (${resolution.why}).`)
+      }
     } else if (modelProvider.id === 'ollama') {
       const { baseUrl } = await inquirer.prompt<{ baseUrl: string }>([{
         type: 'input',
@@ -332,11 +356,19 @@ export default defineCommand({
       modelConfig['baseUrl'] = rewritten
     }
 
-    const builtModelConfig: Record<string, unknown> = {
-      provider: modelProviderId,
-      ...(selectedModel.modelId ? { modelId: selectedModel.modelId } : { model: selectedModel.id }),
-      ...modelConfig,
-    }
+    // `models.providers.<id>`, from the catalog's own configPath. This used to be
+    // `{ provider, modelId }`, which is not a shape OpenClaw has: validation rejected it for
+    // every provider, and because `requiredPlugins` reads `models.providers`, no plugin was
+    // ever installed for the provider that was chosen. See src/openclaw/models.ts.
+    const { buildModelsBlock } = await import('../../openclaw/models.js')
+    const builtModelConfig = buildModelsBlock({
+      provider: modelProvider,
+      model: { id: selectedModel.id, modelId: selectedModel.modelId, displayName: selectedModel.displayName },
+      resolvedModelId,
+      apiKeyRef: typeof modelConfig['apiKey'] === 'string' ? modelConfig['apiKey'] : undefined,
+      baseUrl: typeof modelConfig['baseUrl'] === 'string' ? modelConfig['baseUrl'] : undefined,
+      region: modelProvider.credentialSource === 'aws-profile' ? bedrockRegion : undefined,
+    })
 
     // ── Step 5: Integrations ───────────────────────────────────────────────────
     process.stdout.write('\n')

@@ -263,6 +263,30 @@ const MUTATIONS = [
     file: 'src/openclaw/channels.ts', from: '    return [] // unreadable output is a reporting problem, not a missing channel', to: '    return [...configuredChannelKeys(cfg)]', test: 'tests/openclaw/channels.test.ts' },
   { name: 'a channel plugin pin drifts off the runtime floor',
     file: 'spec/integrations.yaml', from: '      package: "@openclaw/discord"\n      source: npm\n      version: "2026.9.2"', to: '      package: "@openclaw/discord"\n      source: npm\n      version: "2026.9.3"', test: 'tests/spec/integrations.test.ts' },
+
+  // ── WO-64: Bedrock on the 2.0 config contract ────────────────────────────────
+  { name: 'the models block reverts to the shape OpenClaw rejects',
+    file: 'src/openclaw/models.ts', from: '  return { providers: { [key]: entry } }', to: "  return { provider: key, modelId } as Record<string, unknown>", test: 'tests/openclaw/models-block.test.ts' },
+  { name: 'the provider is keyed by catalog id, not OpenClaw id',
+    file: 'src/openclaw/models.ts', from: '  const fromPath = provider.configPath?.split(\'.\').pop()', to: '  const fromPath = undefined as string | undefined', test: 'tests/openclaw/models-block.test.ts' },
+  { name: 'the models[] array is dropped',
+    file: 'src/openclaw/models.ts', from: "  entry['models'] = [", to: "  entry['__models'] = [", test: 'tests/openclaw/models-block.test.ts' },
+  { name: 'Bedrock loses its transport',
+    file: 'src/openclaw/models.ts', from: "  if (provider.api) entry['api'] = provider.api", to: '  void provider.api', test: 'tests/openclaw/models-block.test.ts' },
+  { name: 'the model entry loses its transport',
+    file: 'src/openclaw/models.ts', from: '      ...(provider.api ? { api: provider.api } : {}),', to: '      ...{},', test: 'tests/openclaw/models-block.test.ts' },
+  { name: 'a bundled provider gets a transport it did not ask for',
+    file: 'src/openclaw/models.ts', from: "  if (provider.api) entry['api'] = provider.api", to: "  entry['api'] = provider.api ?? 'openai-responses'", test: 'tests/openclaw/models-block.test.ts' },
+  { name: 'the resolved inference profile is ignored',
+    file: 'src/openclaw/models.ts', from: '  const modelId = opts.resolvedModelId ?? model.modelId ?? model.id', to: '  const modelId = model.modelId ?? model.id', test: 'tests/openclaw/models-block.test.ts' },
+  { name: 'a profile from another geography is used anyway',
+    file: 'src/openclaw/bedrock.ts', from: '  return {\n    ok: false,\n    error:\n      `Bedrock has inference profiles', to: '  return { ok: true, profileId: candidates[0]!, why: \'any\' }\n  return {\n    ok: false,\n    error:\n      `Bedrock has inference profiles', test: 'tests/openclaw/bedrock.test.ts' },
+  { name: 'profile matching becomes a substring match',
+    file: 'src/openclaw/bedrock.ts', from: '    .filter((id) => id.endsWith(`.${foundationModelId}`))', to: '    .filter((id) => id.includes(foundationModelId))', test: 'tests/openclaw/bedrock.test.ts' },
+  { name: 'ap regions stop mapping to apac',
+    file: 'src/openclaw/bedrock.ts', from: "  if (prefix === 'ap') return 'apac'", to: '  void prefix', test: 'tests/openclaw/bedrock.test.ts' },
+  { name: 'bedrock catalog loses the transport declaration',
+    file: 'spec/models.yaml', from: '    api: bedrock-converse-stream', to: '    apiX: bedrock-converse-stream', test: 'tests/openclaw/models-block.test.ts' },
 ]
 
 let survived = []

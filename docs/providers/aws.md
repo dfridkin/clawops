@@ -44,6 +44,12 @@ is stored in config.
 
 ## Required IAM Permissions
 
+**With Bedrock selected**, the identity running `clawops` also needs
+`bedrock:ListInferenceProfiles`. Bedrock refuses bare foundation-model ids for on-demand
+inference, so clawops resolves each model to a regional inference profile at plan time; without
+this permission it warns and leaves the foundation-model id in place, which Bedrock will
+reject. This is separate from the instance role, which needs only inference access at runtime.
+
 Minimum permissions for `clawops up` / `clawops destroy`:
 
 | Service | Actions | Notes |
