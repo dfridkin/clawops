@@ -112,3 +112,21 @@ describe('doctor command', () => {
     expect(process.listenerCount('SIGINT')).toBe(before)
   })
 })
+
+describe('doctor rendering', () => {
+  it('keeps a long check name from running into its detail', async () => {
+    // padEnd does nothing once the name exceeds the column, which printed
+    // "GCP project is setDeploying into clawops-test".
+    mockRunDiagnostics.mockResolvedValue({
+      sections: [{ title: 'Cloud account', checks: [
+        { name: 'GCP project is set', status: 'pass', detail: 'Deploying into proj' },
+      ] }],
+      ok: true,
+      counts: { pass: 1, fail: 0, warn: 0, info: 0 },
+    })
+    await (cmd.run as AnyRunFn)({ args: {} })
+    const out = writes.join('\n')
+    expect(out).not.toContain('setDeploying')
+    expect(out).toMatch(/GCP project is set\s+Deploying into proj/)
+  })
+})

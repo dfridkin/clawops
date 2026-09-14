@@ -138,3 +138,30 @@ describe('gcpPreflight', () => {
     expect(checks.filter((c) => c.id.startsWith('api-')).every((c) => !c.ok)).toBe(true)
   })
 })
+
+describe('provider registration', () => {
+  it('registers the adapter on import, so getProvider can find it', async () => {
+    // `registerProvider` existed and was called by nothing. getProvider therefore threw for
+    // every provider — and `clawops doctor` uses it, so its Credentials section reported
+    // "No provider adapter registered" instead of validating anything, for every cloud stack.
+    // Deploys were unaffected, because cli/context.ts resolves mod.default directly, which is
+    // why this survived so long.
+    const { getProvider } = await import('../../../src/providers/index.js')
+    await import('../../../src/providers/gcp/index.js')
+    expect(getProvider('gcp').name).toBe('gcp')
+  })
+
+  it('every adapter registers itself', async () => {
+    // Statically imported: a templated dynamic import cannot be resolved by the bundler.
+    const { getProvider } = await import('../../../src/providers/index.js')
+    await Promise.all([
+      import('../../../src/providers/aws/index.js'),
+      import('../../../src/providers/gcp/index.js'),
+      import('../../../src/providers/azure/index.js'),
+      import('../../../src/providers/local/index.js'),
+    ])
+    for (const name of ['aws', 'gcp', 'azure', 'local'] as const) {
+      expect(getProvider(name).name, name).toBe(name)
+    }
+  })
+})
