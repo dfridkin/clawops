@@ -444,7 +444,7 @@ const MUTATIONS = [
     file: 'src/cli/context.ts', from: '  } catch {\n    throw new UsageError(\n      `Provider "${name}" is not yet supported.', to: '  } catch {\n    return getProvider(\'gcp\') ?? new UsageError(\n      `Provider "${name}" is not yet supported.', test: 'tests/cli/context.test.ts' },
 
   { name: 'apply reports success without waiting for the host',
-    file: 'src/plan/apply.ts', from: '  await waitForSsh(\n', to: '  await Promise.resolve(); void waitForSsh; if (false) await waitForSsh(\n', test: 'tests/plan/apply.test.ts' },
+    file: 'src/plan/apply.ts', from: '  await waitForSsh(await connectionInfoFor(ctx, outputs), {', to: '  void waitForSsh; await Promise.resolve(); if (false) await waitForSsh(await connectionInfoFor(ctx, outputs), {', test: 'tests/plan/apply.test.ts' },
   { name: 'the readiness wait gives up on the first refusal',
     file: 'src/transport/wait.ts', from: '      if (!isTransient(lastError)) {', to: '      if (true) {', test: 'tests/transport/wait.test.ts' },
   { name: 'a wrong key is retried until the deadline',
@@ -461,6 +461,13 @@ const MUTATIONS = [
     file: 'src/transport/wait.ts', from: '      if (attempts === 1) {', to: '      if (true) {', test: 'tests/transport/wait.test.ts' },
   { name: 'authentication failures are treated as permanent',
     file: 'src/transport/wait.ts', from: "  'All configured authentication methods failed',\n", to: '', test: 'tests/transport/wait.test.ts' },
+
+  { name: 'apply builds a connection with no key again',
+    file: 'src/plan/apply.ts', from: "    privateKeyPath: expandHome(ctx.config.ssh.keyPath),", to: "    privateKeyPath: '',", test: 'tests/plan/apply.test.ts' },
+  { name: 'apply loses the known_hosts path',
+    file: 'src/plan/apply.ts', from: "    knownHostsPath: expandHome(ctx.config.ssh.knownHostsPath),", to: "    knownHostsPath: '',", test: 'tests/plan/apply.test.ts' },
+  { name: 'a ~ in a configured path is passed to ssh2 verbatim',
+    file: 'src/plan/apply.ts', from: "  return p.replace(/^~/, process.env['HOME'] ?? '~')", to: '  return p', test: 'tests/plan/apply.test.ts' },
 
 ]
 

@@ -23,9 +23,17 @@ const mockPreview = vi.fn()
 const mockGetStack = vi.fn()
 
 const FAKE_UP_RESULT = {
+  // A full set, as a provider program exports. apply reads connection details out of these
+  // before it reports success, and a two-field stub never reached that code.
   outputs: {
-    gatewayUrl: { value: 'https://1.2.3.4:18789' },
-    publicIp:   { value: '1.2.3.4' },
+    instanceId:    { value: 'i-abc' },
+    publicIp:      { value: '1.2.3.4' },
+    gatewayUrl:    { value: 'https://1.2.3.4:18789' },
+    region:        { value: 'us-east-1' },
+    provisionedAt: { value: '2026-09-14T00:00:00.000Z' },
+    sshHost:       { value: '1.2.3.4' },
+    sshPort:       { value: 22 },
+    sshUser:       { value: 'clawops' },
   },
   summary: { resourceChanges: { create: 3 } },
 }

@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ProviderAdapter } from '../../src/providers/types.js'
 
-const { mockWaitForSsh } = vi.hoisted(() => ({ mockWaitForSsh: vi.fn() }))
+const { mockWaitForSsh, mockConnect } = vi.hoisted(() => ({
+  mockWaitForSsh: vi.fn(),
+  mockConnect: vi.fn(),
+}))
+// The overlay step opens a real session; without this the suite dials 1.2.3.4 and times out.
+vi.mock('../../src/transport/ssh.js', () => ({ connect: mockConnect }))
 vi.mock('../../src/transport/wait.js', () => ({ waitForSsh: mockWaitForSsh }))
 vi.mock('../../src/cli/context.js', () => ({
   buildContext: vi.fn(),
@@ -22,6 +27,22 @@ vi.mock('../../src/config/store.js', () => ({
   })),
   getConfigDir: vi.fn(() => '/tmp/clawops-test'),
 }))
+
+/**
+ * What a provider program actually exports. Tests used to hand back two fields, which could
+ * not reach the code that reads a stack's connection details — part of why that code stayed
+ * wrong so long.
+ */
+const REALISTIC_OUTPUTS = {
+  instanceId:    { value: 'i-0abc' },
+  publicIp:      { value: '1.2.3.4' },
+  gatewayUrl:    { value: 'https://gw.example.com' },
+  region:        { value: 'us-east-1' },
+  provisionedAt: { value: '2026-09-14T00:00:00.000Z' },
+  sshHost:       { value: '1.2.3.4' },
+  sshPort:       { value: 22 },
+  sshUser:       { value: 'clawops' },
+}
 
 const mockUp = vi.fn()
 const mockSetConfig = vi.fn()
@@ -53,13 +74,11 @@ const basePlan = {
 
 beforeEach(async () => {
   mockWaitForSsh.mockReset().mockResolvedValue(undefined)
+  mockConnect.mockReset().mockRejectedValue(new Error('no host in a unit test'))
   vi.clearAllMocks()
 
   mockUp.mockResolvedValue({
-    outputs: {
-      gatewayUrl: { value: 'https://gw.example.com' },
-      publicIp:   { value: '1.2.3.4' },
-    },
+    outputs: REALISTIC_OUTPUTS,
     summary: {
       resourceChanges: { create: 3, same: 1 },
     },
@@ -74,18 +93,22 @@ beforeEach(async () => {
 
   const { buildContext } = await import('../../src/cli/context.js')
   vi.mocked(buildContext).mockReturnValue({
+    // The operator's SSH paths live here, not in stack outputs.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    config: {} as any,
+    config: { ssh: { keyPath: '~/.clawops/id_ed25519', knownHostsPath: '~/.clawops/known_hosts' } } as any,
     // apply waits for the instance to accept SSH before it reports success, so the adapter
     // has to answer where that instance is.
     adapter: {
       name: 'aws',
-      getConnectionInfo: () => ({
+      // The real adapters read these two out of the object they are handed — they are the
+      // operator's paths, not stack outputs — so the mock does too. apply used to pass raw
+      // outputs and build a connection with an empty key path.
+      getConnectionInfo: (o: Record<string, unknown>) => ({
         host: '203.0.113.4',
         port: 22,
         user: 'clawops',
-        privateKeyPath: '/tmp/key',
-        knownHostsPath: '/tmp/known_hosts',
+        privateKeyPath: String(o['privateKeyPath'] ?? ''),
+        knownHostsPath: String(o['knownHostsPath'] ?? ''),
       }),
     } as unknown as ProviderAdapter,
     stackName: 'default',
@@ -214,7 +237,7 @@ describe('applyPlan()', () => {
     mockUp.mockImplementation(async ({ onOutput }: { onOutput?: (s: string) => void }) => {
       onOutput?.('line 1')
       onOutput?.('line 2')
-      return { outputs: {}, summary: {} }
+      return { outputs: REALISTIC_OUTPUTS, summary: {} }
     })
 
     const lines: string[] = []
@@ -243,7 +266,7 @@ describe('applyPlan()', () => {
   })
 
   it('returns empty changeSummary when resourceChanges is absent', async () => {
-    mockUp.mockResolvedValue({ outputs: {}, summary: {} })
+    mockUp.mockResolvedValue({ outputs: REALISTIC_OUTPUTS, summary: {} })
     const { applyPlan } = await import('../../src/plan/apply.js')
     const result = await applyPlan(basePlan)
     expect(result.changeSummary).toEqual({})
@@ -332,5 +355,28 @@ describe('applyPlan waits for the instance to be reachable', () => {
       // matters, and it is recorded before that happens.
     }
     expect(order).toEqual(['wait'])
+  })
+})
+
+describe('the connection apply waits on', () => {
+  it('carries the operator\'s key, which stack outputs do not contain', async () => {
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan)
+    // Passing raw outputs produced: Cannot read SSH private key at : ENOENT … open ''
+    expect(mockWaitForSsh).toHaveBeenCalledWith(
+      expect.objectContaining({
+        privateKeyPath: expect.stringContaining('id_ed25519'),
+        knownHostsPath: expect.stringContaining('known_hosts'),
+      }),
+      expect.anything(),
+    )
+  })
+
+  it('expands ~ in the configured paths', async () => {
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan)
+    const conn = mockWaitForSsh.mock.calls[0]?.[0] as { privateKeyPath: string }
+    // ssh2 opens the path verbatim; "~" is a directory name to it.
+    expect(conn.privateKeyPath.startsWith('~')).toBe(false)
   })
 })
