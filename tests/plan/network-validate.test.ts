@@ -15,6 +15,21 @@ describe('validatePlanNetwork', () => {
     expect(r.errors).toEqual([])
   })
 
+  it('warns when no CIDR can reach SSH, naming the commands that break', () => {
+    const r = validatePlanNetwork(plan({ allowedSshCidrs: [], allowedGatewayCidrs: [] }))
+    // A warning, not an error: deny-all is the correct default and a bastion-only plan is
+    // legitimate. What is not acceptable is learning it after the VM exists.
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(' ')).toMatch(/no SSH connections at all/)
+    expect(r.warnings.join(' ')).toMatch(/clawops ssh/)
+    expect(r.warnings.join(' ')).toMatch(/--ssh-cidr auto/)
+  })
+
+  it('does not warn about SSH once a CIDR can reach it', () => {
+    const r = validatePlanNetwork(plan({ allowedSshCidrs: ['10.0.0.1/32'], allowedGatewayCidrs: [] }))
+    expect(r.warnings.join(' ')).not.toMatch(/no SSH connections/)
+  })
+
   it('refuses gateway CIDRs alongside loopback publishing', () => {
     // The rules would admit traffic to a port nothing routable is listening on: no access
     // granted, and a security group that reads as an exposed gateway to anyone auditing it.

@@ -332,6 +332,23 @@ const MUTATIONS = [
     file: 'src/pulumi/cli.ts', from: '`could not install the Pulumi CLI into ${root}: ${reason}\\n` +', to: '`could not install the Pulumi CLI into ${root}\\n` +', test: 'tests/pulumi/cli.test.ts' },
   { name: 'the CLI root collides with the Pulumi home',
     file: 'src/pulumi/cli.ts', from: "return path.join(configDir, '.pulumi-cli')", to: "return path.join(configDir, '.pulumi')", test: 'tests/pulumi/cli.test.ts' },
+  { name: 'plan ignores --ssh-cidr again',
+    file: 'src/cli/commands/plan.ts', from: '          network,\n', to: '', test: 'tests/cli/plan.test.ts' },
+  { name: 'a bare IP is assumed to be a /32',
+    file: 'src/plan/network-args.ts', from: "  return /^(\\d{1,3}\\.){3}\\d{1,3}\\/(3[0-2]|[12]?\\d)$/.test(v)", to: "  return /^(\\d{1,3}\\.){3}\\d{1,3}(\\/(3[0-2]|[12]?\\d))?$/.test(v)", test: 'tests/plan/network-args.test.ts' },
+  { name: 'an invalid CIDR is passed through to the provider',
+    file: 'src/plan/network-args.ts', from: '    if (!isCidr(p)) {', to: '    if (false) {', test: 'tests/plan/network-args.test.ts tests/cli/plan.test.ts' },
+  { name: 'failed IP detection falls back to no rules',
+    file: 'src/plan/network-args.ts', from: "  if (!result.ok || result.ip.trim() === '') {", to: '  if (false) {', test: 'tests/plan/network-args.test.ts tests/cli/plan.test.ts' },
+  { name: 'auto resolves to a whole /24 instead of this host',
+    file: 'src/plan/network-args.ts', from: "return ip.includes('/') ? ip : `${ip}/32`", to: "return ip.includes('/') ? ip : `${ip}/24`", test: 'tests/plan/network-args.test.ts' },
+  { name: 'the ssh flag fills the gateway list',
+    file: 'src/plan/network-args.ts', from: "    ['--ssh-cidr', flags.sshCidr, 'allowedSshCidrs'],", to: "    ['--ssh-cidr', flags.sshCidr, 'allowedGatewayCidrs'],", test: 'tests/plan/network-args.test.ts tests/cli/plan.test.ts' },
+  { name: 'publish-gateway accepts anything',
+    file: 'src/plan/network-args.ts', from: "  if (v === 'loopback' || v === 'all') return v", to: "  return v as 'loopback' | 'all'; if (v === 'loopback' || v === 'all') return v", test: 'tests/plan/network-args.test.ts tests/cli/plan.test.ts' },
+  { name: 'a plan that admits nobody says nothing about it',
+    file: 'src/plan/validate.ts', from: "  if ((net.allowedSshCidrs ?? []).length === 0) {", to: '  if (false) {', test: 'tests/plan/network-validate.test.ts' },
+
 ]
 
 let survived = []

@@ -132,6 +132,18 @@ export function validatePlanNetwork(plan: {
     )
   }
 
+  // A plan with no SSH rules deploys a host nobody can reach — including clawops, whose
+  // day-two commands are all SSH. Deny-all is the right default, so this is a warning rather
+  // than an error: `clawops up` on a bastion-only network is a legitimate plan. What is not
+  // legitimate is finding out after the VM exists.
+  if ((net.allowedSshCidrs ?? []).length === 0) {
+    warnings.push(
+      'network.allowedSshCidrs is empty, so this deployment will accept no SSH connections ' +
+        'at all — `clawops ssh`, `logs`, `tunnel` and `harden` will not be able to reach it. ' +
+        'Pass `--ssh-cidr auto` (this machine) or an explicit CIDR when generating the plan.',
+    )
+  }
+
   // N10. clawops never defaults to this; a plan can still ask for it.
   for (const [field, cidrs] of [
     ['allowedSshCidrs', net.allowedSshCidrs ?? []],

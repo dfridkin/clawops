@@ -6,6 +6,9 @@ vi.mock('../../src/cli/context.js', () => ({ buildContext: vi.fn() }))
 const mockGeneratePlan = vi.fn()
 vi.mock('../../src/plan/generate.js', () => ({ generatePlan: mockGeneratePlan }))
 
+const mockDetectEgressIp = vi.fn()
+vi.mock('../../src/providers/firewall.js', () => ({ detectEgressIp: mockDetectEgressIp }))
+
 const mockWriteFileSync = vi.fn()
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>()
@@ -56,6 +59,7 @@ beforeEach(async () => {
     getStack: vi.fn() as any,
   })
   mockGeneratePlan.mockResolvedValue(basePlan)
+  mockDetectEgressIp.mockResolvedValue({ ok: true, ip: '203.0.113.4' })
 })
 
 afterEach(() => {
@@ -170,5 +174,77 @@ describe('plan command', () => {
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
     await expect((cmd.run as AnyRunFn)({ args: {} })).rejects.toThrow('plan gen error')
+  })
+})
+
+describe('plan network flags', () => {
+  beforeEach(() => {
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  })
+
+  function intent() {
+    return mockGeneratePlan.mock.calls[0]?.[0] as { network?: Record<string, unknown> }
+  }
+
+  it('sends an empty network block when no flag is passed', async () => {
+    await (cmd.run as AnyRunFn)({ args: {} })
+    // Deny-all stays the default. The point of the flags is that it is now expressible.
+    expect(intent().network).toEqual({ allowedSshCidrs: [], allowedGatewayCidrs: [] })
+  })
+
+  it('passes --ssh-cidr through to the plan', async () => {
+    await (cmd.run as AnyRunFn)({ args: { 'ssh-cidr': '10.0.0.0/8,192.168.1.1/32' } })
+    expect(intent().network).toMatchObject({
+      allowedSshCidrs: ['10.0.0.0/8', '192.168.1.1/32'],
+    })
+  })
+
+  it('resolves --ssh-cidr auto at plan time, so the plan says which address it admits', async () => {
+    await (cmd.run as AnyRunFn)({ args: { 'ssh-cidr': 'auto' } })
+    expect(mockDetectEgressIp).toHaveBeenCalledWith('https://ifconfig.me')
+    expect(intent().network).toMatchObject({ allowedSshCidrs: ['203.0.113.4/32'] })
+  })
+
+  it('passes --gateway-cidr and --publish-gateway through together', async () => {
+    await (cmd.run as AnyRunFn)({
+      args: { 'gateway-cidr': '10.0.0.0/8', 'publish-gateway': 'all' },
+    })
+    expect(intent().network).toMatchObject({
+      allowedGatewayCidrs: ['10.0.0.0/8'],
+      publishGateway: 'all',
+    })
+  })
+
+  it('rejects a bad CIDR before generating anything', async () => {
+    const { UsageError } = await import('../../src/errors/index.js')
+    await expect((cmd.run as AnyRunFn)({ args: { 'ssh-cidr': 'nonsense' } })).rejects.toBeInstanceOf(
+      UsageError,
+    )
+    // A preview runs against the cloud. Validating after it would waste that round trip and
+    // report a typo as a plan failure.
+    expect(mockGeneratePlan).not.toHaveBeenCalled()
+  })
+
+  it('rejects a bad --publish-gateway before generating anything', async () => {
+    const { UsageError } = await import('../../src/errors/index.js')
+    await expect(
+      (cmd.run as AnyRunFn)({ args: { 'publish-gateway': 'public' } }),
+    ).rejects.toBeInstanceOf(UsageError)
+    expect(mockGeneratePlan).not.toHaveBeenCalled()
+  })
+
+  it('stops when `auto` cannot be resolved rather than planning an unreachable host', async () => {
+    mockDetectEgressIp.mockResolvedValue({ ok: false, error: 'offline' })
+    const { UsageError } = await import('../../src/errors/index.js')
+    await expect((cmd.run as AnyRunFn)({ args: { 'ssh-cidr': 'auto' } })).rejects.toBeInstanceOf(
+      UsageError,
+    )
+    expect(mockGeneratePlan).not.toHaveBeenCalled()
+  })
+
+  it('does not reach the network when no flag asks it to', async () => {
+    await (cmd.run as AnyRunFn)({ args: { 'ssh-cidr': '10.0.0.0/8' } })
+    expect(mockDetectEgressIp).not.toHaveBeenCalled()
   })
 })

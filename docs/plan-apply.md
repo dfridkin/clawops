@@ -26,6 +26,31 @@ Plan written to /tmp/plan.json
 
 The summary writes to stderr so that `--out`-less stdout JSON piping (`clawops plan | jq .diff`) remains clean.
 
+## Who may connect
+
+The plan's `network` block is the only thing that opens a port, and `apply` copies it verbatim
+into stack config. Three flags fill it:
+
+| Flag | Meaning |
+|---|---|
+| `--ssh-cidr <list\|auto>` | CIDRs allowed to reach SSH. `auto` resolves this machine's public IP to a `/32` **while the plan is generated**, so the plan records the address rather than deferring it to apply time. |
+| `--gateway-cidr <list\|auto>` | CIDRs allowed to reach the gateway port. Requires `--publish-gateway all`. |
+| `--publish-gateway loopback\|all` | Which interface the gateway binds. `loopback` (default) keeps it off the network; reach it with `clawops tunnel`. |
+
+Omitting `--ssh-cidr` is a valid plan and produces **no ingress rules at all** — deny-all is
+the default N10 requires. `clawops plan` warns when it happens, because a host nothing can
+reach is rarely what was intended:
+
+```
+[clawops] warning: network.allowedSshCidrs is empty, so this deployment will accept no SSH
+connections at all — `clawops ssh`, `logs`, `tunnel` and `harden` will not be able to reach
+it. Pass `--ssh-cidr auto` (this machine) or an explicit CIDR when generating the plan.
+```
+
+A bare IP is refused rather than assumed to be a `/32`, and `auto` failing to resolve stops
+the plan rather than falling back — neither an empty list nor `0.0.0.0/0` is a safe guess
+about who should be let in.
+
 ## What `clawops plan` produces
 
 `clawops plan` runs `pulumi preview` against your stack and wraps the result in a JSON artifact
@@ -192,8 +217,14 @@ clawops up --provider local   # no plan file needed
 ## Related commands
 
 ```bash
-clawops plan --provider aws --stack default --out /tmp/plan.json
-clawops plan --provider gcp --instance-type medium --out /tmp/plan.json
+clawops plan --provider aws --stack default --ssh-cidr auto --out /tmp/plan.json
+clawops plan --provider gcp --instance-type medium --ssh-cidr 203.0.113.4/32 --out /tmp/plan.json
+
+# Publish the gateway on a routable interface and admit one network to it. Plaintext HTTP —
+# put TLS in front of it. Without --publish-gateway all, gateway CIDRs are refused: they
+# would admit traffic to a port nothing routable is listening on.
+clawops plan --provider aws --ssh-cidr auto --publish-gateway all \
+  --gateway-cidr 203.0.113.0/24 --out /tmp/plan.json
 
 clawops apply /tmp/plan.json             # interactive confirm
 clawops apply /tmp/plan.json --dry-run   # validate + show diff, no apply

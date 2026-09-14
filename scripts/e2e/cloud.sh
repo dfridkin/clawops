@@ -70,8 +70,10 @@ fi
 
 echo
 echo "── Deploying ${STACK} on ${PROVIDER} (OpenClaw ${FLOOR}) ───────"
+# --ssh-cidr auto: every assertion below runs over SSH, so a plan with no ingress fails all
+# of them for a reason that has nothing to do with the runtime contract being tested.
 pnpm dev plan --provider "$PROVIDER" --stack "$STACK" --openclaw-version "$FLOOR" \
-  --out "/tmp/${STACK}.plan.json" || exit 1
+  --ssh-cidr auto --out "/tmp/${STACK}.plan.json" || exit 1
 pnpm dev apply "/tmp/${STACK}.plan.json" --yes || exit 1
 
 echo
