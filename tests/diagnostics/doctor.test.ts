@@ -423,3 +423,44 @@ describe('the SSH key check', () => {
     expect(check?.detail).toMatch(/ssh-ed25519/)
   })
 })
+
+describe('doctor --provider', () => {
+  it('checks that provider even with no stack for it', async () => {
+    // `docs/providers/azure.md` has documented `clawops doctor --provider azure` from the
+    // beginning, and there was no such flag: the only way to ask "am I set up for Azure?" was
+    // to register a stack first and read the answer off a check about something else.
+    mockGetConfig.mockReturnValue(null)
+    mockValidateConfig.mockResolvedValue({ ok: true, errors: [] })
+    const report = await runDiagnostics({ provider: 'azure' })
+    const check = find(report, 'azure')
+    expect(check?.status).toBe('pass')
+  })
+
+  it('reports the provider\'s own error when it has no credentials', async () => {
+    mockGetConfig.mockReturnValue(null)
+    mockValidateConfig.mockResolvedValue({
+      ok: false,
+      errors: ['No Azure credentials found. Run `az login`…'],
+    })
+    const report = await runDiagnostics({ provider: 'azure' })
+    expect(find(report, 'azure')?.status).toBe('fail')
+    expect(find(report, 'azure')?.detail).toMatch(/az login/)
+    expect(report.ok).toBe(false)
+  })
+
+  it('does not report on the other providers a config happens to hold', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockGetConfig.mockReturnValue(baseConfig as any)
+    mockValidateConfig.mockResolvedValue({ ok: true, errors: [] })
+    const report = await runDiagnostics({ provider: 'azure' })
+    expect(find(report, 'azure')).toBeDefined()
+    // The config's stack is aws; asking about azure should not answer about aws.
+    expect(find(report, 'aws')).toBeUndefined()
+  })
+
+  it('needs no cloud credentials for the local provider', async () => {
+    mockGetConfig.mockReturnValue(null)
+    const report = await runDiagnostics({ provider: 'local' })
+    expect(find(report, 'local')?.status).toBe('pass')
+  })
+})

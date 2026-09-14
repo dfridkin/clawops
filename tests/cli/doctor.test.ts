@@ -130,3 +130,26 @@ describe('doctor rendering', () => {
     expect(out).toMatch(/GCP project is set\s+Deploying into proj/)
   })
 })
+
+describe('doctor flags reach the diagnostics', () => {
+  it('forwards --provider', async () => {
+    // The flag is only useful if it travels: the checks themselves are covered in
+    // tests/diagnostics, and this is the wire between them.
+    await (cmd.run as AnyRunFn)({ args: { provider: 'azure' } })
+    expect(mockRunDiagnostics).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'azure' }),
+    )
+  })
+
+  it('forwards --stack', async () => {
+    await (cmd.run as AnyRunFn)({ args: { stack: 'prod' } })
+    expect(mockRunDiagnostics).toHaveBeenCalledWith(expect.objectContaining({ stack: 'prod' }))
+  })
+
+  it('sends no provider when the flag is absent', async () => {
+    await (cmd.run as AnyRunFn)({ args: {} })
+    expect(mockRunDiagnostics).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: undefined }),
+    )
+  })
+})

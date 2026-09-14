@@ -100,8 +100,24 @@ echo "── Deploying ${STACK} on ${PROVIDER} (OpenClaw ${FLOOR}) ────�
 # apply resolves the stack's state backend from ~/.clawops/config.json, so a stack name that
 # has never been registered cannot be applied. Register this run's throwaway name against the
 # same bucket and region as the configured default stack.
-STATE_URL=$(node -e "const c=require(require('os').homedir()+'/.clawops/config.json');const s=c.stacks[c.defaults.stack];process.stdout.write(s.stateUrl)")
-REGION=$(node -e "const c=require(require('os').homedir()+'/.clawops/config.json');const s=c.stacks[c.defaults.stack];process.stdout.write(s.region??'')")
+# From a stack of the SAME provider, not from whichever stack happens to be the default: the
+# state backends are not interchangeable. Taking the default's would have registered an Azure
+# stack against a `gs://` bucket.
+STACK_INFO=$(node -e "
+const c = require(require('os').homedir() + '/.clawops/config.json')
+const match = Object.values(c.stacks).find((s) => s.provider === process.argv[1])
+if (!match) {
+  console.error('No ' + process.argv[1] + ' stack in ~/.clawops/config.json to borrow a state backend from.')
+  console.error('Register one first: clawops init --provider ' + process.argv[1] + ' --state <url>')
+  process.exit(1)
+}
+process.stdout.write(match.stateUrl + ' ' + (match.region ?? ''))
+" "$PROVIDER") || exit 1
+read -r STATE_URL REGION <<<"$STACK_INFO"
+if [ -z "$STATE_URL" ]; then
+  echo "Could not resolve a state backend for ${PROVIDER}." >&2
+  exit 1
+fi
 echo "Registering ${STACK} → ${STATE_URL} (${REGION})"
 pnpm dev init --provider "$PROVIDER" --stack "$STACK" --state "$STATE_URL" \
   ${REGION:+--region "$REGION"} --non-interactive || exit 1

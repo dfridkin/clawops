@@ -830,7 +830,7 @@ clawops down --yes          # Destroy local-provider stack
 | `gateway` | Restart the OpenClaw gateway service |
 | `backup` | Create and restore OpenClaw state backups (`restore` expands into a staging directory, never in place) |
 | `stacks` | List named stacks and their state |
-| `doctor` | Check the local machine; with `--stack`, the deployment's health too. `--json` for the report. Exits 1 on any failure |
+| `doctor` | Check the local machine; with `--stack`, the deployment's health too; with `--provider`, one cloud's credentials and account setup whether or not a stack exists. `--json` for the report. Exits 1 on any failure |
 | `secret` | Manage secrets: `list`, `set`, `delete`, `rotate`, `audit` |
 | `monitor` | Live dashboard: gateway health, container stats, log tail, stack picker |
 | `mcp serve` | Start the embedded MCP server (stdio, or HTTP with `--http <port> --token <t>`) |

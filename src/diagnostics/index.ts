@@ -20,6 +20,8 @@ import { probeCommand, interpretProbe } from '../openclaw/health.js'
 import { execPrivileged } from '../transport/privileged.js'
 import type { SshSession } from '../transport/ssh.js'
 import type { ClawopsConfig } from '../config/store.js'
+// Adapters register themselves on import, and every check here looks one up by name.
+import '../providers/register.js'
 
 /**
  * `fail` means something is wrong that clawops can name. `warn` means something worth
@@ -55,6 +57,13 @@ export interface DiagnosticsReport {
 export interface DiagnosticsOpts {
   /** Include remote health and hardening checks against this stack. */
   stack?: string
+  /**
+   * Check this provider's credentials and account setup, whether or not a stack for it
+   * exists. `docs/providers/azure.md` has documented `clawops doctor --provider azure` from
+   * the beginning; without it, the only way to ask "am I set up for Azure?" was to register a
+   * stack first and read the answer off a check about something else.
+   */
+  provider?: string
   signal?: AbortSignal
 }
 
@@ -86,9 +95,9 @@ export async function runDiagnostics(
     ],
   })
   sections.push({ title: 'SSH', checks: sshChecks(config) })
-  sections.push({ title: 'Credentials', checks: await credentialChecks(config) })
+  sections.push({ title: 'Credentials', checks: await credentialChecks(config, opts.provider) })
   sections.push({ title: 'OpenClaw', checks: await versionChecks() })
-  const account = await accountChecks(config, opts.stack)
+  const account = await accountChecks(config, opts.stack, opts.provider)
   if (account.length > 0) sections.push({ title: 'Cloud account', checks: account })
 
   if (opts.stack) {
@@ -250,17 +259,31 @@ function sshChecks(config: ClawopsConfig | null): Check[] {
   return checks
 }
 
-async function credentialChecks(config: ClawopsConfig | null): Promise<Check[]> {
+/** One provider's credential verdict, named the way the stack-driven checks name theirs. */
+async function providerCredentialCheck(provider: string, why: string): Promise<Check> {
+  if (provider === 'local') {
+    return { name: 'local', status: 'pass', detail: 'SSH-only, no cloud credentials required' }
+  }
+  const { getProvider } = await import('../providers/index.js')
+  try {
+    const adapter = getProvider(provider as 'aws' | 'gcp' | 'azure')
+    const result = await adapter.validateConfig()
+    return result.ok
+      ? { name: provider, status: 'pass', detail: why }
+      : { name: provider, status: 'fail', detail: result.errors.join('; ') }
+  } catch (err) {
+    return { name: provider, status: 'fail', detail: messageOf(err) }
+  }
+}
+
+async function credentialChecks(
+  config: ClawopsConfig | null,
+  provider?: string,
+): Promise<Check[]> {
+  if (provider) return [await providerCredentialCheck(provider, 'requested with --provider')]
   if (!config) return [{ name: 'Credentials', status: 'info', detail: 'skipped — no config' }]
 
   const { getProvider } = await import('../providers/index.js')
-  await Promise.all([
-    import('../providers/aws/index.js'),
-    import('../providers/gcp/index.js'),
-    import('../providers/azure/index.js'),
-    import('../providers/local/index.js'),
-  ])
-
   const checks: Check[] = []
   const seen = new Set<string>()
   for (const [stackName, stackCfg] of Object.entries(config.stacks)) {
@@ -519,19 +542,27 @@ function messageOf(err: unknown): string {
 async function accountChecks(
   config: ClawopsConfig | null,
   stack?: string,
+  provider?: string,
 ): Promise<Check[]> {
-  if (!config) return []
-  const stackName = stack ?? config.defaults?.stack
-  const stackCfg = stackName ? config.stacks[stackName] : undefined
-  if (!stackCfg || stackCfg.provider === 'local') return []
+  if (!config && !provider) return []
+  // With --provider and no stack of that provider there is no state backend to check, but the
+  // account-level checks that need neither — a project, an enabled API — still apply.
+  const stackName = stack ?? config?.defaults?.stack
+  const fromStack = stackName ? config?.stacks[stackName] : undefined
+  const stackCfg =
+    provider && fromStack?.provider !== provider
+      ? Object.values(config?.stacks ?? {}).find((s) => s.provider === provider)
+      : fromStack
+  const providerName = provider ?? stackCfg?.provider
+  if (!providerName || providerName === 'local') return []
 
   try {
     const { getProvider } = await import('../providers/index.js')
-    const adapter = getProvider(stackCfg.provider as 'aws' | 'gcp' | 'azure')
+    const adapter = getProvider(providerName as 'aws' | 'gcp' | 'azure')
     if (!adapter.preflight) return []
 
-    const bucket = bucketFromStateUrl(stackCfg.stateUrl)
-    const results = await adapter.preflight({ region: stackCfg.region, bucket })
+    const bucket = stackCfg ? bucketFromStateUrl(stackCfg.stateUrl) : undefined
+    const results = await adapter.preflight({ region: stackCfg?.region, bucket })
     return results.map((r) => ({
       name: r.label,
       status: r.ok ? ('pass' as const) : ('fail' as const),
