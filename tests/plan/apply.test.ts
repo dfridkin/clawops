@@ -40,6 +40,10 @@ const basePlan = {
     stackName: 'default',
     instanceType: 'small',
     openclaw: { version: '2026.9.2' },
+    // Every cloud program refuses to run without this. Carried by the plan so the suite does
+    // not fall back to whatever key exists on the machine running it — which is how these
+    // tests passed locally and failed in CI.
+    ssh: { publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFIXTURE clawops' },
     network: { allowedSshCidrs: [], allowedGatewayCidrs: [] },
   },
 }
@@ -124,6 +128,14 @@ describe('applyPlan()', () => {
     expect(mockSetConfig).toHaveBeenCalledWith('gatewayCidrs', { value: '' })
     // Deny-all is the default the CIDRs open holes in (N10).
     expect(mockSetConfig).toHaveBeenCalledWith('accessMode', { value: 'restricted' })
+  })
+
+  it('sends the plan\'s SSH public key, without which no cloud program runs', async () => {
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan)
+    expect(mockSetConfig).toHaveBeenCalledWith('sshPublicKey', {
+      value: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFIXTURE clawops',
+    })
   })
 
   it('pins the GCP project so the deploy lands where preflight looked', async () => {

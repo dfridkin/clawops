@@ -119,7 +119,13 @@ function withHost(session: FakeSshSession) {
 
 beforeEach(() => {
   mockPassphraseStatus.mockReset().mockReturnValue('stored')
-  mockReadFileSync.mockReset().mockImplementation(realReadFileSync)
+  // The SSH key check parses real key material, so the fixture must come from the test rather
+  // than from whatever happens to be at that path on this machine — locally that was the
+  // developer's own key, and CI has none.
+  mockReadFileSync.mockReset().mockImplementation(((file: unknown, ...rest: unknown[]) =>
+    String(file).endsWith('id_ed25519')
+      ? REAL_ED25519_KEY
+      : (realReadFileSync as (...a: unknown[]) => unknown)(file, ...rest)) as never)
   mockCliStatus.mockReset().mockResolvedValue({ kind: 'managed', version: 'v3.201.0', root: '/tmp/clawops-test/.pulumi-cli' })
   vi.clearAllMocks()
   mockGetConfigDir.mockReturnValue('/tmp/clawops-test')
