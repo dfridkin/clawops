@@ -10,6 +10,7 @@ import type {
   ValidationResult,
   PulumiFn,
 } from '../types.js'
+import { registerProvider } from '../index.js'
 import { azureProgram } from './program.js'
 
 const INSTANCE_TYPE_MAP: Record<InstanceAlias, string> = {
@@ -92,5 +93,11 @@ async function checkImds(): Promise<boolean> {
     return false
   }
 }
+
+// Self-registering on import. `registerProvider` existed and was called by nothing, so
+// `getProvider` threw for every provider — which `clawops doctor` uses, and which is why its
+// Credentials section reported "No provider adapter registered" instead of validating
+// anything. Deploys were unaffected: cli/context.ts resolves `mod.default` directly.
+registerProvider(azureAdapter)
 
 export default azureAdapter

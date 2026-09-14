@@ -303,6 +303,10 @@ const MUTATIONS = [
     file: 'src/providers/gcp/preflight.ts', from: '  return res.ok', to: '  return true', test: 'tests/providers/gcp/preflight.test.ts' },
   { name: 'the ADC-file test mocks nothing again',
     file: 'tests/providers/gcp/adapter.test.ts', from: '    mockAccessSync.mockImplementation(() => { throw new Error(\'ENOENT\') })', to: '    void mockAccessSync', test: 'tests/providers/gcp/adapter.test.ts' },
+  { name: 'adapters stop registering themselves',
+    file: 'src/providers/gcp/index.ts', from: 'registerProvider(gcpAdapter)', to: 'void gcpAdapter', test: 'tests/providers/gcp/preflight.test.ts' },
+  { name: 'a long check name runs into its detail again',
+    file: 'src/cli/commands/doctor.ts', from: "${check.name.length >= NAME_COLUMN ? '  ' : ''}", to: '', test: 'tests/cli/doctor.test.ts' },
 ]
 
 let survived = []

@@ -61,7 +61,11 @@ function render(report: DiagnosticsReport): void {
 }
 
 function line(check: Check): void {
-  const label = check.detail ? `${check.name.padEnd(NAME_COLUMN)}${check.detail}` : check.name
+  // padEnd does nothing when the name is already wider than the column, which ran the name
+  // straight into the detail — "GCP project is setDeploying into clawops-test".
+  const label = check.detail
+    ? `${check.name.padEnd(NAME_COLUMN)}${check.name.length >= NAME_COLUMN ? '  ' : ''}${check.detail}`
+    : check.name
   const emit = { pass: success, fail: failure, warn, info }[check.status]
   emit(label)
   if (check.remedy) info(`  ${check.remedy}`)

@@ -77,3 +77,18 @@ Neither is infrastructure, which is why neither lives in the Pulumi program: the
 has to exist before Pulumi can run at all, so a deploy cannot create it on its way past. When
 clawops creates one it enables versioning — Pulumi state with no history is a stack that can
 no longer be updated or destroyed.
+
+---
+
+**`clawops doctor` never validated cloud credentials.**
+
+`registerProvider` existed and was called by nothing, so `getProvider` threw for every
+provider. Doctor's Credentials section reported this for any cloud stack:
+
+```
+✗ gcp  stack "prod" — No provider adapter registered for 'gcp'. Run `clawops init`…
+```
+
+Deploys were unaffected — `up`, `plan` and `apply` resolve the adapter directly — so the only
+symptom was a diagnostic that said something alarming and untrue. Adapters register on import
+now, and doctor validates credentials as it always claimed to.
