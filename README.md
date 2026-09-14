@@ -384,6 +384,25 @@ way. `clawops doctor` reports which one it found, from where, and at what versio
 
 See [ADR 0010](docs/decisions/0010-pulumi-cli-bootstrap.md), which supersedes ADR 0006.
 
+### Day-two commands failed with an error about provider loading
+
+Fixed in 2.0.1. `buildContext().adapter` was a proxy that loaded the provider module on its
+first *asynchronous* call, so every synchronous method on it threw until something else
+happened to trigger that:
+
+```
+✗  Connection   Provider not yet loaded. Call getStack() first.
+```
+
+Eighteen call sites depended on that ordering and nothing enforced it. `clawops up` worked
+because it awaits `validateConfig()` a few lines earlier; `clawops plan` did not, and against a
+freshly deployed instance `doctor --stack`, `ssh`, `logs` and `gateway restart` all failed
+with an error about provider loading rather than about the instance.
+
+The adapters are registered when they are imported now, and the context hands back the real
+one. They are small, and the Pulumi packages they eventually need load inside the program
+function, so nothing heavy moves to startup.
+
 ### `--instance-type` named a size no cloud has
 
 Fixed in 2.0.1. `clawops plan` wrote the clawops size name — `micro`, `small`, `medium`,

@@ -433,10 +433,15 @@ const MUTATIONS = [
 
   { name: 'plan reaches through the lazily-loaded context proxy again',
     file: 'src/plan/generate.ts', from: '  const adapter = await loadAdapterModule(intent.provider as ProviderName)', to: '  const adapter = buildContext({ stack: intent.stackName, provider: intent.provider }).adapter', test: 'tests/plan/generate.test.ts' },
-  { name: 'the adapter loader returns the wrong cloud',
-    file: 'src/cli/context.ts', from: "    case 'gcp':\n      return (await import('../providers/gcp/index.js')).default", to: "    case 'gcp':\n      return (await import('../providers/aws/index.js')).default", test: 'tests/cli/context.test.ts tests/plan/generate.test.ts' },
-  { name: 'an unsupported provider loads as gcp',
-    file: 'src/cli/context.ts', from: "    default:\n      throw new UsageError(\n        `Provider \"${name}\" is not yet supported. Supported providers: gcp, aws, azure, local`,\n      )", to: "    default:\n      return (await import('../providers/gcp/index.js')).default", test: 'tests/cli/context.test.ts' },
+
+  { name: 'the registry hands back the wrong cloud',
+    file: 'src/providers/index.ts', from: '  const adapter = registry.get(name)', to: "  const adapter = registry.get('gcp' as ProviderName)", test: 'tests/cli/context.test.ts tests/plan/generate.test.ts' },
+  { name: 'the context hands back a lazily-loaded proxy again',
+    file: 'src/cli/context.ts', from: '    return getProvider(name)', to: "    return { name } as unknown as ProviderAdapter", test: 'tests/cli/context.test.ts' },
+  { name: 'adapters are no longer registered at import',
+    file: 'src/cli/context.ts', from: "import '../providers/register.js'\n", to: '', test: 'tests/cli/context.test.ts' },
+  { name: 'an unknown provider resolves to something',
+    file: 'src/cli/context.ts', from: '  } catch {\n    throw new UsageError(\n      `Provider "${name}" is not yet supported.', to: '  } catch {\n    return getProvider(\'gcp\') ?? new UsageError(\n      `Provider "${name}" is not yet supported.', test: 'tests/cli/context.test.ts' },
 
 ]
 

@@ -188,3 +188,50 @@ describe('loadAdapterModule', () => {
     }
   })
 })
+
+describe('the adapter is usable the moment the context exists', () => {
+  /**
+   * The regression this file did not have. `buildContext().adapter` used to be a proxy whose
+   * synchronous methods threw "Provider not yet loaded. Call getStack() first." until
+   * something async had loaded the module. Eighteen call sites depended on that ordering:
+   * `clawops up` awaits validateConfig() first and worked, `clawops plan` did not, and
+   * `doctor --stack`, `ssh`, `logs` and `gateway restart` all failed against a running
+   * instance with an error about provider loading rather than about the instance.
+   */
+  it('answers getConnectionInfo with no await first', async () => {
+    await withTempConfig(MINIMAL_CONFIG, async () => {
+      const { buildContext } = await import('../../src/cli/context.js')
+      const ctx = buildContext({ stack: 'default', provider: 'gcp' })
+      const conn = ctx.adapter.getConnectionInfo({
+        instanceId: 'i-1',
+        publicIp: '203.0.113.4',
+        gatewayUrl: 'https://203.0.113.4:18789',
+        region: 'us-central1',
+        provisionedAt: '2026-09-14T00:00:00.000Z',
+        sshHost: '203.0.113.4',
+        sshPort: 22,
+        sshUser: 'clawops',
+        privateKeyPath: '/tmp/key',
+        knownHostsPath: '/tmp/known_hosts',
+      })
+      expect(conn.host).toBe('203.0.113.4')
+    })
+  })
+
+  it('answers normalizeInstanceType and defaultRegion with no await first', async () => {
+    await withTempConfig(MINIMAL_CONFIG, async () => {
+      const { buildContext } = await import('../../src/cli/context.js')
+      const ctx = buildContext({ stack: 'default', provider: 'gcp' })
+      expect(ctx.adapter.normalizeInstanceType('small')).toBe('e2-standard-2')
+      expect(ctx.adapter.defaultRegion()).toBeTruthy()
+    })
+  })
+
+  it('still refuses a provider that does not exist', async () => {
+    await withTempConfig(MINIMAL_CONFIG, async () => {
+      const { buildContext } = await import('../../src/cli/context.js')
+      const { UsageError } = await import('../../src/errors/index.js')
+      expect(() => buildContext({ stack: 'default', provider: 'digitalocean' })).toThrow(UsageError)
+    })
+  })
+})

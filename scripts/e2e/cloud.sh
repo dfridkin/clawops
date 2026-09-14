@@ -127,14 +127,23 @@ if pnpm dev doctor --stack "$STACK"; then pass "doctor --stack passed"; else fai
 # exactly what was lost, so it is the assertion the whole release turns on.
 BEFORE=$(pnpm dev ssh --stack "$STACK" --command \
   'sudo sha256sum /var/lib/clawops/openclaw/openclaw.json 2>/dev/null | cut -d" " -f1' 2>/dev/null | tail -1)
-pnpm dev gateway restart --stack "$STACK" >/dev/null 2>&1 || fail "gateway restart failed"
+RESTARTED=yes
+pnpm dev gateway restart --stack "$STACK" >/dev/null 2>&1 || { fail "gateway restart failed"; RESTARTED=no; }
 sleep 15
 AFTER=$(pnpm dev ssh --stack "$STACK" --command \
   'sudo sha256sum /var/lib/clawops/openclaw/openclaw.json 2>/dev/null | cut -d" " -f1' 2>/dev/null | tail -1)
-if [ -n "$BEFORE" ] && [ "$BEFORE" = "$AFTER" ]; then
+
+# Both halves have to be real. When `ssh` fails, both captures are the same error text, and
+# comparing them passes — the survival check reported success for a run where the restart had
+# already failed and nothing was read. A digest is 64 hex characters; an error message is not.
+if ! printf '%s' "$BEFORE" | grep -qE '^[0-9a-f]{64}$'; then
+  fail "could not read the config digest before restarting (got: ${BEFORE:-nothing})"
+elif [ "$RESTARTED" = "no" ]; then
+  fail "skipped the state-survival check — the gateway never restarted"
+elif [ "$BEFORE" = "$AFTER" ]; then
   pass "config survived a gateway restart"
 else
-  fail "config did not survive a gateway restart (before=${BEFORE:-none} after=${AFTER:-none})"
+  fail "config did not survive a gateway restart (before=${BEFORE} after=${AFTER:-none})"
 fi
 
 # The gateway must not be reachable from the network: 2.0 publishes on loopback, and a
