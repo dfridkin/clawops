@@ -1,5 +1,5 @@
 import { defineCommand } from 'citty'
-import { generateKeyPairSync } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
@@ -81,12 +81,26 @@ export default defineCommand({
         throw new UsageError(`SSH key not found at ${keyPath}`)
       }
       info('Generating SSH key pair...')
-      const { privateKey } = generateKeyPairSync('ed25519', {
-        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-        publicKeyEncoding: { type: 'spki', format: 'pem' },
-      })
-      writeFileSync(keyPath, privateKey, { mode: 0o600 })
-      success(`SSH private key written to ${keyPath}`)
+      // ssh-keygen, not crypto.generateKeyPairSync. The latter writes a PKCS#8 PEM: a valid
+      // ed25519 key that ssh2 — which every clawops SSH operation uses — cannot parse, and
+      // that OpenSSH itself rejects with "invalid format". `clawops init` produced one of
+      // those, so the key it generated could not be used by the tool that generated it, and
+      // nothing noticed until `doctor` started parsing the key instead of stat-ing it.
+      const gen = spawnSync(
+        'ssh-keygen',
+        ['-t', 'ed25519', '-f', keyPath, '-N', '', '-C', 'clawops', '-q'],
+        { stdio: ['ignore', 'pipe', 'pipe'] },
+      )
+      if (gen.error || gen.status !== 0) {
+        const reason = gen.error?.message ?? gen.stderr?.toString().trim() ?? `exit ${gen.status}`
+        throw new UsageError(
+          `Could not generate an SSH key: ${reason}\n` +
+            `Generate one yourself and point clawops at it:\n` +
+            `  ssh-keygen -t ed25519 -f ${keyPath} -N '' -C clawops\n` +
+            `  clawops init --key-path ${keyPath}`,
+        )
+      }
+      success(`SSH key pair written to ${keyPath} (and ${keyPath}.pub)`)
     } else {
       info(`Using existing SSH key at ${keyPath}`)
     }

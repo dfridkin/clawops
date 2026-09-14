@@ -399,6 +399,13 @@ const MUTATIONS = [
   { name: 'a create and a delete of one resource collapse into one',
     file: 'src/plan/generate.ts', from: '    if (seen.has(`${op}${urn}`)) continue\n    seen.add(`${op}${urn}`)', to: '    if (seen.has(urn)) continue\n    seen.add(urn)', test: 'tests/plan/generate.test.ts' },
 
+  { name: 'init generates a PKCS#8 key ssh2 cannot use again',
+    file: 'src/cli/commands/init.ts', from: "['-t', 'ed25519', '-f', keyPath, '-N', '', '-C', 'clawops', '-q']", to: "['-t', 'rsa', '-m', 'PKCS8', '-f', keyPath, '-N', '', '-C', 'clawops', '-q']", test: 'tests/cli/init.test.ts' },
+  { name: 'a failed ssh-keygen is ignored and init reports success',
+    file: 'src/cli/commands/init.ts', from: '      if (gen.error || gen.status !== 0) {', to: '      if (false) {', test: 'tests/cli/init.test.ts' },
+  { name: 'the init suite writes into the real home again',
+    file: 'tests/cli/init.test.ts', from: "  process.env['CLAWOPS_HOME'] = suiteHome", to: '  void suiteHome', test: 'tests/cli/init.test.ts' },
+
 ]
 
 let survived = []
