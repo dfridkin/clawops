@@ -87,6 +87,37 @@ export function buildContext(args: ContextArgs): ClawopsContext {
   }
 }
 
+/**
+ * The real adapter for a provider.
+ *
+ * `buildContext().adapter` is a proxy whose synchronous methods — `normalizeInstanceType`,
+ * `defaultRegion`, `getConnectionInfo` — throw until something async has loaded the module
+ * behind it. `clawops up` gets away with calling them because it happens to `await
+ * validateConfig()` first; `generatePlan` did not, and a deploy died at plan time with
+ * "Provider not yet loaded. Call getStack() first." Anything that needs a synchronous adapter
+ * method without needing a stack awaits this instead of depending on call order.
+ */
+export async function loadAdapterModule(name: ProviderName): Promise<ProviderAdapter> {
+  switch (name) {
+    case 'gcp':
+      return (await import('../providers/gcp/index.js')).default
+    case 'aws':
+      return (await import('../providers/aws/index.js')).default
+    case 'azure':
+      return (await import('../providers/azure/index.js')).default
+    case 'local':
+      return (await import('../providers/local/index.js')).default
+    default:
+      throw new UsageError(
+        `Provider "${name}" is not yet supported. Supported providers: gcp, aws, azure, local`,
+      )
+  }
+}
+
+const NOT_LOADED =
+  'Provider not yet loaded. Await `getStack()`, or `loadAdapterModule(provider)` when no stack ' +
+  'is needed, before calling this.'
+
 function loadProvider(name: ProviderName): ProviderAdapter {
   return makeProviderProxy(name)
 }
@@ -96,32 +127,8 @@ function makeProviderProxy(name: ProviderName): ProviderAdapter {
 
   const resolve = async (): Promise<ProviderAdapter> => {
     if (resolved) return resolved
-    switch (name) {
-      case 'gcp': {
-        const mod = await import('../providers/gcp/index.js')
-        resolved = mod.default
-        return resolved
-      }
-      case 'aws': {
-        const mod = await import('../providers/aws/index.js')
-        resolved = mod.default
-        return resolved
-      }
-      case 'azure': {
-        const mod = await import('../providers/azure/index.js')
-        resolved = mod.default
-        return resolved
-      }
-      case 'local': {
-        const mod = await import('../providers/local/index.js')
-        resolved = mod.default
-        return resolved
-      }
-      default:
-        throw new UsageError(
-          `Provider "${name}" is not yet supported. Supported providers: gcp, aws, azure, local`,
-        )
-    }
+    resolved = await loadAdapterModule(name)
+    return resolved
   }
 
   // Return a synchronous-looking adapter that lazily loads on first async call
@@ -134,19 +141,19 @@ function makeProviderProxy(name: ProviderName): ProviderAdapter {
       }
     },
     getConnectionInfo: (outputs) => {
-      if (!resolved) throw new UsageError('Provider not yet loaded. Call getStack() first.')
+      if (!resolved) throw new UsageError(NOT_LOADED)
       return resolved.getConnectionInfo(outputs)
     },
     normalizeInstanceType: (alias) => {
-      if (!resolved) throw new UsageError('Provider not yet loaded. Call getStack() first.')
+      if (!resolved) throw new UsageError(NOT_LOADED)
       return resolved.normalizeInstanceType(alias)
     },
     defaultRegion: () => {
-      if (!resolved) throw new UsageError('Provider not yet loaded. Call getStack() first.')
+      if (!resolved) throw new UsageError(NOT_LOADED)
       return resolved.defaultRegion()
     },
     stateBackendUrl: (bucket) => {
-      if (!resolved) throw new UsageError('Provider not yet loaded. Call getStack() first.')
+      if (!resolved) throw new UsageError(NOT_LOADED)
       return resolved.stateBackendUrl(bucket)
     },
     validateConfig: () => resolve().then((a) => a.validateConfig()),

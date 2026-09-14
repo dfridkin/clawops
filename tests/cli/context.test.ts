@@ -140,3 +140,51 @@ describe('buildContext()', () => {
     })
   })
 })
+
+describe('loadAdapterModule', () => {
+  it('returns an adapter whose synchronous methods work immediately', async () => {
+    const { loadAdapterModule } = await vi.importActual<typeof import('../../src/cli/context.js')>(
+      '../../src/cli/context.js',
+    )
+    const adapter = await loadAdapterModule('gcp')
+    // `buildContext().adapter` cannot do this until something async has loaded the module:
+    // it throws "Provider not yet loaded". `clawops up` only works because it happens to
+    // await validateConfig() first; plan did not, and died at plan time on a real deploy.
+    expect(adapter.normalizeInstanceType('small')).toBe('e2-standard-2')
+    expect(adapter.name).toBe('gcp')
+  })
+
+  it('loads each supported provider', async () => {
+    const { loadAdapterModule } = await vi.importActual<typeof import('../../src/cli/context.js')>(
+      '../../src/cli/context.js',
+    )
+    for (const name of ['aws', 'gcp', 'azure', 'local'] as const) {
+      expect((await loadAdapterModule(name)).name).toBe(name)
+    }
+  })
+
+  it('refuses an unknown provider by name', async () => {
+    const { loadAdapterModule } = await vi.importActual<typeof import('../../src/cli/context.js')>(
+      '../../src/cli/context.js',
+    )
+    await expect(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      loadAdapterModule('digitalocean' as any),
+    ).rejects.toThrow(/not yet supported/)
+  })
+
+  it('maps each size to something distinct per provider', async () => {
+    const { loadAdapterModule } = await vi.importActual<typeof import('../../src/cli/context.js')>(
+      '../../src/cli/context.js',
+    )
+    for (const name of ['aws', 'gcp', 'azure'] as const) {
+      const adapter = await loadAdapterModule(name)
+      const sizes = (['micro', 'small', 'medium', 'large'] as const).map((a) =>
+        adapter.normalizeInstanceType(a),
+      )
+      // A table that collapses two sizes onto one machine type silently ignores the flag.
+      expect(new Set(sizes).size).toBe(sizes.length)
+      for (const size of sizes) expect(size).not.toMatch(/^(micro|small|medium|large|gpu)$/)
+    }
+  })
+})

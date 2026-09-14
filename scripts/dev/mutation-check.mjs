@@ -423,13 +423,20 @@ const MUTATIONS = [
     file: 'src/plan/generate.ts', from: '    if (err instanceof UsageError) throw err', to: '    if (err) throw err', test: 'tests/plan/generate.test.ts' },
 
   { name: 'the plan emits the clawops alias instead of a machine type',
-    file: 'src/plan/generate.ts', from: '  const instanceType = resolveInstanceType(intent)', to: "  const instanceType = intent.instanceType ?? 'small'", test: 'tests/plan/generate.test.ts' },
+    file: 'src/plan/generate.ts', from: '  const instanceType = await resolveInstanceType(intent)', to: "  const instanceType = intent.instanceType ?? 'small'", test: 'tests/plan/generate.test.ts' },
   { name: 'a provider-native instance type is rewritten by the table',
     file: 'src/plan/generate.ts', from: '  if (!isInstanceAlias(requested)) {', to: '  if (false) {', test: 'tests/plan/generate.test.ts' },
   { name: 'an unknown size is passed through in silence',
     file: 'src/plan/generate.ts', from: "      `[clawops] note: \"${requested}\" is not a clawops size ` +", to: "      `` +", test: 'tests/plan/generate.test.ts' },
   { name: 'every size normalises to the same machine',
-    file: 'src/plan/generate.ts', from: '    .adapter.normalizeInstanceType(requested)', to: "    .adapter.normalizeInstanceType('small')", test: 'tests/plan/generate.test.ts' },
+    file: 'src/plan/generate.ts', from: '  return adapter.normalizeInstanceType(requested)', to: "  return adapter.normalizeInstanceType('small')", test: 'tests/plan/generate.test.ts' },
+
+  { name: 'plan reaches through the lazily-loaded context proxy again',
+    file: 'src/plan/generate.ts', from: '  const adapter = await loadAdapterModule(intent.provider as ProviderName)', to: '  const adapter = buildContext({ stack: intent.stackName, provider: intent.provider }).adapter', test: 'tests/plan/generate.test.ts' },
+  { name: 'the adapter loader returns the wrong cloud',
+    file: 'src/cli/context.ts', from: "    case 'gcp':\n      return (await import('../providers/gcp/index.js')).default", to: "    case 'gcp':\n      return (await import('../providers/aws/index.js')).default", test: 'tests/cli/context.test.ts tests/plan/generate.test.ts' },
+  { name: 'an unsupported provider loads as gcp',
+    file: 'src/cli/context.ts', from: "    default:\n      throw new UsageError(\n        `Provider \"${name}\" is not yet supported. Supported providers: gcp, aws, azure, local`,\n      )", to: "    default:\n      return (await import('../providers/gcp/index.js')).default", test: 'tests/cli/context.test.ts' },
 
 ]
 

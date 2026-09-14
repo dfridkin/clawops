@@ -8,9 +8,15 @@ import type { ProviderAdapter } from '../../src/providers/types.js'
 vi.mock('../../src/plan/ssh-key.js', () => ({
   resolvePublicKey: () => 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFIXTURE clawops',
 }))
-vi.mock('../../src/cli/context.js', () => ({
-  buildContext: vi.fn(),
-}))
+// buildContext is stubbed; loadAdapterModule is NOT. The size tests below assert against the
+// real provider tables, because the bug they cover was that the adapter reached through
+// `buildContext().adapter` throws until the module behind it has been loaded — a stub with a
+// plain function on it cannot reproduce that, and the first version of this fix passed its
+// tests and failed on the first real deploy.
+vi.mock('../../src/cli/context.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/cli/context.js')>()
+  return { buildContext: vi.fn(), loadAdapterModule: actual.loadAdapterModule }
+})
 
 vi.mock('../../src/config/store.js', () => ({
   getConfig: vi.fn(() => ({
@@ -51,13 +57,8 @@ beforeEach(async () => {
   vi.mocked(buildContext).mockReturnValue({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     config: {} as any,
-    // A real adapter maps clawops' size names to something its cloud recognises. The plan
-    // used to emit the alias, and the cloud rejected it.
-    adapter: {
-      name: 'aws',
-      normalizeInstanceType: (alias: string) =>
-        ({ micro: 't3.micro', small: 't3.small', medium: 't3.medium', large: 't3.large', gpu: 'g4dn.xlarge' })[alias],
-    } as unknown as ProviderAdapter,
+    // Only what the preview path uses. Instance sizes come from the real adapter module.
+    adapter: { name: 'aws' } as unknown as ProviderAdapter,
     stackName: 'default',
     getStack: mockGetStack,
   })
@@ -253,6 +254,17 @@ describe('instance sizes', () => {
     const { generatePlan } = await import('../../src/plan/generate.js')
     const plan = await generatePlan({ stackName: 'default', provider: 'aws' })
     expect(plan.spec.instanceType).toBe('t3.small')
+  })
+
+  it('resolves through the provider module, not the lazily-loaded context proxy', async () => {
+    // `buildContext().adapter.normalizeInstanceType` throws "Provider not yet loaded" until
+    // something async has loaded the module. `clawops up` gets away with it by awaiting
+    // validateConfig first; plan has no reason to, and died there on a real deploy.
+    const { generatePlan } = await import('../../src/plan/generate.js')
+    const { buildContext } = await import('../../src/cli/context.js')
+    vi.mocked(buildContext).mockClear()
+    const plan = await generatePlan({ stackName: 'default', provider: 'gcp', instanceType: 'small' })
+    expect(plan.spec.instanceType).toBe('e2-standard-2')
   })
 
   it.each(['micro', 'medium', 'large', 'gpu'])('normalises %s', async (alias) => {
