@@ -56,6 +56,8 @@ export interface ResolvedNetwork {
   allowedSshCidrs: string[]
   allowedGatewayCidrs: string[]
   publishGateway?: 'loopback' | 'all'
+  /** Set by callers that take a port flag of their own, such as `clawops up --gateway-port`. */
+  gatewayPort?: number
 }
 
 /**

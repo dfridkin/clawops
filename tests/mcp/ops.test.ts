@@ -5,6 +5,17 @@ import { FakeSshSession } from '../helpers/ssh.js'
 import { FAKE_CONN } from '../helpers/context.js'
 
 vi.mock('../../src/cli/context.js', () => ({ buildContext: vi.fn() }))
+// `clawops_up` deploys through the same plan and apply as the CLI, rather than writing stack
+// config of its own — a third implementation that could not deploy, for want of sshPublicKey.
+const { mockGeneratePlan, mockApplyPlan } = vi.hoisted(() => ({
+  mockGeneratePlan: vi.fn(),
+  mockApplyPlan: vi.fn(),
+}))
+vi.mock('../../src/plan/generate.js', () => ({ generatePlan: mockGeneratePlan }))
+vi.mock('../../src/plan/apply.js', () => ({ applyPlan: mockApplyPlan }))
+vi.mock('../../src/providers/firewall.js', () => ({
+  detectEgressIp: vi.fn().mockResolvedValue({ ok: true, ip: '203.0.113.4' }),
+}))
 vi.mock('../../src/transport/pool.js', () => ({ acquireSession: vi.fn(), drainPool: vi.fn() }))
 vi.mock('../../src/mcp/tools/_conn.js', () => ({
   resolveConn: vi.fn(),
@@ -58,6 +69,18 @@ beforeEach(async () => {
   vi.clearAllMocks()
   const { resolveConn } = await getMocks()
   resolveConn.mockResolvedValue(FAKE_CONN)
+  mockGeneratePlan.mockResolvedValue({
+    apiVersion: 'clawops.dev/v1',
+    kind: 'DeployPlan',
+    metadata: { name: 'default', generatedAt: '', generator: 'clawops', generatorVersion: '2.0.0' },
+    spec: { provider: 'aws', stackName: 'default', instanceType: 't3.small', openclaw: { version: '2026.9.2' } },
+    diff: { create: [], update: [], delete: [], totalChanges: 0 },
+  })
+  mockApplyPlan.mockResolvedValue({
+    outputs: { publicIp: '1.2.3.4', gatewayUrl: 'https://1.2.3.4:18789' },
+    changeSummary: { create: 2 },
+    durationMs: 1,
+  })
 })
 
 describe('handleUp', () => {
@@ -72,24 +95,42 @@ describe('handleUp', () => {
     expect(text).toMatch(/cancel/i)
   })
 
-  it('calls stack.up() and returns summary when confirmed', async () => {
+  it('deploys through the shared plan and apply when confirmed', async () => {
     const { buildContext } = await getMocks()
     const { ctx, stack } = makeCloudContext()
     buildContext.mockReturnValue({ ...ctx, getStack: vi.fn().mockResolvedValue(stack) })
 
     const { handleUp } = await import('../../src/mcp/tools/cli/up.js')
     await handleUp({ instanceType: 'small', dryRun: false }, makeServer())
-    expect(stack.up).toHaveBeenCalledOnce()
+    expect(mockGeneratePlan).toHaveBeenCalledOnce()
+    expect(mockApplyPlan).toHaveBeenCalledOnce()
+    // The old implementation wrote three pieces of stack config and called up() itself.
+    expect(stack.up).not.toHaveBeenCalled()
   })
 
-  it('runs preview (not up) when dryRun=true', async () => {
+  it('carries the network flags into the plan', async () => {
+    const { buildContext } = await getMocks()
+    const { ctx, stack } = makeCloudContext()
+    buildContext.mockReturnValue({ ...ctx, getStack: vi.fn().mockResolvedValue(stack) })
+
+    const { handleUp } = await import('../../src/mcp/tools/cli/up.js')
+    await handleUp({ instanceType: 'small', dryRun: false, sshCidr: 'auto' }, makeServer())
+    expect(mockGeneratePlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        network: expect.objectContaining({ allowedSshCidrs: ['203.0.113.4/32'] }),
+      }),
+    )
+  })
+
+  it('generates a plan and applies nothing when dryRun=true', async () => {
     const { buildContext } = await getMocks()
     const { ctx, stack } = makeCloudContext()
     buildContext.mockReturnValue({ ...ctx, getStack: vi.fn().mockResolvedValue(stack) })
 
     const { handleUp } = await import('../../src/mcp/tools/cli/up.js')
     await handleUp({ instanceType: 'small', dryRun: true }, makeServer())
-    expect(stack.preview).toHaveBeenCalledOnce()
+    expect(mockGeneratePlan).toHaveBeenCalledOnce()
+    expect(mockApplyPlan).not.toHaveBeenCalled()
     expect(stack.up).not.toHaveBeenCalled()
   })
 

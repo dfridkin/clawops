@@ -483,3 +483,27 @@ describe('progress while waiting', () => {
     expect(progress).toContain('Waiting for OpenClaw to start')
   })
 })
+
+describe('skipReadiness', () => {
+  it('returns without waiting when the caller asked not to', async () => {
+    // `clawops up --no-wait` means the caller accepts a stack that is not yet usable.
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan, { skipReadiness: true })
+    expect(mockWaitForSsh).not.toHaveBeenCalled()
+    expect(mockWaitForGateway).not.toHaveBeenCalled()
+  })
+
+  it('still returns the outputs, which is what the caller came for', async () => {
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    const result = await applyPlan(basePlan, { skipReadiness: true })
+    expect(result.outputs['publicIp']).toBe('1.2.3.4')
+    expect(result.changeSummary).toEqual({ create: 3, same: 1 })
+  })
+
+  it('waits when the caller did not ask to skip — the default is a usable stack', async () => {
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan, {})
+    expect(mockWaitForSsh).toHaveBeenCalled()
+    expect(mockWaitForGateway).toHaveBeenCalled()
+  })
+})

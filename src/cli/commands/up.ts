@@ -6,8 +6,6 @@ import { success, failure, info, spinner } from '../../output/human.js'
 import { renderTable } from '../../output/table.js'
 import { UsageError } from '../../errors/index.js'
 
-const VALID_INSTANCE_TYPES = ['micro', 'small', 'medium', 'large', 'gpu'] as const
-
 export default defineCommand({
   meta: {
     name: 'up',
@@ -22,7 +20,10 @@ export default defineCommand({
     'openclaw-version': { type: 'string', description: "OpenClaw release (e.g. 2026.7.1-2). Moving tags are resolved and range-checked" },
     stack: { type: 'string', description: 'Target stack name' },
     config: { type: 'string', description: 'Path to openclaw config overlay JSON (local provider only)' },
-    'gateway-port': { type: 'string', description: `Host port to publish the gateway on (default ${GATEWAY_PORT}, local provider only — cloud stacks set spec.network.gatewayPort in the plan)` },
+    'gateway-port': { type: 'string', description: `Host port to publish the gateway on (default ${GATEWAY_PORT})` },
+    'ssh-cidr': { type: 'string', description: "CIDR(s) allowed to reach SSH, comma-separated, or 'auto' for this machine's IP. Omitted = none, and nothing will be able to connect" },
+    'gateway-cidr': { type: 'string', description: "CIDR(s) allowed to reach the gateway port, or 'auto'. Requires --publish-gateway all" },
+    'publish-gateway': { type: 'string', description: 'loopback (default) or all. "all" serves plaintext HTTP — put TLS in front of it' },
   },
   async run({ args }) {
     const { buildContext } = await import('../context.js')
@@ -92,13 +93,22 @@ export default defineCommand({
       return
     }
 
-    // ── Cloud provider path (Pulumi) ───────────────────────────────────────────
-    const instanceAlias = typeof args['instance-type'] === 'string' ? args['instance-type'] : 'small'
-    if (!VALID_INSTANCE_TYPES.includes(instanceAlias as typeof VALID_INSTANCE_TYPES[number])) {
-      throw new UsageError(
-        `Invalid --instance-type: ${instanceAlias}. Valid values: ${VALID_INSTANCE_TYPES.join(', ')}`,
-      )
-    }
+    // ── Cloud provider path ────────────────────────────────────────────────────
+    //
+    // One deploy path, shared with `clawops apply`. This used to be a second implementation
+    // that set three pieces of stack config — region, instanceType, openclawVersion — and none
+    // of the rest, so the Pulumi programs refused to run:
+    //
+    //   Stack config "sshPublicKey" is required for the GCP adapter
+    //
+    // It also opened no firewall rules, pinned no GCP project and waited for nothing, which are
+    // the same defects `plan`/`apply` carried until this release. Two implementations of one
+    // operation drift, and the quiet one drifts unnoticed: the wizard builds a plan and applies
+    // it, so nothing exercised this path.
+    const { generatePlan } = await import('../../plan/generate.js')
+    const { applyPlan } = await import('../../plan/apply.js')
+    const { resolveNetworkFlags } = await import('../../plan/network-args.js')
+    const { detectEgressIp } = await import('../../providers/firewall.js')
 
     const isDryRun = Boolean(args['dry-run'])
 
@@ -108,55 +118,83 @@ export default defineCommand({
       process.exit(3)
     }
 
-    const stack = await ctx.getStack()
-
-    const region = typeof args.region === 'string' ? args.region : ctx.adapter.defaultRegion()
-    const instanceType = ctx.adapter.normalizeInstanceType(
-      instanceAlias as typeof VALID_INSTANCE_TYPES[number],
-    )
-
-    await stack.setConfig('region', { value: region })
-    await stack.setConfig('instanceType', { value: instanceType })
-    await stack.setConfig('openclawVersion', { value: openclawVersion })
-
-    if (isDryRun) {
-      info('Previewing changes (--dry-run)...')
-      const preview = await stack.preview({ onOutput: (out) => process.stdout.write(out) })
-      process.stdout.write('\n')
-      if (preview.changeSummary) {
-        const rows = Object.entries(preview.changeSummary)
-          .filter(([, count]) => count > 0)
-          .map(([op, count]) => [op, String(count)])
-        if (rows.length > 0) {
-          process.stdout.write(renderTable(['Operation', 'Count'], rows) + '\n')
-        }
-      }
-      success('Preview complete (no resources changed)')
-      return
+    if (typeof args.config === 'string') {
+      info('--config applies to local stacks only; put the overlay in the plan for a cloud stack.')
     }
+
+    const abortController = new AbortController()
+    process.on('SIGINT', () => abortController.abort())
+    process.on('SIGTERM', () => abortController.abort())
+
+    const network = await resolveNetworkFlags(
+      {
+        sshCidr: strArg(args['ssh-cidr']),
+        gatewayCidr: strArg(args['gateway-cidr']),
+        publishGateway: strArg(args['publish-gateway']),
+      },
+      { detectEgressIp: () => detectEgressIp('https://ifconfig.me/ip') },
+    )
+    const cloudGatewayPort = strArg(args['gateway-port'])
+    if (cloudGatewayPort) network.gatewayPort = parseGatewayPort(cloudGatewayPort)
 
     const spin = spinner(`Deploying stack "${ctx.stackName}"...`)
     try {
-      const result = await stack.up({
-        onOutput: (out) => {
-          spin.text = out.trim() || spin.text
+      const plan = await generatePlan(
+        {
+          stackName: ctx.stackName,
+          provider: ctx.adapter.name as 'aws' | 'gcp' | 'azure',
+          ...(strArg(args.region) ? { region: strArg(args.region) as string } : {}),
+          ...(strArg(args['instance-type'])
+            ? { instanceType: strArg(args['instance-type']) as string }
+            : {}),
+          openclawVersion,
+          network,
         },
+        { signal: abortController.signal },
+      )
+
+      if (isDryRun) {
+        spin.stop()
+        info('Previewing changes (--dry-run)...')
+        const diff = plan.diff
+        if (diff && diff.totalChanges > 0) {
+          const rows = [
+            ['create', String(diff.create.length)],
+            ['update', String(diff.update.length)],
+            ['delete', String(diff.delete.length)],
+          ].filter(([, count]) => count !== '0')
+          process.stdout.write(renderTable(['Operation', 'Count'], rows) + '\n')
+        }
+        success('Preview complete (no resources changed)')
+        return
+      }
+
+      const result = await applyPlan(plan, {
+        onOutput: (line) => { spin.text = line.trim() || spin.text },
+        onProgress: (line) => {
+          const text = line.trim()
+          if (!text) return
+          spin.text = text
+          if (!process.stderr.isTTY) process.stderr.write(`${text}\n`)
+        },
+        signal: abortController.signal,
+        skipReadiness: Boolean(args['no-wait']),
       })
       spin.succeed(`Stack "${ctx.stackName}" deployed`)
 
-      const outputs = result.outputs
-      if (outputs['publicIp']) {
-        info(`Public IP:   ${outputs['publicIp'].value}`)
-      }
-      if (outputs['gatewayUrl']) {
-        info(`Gateway URL: ${outputs['gatewayUrl'].value}`)
-      }
+      if (result.outputs['publicIp']) info(`Public IP:   ${String(result.outputs['publicIp'])}`)
+      if (result.outputs['gatewayUrl']) info(`Gateway URL: ${String(result.outputs['gatewayUrl'])}`)
     } catch (err) {
       spin.fail('Deployment failed')
       throw err
     }
   },
 })
+
+/** citty hands through unparsed values; only a real string is an answer. */
+function strArg(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
 
 interface LocalOverlayOpts {
   configPath: string

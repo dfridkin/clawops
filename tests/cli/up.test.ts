@@ -6,6 +6,23 @@ import { makeLocalFakeContext, FAKE_LOCAL_STATE } from '../helpers/context.js'
 // ── Mocks declared at module level so they share the same vi.fn() instances ──
 vi.mock('../../src/cli/context.js', () => ({ buildContext: vi.fn() }))
 vi.mock('../../src/providers/local/bootstrap.js', () => ({ localBootstrap: vi.fn() }))
+const { mockGeneratePlan, mockApplyPlan, mockDetectEgressIp } = vi.hoisted(() => ({
+  mockGeneratePlan: vi.fn(),
+  mockApplyPlan: vi.fn(),
+  mockDetectEgressIp: vi.fn(),
+}))
+vi.mock('../../src/plan/generate.js', () => ({ generatePlan: mockGeneratePlan }))
+vi.mock('../../src/plan/apply.js', () => ({ applyPlan: mockApplyPlan }))
+vi.mock('../../src/providers/firewall.js', () => ({ detectEgressIp: mockDetectEgressIp }))
+
+/** A plan is opaque to `up`: it generates one and hands it to apply. */
+const PLAN = {
+  apiVersion: 'clawops.dev/v1',
+  kind: 'DeployPlan',
+  metadata: { name: 'default', generatedAt: '', generator: 'clawops', generatorVersion: '2.0.0' },
+  spec: { provider: 'aws', stackName: 'default', instanceType: 't3.small', openclaw: { version: '2026.9.2' } },
+  diff: { create: [{ urn: 'u', type: 't' }], update: [], delete: [], totalChanges: 1 },
+}
 
 import { buildContext } from '../../src/cli/context.js'
 import { localBootstrap } from '../../src/providers/local/bootstrap.js'
@@ -217,62 +234,135 @@ describe('up command — cloud provider path', () => {
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     vi.spyOn(console, 'log').mockImplementation(() => {})
     vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockGeneratePlan.mockReset().mockResolvedValue(PLAN)
+    mockApplyPlan.mockReset().mockResolvedValue({
+      outputs: { publicIp: '1.2.3.4', gatewayUrl: 'https://1.2.3.4:18789' },
+      changeSummary: { create: 2 },
+      durationMs: 1,
+    })
+    mockDetectEgressIp.mockReset().mockResolvedValue({ ok: true, ip: '203.0.113.4' })
   })
 
-  it('calls stack.up() and prints public IP when confirmed', async () => {
-    const { ctx, mockUp } = makeCloudContext()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockBuildContext.mockReturnValue(ctx as any)
-
-    await (cmd.run as AnyRunFn)({ args: { 'instance-type': 'small' } })
-    expect(mockUp).toHaveBeenCalledOnce()
-  })
-
-  it('calls setConfig with instance type and region before stack.up()', async () => {
-    const { ctx, mockSetConfig } = makeCloudContext()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockBuildContext.mockReturnValue(ctx as any)
-
-    await (cmd.run as AnyRunFn)({ args: { 'instance-type': 'small', region: 'eu-west-1' } })
-    expect(mockSetConfig).toHaveBeenCalledWith('region', { value: 'eu-west-1' })
-    expect(mockSetConfig).toHaveBeenCalledWith('instanceType', expect.any(Object))
-    expect(mockSetConfig).toHaveBeenCalledWith('openclawVersion', { value: '2026.9.2' })
-  })
-
-  it('runs preview (not up) when --dry-run is set', async () => {
-    const { ctx, mockUp, mockPreview } = makeCloudContext()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockBuildContext.mockReturnValue(ctx as any)
-
-    await (cmd.run as AnyRunFn)({ args: { 'instance-type': 'small', 'dry-run': true } })
-    expect(mockPreview).toHaveBeenCalledOnce()
-    expect(mockUp).not.toHaveBeenCalled()
-  })
-
-  it('uses default instance type "small" when --instance-type is absent', async () => {
-    const { ctx, mockSetConfig } = makeCloudContext()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockBuildContext.mockReturnValue(ctx as any)
-
-    await (cmd.run as AnyRunFn)({ args: {} })
-    const instanceTypeCall = mockSetConfig.mock.calls.find(([k]) => k === 'instanceType')
-    expect(instanceTypeCall).toBeDefined()
-  })
-
-  it('throws UsageError for unknown --instance-type', async () => {
+  /**
+   * `up` used to be a second implementation of deploying: it wrote three pieces of stack
+   * config and none of the rest, so the Pulumi programs refused to run for want of
+   * sshPublicKey, no firewall rule was created, and it waited for nothing. It goes through the
+   * same plan and the same apply as `clawops apply` now, which is what these assert.
+   */
+  it('deploys through the shared plan and apply, not a second implementation', async () => {
     const { ctx } = makeCloudContext()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockBuildContext.mockReturnValue(ctx as any)
 
-    await expect((cmd.run as AnyRunFn)({ args: { 'instance-type': 'gigantic' } })).rejects.toThrow('gigantic')
+    await (cmd.run as AnyRunFn)({ args: { 'instance-type': 'small' } })
+
+    expect(mockGeneratePlan).toHaveBeenCalledWith(
+      expect.objectContaining({ stackName: 'default', provider: 'aws', instanceType: 'small' }),
+      expect.anything(),
+    )
+    expect(mockApplyPlan).toHaveBeenCalledWith(PLAN, expect.anything())
   })
 
-  it('propagates stack.up() errors', async () => {
-    const { ctx, mockUp } = makeCloudContext()
-    mockUp.mockRejectedValue(new Error('pulumi: out of quota'))
+  it('passes the region through to the plan', async () => {
+    const { ctx } = makeCloudContext()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockBuildContext.mockReturnValue(ctx as any)
+    await (cmd.run as AnyRunFn)({ args: { region: 'eu-west-1' } })
+    expect(mockGeneratePlan).toHaveBeenCalledWith(
+      expect.objectContaining({ region: 'eu-west-1' }),
+      expect.anything(),
+    )
+  })
 
+  it('accepts --ssh-cidr, so a cloud stack can be reachable at all', async () => {
+    const { ctx } = makeCloudContext()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockBuildContext.mockReturnValue(ctx as any)
+    await (cmd.run as AnyRunFn)({ args: { 'ssh-cidr': 'auto' } })
+    expect(mockGeneratePlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        network: expect.objectContaining({ allowedSshCidrs: ['203.0.113.4/32'] }),
+      }),
+      expect.anything(),
+    )
+  })
+
+  it('carries --gateway-port into the plan, not just to local stacks', async () => {
+    const { ctx } = makeCloudContext()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockBuildContext.mockReturnValue(ctx as any)
+    await (cmd.run as AnyRunFn)({ args: { 'gateway-port': '9443' } })
+    expect(mockGeneratePlan).toHaveBeenCalledWith(
+      expect.objectContaining({ network: expect.objectContaining({ gatewayPort: 9443 }) }),
+      expect.anything(),
+    )
+  })
+
+  it('shows the plan diff and applies nothing when --dry-run is set', async () => {
+    const { ctx } = makeCloudContext()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockBuildContext.mockReturnValue(ctx as any)
+    await (cmd.run as AnyRunFn)({ args: { 'dry-run': true } })
+    expect(mockGeneratePlan).toHaveBeenCalledOnce()
+    expect(mockApplyPlan).not.toHaveBeenCalled()
+  })
+
+  it('asks apply to skip the readiness waits for --no-wait', async () => {
+    const { ctx } = makeCloudContext()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockBuildContext.mockReturnValue(ctx as any)
+    await (cmd.run as AnyRunFn)({ args: { 'no-wait': true } })
+    expect(mockApplyPlan).toHaveBeenCalledWith(
+      PLAN,
+      expect.objectContaining({ skipReadiness: true }),
+    )
+  })
+
+  it('waits by default — an unusable stack is a terrible default', async () => {
+    const { ctx } = makeCloudContext()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockBuildContext.mockReturnValue(ctx as any)
+    await (cmd.run as AnyRunFn)({ args: {} })
+    expect(mockApplyPlan).toHaveBeenCalledWith(
+      PLAN,
+      expect.objectContaining({ skipReadiness: false }),
+    )
+  })
+
+  it('accepts a provider-native instance type, which may be the only one on offer', async () => {
+    // Azure offers SKU families per subscription; `up` used to reject anything but its five
+    // aliases, and on a subscription offered none of them that left no way to deploy.
+    const { ctx } = makeCloudContext()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockBuildContext.mockReturnValue(ctx as any)
+    await (cmd.run as AnyRunFn)({ args: { 'instance-type': 'Standard_D2als_v7' } })
+    expect(mockGeneratePlan).toHaveBeenCalledWith(
+      expect.objectContaining({ instanceType: 'Standard_D2als_v7' }),
+      expect.anything(),
+    )
+  })
+
+  it('propagates a failed apply', async () => {
+    const { ctx } = makeCloudContext()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockBuildContext.mockReturnValue(ctx as any)
+    mockApplyPlan.mockRejectedValue(new Error('pulumi: out of quota'))
     await expect((cmd.run as AnyRunFn)({ args: {} })).rejects.toThrow('pulumi: out of quota')
+  })
+
+  it('refuses to deploy when the provider has no credentials', async () => {
+    const { ctx } = makeCloudContext()
+    ctx.adapter.validateConfig = vi.fn().mockResolvedValue({ ok: false, errors: ['no creds'] })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockBuildContext.mockReturnValue(ctx as any)
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit')
+    }) as never)
+    try {
+      await expect((cmd.run as AnyRunFn)({ args: {} })).rejects.toThrow('exit')
+      expect(mockGeneratePlan).not.toHaveBeenCalled()
+    } finally {
+      exit.mockRestore()
+    }
   })
 })

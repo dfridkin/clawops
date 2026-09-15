@@ -134,7 +134,10 @@ export const clawops_upSchema = z.object({
   stackName: z.string().optional(),
   provider: z.enum(['aws', 'gcp', 'azure', 'local']).optional(),
   region: z.string().optional(),
-  instanceType: z.enum(['micro', 'small', 'medium', 'large', 'gpu']).optional().default("small"),
+  instanceType: z.string().optional().default("small"),
+  sshCidr: z.string().optional(),
+  gatewayCidr: z.string().optional(),
+  publishGateway: z.enum(['loopback', 'all']).optional(),
   openclawVersion: z.string().optional(),
   dryRun: z.boolean().optional().default(false),
 })

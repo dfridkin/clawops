@@ -607,6 +607,32 @@ const MUTATIONS = [
   { name: 'the wait stops saying why docker could not be asked',
     file: 'src/openclaw/ready.ts', from: '        ? `docker could not be asked yet: ${container.error}`', to: "        ? 'waiting'", test: 'tests/openclaw/ready.test.ts' },
 
+  { name: 'up goes back to writing its own stack config',
+    file: 'src/cli/commands/up.ts', from: '      const result = await applyPlan(plan, {', to: '      const result = { outputs: {} } as never; void applyPlan; if (false) await applyPlan(plan, {', test: 'tests/cli/up.test.ts' },
+  { name: 'up applies on a dry run',
+    file: 'src/cli/commands/up.ts', from: '      if (isDryRun) {', to: '      if (false) {', test: 'tests/cli/up.test.ts' },
+  { name: 'up ignores --no-wait',
+    file: 'src/cli/commands/up.ts', from: "        skipReadiness: Boolean(args['no-wait']),", to: '        skipReadiness: false,', test: 'tests/cli/up.test.ts' },
+  { name: 'up always skips the readiness waits',
+    file: 'src/cli/commands/up.ts', from: "        skipReadiness: Boolean(args['no-wait']),", to: '        skipReadiness: true,', test: 'tests/cli/up.test.ts' },
+  { name: 'up drops the network flags',
+    file: 'src/cli/commands/up.ts', from: '          network,\n', to: '', test: 'tests/cli/up.test.ts' },
+  { name: 'up ignores --gateway-port for cloud stacks',
+    file: 'src/cli/commands/up.ts', from: '    if (cloudGatewayPort) network.gatewayPort = parseGatewayPort(cloudGatewayPort)', to: '    void cloudGatewayPort', test: 'tests/cli/up.test.ts' },
+  { name: 'up deploys without checking credentials',
+    file: 'src/cli/commands/up.ts', from: '    if (!validation.ok) {', to: '    if (false) {', test: 'tests/cli/up.test.ts' },
+  { name: 'skipReadiness is ignored by apply',
+    file: 'src/plan/apply.ts', from: '  if (opts?.skipReadiness) {', to: '  if (false) {', test: 'tests/plan/apply.test.ts tests/cli/up.test.ts' },
+  { name: 'the MCP up tool writes its own stack config again',
+    file: 'src/mcp/tools/cli/up.ts', from: '    const result = await applyPlan(plan, {', to: '    const result = { outputs: {} } as never; void applyPlan; if (false) await applyPlan(plan, {', test: 'tests/mcp/ops.test.ts' },
+  { name: 'the MCP up tool applies on a dry run',
+    file: 'src/mcp/tools/cli/up.ts', from: '    if (input.dryRun) {', to: '    if (false) {', test: 'tests/mcp/ops.test.ts' },
+
+  { name: 'the azure subscription is left to the environment',
+    file: 'src/plan/stack-config.ts', from: "    if (subscription) await stack.setConfig('azure-native:subscriptionId', { value: subscription })", to: '    void subscription', test: 'tests/plan/stack-config.test.ts' },
+  { name: 'every provider gets an azure subscription pinned',
+    file: 'src/plan/stack-config.ts', from: "  if (plan.spec.provider === 'azure') {", to: '  if (true) {', test: 'tests/plan/stack-config.test.ts' },
+
 ]
 
 let survived = []
