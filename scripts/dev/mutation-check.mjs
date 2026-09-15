@@ -550,6 +550,23 @@ const MUTATIONS = [
   { name: 'a service principal is ignored in favour of spawning az',
     file: 'src/providers/azure/preflight.ts', from: '  if (tenantId && clientId && clientSecret) {', to: '  if (false) {', test: 'tests/providers/azure/preflight.test.ts' },
 
+  { name: 'an unavailable VM size is reported as available',
+    file: 'src/providers/azure/preflight.ts', from: '  if (available.has(requested)) {', to: '  if (true) {', test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'a failed SKU listing counts as availability',
+    file: 'src/providers/azure/preflight.ts', from: '  if (!available) {', to: '  if (false) {', test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'restricted SKUs are treated as usable',
+    file: 'src/providers/azure/preflight.ts', from: '        .filter((s) => !Array.isArray(s.restrictions) || s.restrictions.length === 0)\n', to: '', test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'disks and other resource types are offered as VM sizes',
+    file: 'src/providers/azure/preflight.ts', from: "        .filter((s) => s.resourceType === 'virtualMachines')\n", to: '', test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'the SKU query stops filtering by location',
+    file: 'src/providers/azure/preflight.ts', from: "      `?api-version=2021-07-01&$filter=${encodeURIComponent(`location eq '${location}'`)}`", to: "      `?api-version=2021-07-01`", test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'the size suggestions are unbounded',
+    file: 'src/providers/azure/preflight.ts', from: '    .slice(0, 4)', to: '', test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'any size is suggested as an alternative, whatever its shape',
+    file: 'src/providers/azure/preflight.ts', from: "    .filter((n) => /[^0-9]2[a-z]*(_v\\d+)?$/.test(n))\n", to: '', test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'preflight stops checking the VM size',
+    file: 'src/providers/azure/preflight.ts', from: '  if (opts.region) {', to: '  if (false) {', test: 'tests/providers/azure/preflight.test.ts tests/providers/azure/adapter.test.ts' },
+
 ]
 
 let survived = []

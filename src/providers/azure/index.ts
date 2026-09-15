@@ -14,15 +14,9 @@ import type {
 } from '../types.js'
 import { registerProvider } from '../index.js'
 import { azureCliAccount } from './cli-auth.js'
+import { INSTANCE_TYPE_MAP } from './sizes.js'
 import { azureProgram } from './program.js'
 
-const INSTANCE_TYPE_MAP: Record<InstanceAlias, string> = {
-  micro:  'Standard_B1s',
-  small:  'Standard_B2s',
-  medium: 'Standard_B4ms',
-  large:  'Standard_B8ms',
-  gpu:    'Standard_NC6s_v3',
-}
 
 const azureAdapter: ProviderAdapter = {
   name: 'azure' as ProviderName,

@@ -18,6 +18,7 @@ import process from 'node:process'
 import { spawnSync } from 'node:child_process'
 import type { PreflightCheck, PreflightOpts } from '../types.js'
 import { resolveSubscriptionId } from './cli-auth.js'
+import { INSTANCE_TYPE_MAP, DEFAULT_ALIAS } from './sizes.js'
 
 const ARM = 'https://management.azure.com'
 const API_VERSION = '2021-04-01'
@@ -107,6 +108,94 @@ async function register(
   }
 }
 
+interface SkuEntry {
+  name: string
+  resourceType: string
+  restrictions: unknown[]
+}
+
+/** Every VM size the subscription is offered in a location, restricted ones dropped. */
+export async function availableSizes(
+  subscriptionId: string,
+  location: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<Set<string> | undefined> {
+  try {
+    const url =
+      `${ARM}/subscriptions/${subscriptionId}/providers/Microsoft.Compute/skus` +
+      `?api-version=2021-07-01&$filter=${encodeURIComponent(`location eq '${location}'`)}`
+    const res = await fetch(url, { headers: { authorization: `Bearer ${token}` }, signal })
+    if (!res.ok) return undefined
+    const body = (await res.json()) as { value?: SkuEntry[] }
+    if (!Array.isArray(body.value)) return undefined
+    return new Set(
+      body.value
+        .filter((s) => s.resourceType === 'virtualMachines')
+        .filter((s) => !Array.isArray(s.restrictions) || s.restrictions.length === 0)
+        .map((s) => s.name),
+    )
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Whether the size a deploy will ask for is one this subscription can have here.
+ *
+ * Azure offers SKU families per subscription and region, and the failure arrives late: the
+ * virtual network, NSG, public IP and NIC are all created first, and then
+ *
+ *   Status=409 Code="SkuNotAvailable" … 'Standard_B2s' is currently not available in
+ *   location 'eastus'
+ *
+ * The subscription this was first run against was offered no B-series size at all in eastus —
+ * every non-GPU size clawops names. A list of what it *can* have is the useful half of the
+ * answer, so the detail carries a few.
+ */
+export function sizeCheck(
+  location: string,
+  available: Set<string> | undefined,
+  requested = INSTANCE_TYPE_MAP[DEFAULT_ALIAS],
+): PreflightCheck {
+  if (!available) {
+    return {
+      id: 'vm-size-available',
+      label: `${requested} is available in ${location}`,
+      ok: false,
+      detail: 'Could not list the VM sizes this subscription is offered.',
+    }
+  }
+  if (available.has(requested)) {
+    return {
+      id: 'vm-size-available',
+      label: `${requested} is available in ${location}`,
+      ok: true,
+    }
+  }
+
+  // Same shape and a similar size, so the suggestion is a real alternative rather than the
+  // alphabetically first thing Azure happens to offer.
+  const alternatives = [...available]
+    .filter((n) => /^Standard_[A-Z]*[0-9]+[a-z]*(_v\d+)?$/.test(n))
+    .filter((n) => /[^0-9]2[a-z]*(_v\d+)?$/.test(n))
+    .sort()
+    .slice(0, 4)
+
+  return {
+    id: 'vm-size-available',
+    label: `${requested} is available in ${location}`,
+    ok: false,
+    detail:
+      `${requested} is not offered to this subscription in ${location}, so a deploy fails ` +
+      'after the network, NSG, public IP and NIC have been created. ' +
+      (alternatives.length > 0
+        ? `Available instead: ${alternatives.join(', ')} — pass one with ` +
+          '`clawops plan --instance-type <size>`.'
+        : 'Try another region.'),
+  }
+}
+
 export async function azurePreflight(opts: PreflightOpts = {}): Promise<PreflightCheck[]> {
   const checks: PreflightCheck[] = []
   const subscriptionId = resolveSubscriptionId()
@@ -137,6 +226,12 @@ export async function azurePreflight(opts: PreflightOpts = {}): Promise<Prefligh
         'AZURE_CLIENT_ID + AZURE_CLIENT_SECRET for a service principal.',
     })
     return checks
+  }
+
+  if (opts.region) {
+    checks.push(
+      sizeCheck(opts.region, await availableSizes(subscriptionId, opts.region, token, opts.signal)),
+    )
   }
 
   for (const provider of REQUIRED_PROVIDERS) {

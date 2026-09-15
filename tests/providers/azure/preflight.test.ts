@@ -8,6 +8,7 @@ vi.mock('node:child_process', async (importOriginal) => {
 
 import {
   azurePreflight, stateBackendCheck, managementToken, REQUIRED_PROVIDERS,
+  sizeCheck, availableSizes,
 } from '../../../src/providers/azure/preflight.js'
 
 const SUB = 'sub-0001'
@@ -205,6 +206,21 @@ describe('azurePreflight', () => {
     expect(find(checks, 'rp-compute')).toBeUndefined()
   })
 
+  it('checks the VM size when a region is known', async () => {
+    mockFetch((url) => {
+      if (url.includes('login.microsoftonline.com')) return json({ access_token: 'tok' })
+      if (url.includes('/skus')) return json({ value: [] })
+      return json({ registrationState: 'Registered' })
+    })
+    const checks = await azurePreflight({ region: 'eastus' })
+    expect(find(checks, 'vm-size-available')).toBeDefined()
+  })
+
+  it('skips the size check when no region is known, rather than guessing one', async () => {
+    arm(REGISTERED)
+    expect(find(await azurePreflight({}), 'vm-size-available')).toBeUndefined()
+  })
+
   it('covers every provider the program needs', async () => {
     arm(REGISTERED)
     const checks = await azurePreflight({})
@@ -219,5 +235,99 @@ describe('azurePreflight', () => {
       return json({ error: 'forbidden' }, 403)
     })
     expect(find(await azurePreflight({}), 'rp-compute')?.ok).toBe(false)
+  })
+})
+
+describe('sizeCheck', () => {
+  const AVAILABLE = new Set([
+    'Standard_D2als_v7',
+    'Standard_D2as_v7',
+    'Standard_D4as_v7',
+    'Standard_D248ds_v7',
+  ])
+
+  it('passes when the size is offered', () => {
+    expect(sizeCheck('eastus', new Set(['Standard_B2s'])).ok).toBe(true)
+  })
+
+  it('fails when it is not, and says the deploy gets that far first', () => {
+    // The subscription this was first run against was offered no B-series size at all in
+    // eastus, and the 409 arrives after the network, NSG, public IP and NIC exist.
+    const check = sizeCheck('eastus', AVAILABLE)
+    expect(check.ok).toBe(false)
+    expect(check.detail).toMatch(/after the network, NSG, public IP and NIC have been created/)
+  })
+
+  it('suggests sizes of a similar shape, not whatever sorts first', () => {
+    const check = sizeCheck('eastus', AVAILABLE)
+    expect(check.detail).toContain('Standard_D2as_v7')
+    // A 248-vCPU machine is not an alternative to a 2-vCPU one.
+    expect(check.detail).not.toContain('Standard_D248ds_v7')
+  })
+
+  it('caps the suggestions rather than printing a catalogue', () => {
+    const many = new Set(
+      Array.from({ length: 40 }, (_, i) => `Standard_D2a${String.fromCharCode(97 + (i % 26))}s_v7`),
+    )
+    // Count the listed sizes, not every comma in the sentence — the prose around them has
+    // commas of its own, and counting those measures the wrong thing.
+    const detail = sizeCheck('eastus', many).detail ?? ''
+    const listed = detail.match(/Available instead: ([^—]+)/)?.[1]?.split(',') ?? []
+    expect(listed.length).toBeLessThanOrEqual(4)
+    expect(listed.length).toBeGreaterThan(0)
+  })
+
+  it('says to try another region when nothing similar is offered', () => {
+    expect(sizeCheck('eastus', new Set(['Standard_D248ds_v7'])).detail).toMatch(/another region/)
+  })
+
+  it('reports a failed listing as a failure, not as availability', () => {
+    const check = sizeCheck('eastus', undefined)
+    expect(check.ok).toBe(false)
+    expect(check.detail).toMatch(/Could not list/)
+  })
+
+  it('checks the size a plan gets by default', () => {
+    // `small` is what a plan uses when nobody says otherwise, so it is the one worth checking.
+    expect(sizeCheck('eastus', new Set()).label).toContain('Standard_B2s')
+  })
+
+  it('can be asked about a specific size', () => {
+    expect(sizeCheck('eastus', new Set(['Standard_D2as_v7']), 'Standard_D2as_v7').ok).toBe(true)
+  })
+})
+
+describe('availableSizes', () => {
+  const skus = (value: unknown[]) => json({ value })
+
+  it('keeps only virtual machine SKUs', async () => {
+    mockFetch(() => skus([
+      { name: 'Standard_D2as_v7', resourceType: 'virtualMachines', restrictions: [] },
+      { name: 'Premium_LRS', resourceType: 'disks', restrictions: [] },
+    ]))
+    const sizes = await availableSizes('sub', 'eastus', 'tok')
+    expect(sizes?.has('Standard_D2as_v7')).toBe(true)
+    expect(sizes?.has('Premium_LRS')).toBe(false)
+  })
+
+  it('drops restricted SKUs — offered is not the same as usable', async () => {
+    mockFetch(() => skus([
+      { name: 'Standard_B2s', resourceType: 'virtualMachines', restrictions: [{ reasonCode: 'NotAvailableForSubscription' }] },
+      { name: 'Standard_D2as_v7', resourceType: 'virtualMachines', restrictions: [] },
+    ]))
+    const sizes = await availableSizes('sub', 'eastus', 'tok')
+    expect(sizes?.has('Standard_B2s')).toBe(false)
+    expect(sizes?.has('Standard_D2as_v7')).toBe(true)
+  })
+
+  it('filters by the location asked about', async () => {
+    const spy = mockFetch(() => skus([]))
+    await availableSizes('sub', 'westus2', 'tok')
+    expect(String(spy.mock.calls[0]?.[0])).toContain(encodeURIComponent("location eq 'westus2'"))
+  })
+
+  it('is undefined when the call fails, so the check can say so', async () => {
+    mockFetch(() => json({ error: 'forbidden' }, 403))
+    await expect(availableSizes('sub', 'eastus', 'tok')).resolves.toBeUndefined()
   })
 })
