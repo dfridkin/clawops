@@ -102,3 +102,21 @@ describe('awsAdapter.validateConfig()', () => {
     }
   })
 })
+
+describe('awsAdapter.preflight()', () => {
+  it('delegates to the preflight checks', async () => {
+    // The checks are covered in preflight.test.ts, which calls them directly — without this the
+    // adapter could stop calling them at all and nothing would notice. That exact gap showed up
+    // twice on the other two clouds.
+    const saved = process.env['AWS_PROFILE']
+    delete process.env['AWS_PROFILE']
+    try {
+      const checks = await awsAdapter.preflight!({ region: 'us-east-1' })
+      expect(checks.length).toBeGreaterThan(0)
+      expect(checks[0]?.id).toBe('account-resolved')
+    } finally {
+      if (saved === undefined) delete process.env['AWS_PROFILE']
+      else process.env['AWS_PROFILE'] = saved
+    }
+  })
+})

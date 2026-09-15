@@ -575,7 +575,9 @@ async function accountChecks(
     const results = await adapter.preflight({ region: stackCfg?.region, bucket, instanceType })
     return results.map((r) => ({
       name: r.label,
-      status: r.ok ? ('pass' as const) : ('fail' as const),
+      // A question clawops could not ask is not an answer about the account. Failing the
+      // report over a denied read permission would be as wrong as passing it.
+      status: r.unknown ? ('warn' as const) : r.ok ? ('pass' as const) : ('fail' as const),
       detail: r.detail,
       remedy: r.mutates ? `clawops setup can fix this: ${r.mutates}` : undefined,
     }))
