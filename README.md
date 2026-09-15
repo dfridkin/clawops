@@ -471,6 +471,26 @@ accepts the resources.
 `azure-native:subscriptionId`, both from the same resolver the preflight uses — otherwise an
 `az account set` between the check and the apply moves the deploy somewhere else silently.
 
+### A plan was written even when its state backend did not exist
+
+Fixed in 2.0.1. Opening a stack and previewing it failed into the same `catch`, which wrote a
+warning and carried on. So a state bucket that does not exist produced this — and exit 0:
+
+```
+error: could not list bucket: NoSuchBucket: The specified bucket does not exist
+✔ Plan generated
+✓ Plan written to /tmp/plan.json
+(diff unavailable — preview could not run against this stack)
+```
+
+`doctor` said the provider was fine, `plan` said the plan was fine, and `apply` then failed with
+a raw Pulumi error about a bucket clawops had never mentioned.
+
+These are different failures and get different answers now. A backend clawops cannot open ends
+the command — a plan is only as good as the state it was computed against — and names the cause
+rather than Pulumi's exit code. A preview that fails on a stack which opened normally still
+writes the plan, without a diff, as before.
+
 ### `clawops logs` never read from the gateway on AWS
 
 Fixed in 2.0.1. The probe that decides whether the gateway can serve its own logs was:
