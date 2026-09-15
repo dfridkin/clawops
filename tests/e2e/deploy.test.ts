@@ -11,7 +11,10 @@ vi.mock('../../src/plan/ssh-key.js', () => ({
 vi.mock('../../src/cli/context.js', () => ({ buildContext: vi.fn() }))
 // Never dial a host from a unit test. Both waits are covered in their own suites:
 // tests/transport/wait.test.ts and tests/openclaw/ready.test.ts.
-vi.mock('../../src/transport/wait.js', () => ({ waitForSsh: vi.fn().mockResolvedValue(undefined) }))
+// waitForSsh hands back the session the gateway wait then uses.
+vi.mock('../../src/transport/wait.js', () => ({
+  waitForSsh: vi.fn().mockResolvedValue({ close: vi.fn(), exec: vi.fn() }),
+}))
 vi.mock('../../src/openclaw/ready.js', () => ({
   waitForGateway: vi.fn().mockResolvedValue({ waitedMs: 0, lastContainerStatus: 'running' }),
 }))

@@ -106,7 +106,10 @@ export async function applyPlan(
   if (opts?.skipReadiness) {
     return { outputs, changeSummary, durationMs: Date.now() - start }
   }
-  await waitForSsh(conn, {
+  // The session this returns is the one that proved the host is up. Opening a second one here
+  // meant a fresh handshake against a host that had only just started accepting them, with no
+  // retries behind it — which is how an AWS deploy failed immediately after "SSH is up".
+  const readySession = await waitForSsh(conn, {
     signal: opts?.signal,
     onProgress: (line) => reportProgress(opts, line),
   })
@@ -116,8 +119,6 @@ export async function applyPlan(
   // gateway that answers. Reporting success before one exists hands the operator a deployment
   // that fails at whatever they try first.
   const { waitForGateway } = await import('../openclaw/ready.js')
-  const { connect } = await import('../transport/ssh.js')
-  const readySession = await connect({ ...conn, signal: opts?.signal })
   try {
     await waitForGateway(readySession, {
       signal: opts?.signal,

@@ -75,7 +75,7 @@ const basePlan = {
 }
 
 beforeEach(async () => {
-  mockWaitForSsh.mockReset().mockResolvedValue(undefined)
+  mockWaitForSsh.mockReset().mockResolvedValue({ close: vi.fn(), exec: vi.fn() })
   mockConnect.mockReset().mockResolvedValue({ close: vi.fn(), exec: vi.fn() })
   mockWaitForGateway.mockReset().mockResolvedValue({ waitedMs: 0, lastContainerStatus: 'running' })
   vi.clearAllMocks()
@@ -393,9 +393,12 @@ describe('applyPlan waits for the deployment, not just the machine', () => {
     expect(mockWaitForGateway).toHaveBeenCalled()
   })
 
-  it('waits for SSH first — the probe runs over it', async () => {
+  it('waits for SSH first — the probe runs over the session it returns', async () => {
     const order: string[] = []
-    mockWaitForSsh.mockImplementation(async () => void order.push('ssh'))
+    mockWaitForSsh.mockImplementation(async () => {
+      order.push('ssh')
+      return { close: vi.fn(), exec: vi.fn() }
+    })
     mockWaitForGateway.mockImplementation(async () => {
       order.push('gateway')
       return { waitedMs: 0, lastContainerStatus: 'running' }
@@ -426,21 +429,12 @@ describe('applyPlan waits for the deployment, not just the machine', () => {
     await expect(applyPlan(basePlan)).rejects.toThrow(/gateway did not answer/)
   })
 
-  it('closes the session it opened for the probe', async () => {
+  it('leaks no session when the gateway never answers', async () => {
     const close = vi.fn()
-    mockConnect.mockResolvedValue({ close, exec: vi.fn() })
-    const { applyPlan } = await import('../../src/plan/apply.js')
-    await applyPlan(basePlan)
-    expect(close).toHaveBeenCalled()
-  })
-
-  it('closes it even when the gateway never answers', async () => {
-    const close = vi.fn()
-    mockConnect.mockResolvedValue({ close, exec: vi.fn() })
+    mockWaitForSsh.mockResolvedValue({ close, exec: vi.fn() })
     mockWaitForGateway.mockRejectedValue(new Error('timed out'))
     const { applyPlan } = await import('../../src/plan/apply.js')
     await expect(applyPlan(basePlan)).rejects.toThrow()
-    // One leaked SSH session per failed apply otherwise.
     expect(close).toHaveBeenCalled()
   })
 })
@@ -449,6 +443,7 @@ describe('progress while waiting', () => {
   it('goes to onProgress, not into the Pulumi output stream', async () => {
     mockWaitForSsh.mockImplementation(async (_conn: unknown, o: { onProgress?: (l: string) => void }) => {
       o.onProgress?.('Waiting for 203.0.113.4:22 to accept SSH')
+      return { close: vi.fn(), exec: vi.fn() }
     })
     const progress: string[] = []
     const output: string[] = []
@@ -465,6 +460,7 @@ describe('progress while waiting', () => {
   it('falls back to onOutput for a caller that only offers that', async () => {
     mockWaitForSsh.mockImplementation(async (_conn: unknown, o: { onProgress?: (l: string) => void }) => {
       o.onProgress?.('still waiting')
+      return { close: vi.fn(), exec: vi.fn() }
     })
     const output: string[] = []
     const { applyPlan } = await import('../../src/plan/apply.js')
@@ -505,5 +501,36 @@ describe('skipReadiness', () => {
     await applyPlan(basePlan, {})
     expect(mockWaitForSsh).toHaveBeenCalled()
     expect(mockWaitForGateway).toHaveBeenCalled()
+  })
+})
+
+describe('the session the readiness waits share', () => {
+  it('uses the one waitForSsh proved with, not a fresh connection', async () => {
+    // Opening a second connection to a host that had only just started accepting them is how
+    // an AWS deploy failed with "Timed out while waiting for handshake", one line after
+    // "SSH is up after 2 attempts".
+    const proven = { close: vi.fn(), exec: vi.fn() }
+    mockWaitForSsh.mockResolvedValue(proven)
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan)
+    expect(mockWaitForGateway).toHaveBeenCalledWith(proven, expect.anything())
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
+
+  it('closes it when the gateway answers', async () => {
+    const proven = { close: vi.fn(), exec: vi.fn() }
+    mockWaitForSsh.mockResolvedValue(proven)
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(basePlan)
+    expect(proven.close).toHaveBeenCalled()
+  })
+
+  it('closes it when the gateway never answers', async () => {
+    const proven = { close: vi.fn(), exec: vi.fn() }
+    mockWaitForSsh.mockResolvedValue(proven)
+    mockWaitForGateway.mockRejectedValue(new Error('timed out'))
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await expect(applyPlan(basePlan)).rejects.toThrow()
+    expect(proven.close).toHaveBeenCalled()
   })
 })
