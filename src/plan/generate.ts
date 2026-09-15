@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { buildContext, loadAdapterModule } from '../cli/context.js'
 import type { ProviderName } from '../providers/types.js'
 import { getConfig } from '../config/store.js'
-import { UsageError } from '../errors/index.js'
+import { UsageError, StateError } from '../errors/index.js'
 import { validatePlan } from './validate.js'
 
 export interface DeployPlan {
@@ -217,11 +217,35 @@ export async function generatePlan(
     },
   }
 
-  // Run preview to populate diff
+  // Opening the stack and previewing it fail for different reasons and deserve different
+  // answers. `createOrSelectStack` reaches the state backend — a bucket that does not exist, a
+  // container clawops cannot read, a passphrase it cannot use — and none of that produces a
+  // plan worth having. A preview can still fail on a stack that opened fine, and a plan without
+  // a diff is worth writing then.
+  //
+  // Both used to land in one catch that wrote a warning and carried on, so a missing S3 bucket
+  // produced "✔ Plan generated" and exit 0:
+  //
+  //   error: could not list bucket: NoSuchBucket: The specified bucket does not exist
+  //   ✔ Plan generated
+  //
+  // The operator was told the plan was fine three times before apply told them otherwise.
+  let stack: Awaited<ReturnType<Awaited<ReturnType<typeof buildContext>>['getStack']>>
   try {
     const ctx = buildContext({ stack: stackName, provider: intent.provider })
-    const stack = await ctx.getStack()
+    stack = await ctx.getStack()
+  } catch (err) {
+    if (err instanceof UsageError) throw err
+    throw new StateError(
+      `Cannot open the state backend for stack "${stackName}": ${messageOf(err)}\n` +
+        'A plan is only as good as the state it was computed against, so this is not a plan ' +
+        'clawops will write. Check the stateUrl in ~/.clawops/config.json, and that the ' +
+        'bucket or container exists and your credentials can read it.',
+    )
+  }
 
+  // Run preview to populate diff
+  try {
     // The same writer apply uses. Previously this set three keys and apply set six, so the
     // preview was of a stack that would never be deployed — and, missing sshPublicKey, of one
     // that could not even be previewed.
@@ -303,4 +327,24 @@ export function planId(): string {
 /** `~` in a configured path is the operator's home, not a directory called "~". */
 function expandHome(p: string): string {
   return p.replace(/^~/, process.env['HOME'] ?? '~')
+}
+
+/**
+ * The informative line of whatever was thrown.
+ *
+ * A Pulumi CommandError's message opens with "code: -2" and buries the cause several lines
+ * down, in the captured stderr:
+ *
+ *   code: -2
+ *    stdout:
+ *    stderr: … error: could not list bucket: NoSuchBucket: The specified bucket does not exist
+ *
+ * Reporting the first line would hand the operator an exit code where the answer was available.
+ */
+function messageOf(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err)
+  const lines = raw.split('\n').map((l) => l.trim()).filter((l) => l !== '')
+  const explained = lines.find((l) => /(^|\s)error:/i.test(l))
+  if (explained) return explained.replace(/^.*?error:\s*/i, '')
+  return lines[0] ?? raw
 }

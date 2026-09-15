@@ -231,12 +231,16 @@ describe('a stack that is not registered', () => {
     ).rejects.toThrow(/not found in config/)
   })
 
-  it('still tolerates a preview that fails for a Pulumi reason', async () => {
+  it('refuses when the backend itself cannot be opened', async () => {
+    // This was named "still tolerates a preview that fails" while rejecting getStack — the
+    // mislabelling was the conflation: a backend clawops cannot open and a diff it cannot
+    // compute were one catch, so a missing bucket produced a plan. The preview case it meant
+    // to cover is in "a state backend it cannot open" below, rejecting the preview instead.
     const { generatePlan } = await import('../../src/plan/generate.js')
     mockGetStack.mockRejectedValue(new Error('error: could not reach the backend'))
-    const plan = await generatePlan({ stackName: 'default', provider: 'gcp' })
-    expect(plan.spec.stackName).toBe('default')
-    expect(plan.diff).toBeUndefined()
+    await expect(generatePlan({ stackName: 'default', provider: 'gcp' })).rejects.toThrow(
+      /Cannot open the state backend/,
+    )
   })
 })
 
@@ -289,5 +293,47 @@ describe('instance sizes', () => {
     } finally {
       stderr.mockRestore()
     }
+  })
+})
+
+describe('a state backend it cannot open', () => {
+  it('refuses to write a plan at all', async () => {
+    // A missing S3 bucket used to produce "✔ Plan generated", exit 0, and a plan file with no
+    // diff — the operator was told it was fine three times before apply said otherwise.
+    const { generatePlan } = await import('../../src/plan/generate.js')
+    mockGetStack.mockRejectedValue(
+      new Error('code: -2\n stdout:\n stderr: error: could not list bucket: NoSuchBucket'),
+    )
+    await expect(generatePlan({ stackName: 'default', provider: 'aws' })).rejects.toThrow(
+      /Cannot open the state backend/,
+    )
+  })
+
+  it('names the cause, not Pulumi\'s exit code', async () => {
+    const { generatePlan } = await import('../../src/plan/generate.js')
+    mockGetStack.mockRejectedValue(
+      new Error('code: -2\n stdout:\n stderr: error: could not list bucket: NoSuchBucket'),
+    )
+    await expect(generatePlan({ stackName: 'default', provider: 'aws' })).rejects.toThrow(
+      /NoSuchBucket/,
+    )
+  })
+
+  it('points at the setting that is wrong', async () => {
+    const { generatePlan } = await import('../../src/plan/generate.js')
+    mockGetStack.mockRejectedValue(new Error('error: blob (code=NotFound)'))
+    await expect(generatePlan({ stackName: 'default', provider: 'aws' })).rejects.toThrow(
+      /stateUrl in ~\/\.clawops\/config\.json/,
+    )
+  })
+
+  it('still writes a plan when the stack opened and only the preview failed', async () => {
+    // Opening the stack and computing a diff fail for different reasons: a cloud API that
+    // refuses a preview leaves the plan worth having, minus its diff.
+    const { generatePlan } = await import('../../src/plan/generate.js')
+    mockPreview.mockRejectedValue(new Error('error: rate limit exceeded'))
+    const plan = await generatePlan({ stackName: 'default', provider: 'aws' })
+    expect(plan.spec.stackName).toBe('default')
+    expect(plan.diff).toBeUndefined()
   })
 })

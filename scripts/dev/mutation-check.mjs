@@ -642,6 +642,13 @@ const MUTATIONS = [
   { name: 'every gateway probe is treated as reachable',
     file: 'src/cli/commands/logs.ts', from: '      const choice = chooseLogSource({ since, gatewayReachable: probe.code === 0 })', to: '      const choice = chooseLogSource({ since, gatewayReachable: true })', test: 'tests/cli/logs.test.ts' },
 
+  { name: 'an unopenable state backend becomes a warning again',
+    file: 'src/plan/generate.ts', from: '    throw new StateError(\n      `Cannot open the state backend', to: '    process.stderr.write(`warn`); stack = undefined as never; void new StateError(\n      `Cannot open the state backend', test: 'tests/plan/generate.test.ts' },
+  { name: 'a failed preview becomes fatal',
+    file: 'src/plan/generate.ts', from: "    process.stderr.write(\n      `[clawops] Warning: preview failed", to: '    if (true) throw err; process.stderr.write(\n      `[clawops] Warning: preview failed', test: 'tests/plan/generate.test.ts' },
+  { name: 'the backend error reports Pulumi\'s exit code instead of the cause',
+    file: 'src/plan/generate.ts', from: '  const explained = lines.find((l) => /(^|\\s)error:/i.test(l))', to: '  const explained = undefined as string | undefined', test: 'tests/plan/generate.test.ts' },
+
 ]
 
 let survived = []
