@@ -47,6 +47,35 @@ export interface GatewayReadyResult {
  * things went wrong: an image still downloading and a container that exited immediately are
  * both "no response from the gateway", and they need different answers from the operator.
  */
+/**
+ * What the bootstrap was doing when it stopped.
+ *
+ * A gateway that never appears leaves the operator with "Container: not found" and a host they
+ * have to go and look at — and if anything tears the instance down first, as an automated run
+ * does, the evidence goes with it. The bootstrap script is the same on every provider and its
+ * output lands in cloud-init's log on both Ubuntu and Debian images; GCP also keeps its own
+ * copy under the startup-script unit.
+ *
+ * Failures here are swallowed: this runs while something has already gone wrong, and a
+ * diagnostic that throws would replace the real error with its own.
+ */
+export async function bootstrapTail(
+  session: SshSession,
+  lines = 12,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
+  const command =
+    `(tail -n ${lines} /var/log/cloud-init-output.log 2>/dev/null || ` +
+    `journalctl -u google-startup-scripts --no-pager 2>/dev/null | tail -n ${lines}) | tail -n ${lines}`
+  try {
+    const result = await execPrivileged(session, command, signal)
+    const text = result.stdout.trim()
+    return text === '' ? undefined : text
+  } catch {
+    return undefined
+  }
+}
+
 export async function waitForGateway(
   session: SshSession,
   opts: WaitForGatewayOpts = {},
@@ -92,10 +121,13 @@ export async function waitForGateway(
     }
 
     if (now() + intervalMs >= deadline) {
+      const tail = await bootstrapTail(session, 12, opts.signal)
       throw new Error(
         `The OpenClaw gateway did not answer within ${Math.round(timeoutMs / 1000)}s. ` +
-          `Container: ${lastContainerStatus}. Last check: ${lastReason}. ` +
-          'The instance is up — `clawops logs --stack <name>` shows what it is doing.',
+          `Container: ${lastContainerStatus}. Last check: ${lastReason}.` +
+          (tail
+            ? `\n\nThe last of the host's bootstrap log:\n${tail}`
+            : ' The instance is up — `clawops logs --stack <name>` shows what it is doing.'),
       )
     }
     await sleep(intervalMs, opts.signal)

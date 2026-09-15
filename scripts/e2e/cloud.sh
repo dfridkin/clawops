@@ -34,8 +34,32 @@ REGISTERED=no
 # Whether the run got as far as checking anything.
 ASSERTED=no
 
+# Everything worth knowing about a host that misbehaved, captured while it still exists. A run
+# that destroys its own evidence cannot be diagnosed: the third Azure run's container never
+# appeared, and by the time anyone could look, the trap had deleted the VM.
+capture_diagnostics() {
+  [ "$CREATED" = "yes" ] || return 0
+  local out="/tmp/${STACK}-diagnostics.txt"
+  echo
+  echo "── Capturing diagnostics before teardown ───────────────────────"
+  pnpm dev ssh --stack "$STACK" --command '
+    echo "=== docker ps -a ==="; sudo docker ps -a 2>&1 | head -10
+    echo "=== docker images ==="; sudo docker images 2>&1 | head -10
+    echo "=== docker service ==="; sudo systemctl is-active docker 2>&1
+    echo "=== bootstrap log ==="; sudo tail -60 /var/log/cloud-init-output.log 2>/dev/null ||
+      sudo journalctl -u google-startup-scripts --no-pager 2>/dev/null | tail -60
+    echo "=== cloud-init status ==="; sudo cloud-init status --long 2>&1 | head -10
+  ' > "$out" 2>&1 || echo "   (could not reach the host — it may already be gone)"
+  if [ -s "$out" ]; then
+    echo "   written to ${out}"
+    grep -iE "error|fail|cannot|unable|E:" "$out" | head -8 || true
+  fi
+}
+
 cleanup() {
   local code=$?
+  # Before the trap destroys the host, not after.
+  if [ "$FAILURES" -gt 0 ] || [ "$ASSERTED" = "no" ]; then capture_diagnostics; fi
   if [ "$KEEP" = "--keep" ]; then
     echo
     echo "⚠  --keep was passed. Stack '${STACK}' is STILL RUNNING and still costing money."
