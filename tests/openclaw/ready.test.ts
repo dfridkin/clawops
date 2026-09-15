@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { waitForGateway } from '../../src/openclaw/ready.js'
+import { waitForGateway, bootstrapTail } from '../../src/openclaw/ready.js'
 import type { SshSession } from '../../src/transport/ssh.js'
 
 const STARTED = JSON.stringify({ ok: true, status: 'started' })
@@ -170,5 +170,82 @@ describe('waitForGateway', () => {
     await waitForGateway(session, { sleep: noSleep, port: 9999 })
     const probe = session.exec.mock.calls.find(([c]) => String(c).includes('curl'))
     expect(String(probe?.[0])).toContain('127.0.0.1:9999')
+  })
+})
+
+describe('bootstrapTail', () => {
+  function sessionReturning(stdout: string, throws = false) {
+    return {
+      exec: vi.fn(async () => {
+        if (throws) throw new Error('connection closed')
+        return { stdout, stderr: '', code: 0 }
+      }),
+    } as unknown as SshSession
+  }
+
+  it('returns what the bootstrap log says', async () => {
+    await expect(bootstrapTail(sessionReturning('E: Unable to acquire the dpkg lock\n')))
+      .resolves.toContain('dpkg lock')
+  })
+
+  it('is undefined when the log is empty', async () => {
+    await expect(bootstrapTail(sessionReturning('   \n'))).resolves.toBeUndefined()
+  })
+
+  it('never throws — it runs when something has already gone wrong', async () => {
+    // A diagnostic that throws replaces the real error with its own.
+    await expect(bootstrapTail(sessionReturning('', true))).resolves.toBeUndefined()
+  })
+
+  it('falls back to the startup-script unit when cloud-init has no log', async () => {
+    const session = sessionReturning('x')
+    await bootstrapTail(session)
+    const command = String((session.exec as ReturnType<typeof vi.fn>).mock.calls[0]?.[0])
+    expect(command).toContain('/var/log/cloud-init-output.log')
+    expect(command).toContain('google-startup-scripts')
+  })
+})
+
+describe('what a timeout tells the operator', () => {
+  it('carries the bootstrap log, because the instance may not outlive the error', async () => {
+    // An automated run destroys the host on its way out, and the evidence goes with it. This
+    // failure is the only chance to capture what the bootstrap was doing.
+    let clock = 0
+    const session = {
+      exec: vi.fn(async (command: string) => {
+        if (String(command).includes('cloud-init-output')) {
+          return { stdout: 'E: Could not get lock /var/lib/dpkg/lock-frontend\n', stderr: '', code: 0 }
+        }
+        return { stdout: 'not found\n', stderr: '', code: 0 }
+      }),
+    } as unknown as SshSession
+
+    await expect(
+      waitForGateway(session, {
+        sleep: noSleep,
+        intervalMs: 1_000,
+        timeoutMs: 5_000,
+        now: () => (clock += 1_000),
+      }),
+    ).rejects.toThrow(/bootstrap log[\s\S]*dpkg/)
+  })
+
+  it('still says where to look when the log cannot be read', async () => {
+    let clock = 0
+    const session = {
+      exec: vi.fn(async (command: string) => {
+        if (String(command).includes('cloud-init-output')) throw new Error('closed')
+        return { stdout: 'not found\n', stderr: '', code: 0 }
+      }),
+    } as unknown as SshSession
+
+    await expect(
+      waitForGateway(session, {
+        sleep: noSleep,
+        intervalMs: 1_000,
+        timeoutMs: 5_000,
+        now: () => (clock += 1_000),
+      }),
+    ).rejects.toThrow(/clawops logs --stack/)
   })
 })

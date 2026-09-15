@@ -478,7 +478,7 @@ const MUTATIONS = [
   { name: 'the gateway wait never times out',
     file: 'src/openclaw/ready.ts', from: '    if (now() + intervalMs >= deadline) {', to: '    if (false) {', test: 'tests/openclaw/ready.test.ts' },
   { name: 'the timeout no longer says what the container was doing',
-    file: 'src/openclaw/ready.ts', from: '          `Container: ${lastContainerStatus}. Last check: ${lastReason}. ` +', to: '          `` +', test: 'tests/openclaw/ready.test.ts' },
+    file: 'src/openclaw/ready.ts', from: '          `Container: ${lastContainerStatus}. Last check: ${lastReason}.` +', to: '          `` +', test: 'tests/openclaw/ready.test.ts' },
   { name: 'the readiness session is left open',
     file: 'src/plan/apply.ts', from: '    readySession.close()', to: '    void readySession', test: 'tests/plan/apply.test.ts' },
   { name: 'the gateway is probed on the default port whatever the plan says',
@@ -573,6 +573,15 @@ const MUTATIONS = [
     file: 'src/diagnostics/index.ts', from: '    const results = await adapter.preflight({ region: stackCfg?.region, bucket, instanceType })', to: '    const results = await adapter.preflight({ region: stackCfg?.region, bucket })', test: 'tests/diagnostics/doctor.test.ts' },
   { name: 'the size check ignores the size it was given',
     file: 'src/providers/azure/preflight.ts', from: '        opts.instanceType,\n', to: '', test: 'tests/providers/azure/preflight.test.ts' },
+
+  { name: 'a timeout stops carrying the bootstrap log',
+    file: 'src/openclaw/ready.ts', from: '      const tail = await bootstrapTail(session, 12, opts.signal)', to: '      const tail = undefined', test: 'tests/openclaw/ready.test.ts' },
+  { name: 'the diagnostic throws over the real error',
+    file: 'src/openclaw/ready.ts', from: '  } catch {\n    return undefined\n  }\n}\n\nexport async function waitForGateway', to: '  } catch (err) {\n    throw err\n  }\n}\n\nexport async function waitForGateway', test: 'tests/openclaw/ready.test.ts' },
+  { name: 'an empty bootstrap log is reported as content',
+    file: 'src/openclaw/ready.ts', from: "    return text === '' ? undefined : text", to: '    return text', test: 'tests/openclaw/ready.test.ts' },
+  { name: 'only cloud-init is consulted, never the startup-script unit',
+    file: 'src/openclaw/ready.ts', from: "    `journalctl -u google-startup-scripts --no-pager 2>/dev/null | tail -n ${lines}) | tail -n ${lines}`", to: "    `true) | tail -n ${lines}`", test: 'tests/openclaw/ready.test.ts' },
 
 ]
 
