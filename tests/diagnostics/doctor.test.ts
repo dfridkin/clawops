@@ -488,3 +488,24 @@ describe('the size account checks ask about', () => {
     )
   })
 })
+
+describe('the container check', () => {
+  it('says clawops could not ask, rather than that the container is gone', async () => {
+    // "not found" is a claim about the deployment. A refused docker socket is a claim about
+    // clawops, and conflating them cost a ten-minute wait on a host that was healthy.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockGetConfig.mockReturnValue(baseConfig as any)
+    const session = new FakeSshSession()
+    session.respond(/docker inspect/, {
+      stdout: '',
+      stderr: 'permission denied while trying to connect to the Docker daemon socket',
+      code: 1,
+    })
+    session.respond(/sudo/, { stdout: '', stderr: 'sudo: a password is required', code: 1 })
+    const report = await runDiagnostics({ stack: 'default' }, withHost(session))
+    const check = find(report, 'Container')
+    expect(check?.status).toBe('fail')
+    expect(check?.detail).toMatch(/could not ask docker/)
+    expect(check?.detail).not.toMatch(/^not found$/)
+  })
+})

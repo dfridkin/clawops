@@ -445,6 +445,29 @@ wait is more than momentary. `ECONNREFUSED` and a handshake timeout are expected
 minute of a VM's life and are retried; a host-key mismatch or an unreadable key is raised
 immediately, because waiting will not fix it.
 
+### A healthy deployment could be reported as missing
+
+Fixed in 2.0.1. Every Docker probe was written like this:
+
+```bash
+docker inspect openclaw --format '{{.State.Status}}' 2>/dev/null || echo 'not found'
+```
+
+That discards stderr and exits 0 whatever happened. clawops escalates to `sudo` when a command
+looks like it was refused access to the Docker socket — and it checks the exit code first, so a
+command that always succeeds never escalates. A permission error became a confident
+`not found`, and the session remembered that `sudo` was unnecessary.
+
+It bit on a real deploy: `clawops apply` waited ten minutes for a container that was `Up 9
+minutes (healthy)` the whole time. Intermittent, because the SSH user's membership of the
+`docker` group is fixed when the session opens and clawops connects as soon as `sshd` answers —
+sometimes before the host has run `usermod`.
+
+A refusal and an absence are now different answers. `doctor` reports `could not ask docker —
+permission denied` instead of claiming the container is gone, `gateway status` will not print
+"not running" when it does not know, and the readiness wait stops on a refusal rather than
+polling through it.
+
 ### Day-two commands failed with an error about provider loading
 
 Fixed in 2.0.1. `buildContext().adapter` was a proxy that loaded the provider module on its

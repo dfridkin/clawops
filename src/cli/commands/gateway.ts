@@ -72,17 +72,27 @@ export default defineCommand({
 
     try {
       if (action === 'status') {
-        const statusCmd =
-          `docker inspect openclaw ` +
-          `--format '{"status":"{{.State.Status}}","started":"{{.State.StartedAt}}","image":"{{.Config.Image}}"}' ` +
-          `2>/dev/null || echo '{"status":"not running","started":"","image":""}'`
-
-        const result = await session.exec(statusCmd, abortController.signal)
+        const { inspectContainer } = await import('../../openclaw/docker.js')
+        const inspected = await inspectContainer(
+          session,
+          'openclaw',
+          '{"status":"{{.State.Status}}","started":"{{.State.StartedAt}}","image":"{{.Config.Image}}"}',
+          abortController.signal,
+        )
         type GatewayStatus = { status: string; started: string; image: string }
         let status: GatewayStatus = { status: 'unknown', started: '', image: '' }
-        try {
-          status = JSON.parse(result.stdout.trim()) as GatewayStatus
-        } catch { /* keep default */ }
+        if (inspected.kind === 'ok') {
+          try {
+            status = JSON.parse(inspected.value) as GatewayStatus
+          } catch { /* keep default */ }
+        } else if (inspected.kind === 'missing') {
+          status = { status: 'not running', started: '', image: '' }
+        } else {
+          // Reporting "not running" here would be a statement about the gateway, when the
+          // truth is that clawops could not ask.
+          failure(`Could not ask docker about the gateway: ${inspected.detail}`)
+          process.exit(1)
+        }
 
         if (args.json) {
           printJson(jsonOk(status))
