@@ -165,6 +165,9 @@ REGISTERED=yes
 # E2E_INSTANCE_TYPE overrides the size. Azure offers SKU families per subscription and region,
 # and the subscription this was first run against was offered none of the B-series sizes
 # clawops names — so there is no size the script can hardcode that works everywhere.
+# Empty by default, and expanded with the ${arr[@]+…} guard below: bash 3.2 (what macOS ships)
+# errors on "${arr[@]}" for an empty array under `set -u`, which took out the first GCP run
+# after this flag was added — the Azure runs always set a size, so the array was never empty.
 SIZE_ARG=()
 if [ -n "${E2E_INSTANCE_TYPE:-}" ]; then
   SIZE_ARG=(--instance-type "$E2E_INSTANCE_TYPE")
@@ -183,10 +186,10 @@ echo "Deploying via clawops ${DEPLOY_VIA}"
 CREATED=yes
 if [ "$DEPLOY_VIA" = "up" ]; then
   pnpm dev up --provider "$PROVIDER" --stack "$STACK" --openclaw-version "$FLOOR" \
-    --ssh-cidr auto "${SIZE_ARG[@]}" || exit 1
+    --ssh-cidr auto ${SIZE_ARG[@]+"${SIZE_ARG[@]}"} || exit 1
 else
   pnpm dev plan --provider "$PROVIDER" --stack "$STACK" --openclaw-version "$FLOOR" \
-    --ssh-cidr auto "${SIZE_ARG[@]}" --out "/tmp/${STACK}.plan.json" || exit 1
+    --ssh-cidr auto ${SIZE_ARG[@]+"${SIZE_ARG[@]}"} --out "/tmp/${STACK}.plan.json" || exit 1
   pnpm dev apply "/tmp/${STACK}.plan.json" --yes || exit 1
 fi
 
