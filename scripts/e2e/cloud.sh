@@ -88,9 +88,19 @@ trap cleanup EXIT INT TERM
 
 echo "── Preflight ───────────────────────────────────────────────────"
 # Credentials first: finding out after provisioning is the expensive order to discover this.
-pnpm dev doctor 2>&1 | grep -iE "credential|${PROVIDER}" | head -5 || true
-if ! pnpm dev doctor >/dev/null 2>&1; then
-  echo "doctor reports a failure — fix that before spending money on a deploy." >&2
+#
+# --provider, not the default stack. `stacks delete` on this script's throwaway stack hands the
+# default to whichever stack is left, so the second Azure run preflighted GCP, passed, and
+# deployed without a single Azure check having run.
+PREFLIGHT_ARGS=(--provider "$PROVIDER")
+if [ -n "${E2E_INSTANCE_TYPE:-}" ]; then
+  # Otherwise the size check asks about the provider's default, which this run is deliberately
+  # not using, and reports a healthy deployment as broken.
+  PREFLIGHT_ARGS+=(--instance-type "$E2E_INSTANCE_TYPE")
+fi
+pnpm dev doctor "${PREFLIGHT_ARGS[@]}" 2>&1 | grep -iE "credential|${PROVIDER}|available in" | head -6 || true
+if ! pnpm dev doctor "${PREFLIGHT_ARGS[@]}" >/dev/null 2>&1; then
+  echo "doctor reports a failure for ${PROVIDER} — fix that before spending money on a deploy." >&2
   DESTROYED=yes   # nothing was created
   exit 1
 fi
@@ -146,7 +156,9 @@ ASSERTED=yes
 # `doctor --stack` exits 1 on any failed check, so it is the single strongest assertion here:
 # container running, the deployed version in range, the gateway answering /startupz with a
 # JSON body, the port on loopback, disk, log rotation.
-if pnpm dev doctor --stack "$STACK"; then pass "doctor --stack passed"; else fail "doctor --stack reported failures"; fi
+DOCTOR_ARGS=(--stack "$STACK")
+if [ -n "${E2E_INSTANCE_TYPE:-}" ]; then DOCTOR_ARGS+=(--instance-type "$E2E_INSTANCE_TYPE"); fi
+if pnpm dev doctor "${DOCTOR_ARGS[@]}"; then pass "doctor --stack passed"; else fail "doctor --stack reported failures"; fi
 
 # State must survive a container replacement. Before 2.0 nothing was mounted and this is
 # exactly what was lost, so it is the assertion the whole release turns on.

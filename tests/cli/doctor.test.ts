@@ -146,6 +146,15 @@ describe('doctor flags reach the diagnostics', () => {
     expect(mockRunDiagnostics).toHaveBeenCalledWith(expect.objectContaining({ stack: 'prod' }))
   })
 
+  it('forwards --instance-type', async () => {
+    // Without this the account checks ask about the provider's default size, and report a
+    // deployment that passed --instance-type as broken.
+    await (cmd.run as AnyRunFn)({ args: { 'instance-type': 'Standard_D2als_v7' } })
+    expect(mockRunDiagnostics).toHaveBeenCalledWith(
+      expect.objectContaining({ instanceType: 'Standard_D2als_v7' }),
+    )
+  })
+
   it('sends no provider when the flag is absent', async () => {
     await (cmd.run as AnyRunFn)({ args: {} })
     expect(mockRunDiagnostics).toHaveBeenCalledWith(

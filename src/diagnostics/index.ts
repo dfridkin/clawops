@@ -64,6 +64,11 @@ export interface DiagnosticsOpts {
    * stack first and read the answer off a check about something else.
    */
   provider?: string
+  /**
+   * The machine size to ask about, for checks that depend on one. Without it those checks use
+   * the provider's default, which reports a deployment that passed `--instance-type` as broken.
+   */
+  instanceType?: string
   signal?: AbortSignal
 }
 
@@ -97,7 +102,7 @@ export async function runDiagnostics(
   sections.push({ title: 'SSH', checks: sshChecks(config) })
   sections.push({ title: 'Credentials', checks: await credentialChecks(config, opts.provider) })
   sections.push({ title: 'OpenClaw', checks: await versionChecks() })
-  const account = await accountChecks(config, opts.stack, opts.provider)
+  const account = await accountChecks(config, opts.stack, opts.provider, opts.instanceType)
   if (account.length > 0) sections.push({ title: 'Cloud account', checks: account })
 
   if (opts.stack) {
@@ -543,6 +548,7 @@ async function accountChecks(
   config: ClawopsConfig | null,
   stack?: string,
   provider?: string,
+  instanceType?: string,
 ): Promise<Check[]> {
   if (!config && !provider) return []
   // With --provider and no stack of that provider there is no state backend to check, but the
@@ -562,7 +568,7 @@ async function accountChecks(
     if (!adapter.preflight) return []
 
     const bucket = stackCfg ? bucketFromStateUrl(stackCfg.stateUrl) : undefined
-    const results = await adapter.preflight({ region: stackCfg?.region, bucket })
+    const results = await adapter.preflight({ region: stackCfg?.region, bucket, instanceType })
     return results.map((r) => ({
       name: r.label,
       status: r.ok ? ('pass' as const) : ('fail' as const),

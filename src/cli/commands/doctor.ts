@@ -16,6 +16,7 @@ export default defineCommand({
   args: {
     stack: { type: 'string', description: 'Stack name to include remote health checks' },
     provider: { type: 'string', description: 'Check this provider\'s credentials and account setup, with or without a stack' },
+    'instance-type': { type: 'string', description: 'Ask account checks about this machine size rather than the provider default' },
     json: { type: 'boolean', description: 'Emit the report as JSON' },
   },
   async run({ args }) {
@@ -29,6 +30,8 @@ export default defineCommand({
       report = await runDiagnostics({
         stack: args.stack,
         provider: typeof args.provider === 'string' ? args.provider : undefined,
+        instanceType:
+          typeof args['instance-type'] === 'string' ? args['instance-type'] : undefined,
         signal: ac.signal,
       })
     } finally {
