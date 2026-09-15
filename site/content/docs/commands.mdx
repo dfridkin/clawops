@@ -23,14 +23,14 @@ description: Every clawops command, grouped by what you reach for it.
 |---|---|
 | `init` | Choose a provider, configure the state backend, generate an SSH key |
 | `setup` | Interactive wizard — configure and deploy in one pass |
-| `doctor` | Check the local machine; with `--stack`, the deployment too. Exits 1 on any failure |
+| `doctor` | Check the local machine; with `--stack`, the deployment too; with `--provider`, one cloud's credentials and account setup whether or not a stack exists; with `--instance-type`, account checks ask about that size. Exits 1 on any failure |
 
 ## Provisioning
 
 | Command | Does |
 |---|---|
 | `up` | Provision and deploy a stack (`--gateway-port` for a non-default port) |
-| `plan` | Generate a deploy plan without applying it |
+| `plan` | Generate a deploy plan without applying it (`--ssh-cidr`, `--gateway-cidr`, `--publish-gateway` say who may connect; `--instance-type` picks the machine size) |
 | `apply` | Apply a plan produced by `clawops plan` |
 | `down` | Destroy provisioned resources for a stack |
 | `destroy` | Destroy everything in a stack — irreversible |

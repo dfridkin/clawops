@@ -680,6 +680,12 @@ const MUTATIONS = [
     file: 'src/providers/aws/preflight.ts', from: "          ok: false,\n          unknown: true,", to: '          ok: true,\n          unknown: true,', test: 'tests/providers/aws/preflight.test.ts' },
   { name: 'azure treats an unlistable size as a hard failure again',
     file: 'src/providers/azure/preflight.ts', from: '      ok: false,\n      unknown: true,', to: '      ok: false,', test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'the wizard checks the provider default instead of the size just chosen',
+    file: 'src/cli/commands/setup.ts', from: '      instanceType: opts.instanceType,\n', to: '', test: 'tests/cli/setup-preflight.test.ts' },
+  { name: 'the wizard counts a question it could not ask as a failure',
+    file: 'src/cli/commands/setup.ts', from: '  const failed = checks.filter((c) => !c.ok && !c.unknown)', to: '  const failed = checks.filter((c) => !c.ok)', test: 'tests/cli/setup-preflight.test.ts' },
+  { name: 'the wizard calls an account ready without saying what it could not check',
+    file: 'src/cli/commands/setup.ts', from: '        ? `${opts.provider} account is ready, as far as clawops could tell.`', to: '        ? `${opts.provider} account is ready.`', test: 'tests/cli/setup-preflight.test.ts' },
 
 ]
 
