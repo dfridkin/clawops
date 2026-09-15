@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # End-to-end deploy against a real cloud, then destroy it.
 #
-#   scripts/e2e/cloud.sh gcp|azure [--keep]
+#   scripts/e2e/cloud.sh aws|gcp|azure [--keep]
 #
 #   E2E_INSTANCE_TYPE=<size>   deploy a size this subscription is actually offered
 #   E2E_DEPLOY_VIA=up|apply    which deploy path to exercise (default: apply)
@@ -21,8 +21,8 @@ STACK="e2e-$(date +%Y%m%d-%H%M%S)"
 FLOOR=$(node -p "require('js-yaml').load(require('fs').readFileSync('spec/openclaw-versions.yaml','utf8')).support.recommended")
 
 case "$PROVIDER" in
-  gcp|azure) ;;
-  *) echo "usage: $0 gcp|azure [--keep]" >&2; exit 2 ;;
+  aws|gcp|azure) ;;
+  *) echo "usage: $0 aws|gcp|azure [--keep]" >&2; exit 2 ;;
 esac
 
 fail() { echo "  ✗ $*" >&2; FAILURES=$((FAILURES + 1)); }
