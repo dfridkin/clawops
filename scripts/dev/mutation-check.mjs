@@ -633,6 +633,13 @@ const MUTATIONS = [
   { name: 'every provider gets an azure subscription pinned',
     file: 'src/plan/stack-config.ts', from: "  if (plan.spec.provider === 'azure') {", to: '  if (true) {', test: 'tests/plan/stack-config.test.ts' },
 
+  { name: 'the logs probe launders a refusal into a word again',
+    file: 'src/openclaw/logs.ts', from: "export const GATEWAY_LOGS_PROBE = 'docker exec openclaw openclaw logs --limit 1 >/dev/null'", to: "export const GATEWAY_LOGS_PROBE = 'docker exec openclaw openclaw logs --limit 1 >/dev/null 2>&1 && echo ok || echo no'", test: 'tests/openclaw/logs.test.ts' },
+  { name: 'the logs source is decided by stdout rather than the exit code',
+    file: 'src/cli/commands/logs.ts', from: '      const choice = chooseLogSource({ since, gatewayReachable: probe.code === 0 })', to: "      const choice = chooseLogSource({ since, gatewayReachable: probe.stdout?.trim() === 'ok' })", test: 'tests/cli/logs.test.ts' },
+  { name: 'every gateway probe is treated as reachable',
+    file: 'src/cli/commands/logs.ts', from: '      const choice = chooseLogSource({ since, gatewayReachable: probe.code === 0 })', to: '      const choice = chooseLogSource({ since, gatewayReachable: true })', test: 'tests/cli/logs.test.ts' },
+
 ]
 
 let survived = []

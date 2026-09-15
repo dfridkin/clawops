@@ -471,6 +471,22 @@ accepts the resources.
 `azure-native:subscriptionId`, both from the same resolver the preflight uses — otherwise an
 `az account set` between the check and the apply moves the deploy somewhere else silently.
 
+### `clawops logs` never read from the gateway on AWS
+
+Fixed in 2.0.1. The probe that decides whether the gateway can serve its own logs was:
+
+```bash
+docker exec openclaw openclaw logs --limit 1 >/dev/null 2>&1 && echo ok || echo no
+```
+
+It discards stderr and exits 0 whatever happened, so clawops never escalated to `sudo` — and on
+AWS the SSH user is `ubuntu`, who is not in the docker group, so `docker exec` was always
+refused. The probe could only ever answer "no", and `logs` silently read container output
+instead, announcing it in one line that reads like a choice rather than a failure.
+
+GCP and Azure connect as `clawops`, who is in the group, which is why this was invisible until
+the first AWS deploy. The probe reports through its exit code now.
+
 ### A healthy deployment could be reported as missing
 
 Fixed in 2.0.1. Every Docker probe was written like this:
