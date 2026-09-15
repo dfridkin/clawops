@@ -358,16 +358,20 @@ async function versionChecks(): Promise<Check[]> {
 export async function remoteChecks(session: SshSession, signal?: AbortSignal): Promise<Check[]> {
   const checks: Check[] = []
 
-  const containerResult = await execPrivileged(
-    session,
-    `docker inspect openclaw --format '{{.State.Status}}' 2>/dev/null || echo 'not found'`,
-    signal,
-  )
-  const containerStatus = containerResult.stdout.trim()
+  const { containerStatus } = await import('../openclaw/docker.js')
+  const container = await containerStatus(session, 'openclaw', signal)
   checks.push(
-    containerStatus === 'running'
-      ? { name: 'Container', status: 'pass', detail: 'running' }
-      : { name: 'Container', status: 'fail', detail: containerStatus || 'unknown' },
+    container.error
+      ? {
+          // "not found" would be a claim about the deployment. This is a claim about clawops.
+          name: 'Container',
+          status: 'fail',
+          detail: `could not ask docker — ${container.error}`,
+          remedy: 'the SSH user may have been added to the docker group after this session opened',
+        }
+      : container.status === 'running'
+        ? { name: 'Container', status: 'pass', detail: 'running' }
+        : { name: 'Container', status: 'fail', detail: container.status },
   )
 
   // Deployed OpenClaw version — the half that helps users who ALREADY ran `clawops up`

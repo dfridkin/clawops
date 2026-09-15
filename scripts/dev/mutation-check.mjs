@@ -583,6 +583,19 @@ const MUTATIONS = [
   { name: 'only cloud-init is consulted, never the startup-script unit',
     file: 'src/openclaw/ready.ts', from: "    `journalctl -u google-startup-scripts --no-pager 2>/dev/null | tail -n ${lines}) | tail -n ${lines}`", to: "    `true) | tail -n ${lines}`", test: 'tests/openclaw/ready.test.ts' },
 
+  { name: 'a refused docker inspect is reported as a missing container',
+    file: 'src/openclaw/docker.ts', from: '  if (saysNoSuchObject(text)) return { kind: \'missing\' }', to: "  if (true) return { kind: 'missing' }", test: 'tests/openclaw/docker.test.ts tests/openclaw/ready.test.ts' },
+  { name: 'the probe masks its failure with a shell fallback again',
+    file: 'src/openclaw/docker.ts', from: '    `${dockerCmd} inspect ${name} --format \'${format}\'`,', to: "    `${dockerCmd} inspect ${name} --format '${format}' 2>/dev/null || echo 'not found'`,", test: 'tests/openclaw/docker.test.ts' },
+  { name: 'the probe stops escalating to sudo',
+    file: 'src/openclaw/docker.ts', from: '  const result = await execPrivileged(', to: '  const result = await session.exec(', test: 'tests/openclaw/docker.test.ts' },
+  { name: 'containerStatus reports an unanswerable question as not found',
+    file: 'src/openclaw/docker.ts', from: "  return { status: 'unknown', error: result.detail }", to: "  return { status: 'not found' }", test: 'tests/openclaw/docker.test.ts tests/openclaw/ready.test.ts' },
+  { name: 'the gateway wait keeps polling through a refusal',
+    file: 'src/openclaw/ready.ts', from: '    if (container.error) {', to: '    if (false) {', test: 'tests/openclaw/ready.test.ts' },
+  { name: 'doctor calls an unaskable container missing',
+    file: 'src/diagnostics/index.ts', from: '    container.error\n      ? {', to: '    false\n      ? {', test: 'tests/diagnostics/doctor.test.ts' },
+
 ]
 
 let survived = []

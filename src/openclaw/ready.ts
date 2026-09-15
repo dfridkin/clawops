@@ -17,6 +17,7 @@
 import { probeCommand, interpretProbe } from './health.js'
 import { GATEWAY_PORT } from './run-flags.js'
 import { execPrivileged } from '../transport/privileged.js'
+import { containerStatus } from './docker.js'
 import type { SshSession } from '../transport/ssh.js'
 
 export interface WaitForGatewayOpts {
@@ -95,12 +96,16 @@ export async function waitForGateway(
   for (;;) {
     if (opts.signal?.aborted) throw new Error('Waiting for the gateway was aborted')
 
-    const container = await execPrivileged(
-      session,
-      `docker inspect openclaw --format '{{.State.Status}}' 2>/dev/null || echo 'not found'`,
-      opts.signal,
-    )
-    lastContainerStatus = container.stdout.trim() || 'unknown'
+    const container = await containerStatus(session, 'openclaw', opts.signal)
+    lastContainerStatus = container.status
+    // A refusal is not an absence. Waiting ten minutes for a container that is running, and
+    // then reporting it missing, is what the old probe did.
+    if (container.error) {
+      throw new Error(
+        `Could not ask the host about the openclaw container: ${container.error}. ` +
+          'This is not the container being absent — clawops was unable to look.',
+      )
+    }
 
     if (lastContainerStatus === 'running') {
       const probe = await session.exec(probeCommand('started', port), opts.signal)

@@ -249,3 +249,26 @@ describe('what a timeout tells the operator', () => {
     ).rejects.toThrow(/clawops logs --stack/)
   })
 })
+
+describe('a host that will not answer about the container', () => {
+  it('stops rather than waiting ten minutes on a refusal', async () => {
+    // The fourth Azure run waited the full timeout for a container that was up and healthy the
+    // whole time, because a permission error had been laundered into "not found".
+    const session = {
+      exec: vi.fn(async (command: string) => {
+        if (String(command).includes('inspect')) {
+          return {
+            stdout: '',
+            stderr: 'permission denied while trying to connect to the Docker daemon socket',
+            code: 1,
+          }
+        }
+        return { stdout: '', stderr: 'sudo: a password is required', code: 1 }
+      }),
+    } as unknown as SshSession
+
+    await expect(waitForGateway(session, { sleep: noSleep, intervalMs: 1 })).rejects.toThrow(
+      /Could not ask the host about the openclaw container[\s\S]*unable to look/,
+    )
+  })
+})

@@ -3,6 +3,7 @@ import process from 'node:process'
 import { chalk, failure } from '../../output/human.js'
 import type { SshSession } from '../../transport/ssh.js'
 import { execPrivileged } from '../../transport/privileged.js'
+import { inspectContainer } from '../../openclaw/docker.js'
 import { probeCommand, interpretProbe } from '../../openclaw/health.js'
 import { STATE_DIR_HOST_LINUX, configPathForOS, GATEWAY_PORT } from '../../openclaw/runtime.js'
 
@@ -51,10 +52,20 @@ export async function gatherSnapshot(
   const DOCKER = 'PATH=/usr/local/bin:/opt/homebrew/bin:$PATH docker'
 
   const [inspectRaw, statsRaw, healthRaw, configRaw, diskRaw, logsRaw] = await Promise.all([
-    execPrivileged(session, 
-      `${DOCKER} inspect openclaw --format '{{.State.Status}}|{{.Config.Image}}|{{.State.StartedAt}}|{{.RestartCount}}' 2>/dev/null || echo 'not found|||0'`,
+    inspectContainer(
+      session,
+      'openclaw',
+      '{{.State.Status}}|{{.Config.Image}}|{{.State.StartedAt}}|{{.RestartCount}}',
       signal,
-    ),
+      DOCKER,
+    ).then((r) => ({
+      // The dashboard shows a word per field; a refusal says so rather than borrowing
+      // "not found", which would claim the container is gone.
+      stdout:
+        r.kind === 'ok' ? r.value : r.kind === 'missing' ? 'not found|||0' : 'unreachable|||0',
+      stderr: r.kind === 'error' ? r.detail : '',
+      code: r.kind === 'ok' ? 0 : 1,
+    })),
     execPrivileged(session, 
       `${DOCKER} stats openclaw --no-stream --format '{{.MemUsage}}|{{.CPUPerc}}' 2>/dev/null || echo '—|—'`,
       signal,
