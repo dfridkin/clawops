@@ -65,9 +65,9 @@ export default defineCommand({
       // Ask before committing to a stream: `openclaw logs` reads the gateway over RPC, so a
       // gateway that is down cannot serve them — which is when logs are wanted most.
       const probe = since
-        ? { stdout: '' }
+        ? { code: 1, stderr: '' }
         : await execPrivileged(session, GATEWAY_LOGS_PROBE, abortController.signal)
-      const choice = chooseLogSource({ since, gatewayReachable: probe.stdout.trim() === 'ok' })
+      const choice = chooseLogSource({ since, gatewayReachable: probe.code === 0 })
       const opts = { tail: tailLines, follow, since, json: Boolean(args.json) }
       const command =
         choice.source === 'gateway' ? gatewayLogsCommand(opts) : containerLogsCommand(opts)

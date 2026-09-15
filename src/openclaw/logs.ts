@@ -28,8 +28,22 @@ export interface LogOpts {
  * A stream cannot be retried once it has started emitting, which is the same reason
  * `streamPrivileged` probes for sudo first.
  */
-export const GATEWAY_LOGS_PROBE =
-  'docker exec openclaw openclaw logs --limit 1 >/dev/null 2>&1 && echo ok || echo no'
+/**
+ * Can the gateway serve its own logs?
+ *
+ * Judged by exit code, not by a word the command prints. This was:
+ *
+ *   docker exec openclaw openclaw logs --limit 1 >/dev/null 2>&1 && echo ok || echo no
+ *
+ * which discards stderr and always exits 0 — so `execPrivileged`, which tests the exit code
+ * before deciding whether it was refused Docker access, never escalated. On AWS the SSH user is
+ * `ubuntu`, who is not in the docker group, so `docker exec` was always refused, the probe
+ * always said `no`, and `clawops logs` silently read container output instead of the gateway's
+ * own. It had never once read from the gateway there.
+ *
+ * Only stdout is discarded now: stderr is what says why, and the exit code is what decides.
+ */
+export const GATEWAY_LOGS_PROBE = 'docker exec openclaw openclaw logs --limit 1 >/dev/null'
 
 export function gatewayLogsCommand(opts: LogOpts): string {
   return [

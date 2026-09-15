@@ -70,12 +70,25 @@ describe('chooseLogSource', () => {
 })
 
 describe('GATEWAY_LOGS_PROBE', () => {
-  it('is cheap, silent, and answers ok or no', () => {
-    // A stream cannot be retried once it starts emitting, so the question is asked first.
+  it('is cheap and quiet — a stream cannot be retried once it starts emitting', () => {
     expect(GATEWAY_LOGS_PROBE).toContain('--limit 1')
     expect(GATEWAY_LOGS_PROBE).toContain('>/dev/null')
-    expect(GATEWAY_LOGS_PROBE).toContain('echo ok')
-    expect(GATEWAY_LOGS_PROBE).toContain('echo no')
+  })
+
+  it('reports through its exit code, not a word it prints', () => {
+    // It used to end in `2>&1 && echo ok || echo no`, which always exits 0. execPrivileged
+    // tests the exit code before deciding a command was refused Docker access, so it never
+    // escalated — and on AWS, where the SSH user is not in the docker group, the probe could
+    // only ever say "no". `clawops logs` had never once read from the gateway there.
+    expect(GATEWAY_LOGS_PROBE).not.toContain('echo ok')
+    expect(GATEWAY_LOGS_PROBE).not.toContain('echo no')
+    expect(GATEWAY_LOGS_PROBE).not.toContain('&&')
+    expect(GATEWAY_LOGS_PROBE).not.toContain('||')
+  })
+
+  it('keeps stderr, which is what says why it failed', () => {
+    expect(GATEWAY_LOGS_PROBE).not.toContain('2>&1')
+    expect(GATEWAY_LOGS_PROBE).not.toContain('2>/dev/null')
   })
 })
 

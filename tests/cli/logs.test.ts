@@ -44,7 +44,7 @@ describe('logs command — exec (no --follow)', () => {
     // command unanswered — match on the command instead.
     const session = new FakeSshSession()
       .respond(/openclaw logs/, { stdout: 'log line 1\nlog line 2\n' })
-      .respond(/openclaw logs --limit 1 >/, { stdout: 'ok' })
+      .respond(/openclaw logs --limit 1 >/, { stdout: '', code: 0 })
 
     const { buildContext, acquireSession } = await getMocks()
     buildContext.mockReturnValue(makeFakeContext())
@@ -58,7 +58,7 @@ describe('logs command — exec (no --follow)', () => {
   })
 
   it('passes the tail count to the gateway log command', async () => {
-    const session = new FakeSshSession().respond(/openclaw logs --limit 1 >/, { stdout: 'ok' })
+    const session = new FakeSshSession().respond(/openclaw logs --limit 1 >/, { stdout: '', code: 0 })
 
     const { buildContext, acquireSession } = await getMocks()
     buildContext.mockReturnValue(makeFakeContext())
@@ -91,7 +91,7 @@ describe('logs command — exec (no --follow)', () => {
   it('never runs journalctl — only the local provider has that unit', async () => {
     // Both this command and the MCP tool ran `journalctl -u openclaw || docker logs`, so on
     // every cloud VM the fallback won and nothing said which source had answered.
-    const session = new FakeSshSession().respond(/openclaw logs --limit 1 >/, { stdout: 'ok' })
+    const session = new FakeSshSession().respond(/openclaw logs --limit 1 >/, { stdout: '', code: 0 })
     const { buildContext, acquireSession } = await getMocks()
     buildContext.mockReturnValue(makeFakeContext())
     acquireSession.mockResolvedValue({ session, release: vi.fn() })
@@ -105,7 +105,7 @@ describe('logs command — exec (no --follow)', () => {
   it('falls back to container output when the gateway is not answering, and says which', async () => {
     const session = new FakeSshSession()
       .respond(/docker logs/, { stdout: 'container line\n' })
-      .respond(/openclaw logs --limit 1 >/, { stdout: 'no' })
+      .respond(/openclaw logs --limit 1 >/, { stderr: 'gateway down', code: 1 })
     const { buildContext, acquireSession } = await getMocks()
     buildContext.mockReturnValue(makeFakeContext())
     acquireSession.mockResolvedValue({ session, release: vi.fn() })
@@ -159,5 +159,44 @@ describe('logs command — error handling', () => {
 
     const cmd = await getCmd()
     await expect((cmd.run as AnyRunFn)({ args: {} })).rejects.toThrow('connection refused')
+  })
+})
+
+describe('which source the logs command picks', () => {
+  async function run(probe: { stdout?: string; stderr?: string; code: number }) {
+    const session = new FakeSshSession()
+      .respond(/openclaw logs/, { stdout: 'a gateway line\n' })
+      .respond(/docker logs/, { stdout: 'a container line\n' })
+      // Registered last so it wins: respond() unshifts, and this pattern is a subset of the
+      // one above.
+      .respond(/openclaw logs --limit 1 >/, probe)
+
+    const { buildContext, acquireSession } = await getMocks()
+    buildContext.mockReturnValue(makeFakeContext())
+    acquireSession.mockResolvedValue({ session, release: vi.fn() })
+
+    const cmd = await getCmd()
+    await (cmd.run as AnyRunFn)({ args: {} })
+    return session
+  }
+
+  it('reads from the gateway when the probe exits 0', async () => {
+    const session = await run({ stdout: '', code: 0 })
+    const streamed = session.execCalls().filter((c) => !c.includes('--limit 1 >'))
+    expect(streamed.some((c) => c.includes('docker exec openclaw openclaw logs'))).toBe(true)
+  })
+
+  it('falls back to container output when the probe exits non-zero', async () => {
+    const session = await run({ stderr: 'Error: No such container', code: 1 })
+    expect(session.execCalls().some((c) => c.includes('docker logs openclaw'))).toBe(true)
+  })
+
+  it('does not read a word from stdout as the answer', async () => {
+    // The probe used to print ok/no and exit 0 regardless, which made a refused `docker exec`
+    // indistinguishable from a gateway that is down — permanently so on AWS, where the SSH
+    // user is not in the docker group.
+    const session = await run({ stdout: 'no\n', code: 0 })
+    const streamed = session.execCalls().filter((c) => !c.includes('--limit 1 >'))
+    expect(streamed.some((c) => c.includes('docker exec openclaw openclaw logs'))).toBe(true)
   })
 })
