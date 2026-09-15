@@ -14,7 +14,7 @@
 // there in five minutes, so it is raised at once rather than retried until the deadline.
 
 import { NetworkError } from '../errors/index.js'
-import { connect as sshConnect, type SshConnectOpts } from './ssh.js'
+import { connect as sshConnect, type SshConnectOpts, type SshSession } from './ssh.js'
 
 /** Errors that mean "not yet", as opposed to "not ever". */
 const TRANSIENT = [
@@ -50,18 +50,30 @@ export interface WaitForSshOpts {
   /** Called before the first retry and on each one, so a slow boot does not look like a hang. */
   onProgress?: (line: string) => void
   /** Injectable for tests; defaults to the real SSH connect. */
-  connect?: (opts: SshConnectOpts) => Promise<{ close(): void }>
+  connect?: (opts: SshConnectOpts) => Promise<SshSession>
   /** Injectable for tests. */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>
 }
 
 /**
- * Resolve once the host accepts an SSH session, or throw when the deadline passes.
+ * The session that proved the host is up, for the caller to use and close.
  *
- * The session opened to prove it is closed again: this answers "is it up", and holding a
- * connection open would leak one per apply.
+ * It used to close that session and return nothing, which left the caller to open a second
+ * one — and a second connection to a host that started accepting them moments ago is not
+ * guaranteed to succeed. On AWS it did not:
+ *
+ *   SSH is up after 2 attempts.
+ *   ✖ Deployment failed
+ *     SSH connection failed: Timed out while waiting for handshake
+ *
+ * The wait retried; the connection right after it had no retries at all. Handing back the
+ * proven session removes that gap rather than adding a second retry loop behind the first, and
+ * costs one connection instead of two.
  */
-export async function waitForSsh(conn: SshConnectOpts, opts: WaitForSshOpts = {}): Promise<void> {
+export async function waitForSsh(
+  conn: SshConnectOpts,
+  opts: WaitForSshOpts = {},
+): Promise<SshSession> {
   const timeoutMs = opts.timeoutMs ?? 300_000
   const intervalMs = opts.intervalMs ?? 5_000
   const connect = opts.connect ?? sshConnect
@@ -76,9 +88,8 @@ export async function waitForSsh(conn: SshConnectOpts, opts: WaitForSshOpts = {}
     attempts++
     try {
       const session = await connect({ ...conn, signal: opts.signal })
-      session.close()
       if (attempts > 1) opts.onProgress?.(`SSH is up after ${attempts} attempts.`)
-      return
+      return session
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
       if (!isTransient(lastError)) {

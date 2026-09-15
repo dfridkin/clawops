@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { waitForSsh, isTransient } from '../../src/transport/wait.js'
+import type { SshSession } from '../../src/transport/ssh.js'
 
 const CONN = {
   host: '203.0.113.4',
@@ -13,12 +14,13 @@ const CONN = {
 function flaky(failures: number, message = 'SSH connection failed: connect ECONNREFUSED') {
   let calls = 0
   const close = vi.fn()
+  const session = { close, exec: vi.fn(), stream: vi.fn(), execWithInput: vi.fn(), tunnel: vi.fn() }
   const connect = vi.fn(async () => {
     calls++
     if (calls <= failures) throw new Error(message)
-    return { close }
+    return session as unknown as SshSession
   })
-  return { connect, close, calls: () => calls }
+  return { connect, close, session, calls: () => calls }
 }
 
 const noSleep = vi.fn(async () => undefined)
@@ -49,11 +51,14 @@ describe('waitForSsh', () => {
     expect(calls()).toBe(1)
   })
 
-  it('closes the session it opened to prove the host is up', async () => {
-    const { connect, close } = flaky(0)
-    await waitForSsh(CONN, { connect, sleep: noSleep })
-    // One leaked connection per apply otherwise.
-    expect(close).toHaveBeenCalledOnce()
+  it('hands back the session it proved with, rather than closing it', async () => {
+    // Closing it left the caller to open a second connection to a host that had only just
+    // started accepting them — with no retries behind that one. An AWS deploy failed on
+    // exactly that, immediately after "SSH is up after 2 attempts".
+    const { connect, close, session } = flaky(0)
+    const returned = await waitForSsh(CONN, { connect, sleep: noSleep })
+    expect(returned).toBe(session)
+    expect(close).not.toHaveBeenCalled()
   })
 
   it('retries a refused connection until it is accepted', async () => {
