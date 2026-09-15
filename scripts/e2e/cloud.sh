@@ -3,6 +3,9 @@
 #
 #   scripts/e2e/cloud.sh gcp|azure [--keep]
 #
+#   E2E_INSTANCE_TYPE=<size>   deploy a size this subscription is actually offered
+#   E2E_DEPLOY_VIA=up|apply    which deploy path to exercise (default: apply)
+#
 # Deliberately manual and deliberately noisy about money. It provisions a VM, proves the 2.0
 # runtime contract on it, and destroys everything. Not wired into CI: a run costs real money,
 # and a recurring job that provisions infrastructure is a bill nobody reads until it arrives.
@@ -168,10 +171,24 @@ if [ -n "${E2E_INSTANCE_TYPE:-}" ]; then
   echo "Using instance type ${E2E_INSTANCE_TYPE}"
 fi
 
-pnpm dev plan --provider "$PROVIDER" --stack "$STACK" --openclaw-version "$FLOOR" \
-  --ssh-cidr auto "${SIZE_ARG[@]}" --out "/tmp/${STACK}.plan.json" || exit 1
+# Which deploy path to exercise. `clawops up` and `clawops apply` were separate implementations
+# until 2.0.1, and the one nothing tested could not deploy at all — so the script drives either.
+DEPLOY_VIA="${E2E_DEPLOY_VIA:-apply}"
+case "$DEPLOY_VIA" in
+  apply|up) ;;
+  *) echo "E2E_DEPLOY_VIA must be 'apply' or 'up', got '${DEPLOY_VIA}'" >&2; exit 2 ;;
+esac
+echo "Deploying via clawops ${DEPLOY_VIA}"
+
 CREATED=yes
-pnpm dev apply "/tmp/${STACK}.plan.json" --yes || exit 1
+if [ "$DEPLOY_VIA" = "up" ]; then
+  pnpm dev up --provider "$PROVIDER" --stack "$STACK" --openclaw-version "$FLOOR" \
+    --ssh-cidr auto "${SIZE_ARG[@]}" || exit 1
+else
+  pnpm dev plan --provider "$PROVIDER" --stack "$STACK" --openclaw-version "$FLOOR" \
+    --ssh-cidr auto "${SIZE_ARG[@]}" --out "/tmp/${STACK}.plan.json" || exit 1
+  pnpm dev apply "/tmp/${STACK}.plan.json" --yes || exit 1
+fi
 
 echo
 echo "── Asserting the 2.0 runtime contract ──────────────────────────"
