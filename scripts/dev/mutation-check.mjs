@@ -529,6 +529,27 @@ const MUTATIONS = [
   { name: 'the doctor command drops the --provider flag',
     file: 'src/cli/commands/doctor.ts', from: "        provider: typeof args.provider === 'string' ? args.provider : undefined,\n", to: '', test: 'tests/cli/doctor.test.ts tests/diagnostics/doctor.test.ts' },
 
+  { name: 'azure stops checking resource providers',
+    file: 'src/providers/azure/index.ts', from: '    return azurePreflight(opts)', to: '    return []', test: 'tests/providers/azure/adapter.test.ts tests/providers/azure/preflight.test.ts' },
+  { name: 'an unregistered provider is reported as ready',
+    file: 'src/providers/azure/preflight.ts', from: "    const registered = state === 'Registered'", to: '    const registered = true', test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'a failed registration lookup counts as registered',
+    file: 'src/providers/azure/preflight.ts', from: '    if (!res.ok) return undefined\n    const body = (await res.json()) as { registrationState?: unknown }', to: "    if (!res.ok) return 'Registered'\n    const body = (await res.json()) as { registrationState?: unknown }", test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'the register fix posts to the wrong namespace',
+    file: 'src/providers/azure/preflight.ts', from: '            fix: () => register(subscriptionId, provider.namespace, token, opts.signal),', to: "            fix: () => register(subscriptionId, 'Microsoft.Compute', token, opts.signal),", test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'a fix is offered without saying what it changes',
+    file: 'src/providers/azure/preflight.ts', from: '            mutates: `Registers the ${provider.namespace} resource provider on subscription ${subscriptionId}`,\n', to: '', test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'the state backend is judged on the account alone',
+    file: 'src/providers/azure/preflight.ts', from: '  const ok = Boolean(account) && hasSecret', to: '  const ok = Boolean(account)', test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'a SAS token is no longer accepted for the state backend',
+    file: 'src/providers/azure/preflight.ts', from: "    process.env['AZURE_STORAGE_KEY'] ?? process.env['AZURE_STORAGE_SAS_TOKEN'],", to: "    process.env['AZURE_STORAGE_KEY'],", test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'the state backend check is skipped when the API is unreachable',
+    file: 'src/providers/azure/preflight.ts', from: '  checks.push(stateBackendCheck(opts.bucket))\n', to: '', test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'preflight runs on without a subscription',
+    file: 'src/providers/azure/preflight.ts', from: '  if (!subscriptionId) return checks', to: '  if (!subscriptionId) { void 0 }', test: 'tests/providers/azure/preflight.test.ts' },
+  { name: 'a service principal is ignored in favour of spawning az',
+    file: 'src/providers/azure/preflight.ts', from: '  if (tenantId && clientId && clientSecret) {', to: '  if (false) {', test: 'tests/providers/azure/preflight.test.ts' },
+
 ]
 
 let survived = []

@@ -9,6 +9,8 @@ import type {
   StackOutputs,
   ValidationResult,
   PulumiFn,
+  PreflightCheck,
+  PreflightOpts,
 } from '../types.js'
 import { registerProvider } from '../index.js'
 import { azureCliAccount } from './cli-auth.js'
@@ -51,6 +53,11 @@ const azureAdapter: ProviderAdapter = {
 
   stateBackendUrl(bucket: string): string {
     return `azblob://${bucket}`
+  },
+
+  async preflight(opts: PreflightOpts): Promise<PreflightCheck[]> {
+    const { azurePreflight } = await import('./preflight.js')
+    return azurePreflight(opts)
   },
 
   async validateConfig(): Promise<ValidationResult> {
