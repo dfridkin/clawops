@@ -24,6 +24,27 @@
 import { execPrivileged } from '../transport/privileged.js'
 import type { SshSession } from '../transport/ssh.js'
 
+/**
+ * Is this failure the host still coming up, rather than something that will not resolve?
+ *
+ * A fresh VM has no Docker for the first minute or so: the bootstrap installs it. `docker:
+ * command not found` there is the deployment working as intended, and treating it as fatal
+ * turns a normal boot into a failed deploy — which is what the first version of this fix did.
+ *
+ * A refusal is the opposite. The SSH user's group membership is fixed when the session opens,
+ * so a socket that refuses this session will refuse it for its whole life; waiting cannot help
+ * and `sudo` has already been tried by the time this is asked.
+ */
+export function looksLikeStillBooting(detail: string): boolean {
+  const text = detail.toLowerCase()
+  return (
+    text.includes('command not found') ||
+    text.includes('cannot connect to the docker daemon') ||
+    text.includes('is the docker daemon running') ||
+    text.includes('no such file or directory')
+  )
+}
+
 export type InspectResult =
   | { kind: 'ok'; value: string }
   /** Docker answered, and there is no such container. */

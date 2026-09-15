@@ -17,7 +17,7 @@
 import { probeCommand, interpretProbe } from './health.js'
 import { GATEWAY_PORT } from './run-flags.js'
 import { execPrivileged } from '../transport/privileged.js'
-import { containerStatus } from './docker.js'
+import { containerStatus, looksLikeStillBooting } from './docker.js'
 import type { SshSession } from '../transport/ssh.js'
 
 export interface WaitForGatewayOpts {
@@ -98,13 +98,18 @@ export async function waitForGateway(
 
     const container = await containerStatus(session, 'openclaw', opts.signal)
     lastContainerStatus = container.status
-    // A refusal is not an absence. Waiting ten minutes for a container that is running, and
-    // then reporting it missing, is what the old probe did.
+
+    // A refusal is not an absence, and neither is a host that has not installed Docker yet.
+    // The first is permanent — the session's group membership was fixed when it opened — and
+    // the second is the bootstrap doing its job.
     if (container.error) {
-      throw new Error(
-        `Could not ask the host about the openclaw container: ${container.error}. ` +
-          'This is not the container being absent — clawops was unable to look.',
-      )
+      if (!looksLikeStillBooting(container.error)) {
+        throw new Error(
+          `Could not ask the host about the openclaw container: ${container.error}. ` +
+            'This is not the container being absent — clawops was unable to look.',
+        )
+      }
+      lastContainerStatus = 'docker not installed yet'
     }
 
     if (lastContainerStatus === 'running') {
@@ -113,7 +118,9 @@ export async function waitForGateway(
       if (verdict.ok) return { waitedMs: now() - started, lastContainerStatus }
       lastReason = verdict.reason ?? 'the gateway did not report itself started'
     } else {
-      lastReason = `the container is ${lastContainerStatus}`
+      lastReason = container.error
+        ? `docker could not be asked yet: ${container.error}`
+        : `the container is ${lastContainerStatus}`
     }
 
     const elapsed = now() - started
