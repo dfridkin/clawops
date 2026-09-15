@@ -216,6 +216,29 @@ describe('azurePreflight', () => {
     expect(find(checks, 'vm-size-available')).toBeDefined()
   })
 
+  it('asks about the size the caller named, not the provider default', async () => {
+    // A stack deployed with --instance-type would otherwise be reported as broken because a
+    // size it does not use is unavailable — which is exactly what the Azure e2e hit.
+    mockFetch((url) => {
+      if (url.includes('login.microsoftonline.com')) return json({ access_token: 'tok' })
+      if (url.includes('/skus')) {
+        return json({
+          value: [
+            { name: 'Standard_D2als_v7', resourceType: 'virtualMachines', restrictions: [] },
+          ],
+        })
+      }
+      return json({ registrationState: 'Registered' })
+    })
+    const checks = await azurePreflight({
+      region: 'eastus',
+      instanceType: 'Standard_D2als_v7',
+    })
+    const size = find(checks, 'vm-size-available')!
+    expect(size.ok).toBe(true)
+    expect(size.label).toContain('Standard_D2als_v7')
+  })
+
   it('skips the size check when no region is known, rather than guessing one', async () => {
     arm(REGISTERED)
     expect(find(await azurePreflight({}), 'vm-size-available')).toBeUndefined()

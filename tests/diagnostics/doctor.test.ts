@@ -13,9 +13,8 @@ const { mockValidateConfig, mockAccessSync, mockMkdirSync, mockReadFileSync } = 
   mockMkdirSync: vi.fn(),
   mockReadFileSync: vi.fn(),
 }))
-vi.mock('../../src/providers/index.js', () => ({
-  getProvider: vi.fn(() => ({ validateConfig: mockValidateConfig })),
-}))
+const { mockGetProvider } = vi.hoisted(() => ({ mockGetProvider: vi.fn() }))
+vi.mock('../../src/providers/index.js', () => ({ getProvider: mockGetProvider }))
 vi.mock('../../src/providers/aws/index.js', () => ({}))
 vi.mock('../../src/providers/gcp/index.js', () => ({}))
 vi.mock('../../src/providers/azure/index.js', () => ({}))
@@ -118,6 +117,7 @@ function withHost(session: FakeSshSession) {
 }
 
 beforeEach(() => {
+  mockGetProvider.mockReset().mockReturnValue({ validateConfig: mockValidateConfig })
   mockPassphraseStatus.mockReset().mockReturnValue('stored')
   // The SSH key check parses real key material, so the fixture must come from the test rather
   // than from whatever happens to be at that path on this machine — locally that was the
@@ -462,5 +462,29 @@ describe('doctor --provider', () => {
     mockGetConfig.mockReturnValue(null)
     const report = await runDiagnostics({ provider: 'local' })
     expect(find(report, 'local')?.status).toBe('pass')
+  })
+})
+
+describe('the size account checks ask about', () => {
+  it('is the one the caller named', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockGetConfig.mockReturnValue(baseConfig as any)
+    const preflight = vi.fn().mockResolvedValue([])
+    mockGetProvider.mockReturnValue({ validateConfig: mockValidateConfig, preflight })
+    await runDiagnostics({ instanceType: 'Standard_D2als_v7' })
+    expect(preflight).toHaveBeenCalledWith(
+      expect.objectContaining({ instanceType: 'Standard_D2als_v7' }),
+    )
+  })
+
+  it('is undefined when nobody named one, so the provider picks its default', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockGetConfig.mockReturnValue(baseConfig as any)
+    const preflight = vi.fn().mockResolvedValue([])
+    mockGetProvider.mockReturnValue({ validateConfig: mockValidateConfig, preflight })
+    await runDiagnostics({})
+    expect(preflight).toHaveBeenCalledWith(
+      expect.objectContaining({ instanceType: undefined }),
+    )
   })
 })

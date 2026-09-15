@@ -152,6 +152,15 @@ export interface PreflightOpts {
   region?: string
   /** State backend bucket or container, when the check covers it. */
   bucket?: string
+  /**
+   * The machine size about to be deployed, when the caller knows it.
+   *
+   * Azure offers SKU families per subscription, so "is this size available here" can only be
+   * answered about a specific size. Without this the check falls back to the provider's
+   * default alias, which is right for a default deploy and wrong for anyone passing
+   * --instance-type: a deployment using an available size would be reported as broken.
+   */
+  instanceType?: string
   signal?: AbortSignal
 }
 

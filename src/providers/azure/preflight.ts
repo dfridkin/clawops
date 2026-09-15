@@ -156,7 +156,7 @@ export async function availableSizes(
 export function sizeCheck(
   location: string,
   available: Set<string> | undefined,
-  requested = INSTANCE_TYPE_MAP[DEFAULT_ALIAS],
+  requested: string = INSTANCE_TYPE_MAP[DEFAULT_ALIAS],
 ): PreflightCheck {
   if (!available) {
     return {
@@ -230,7 +230,11 @@ export async function azurePreflight(opts: PreflightOpts = {}): Promise<Prefligh
 
   if (opts.region) {
     checks.push(
-      sizeCheck(opts.region, await availableSizes(subscriptionId, opts.region, token, opts.signal)),
+      sizeCheck(
+        opts.region,
+        await availableSizes(subscriptionId, opts.region, token, opts.signal),
+        opts.instanceType,
+      ),
     )
   }
 

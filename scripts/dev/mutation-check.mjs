@@ -567,6 +567,13 @@ const MUTATIONS = [
   { name: 'preflight stops checking the VM size',
     file: 'src/providers/azure/preflight.ts', from: '  if (opts.region) {', to: '  if (false) {', test: 'tests/providers/azure/preflight.test.ts tests/providers/azure/adapter.test.ts' },
 
+  { name: 'the doctor command drops the --instance-type flag',
+    file: 'src/cli/commands/doctor.ts', from: "        instanceType:\n          typeof args['instance-type'] === 'string' ? args['instance-type'] : undefined,\n", to: '', test: 'tests/cli/doctor.test.ts' },
+  { name: 'account checks stop passing the size along',
+    file: 'src/diagnostics/index.ts', from: '    const results = await adapter.preflight({ region: stackCfg?.region, bucket, instanceType })', to: '    const results = await adapter.preflight({ region: stackCfg?.region, bucket })', test: 'tests/diagnostics/doctor.test.ts' },
+  { name: 'the size check ignores the size it was given',
+    file: 'src/providers/azure/preflight.ts', from: '        opts.instanceType,\n', to: '', test: 'tests/providers/azure/preflight.test.ts' },
+
 ]
 
 let survived = []
