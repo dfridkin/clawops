@@ -152,3 +152,50 @@ describe('azureAdapter.validateConfig()', () => {
     }
   })
 })
+
+describe('azureAdapter.preflight()', () => {
+  const VARS = ['ARM_SUBSCRIPTION_ID', 'AZURE_SUBSCRIPTION_ID', 'AZURE_CONFIG_DIR'] as const
+  const kept: Record<string, string | undefined> = {}
+
+  beforeEach(() => {
+    for (const v of VARS) {
+      kept[v] = process.env[v]
+      delete process.env[v]
+    }
+    process.env['AZURE_CONFIG_DIR'] = '/nonexistent-azure-config'
+  })
+  afterEach(() => {
+    for (const v of VARS) {
+      if (kept[v] === undefined) delete process.env[v]
+      else process.env[v] = kept[v]
+    }
+  })
+
+  it('delegates to the preflight checks', async () => {
+    // The checks themselves are covered in preflight.test.ts, which calls them directly — so
+    // without this the adapter could stop calling them at all and nothing would notice.
+    const checks = await azureAdapter.preflight!({})
+    expect(checks).toHaveLength(1)
+    expect(checks[0]?.id).toBe('subscription-resolved')
+    expect(checks[0]?.ok).toBe(false)
+  })
+
+  it('passes the caller\'s options through', async () => {
+    process.env['ARM_SUBSCRIPTION_ID'] = 'sub-from-env'
+    process.env['AZURE_STORAGE_ACCOUNT'] = 'acct'
+    process.env['AZURE_STORAGE_KEY'] = 'key'
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('{}', { status: 500 }),
+    )
+    try {
+      const checks = await azureAdapter.preflight!({ bucket: 'clawops-state' })
+      expect(checks.find((c) => c.id === 'state-backend-credentials')?.detail).toContain(
+        'azblob://clawops-state',
+      )
+    } finally {
+      spy.mockRestore()
+      delete process.env['AZURE_STORAGE_ACCOUNT']
+      delete process.env['AZURE_STORAGE_KEY']
+    }
+  })
+})

@@ -51,6 +51,41 @@ Credentials NEVER appear in `~/.clawops/config.json`, CLI flags, MCP tool argume
 or audit logs. Only a `credentialsRef: { source: "env", envVars: ["AZURE_CLIENT_ID"] }` reference
 is stored in config.
 
+## Account setup clawops checks before it deploys
+
+`clawops doctor --provider azure` runs an account-level preflight. None of this is
+infrastructure and none of it belongs in the Pulumi program, but a deploy fails partway through
+without it:
+
+| Check | Why |
+|---|---|
+| Subscription is set | `ARM_SUBSCRIPTION_ID`, `AZURE_SUBSCRIPTION_ID`, or the CLI's default |
+| `Microsoft.Compute` registered | the virtual machine and its disk |
+| `Microsoft.Network` registered | the virtual network, NSG, public IP and NIC |
+| `Microsoft.Storage` registered | the azblob state backend |
+| azblob state backend configured | `AZURE_STORAGE_ACCOUNT` + `AZURE_STORAGE_KEY` or `AZURE_STORAGE_SAS_TOKEN` |
+
+**A fresh subscription has no resource providers registered.** The first sign is a deploy
+failing with `The subscription is not registered to use namespace 'Microsoft.Compute'`.
+Registration is free, idempotent and takes a couple of minutes; `clawops setup` offers to do it
+and names the subscription it will change.
+
+**The state backend does not use your `az login`.** Pulumi's azblob backend authenticates with
+`AZURE_STORAGE_ACCOUNT` and a key or SAS token, so every credential check here can pass and the
+deploy still fail to open its own state. Creating one:
+
+```bash
+az group create -n clawops-state-rg -l eastus
+az storage account create -n <globally-unique-name> -g clawops-state-rg -l eastus \
+  --sku Standard_LRS --kind StorageV2 --min-tls-version TLS1_2 --allow-blob-public-access false
+KEY=$(az storage account keys list -n <name> -g clawops-state-rg --query "[0].value" -o tsv)
+az storage container create -n clawops-state --account-name <name> --account-key "$KEY"
+
+export AZURE_STORAGE_ACCOUNT=<name>
+export AZURE_STORAGE_KEY="$KEY"
+clawops init --provider azure --state azblob://clawops-state --region eastus
+```
+
 ## Required RBAC Permissions
 
 The service principal / managed identity needs the following roles on the subscription
