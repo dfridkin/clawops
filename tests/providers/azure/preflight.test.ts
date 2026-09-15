@@ -304,10 +304,14 @@ describe('sizeCheck', () => {
     expect(sizeCheck('eastus', new Set(['Standard_D248ds_v7'])).detail).toMatch(/another region/)
   })
 
-  it('reports a failed listing as a failure, not as availability', () => {
+  it('reports a failed listing as unknown, not as availability or as a fault', () => {
+    // The subscription may well be offered this size; clawops could not ask. Failing over a
+    // denied read would be as wrong as passing.
     const check = sizeCheck('eastus', undefined)
     expect(check.ok).toBe(false)
-    expect(check.detail).toMatch(/Could not list/)
+    expect(check.unknown).toBe(true)
+    expect(check.detail).toMatch(/could not list the VM sizes/)
+    expect(check.detail).toMatch(/Microsoft.Compute\/skus/)
   })
 
   it('checks the size a plan gets by default', () => {

@@ -9,17 +9,13 @@ import type {
   StackOutputs,
   ValidationResult,
   PulumiFn,
+  PreflightCheck,
+  PreflightOpts,
 } from '../types.js'
 import { registerProvider } from '../index.js'
 import { awsProgram } from './program.js'
+import { INSTANCE_TYPE_MAP } from './sizes.js'
 
-const INSTANCE_TYPE_MAP: Record<InstanceAlias, string> = {
-  micro:  't3.micro',
-  small:  't3.small',
-  medium: 't3.medium',
-  large:  't3.large',
-  gpu:    'g4dn.xlarge',
-}
 
 const awsAdapter: ProviderAdapter = {
   name: 'aws' as ProviderName,
@@ -50,6 +46,11 @@ const awsAdapter: ProviderAdapter = {
 
   stateBackendUrl(bucket: string): string {
     return `s3://${bucket}`
+  },
+
+  async preflight(opts: PreflightOpts): Promise<PreflightCheck[]> {
+    const { awsPreflight } = await import('./preflight.js')
+    return awsPreflight(opts)
   },
 
   async validateConfig(): Promise<ValidationResult> {

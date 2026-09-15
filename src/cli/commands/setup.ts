@@ -282,6 +282,11 @@ export default defineCommand({
         provider,
         region: typeof stackAnswers.region === 'string' ? stackAnswers.region : undefined,
         bucket: stackAnswers.stateBucket,
+        // The size was chosen three questions ago. Azure offers SKU families per subscription,
+        // so asking about the provider default here would clear a size the operator is not
+        // deploying and say nothing about the one they are.
+        instanceType:
+          typeof stackAnswers.instanceSize === 'string' ? stackAnswers.instanceSize : undefined,
         inquirer,
       })
     }
@@ -1587,10 +1592,11 @@ export function startChannelConfig(integ: Integration): Record<string, unknown> 
  * creating a state bucket happens outside the Pulumi program — the state backend has to exist
  * before Pulumi can run at all — so a deploy cannot fix them on its way past.
  */
-async function runAccountPreflight(opts: {
+export async function runAccountPreflight(opts: {
   provider: 'aws' | 'gcp' | 'azure'
   region?: string
   bucket?: string
+  instanceType?: string
   inquirer: InquirerInstance
 }): Promise<void> {
   const { getProvider } = await import('../../providers/index.js')
@@ -1598,15 +1604,37 @@ async function runAccountPreflight(opts: {
   try {
     const adapter = getProvider(opts.provider)
     if (!adapter.preflight) return
-    checks = await adapter.preflight({ region: opts.region, bucket: opts.bucket })
+    checks = await adapter.preflight({
+      region: opts.region,
+      bucket: opts.bucket,
+      instanceType: opts.instanceType,
+    })
   } catch (err) {
     warn(`Could not check the ${opts.provider} account: ${err instanceof Error ? err.message : String(err)}`)
     return
   }
 
-  const failed = checks.filter((c) => !c.ok)
+  // A check clawops could not put — a denied read — is not a finding about the account. Listing
+  // it among the failures would tell the operator their account is broken on the strength of a
+  // question that was never answered, and withhold "ready" from an account that may well be.
+  const unanswered = checks.filter((c) => c.unknown)
+  const failed = checks.filter((c) => !c.ok && !c.unknown)
+
+  if (unanswered.length > 0) {
+    process.stdout.write('\n')
+    for (const check of unanswered) {
+      warn(`Could not check: ${check.label}`)
+      if (check.detail) info(`  ${check.detail}`)
+    }
+  }
+
   if (failed.length === 0) {
-    success(`${opts.provider} account is ready.`)
+    success(
+      unanswered.length > 0
+        ? `${opts.provider} account is ready, as far as clawops could tell.`
+        : `${opts.provider} account is ready.`,
+    )
+    process.stdout.write('\n')
     return
   }
 
