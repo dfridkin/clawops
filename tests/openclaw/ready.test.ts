@@ -272,3 +272,57 @@ describe('a host that will not answer about the container', () => {
     )
   })
 })
+
+describe('a host that has not installed Docker yet', () => {
+  /** Docker missing for the first few polls, then a healthy container. */
+  function bootingHost(missingPolls: number) {
+    let polls = 0
+    return {
+      exec: vi.fn(async (command: string) => {
+        const c = String(command)
+        if (c.includes('inspect')) {
+          polls++
+          if (polls <= missingPolls) {
+            return { stdout: '', stderr: 'bash: line 1: docker: command not found', code: 127 }
+          }
+          return { stdout: 'running\n', stderr: '', code: 0 }
+        }
+        if (c.includes('curl')) return { stdout: STARTED, stderr: '', code: 0 }
+        return { stdout: '', stderr: 'sudo: a password is required', code: 1 }
+      }),
+    } as unknown as SshSession
+  }
+
+  it('keeps waiting rather than failing the deploy', async () => {
+    // The first version of this fix treated any probe error as fatal, which turned a normal
+    // boot into a failed deploy on the very next run.
+    await expect(
+      waitForGateway(bootingHost(3), { sleep: noSleep, intervalMs: 1 }),
+    ).resolves.toMatchObject({ lastContainerStatus: 'running' })
+  })
+
+  it('says what it is waiting for', async () => {
+    const onProgress = vi.fn()
+    let clock = 0
+    await waitForGateway(bootingHost(2), {
+      sleep: noSleep,
+      intervalMs: 1,
+      onProgress,
+      now: () => (clock += 31_000),
+    })
+    expect(String(onProgress.mock.calls[0]?.[0])).toMatch(/docker could not be asked yet/)
+  })
+
+  it('still stops at once on a refusal, which waiting cannot fix', async () => {
+    const refusing = {
+      exec: vi.fn(async (command: string) =>
+        String(command).startsWith('sudo')
+          ? { stdout: '', stderr: 'sudo: a password is required', code: 1 }
+          : { stdout: '', stderr: 'permission denied … docker.sock', code: 1 },
+      ),
+    } as unknown as SshSession
+    await expect(waitForGateway(refusing, { sleep: noSleep, intervalMs: 1 })).rejects.toThrow(
+      /unable to look/,
+    )
+  })
+})

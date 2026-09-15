@@ -596,6 +596,17 @@ const MUTATIONS = [
   { name: 'doctor calls an unaskable container missing',
     file: 'src/diagnostics/index.ts', from: '    container.error\n      ? {', to: '    false\n      ? {', test: 'tests/diagnostics/doctor.test.ts' },
 
+  { name: 'a host still installing docker fails the deploy',
+    file: 'src/openclaw/ready.ts', from: '      if (!looksLikeStillBooting(container.error)) {', to: '      if (true) {', test: 'tests/openclaw/ready.test.ts' },
+  { name: 'a permanent refusal is waited out instead of raised',
+    file: 'src/openclaw/ready.ts', from: '      if (!looksLikeStillBooting(container.error)) {', to: '      if (false) {', test: 'tests/openclaw/ready.test.ts' },
+  { name: 'a refusal is classified as still booting',
+    file: 'src/openclaw/docker.ts', from: "    text.includes('command not found') ||", to: "    text.includes('permission denied') ||\n    text.includes('command not found') ||", test: 'tests/openclaw/docker.test.ts tests/openclaw/ready.test.ts' },
+  { name: 'a missing docker binary is no longer recognised',
+    file: 'src/openclaw/docker.ts', from: "    text.includes('command not found') ||\n", to: '', test: 'tests/openclaw/docker.test.ts tests/openclaw/ready.test.ts' },
+  { name: 'the wait stops saying why docker could not be asked',
+    file: 'src/openclaw/ready.ts', from: '        ? `docker could not be asked yet: ${container.error}`', to: "        ? 'waiting'", test: 'tests/openclaw/ready.test.ts' },
+
 ]
 
 let survived = []

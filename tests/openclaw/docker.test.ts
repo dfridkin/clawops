@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { inspectContainer, containerStatus } from '../../src/openclaw/docker.js'
+import {
+  inspectContainer, containerStatus, looksLikeStillBooting,
+} from '../../src/openclaw/docker.js'
 import type { SshSession } from '../../src/transport/ssh.js'
 import { resetPrivilegeCache } from '../../src/transport/privileged.js'
 
@@ -118,5 +120,26 @@ describe('containerStatus', () => {
     })
     resetPrivilegeCache(s)
     expect((await containerStatus(s)).status).not.toBe('not found')
+  })
+})
+
+describe('looksLikeStillBooting', () => {
+  it.each([
+    'bash: line 1: docker: command not found',
+    'Cannot connect to the Docker daemon at unix:///var/run/docker.sock',
+    'Is the docker daemon running?',
+    '/var/run/docker.sock: no such file or directory',
+  ])('treats %s as the host still coming up', (detail) => {
+    // A fresh VM has no Docker for the first minute; the bootstrap installs it.
+    expect(looksLikeStillBooting(detail)).toBe(true)
+  })
+
+  it.each([
+    'permission denied while trying to connect to the Docker daemon socket',
+    'sudo: a password is required',
+  ])('treats %s as permanent', (detail) => {
+    // The SSH user's group membership is fixed when the session opens, so a socket that
+    // refuses this session refuses it for the session's whole life.
+    expect(looksLikeStillBooting(detail)).toBe(false)
   })
 })
