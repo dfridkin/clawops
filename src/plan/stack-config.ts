@@ -54,13 +54,20 @@ export async function writeStackConfig(stack: ConfigurableStack, plan: DeployPla
   // SSH — which is every day-two command.
   //
   // `accessMode: restricted` is the deny-all default (N10). The CIDRs decide what opens.
-  // GCP resolves the project from ambient config, so a deploy could land in whichever project
-  // the environment happened to name — not necessarily the one preflight checked APIs and the
-  // state bucket in. Pinning it here makes the two agree.
+  // Clouds that resolve the account from ambient configuration get it pinned here, so a deploy
+  // lands where preflight looked rather than wherever the environment points at the moment
+  // `up` runs. Both of these can change between the check and the apply — a `gcloud config set
+  // project` or an `az account set` in another terminal is enough.
   if (plan.spec.provider === 'gcp') {
     const { resolveProjectId } = await import('../providers/gcp/preflight.js')
     const project = resolveProjectId()
     if (project) await stack.setConfig('gcp:project', { value: project })
+  }
+
+  if (plan.spec.provider === 'azure') {
+    const { resolveSubscriptionId } = await import('../providers/azure/cli-auth.js')
+    const subscription = resolveSubscriptionId()
+    if (subscription) await stack.setConfig('azure-native:subscriptionId', { value: subscription })
   }
 
   await stack.setConfig('accessMode', { value: 'restricted' })

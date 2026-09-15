@@ -23,6 +23,12 @@ export interface ApplyPlanOpts {
   signal?: AbortSignal
   /** Called when drift is detected, before stack.up(). Implementations should prompt the user or throw to abort. */
   confirmDrift?: () => Promise<void>
+  /**
+   * Return as soon as the cloud API has accepted the resources, without waiting for SSH or the
+   * gateway. `clawops up --no-wait` asks for this; it means the caller accepts a stack that is
+   * not yet usable, which is a reasonable thing to want and a terrible default.
+   */
+  skipReadiness?: boolean
 }
 
 export interface ApplyPlanResult {
@@ -97,6 +103,9 @@ export async function applyPlan(
   // ECONNREFUSED, including its own config overlay a few lines below this.
   const { waitForSsh } = await import('../transport/wait.js')
   const conn = await connectionInfoFor(ctx, outputs)
+  if (opts?.skipReadiness) {
+    return { outputs, changeSummary, durationMs: Date.now() - start }
+  }
   await waitForSsh(conn, {
     signal: opts?.signal,
     onProgress: (line) => reportProgress(opts, line),

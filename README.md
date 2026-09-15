@@ -445,6 +445,32 @@ wait is more than momentary. `ECONNREFUSED` and a handshake timeout are expected
 minute of a VM's life and are retried; a host-key mismatch or an unreadable key is raised
 immediately, because waiting will not fix it.
 
+### `clawops up` could not deploy to a cloud at all
+
+Fixed in 2.0.1. There were three implementations of deploying — `clawops up`, `clawops apply`
+and the `clawops_up` MCP tool — and the two that were not the plan path each wrote three pieces
+of stack config and nothing else:
+
+```ts
+await stack.setConfig('region', …)
+await stack.setConfig('instanceType', …)
+await stack.setConfig('openclawVersion', …)
+```
+
+No `sshPublicKey`, so every cloud program refused to run. No firewall rules, no GCP project pin,
+no readiness waits, and no way to say who may connect. The wizard builds a plan and applies it,
+so nothing exercised the path the README calls the primary command.
+
+`up` and the MCP tool now build a plan and apply it, like everything else. They gain
+`--ssh-cidr`, `--gateway-cidr` and `--publish-gateway`; `--gateway-port` works for cloud stacks
+rather than local only; and `--instance-type` accepts a provider-native machine type, which on
+Azure is often the only kind on offer. `--no-wait` still returns as soon as the cloud API
+accepts the resources.
+
+**The account a deploy lands in is pinned.** GCP pins `gcp:project` and Azure pins
+`azure-native:subscriptionId`, both from the same resolver the preflight uses — otherwise an
+`az account set` between the check and the apply moves the deploy somewhere else silently.
+
 ### A healthy deployment could be reported as missing
 
 Fixed in 2.0.1. Every Docker probe was written like this:

@@ -25,9 +25,24 @@ describe('MCP tool schemas', () => {
     if (result.success) expect(result.data.instanceType).toBe('small')
   })
 
-  it('clawops_up rejects unknown instanceType', () => {
-    const result = clawops_upSchema.safeParse({ instanceType: 'xlarge' })
-    expect(result.success).toBe(false)
+  it('clawops_up accepts a provider-native instanceType', () => {
+    // It was an enum of the five clawops sizes. Azure offers SKU families per subscription,
+    // and an account offered none of those five would have had no way to deploy.
+    const result = clawops_upSchema.safeParse({ instanceType: 'Standard_D2als_v7' })
+    expect(result.success).toBe(true)
+  })
+
+  it('clawops_up takes the network flags a reachable stack needs', () => {
+    const result = clawops_upSchema.safeParse({
+      sshCidr: 'auto',
+      gatewayCidr: '203.0.113.0/24',
+      publishGateway: 'all',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('clawops_up still rejects a publishGateway it does not understand', () => {
+    expect(clawops_upSchema.safeParse({ publishGateway: 'public' }).success).toBe(false)
   })
 
   it('clawops_destroy requires stackName', () => {

@@ -1,13 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockGetConfig, mockResolvePublicKey, mockResolveProjectId } = vi.hoisted(() => ({
-  mockGetConfig: vi.fn(),
-  mockResolvePublicKey: vi.fn(),
-  mockResolveProjectId: vi.fn(),
-}))
+const { mockGetConfig, mockResolvePublicKey, mockResolveProjectId, mockResolveSubscriptionId } =
+  vi.hoisted(() => ({
+    mockGetConfig: vi.fn(),
+    mockResolvePublicKey: vi.fn(),
+    mockResolveProjectId: vi.fn(),
+    mockResolveSubscriptionId: vi.fn(),
+  }))
 vi.mock('../../src/config/store.js', () => ({ getConfig: mockGetConfig }))
 vi.mock('../../src/plan/ssh-key.js', () => ({ resolvePublicKey: mockResolvePublicKey }))
 vi.mock('../../src/providers/gcp/preflight.js', () => ({ resolveProjectId: mockResolveProjectId }))
+vi.mock('../../src/providers/azure/cli-auth.js', () => ({
+  resolveSubscriptionId: mockResolveSubscriptionId,
+}))
 
 import { writeStackConfig } from '../../src/plan/stack-config.js'
 import type { DeployPlan } from '../../src/plan/generate.js'
@@ -41,6 +46,7 @@ beforeEach(() => {
   mockGetConfig.mockReturnValue(null)
   mockResolvePublicKey.mockReturnValue(undefined)
   mockResolveProjectId.mockReturnValue(undefined)
+  mockResolveSubscriptionId.mockReturnValue(undefined)
 })
 
 describe('writeStackConfig', () => {
@@ -146,5 +152,27 @@ describe('writeStackConfig', () => {
       plan({ openclaw: { version: '2026.9.2', config: { models: { provider: 'bedrock' } } } }),
     )
     expect(sent()['bedrockEnabled']).toBe('true')
+  })
+})
+
+describe('pinning the account a deploy lands in', () => {
+  it('pins the Azure subscription, which the provider otherwise takes from the environment', async () => {
+    // azure-native resolves the subscription from ARM_SUBSCRIPTION_ID, then
+    // AZURE_SUBSCRIPTION_ID, then the CLI's default — so an `az account set` between the
+    // preflight and the apply moves the deploy to another subscription silently.
+    mockResolveSubscriptionId.mockReturnValue('sub-0001')
+    await writeStackConfig(stack(), plan({ provider: 'azure' }))
+    expect(sent()['azure-native:subscriptionId']).toBe('sub-0001')
+  })
+
+  it('pins nothing for Azure when no subscription resolves', async () => {
+    await writeStackConfig(stack(), plan({ provider: 'azure' }))
+    expect(sent()).not.toHaveProperty('azure-native:subscriptionId')
+  })
+
+  it('does not pin an Azure subscription on another provider', async () => {
+    mockResolveSubscriptionId.mockReturnValue('sub-0001')
+    await writeStackConfig(stack(), plan({ provider: 'gcp' }))
+    expect(sent()).not.toHaveProperty('azure-native:subscriptionId')
   })
 })

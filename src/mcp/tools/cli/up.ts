@@ -10,8 +10,6 @@ import { makeProgressEmitter, startTask, updateTask } from '../../progress.js'
 import { okText, errText } from '../_conn.js'
 import { trimForMcp } from '../_trim.js'
 
-const VALID_INSTANCE_TYPES = ['micro', 'small', 'medium', 'large', 'gpu'] as const
-
 export async function handleUp(input: UpInput, server: McpServer): Promise<CallToolResult> {
   // R19: elicit unless dryRun
   if (!input.dryRun) {
@@ -56,12 +54,12 @@ export async function handleUp(input: UpInput, server: McpServer): Promise<CallT
     return okText(JSON.stringify({ stack: ctx.stackName, ...state }, null, 2))
   }
 
-  // ── Cloud provider path (Pulumi) ───────────────────────────────────────────
-  const instanceAlias = input.instanceType ?? 'small'
-  if (!VALID_INSTANCE_TYPES.includes(instanceAlias as typeof VALID_INSTANCE_TYPES[number])) {
-    throw new UsageError(`Invalid instanceType: ${instanceAlias}`)
-  }
-
+  // ── Cloud provider path ────────────────────────────────────────────────────
+  //
+  // The same plan and apply the CLI uses. This was a third implementation of deploying — after
+  // `clawops up` and `clawops apply` — and it wrote the same three pieces of stack config as
+  // the first, so it could not deploy either: the programs refuse to run without sshPublicKey,
+  // and nothing opened a firewall rule.
   const validation = await ctx.adapter.validateConfig()
   if (!validation.ok) {
     return errText(`Provider config invalid: ${validation.errors.join('; ')}`)
@@ -72,34 +70,47 @@ export async function handleUp(input: UpInput, server: McpServer): Promise<CallT
   const emit = makeProgressEmitter(server, progressToken)
   startTask(taskId, `clawops_up stack=${ctx.stackName}`)
 
-  const stack = await ctx.getStack()
-  const region = input.region ?? ctx.adapter.defaultRegion()
-  const instanceType = ctx.adapter.normalizeInstanceType(instanceAlias as typeof VALID_INSTANCE_TYPES[number])
+  const { generatePlan } = await import('../../../plan/generate.js')
+  const { applyPlan } = await import('../../../plan/apply.js')
+  const { resolveNetworkFlags } = await import('../../../plan/network-args.js')
+  const { detectEgressIp } = await import('../../../providers/firewall.js')
 
-  await stack.setConfig('region', { value: region })
-  await stack.setConfig('instanceType', { value: instanceType })
-  await stack.setConfig('openclawVersion', { value: openclawVersion })
-
-  if (input.dryRun) {
-    const lines: string[] = []
-    await stack.preview({ onOutput: (o) => { emit(o.trim()); lines.push(o) } })
-    const output = lines.join('')
-    updateTask(taskId, 'completed', output)
-    const { content } = trimForMcp(output, ctx.stackName)
-    return okText(content)
-  }
+  const network = await resolveNetworkFlags(
+    {
+      ...(input.sshCidr ? { sshCidr: input.sshCidr } : {}),
+      ...(input.gatewayCidr ? { gatewayCidr: input.gatewayCidr } : {}),
+      ...(input.publishGateway ? { publishGateway: input.publishGateway } : {}),
+    },
+    { detectEgressIp: () => detectEgressIp('https://ifconfig.me/ip') },
+  )
 
   try {
+    const plan = await generatePlan({
+      stackName: ctx.stackName,
+      provider: ctx.adapter.name as 'aws' | 'gcp' | 'azure',
+      ...(input.region ? { region: input.region } : {}),
+      ...(input.instanceType ? { instanceType: input.instanceType } : {}),
+      openclawVersion,
+      network,
+    })
+
+    if (input.dryRun) {
+      const summary = JSON.stringify(plan.diff ?? { totalChanges: 0 }, null, 2)
+      updateTask(taskId, 'completed', summary)
+      const { content } = trimForMcp(summary, ctx.stackName)
+      return okText(content)
+    }
+
     const lines: string[] = []
-    const result = await stack.up({
+    const result = await applyPlan(plan, {
       onOutput: (o) => { emit(o.trim()); lines.push(o) },
+      onProgress: (o) => emit(o),
     })
     const summary = `Stack "${ctx.stackName}" deployed.\n` +
-      (result.outputs['publicIp'] ? `Public IP: ${result.outputs['publicIp'].value}\n` : '') +
-      (result.outputs['gatewayUrl'] ? `Gateway URL: ${result.outputs['gatewayUrl'].value}\n` : '')
+      (result.outputs['publicIp'] ? `Public IP: ${String(result.outputs['publicIp'])}\n` : '') +
+      (result.outputs['gatewayUrl'] ? `Gateway URL: ${String(result.outputs['gatewayUrl'])}\n` : '')
     updateTask(taskId, 'completed', summary)
-    const fullOutput = lines.join('')
-    trimForMcp(fullOutput, ctx.stackName) // write to disk for resource
+    trimForMcp(lines.join(''), ctx.stackName) // write to disk for resource
     return okText(summary)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

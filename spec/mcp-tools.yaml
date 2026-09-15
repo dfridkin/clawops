@@ -291,10 +291,29 @@ tools:
         description: Defaults to provider configured for this stack
       region: { type: string, optional: true }
       instanceType:
-        type: enum
-        values: [micro, small, medium, large, gpu]
+        type: string
         optional: true
         default: small
+        description: |
+          A clawops size (micro|small|medium|large|gpu) or a provider-native machine type.
+          Not an enum: Azure offers SKU families per subscription, and an account offered
+          none of the five sizes clawops names would otherwise have no way to deploy.
+      sshCidr:
+        type: string
+        optional: true
+        description: |
+          CIDR(s) allowed to reach SSH, comma-separated, or 'auto' for the caller's own
+          address. Omitted means none, and nothing will be able to connect — including
+          every clawops day-two command.
+      gatewayCidr:
+        type: string
+        optional: true
+        description: CIDR(s) allowed to reach the gateway port. Requires publishGateway=all.
+      publishGateway:
+        type: enum
+        values: [loopback, all]
+        optional: true
+        description: Which interface the gateway binds. 'all' serves plaintext HTTP.
       openclawVersion: { type: string, optional: true, description: "semver or 'stable'/'dev'" }
       dryRun: { type: boolean, optional: true, default: false }
     output:
