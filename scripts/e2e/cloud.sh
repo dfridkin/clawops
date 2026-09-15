@@ -125,8 +125,17 @@ REGISTERED=yes
 
 # --ssh-cidr auto: every assertion below runs over SSH, so a plan with no ingress fails all
 # of them for a reason that has nothing to do with the runtime contract being tested.
+# E2E_INSTANCE_TYPE overrides the size. Azure offers SKU families per subscription and region,
+# and the subscription this was first run against was offered none of the B-series sizes
+# clawops names — so there is no size the script can hardcode that works everywhere.
+SIZE_ARG=()
+if [ -n "${E2E_INSTANCE_TYPE:-}" ]; then
+  SIZE_ARG=(--instance-type "$E2E_INSTANCE_TYPE")
+  echo "Using instance type ${E2E_INSTANCE_TYPE}"
+fi
+
 pnpm dev plan --provider "$PROVIDER" --stack "$STACK" --openclaw-version "$FLOOR" \
-  --ssh-cidr auto --out "/tmp/${STACK}.plan.json" || exit 1
+  --ssh-cidr auto "${SIZE_ARG[@]}" --out "/tmp/${STACK}.plan.json" || exit 1
 CREATED=yes
 pnpm dev apply "/tmp/${STACK}.plan.json" --yes || exit 1
 

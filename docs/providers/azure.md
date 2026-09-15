@@ -70,6 +70,19 @@ failing with `The subscription is not registered to use namespace 'Microsoft.Com
 Registration is free, idempotent and takes a couple of minutes; `clawops setup` offers to do it
 and names the subscription it will change.
 
+**The VM size clawops asks for may not be offered to you.** Azure gates SKU families per
+subscription and region: a subscription created in 2026 is commonly offered no B-series size at
+all in `eastus`, which is every non-GPU size clawops names. The failure arrives late —
+
+```
+Status=409 Code="SkuNotAvailable" … 'Standard_B2s' is currently not available in location 'eastus'
+```
+
+— after the virtual network, NSG, public IP and NIC have been created. The preflight checks the
+default size against what your subscription is actually offered and names alternatives; pass one
+with `clawops plan --instance-type Standard_D2als_v7`. No static map is right everywhere, which
+is why clawops names what you can have rather than guessing.
+
 **The state backend does not use your `az login`.** Pulumi's azblob backend authenticates with
 `AZURE_STORAGE_ACCOUNT` and a key or SAS token, so every credential check here can pass and the
 deploy still fail to open its own state. Creating one:
