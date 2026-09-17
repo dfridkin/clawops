@@ -471,6 +471,40 @@ accepts the resources.
 `azure-native:subscriptionId`, both from the same resolver the preflight uses — otherwise an
 `az account set` between the check and the apply moves the deploy somewhere else silently.
 
+### clawops names the state backend, instead of asking you to
+
+New in 2.0.1. `clawops init` used to write a placeholder into the stack —
+`s3://CHANGEME/clawops` — and explain it in a line of output. The wizard asked for a bucket name
+with no default and advised creating one by hand in your cloud console, forty lines before the
+preflight above offered to create it for you with versioning on and public access blocked.
+
+The placeholder was worse than a blank. `CHANGEME` is not a valid S3 bucket name, so S3 answers
+`403` rather than `404`, and `doctor` reported it as a bucket **belonging to somebody else**.
+
+Both now derive a name, and the name carries exactly the uniqueness its namespace demands:
+
+| | derived name | longest possible |
+|---|---|---|
+| AWS | `clawops-state-<accountId>-<region>` | 41 / 63 |
+| GCP | `clawops-state-<projectId>` | 44 / 63 |
+| Azure | `clawops-state` | 13 / 63 |
+
+S3 and Cloud Storage share one namespace across every customer, so those names need something
+nobody else can hold. An `azblob://` URL names a *container* inside the storage account you
+supply, so it is already scoped — a subscription GUID there would be 37 characters buying
+nothing. (The 3–24 character limit people associate with Azure storage is on storage *accounts*;
+clawops never names one, because it will not hold the key that goes with it.)
+
+AWS carries the region because an S3 bucket is a regional resource and Pulumi reads state on
+every operation. A bucket on another continent slows every `plan` and `apply` for no visible
+reason, and an extra bucket costs nothing.
+
+A name you type yourself is checked against the rules of the cloud that has to accept it —
+length, case, `xn--` and `-s3alias` on S3, `google` on Cloud Storage, hyphen placement on Azure
+— instead of being learned from a creation failure. And a name clawops cannot derive is not
+invented: `init` without credentials and without `--state` now stops and names what it needed.
+`--state` still takes any URL verbatim, and existing configs are untouched. [ADR 0012](docs/decisions/0012-state-bucket-naming.md).
+
 ### Your cloud account is checked before anything is spent
 
 New in 2.0.1. A cloud account is not ready just because a credential resolves. A GCP project
@@ -1246,7 +1280,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (1613 tests, ~11s)
+pnpm test                  # vitest (1657 tests, ~12s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm typecheck             # tsc --noEmit

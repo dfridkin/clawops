@@ -7,6 +7,16 @@ import path from 'node:path'
 import process from 'node:process'
 import { getConfig } from '../../src/config/store.js'
 
+// `init` derives the state backend from the account it is pointed at, so without this these
+// tests would read whatever project the developer's gcloud happens to have configured — and
+// find none at all in CI. Pinned so every run names the same backend.
+const { mockProjectId, mockAwsAccount } = vi.hoisted(() => ({
+  mockProjectId: vi.fn<() => string | undefined>(() => 'unit-test-project'),
+  mockAwsAccount: vi.fn<() => Promise<string | undefined>>(async () => '000000000000'),
+}))
+vi.mock('../../src/providers/gcp/preflight.js', () => ({ resolveProjectId: mockProjectId }))
+vi.mock('../../src/providers/aws/preflight.js', () => ({ callerAccount: mockAwsAccount }))
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRunFn = (ctx: any) => Promise<void>
 
@@ -57,6 +67,98 @@ describe('init command — cloud providers', () => {
       expect(cfg?.stacks['default']?.provider).toBe('gcp')
       expect(cfg?.stacks['default']?.region).toBe('us-central1')
       expect(cfg?.stacks['default']?.credentialsRef.source).toBe('env')
+    } finally {
+      if (prevHome === undefined) delete process.env['CLAWOPS_HOME']
+      else process.env['CLAWOPS_HOME'] = prevHome
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('names the state backend after the account instead of writing a placeholder', async () => {
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'clawops-init-test-'))
+    const prevHome = process.env['CLAWOPS_HOME']
+    process.env['CLAWOPS_HOME'] = tmpDir
+    try {
+      vi.resetModules()
+      const cmd = await getCmd()
+      vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+      await (cmd.run as AnyRunFn)({ args: { provider: 'gcp', 'non-interactive': true } })
+      vi.restoreAllMocks()
+
+      process.env['CLAWOPS_HOME'] = tmpDir
+      expect(getConfig()?.stacks['default']?.stateUrl)
+        .toBe('gs://clawops-state-unit-test-project/clawops')
+    } finally {
+      if (prevHome === undefined) delete process.env['CLAWOPS_HOME']
+      else process.env['CLAWOPS_HOME'] = prevHome
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('puts the region in an S3 name, because an S3 bucket lives in one', async () => {
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'clawops-init-test-'))
+    const prevHome = process.env['CLAWOPS_HOME']
+    process.env['CLAWOPS_HOME'] = tmpDir
+    try {
+      vi.resetModules()
+      const cmd = await getCmd()
+      vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+      await (cmd.run as AnyRunFn)({
+        args: { provider: 'aws', region: 'eu-west-2', 'non-interactive': true },
+      })
+      vi.restoreAllMocks()
+
+      process.env['CLAWOPS_HOME'] = tmpDir
+      expect(getConfig()?.stacks['default']?.stateUrl)
+        .toBe('s3://clawops-state-000000000000-eu-west-2/clawops')
+    } finally {
+      if (prevHome === undefined) delete process.env['CLAWOPS_HOME']
+      else process.env['CLAWOPS_HOME'] = prevHome
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('writes nothing, and says what it needs, when no account resolves', async () => {
+    mockProjectId.mockReturnValueOnce(undefined)
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'clawops-init-test-'))
+    const prevHome = process.env['CLAWOPS_HOME']
+    process.env['CLAWOPS_HOME'] = tmpDir
+    try {
+      vi.resetModules()
+      const cmd = await getCmd()
+      vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+      await expect(
+        (cmd.run as AnyRunFn)({ args: { provider: 'gcp', 'non-interactive': true } }),
+      ).rejects.toThrow(/gcloud config set project/)
+      vi.restoreAllMocks()
+
+      process.env['CLAWOPS_HOME'] = tmpDir
+      // The old placeholder left a stack that looked registered and could never deploy.
+      expect(getConfig()?.stacks['default']).toBeUndefined()
+    } finally {
+      if (prevHome === undefined) delete process.env['CLAWOPS_HOME']
+      else process.env['CLAWOPS_HOME'] = prevHome
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('still takes --state verbatim without asking any cloud who we are', async () => {
+    mockProjectId.mockReturnValueOnce(undefined)
+    mockAwsAccount.mockResolvedValueOnce(undefined)
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'clawops-init-test-'))
+    const prevHome = process.env['CLAWOPS_HOME']
+    process.env['CLAWOPS_HOME'] = tmpDir
+    try {
+      vi.resetModules()
+      const cmd = await getCmd()
+      vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+      await (cmd.run as AnyRunFn)({
+        args: { provider: 'aws', state: 's3://mine/clawops', 'non-interactive': true },
+      })
+      vi.restoreAllMocks()
+
+      process.env['CLAWOPS_HOME'] = tmpDir
+      expect(getConfig()?.stacks['default']?.stateUrl).toBe('s3://mine/clawops')
     } finally {
       if (prevHome === undefined) delete process.env['CLAWOPS_HOME']
       else process.env['CLAWOPS_HOME'] = prevHome
