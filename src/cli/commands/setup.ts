@@ -12,6 +12,10 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { execSync, spawnSync, spawn } from 'node:child_process'
 import path from 'node:path'
 import { success, failure, warn, info, spinner, printCta } from '../../output/human.js'
+import {
+  deriveStateBucket, validateStateBucket, resolveScopeAccount,
+} from '../../providers/state-bucket.js'
+import type { CloudProvider } from '../../providers/state-bucket.js'
 import type { ClawopsConfig } from '../../config/store.js'
 import { MCP_APPS, buildMcpEntry, writeAppConfigs } from '../mcp-apps.js'
 import { execPrivileged } from '../../transport/privileged.js'
@@ -211,6 +215,21 @@ export default defineCommand({
     // ── Step 3: Stack basics ───────────────────────────────────────────────────
     process.stdout.write('\n')
     const sshCidrDefault = provider === 'local' ? undefined : await detectSshCidrDefault()
+    // Asked for before the questions rather than during them, because the state bucket's
+    // default name is built from it and inquirer renders a default once. It is also the
+    // earliest point at which a missing credential can be reported — previously the operator
+    // answered another dozen questions before the preflight said so.
+    const scopeAccount =
+      provider === 'local' ? undefined : await resolveScopeAccount(provider)
+    if (provider !== 'local' && provider !== 'azure' && !scopeAccount) {
+      // Not fatal: an operator who already has a bucket can type its name. But without this
+      // the next prompt is an unexplained blank where everyone else gets a filled-in default.
+      const needed = deriveStateBucket(provider as CloudProvider, {})
+      if (!needed.ok) {
+        warn(`clawops cannot suggest a name for the state backend: it needs ${needed.needs}.`)
+        info('Type the name of a bucket you already have, or quit, authenticate, and start again.\n')
+      }
+    }
     const stackAnswers = await inquirer.prompt<{
       stackName: string; region: string; instanceSize: string;
       stateBucket: string; sshKeyPath: string; sshCidr: string; openclawVersion: string
@@ -235,12 +254,7 @@ export default defineCommand({
           message: 'Server size: (bigger = faster, but costs more per month)',
           choices: instanceChoices(provider),
         },
-        {
-          type: 'input',
-          name: 'stateBucket',
-          message: `${stateLabel(provider)} bucket name: (a storage bucket that tracks what's deployed — create one first if you haven't)`,
-          validate: (v: string) => v.trim() !== '' || 'Required — create a bucket in your cloud console first',
-        },
+        stateBucketQuestion(provider as CloudProvider, scopeAccount),
         {
           type: 'input',
           name: 'sshKeyPath',
@@ -1407,6 +1421,31 @@ function defaultRegion(provider: string): string {
   if (provider === 'gcp') return 'us-central1'
   if (provider === 'azure') return 'eastus'
   return ''
+}
+
+/**
+ * The state-backend question, with the name clawops would choose already filled in.
+ *
+ * The account preflight a few questions later offers to create this, with versioning on and
+ * public access blocked. The prompt this replaces told the operator to go and make one by hand
+ * in their cloud console — sending them to do, worse, the job the wizard was about to offer.
+ */
+export function stateBucketQuestion(provider: CloudProvider, account?: string) {
+  return {
+    type: 'input',
+    name: 'stateBucket',
+    message: `${stateLabel(provider)} name: (where clawops records what it deployed — press Enter to accept)`,
+    default: (answers: { region?: string }) => {
+      const derived = deriveStateBucket(provider, {
+        account,
+        region: answers.region ?? defaultRegion(provider),
+      })
+      // No default rather than a wrong one: an operator with no credentials types the name of
+      // a bucket they already have, and the wizard has already said why nothing was suggested.
+      return derived.ok ? derived.name : undefined
+    },
+    validate: (v: string) => validateStateBucket(provider, v),
+  }
 }
 
 function stateLabel(provider: string): string {
