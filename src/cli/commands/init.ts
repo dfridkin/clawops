@@ -7,6 +7,9 @@ import { success, failure, info } from '../../output/human.js'
 import { setConfig, getConfigDir, getConfig } from '../../config/store.js'
 import type { ClawopsConfig } from '../../config/store.js'
 import { UsageError } from '../../errors/index.js'
+import {
+  deriveStateBucket, stateUrlFor, resolveScopeAccount,
+} from '../../providers/state-bucket.js'
 
 const SUPPORTED_PROVIDERS = ['gcp', 'aws', 'azure', 'local'] as const
 type SupportedProvider = (typeof SUPPORTED_PROVIDERS)[number]
@@ -137,10 +140,28 @@ export default defineCommand({
     } else {
       const defaults = PROVIDER_DEFAULTS[provider]
       const region = typeof args.region === 'string' ? args.region : defaults.region
-      const stateUrl =
-        typeof args.state === 'string'
-          ? args.state
-          : `${defaults.stateScheme}CHANGEME/clawops`
+
+      // A name clawops chose beats a placeholder the operator has to notice. `CHANGEME` was
+      // written into the stateUrl and explained in a line of output that scrolled past: the
+      // stack was valid, `plan` refused it, and `doctor` reported the placeholder as a bucket
+      // belonging to somebody else — which is what S3 says about a name it will not discuss.
+      let stateUrl: string
+      if (typeof args.state === 'string') {
+        stateUrl = args.state
+      } else {
+        const account = await resolveScopeAccount(provider)
+        const derived = deriveStateBucket(provider, { account, region })
+        if (!derived.ok) {
+          // Nothing is written. A stack whose state backend cannot be named is a stack that
+          // cannot be deployed, and saying so here costs the operator one command.
+          throw new UsageError(
+            `Could not name a state backend for ${provider}: clawops needs ${derived.needs}.\n` +
+              `Authenticate and run this again, or name the backend yourself:\n` +
+              `  clawops init --provider ${provider} --state ${defaults.stateScheme}your-bucket/clawops`,
+          )
+        }
+        stateUrl = stateUrlFor(provider, derived.name)
+      }
 
       config = merge(existing, stackName, provider, keyPath, knownHostsPath, {
         provider,
@@ -149,13 +170,12 @@ export default defineCommand({
         credentialsRef: { source: 'env', envVars: [defaults.credEnv] },
       })
 
-      if (stateUrl.includes('CHANGEME')) {
-        process.stdout.write('\n')
-        info(
-          `Update stateUrl in the config to a real state backend before running \`clawops up\`.\n` +
-            `  Example: clawops init --provider ${provider} --state ${defaults.stateScheme}your-bucket/clawops`,
-        )
-      }
+      process.stdout.write('\n')
+      info(
+        `State backend: ${stateUrl}\n` +
+          `  clawops doctor --provider ${provider} checks it exists, and clawops setup offers ` +
+          `to create it.`,
+      )
 
       process.stdout.write('\n')
       success(`Provider: ${provider}  Region: ${region}  Stack: ${stackName}`)

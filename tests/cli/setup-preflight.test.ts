@@ -11,7 +11,7 @@ vi.mock('../../src/output/human.js', async (importOriginal) => ({
   success: mockSuccess, warn: mockWarn, info: mockInfo, failure: mockFailure,
 }))
 
-import { runAccountPreflight } from '../../src/cli/commands/setup.js'
+import { runAccountPreflight, stateBucketQuestion } from '../../src/cli/commands/setup.js'
 import type { PreflightCheck } from '../../src/providers/types.js'
 
 /** An inquirer stand-in that answers every confirm the same way and records what it was asked. */
@@ -153,5 +153,40 @@ describe('a provider that cannot be asked at all', () => {
     await runAccountPreflight({ provider: 'aws', ...fakeInquirer(true) })
     expect(mockSuccess).not.toHaveBeenCalled()
     expect(mockWarn).not.toHaveBeenCalled()
+  })
+})
+
+describe('the state-backend question arrives already answered', () => {
+  it('fills in the name clawops would choose, scoped to the account and region', () => {
+    const q = stateBucketQuestion('aws', '614126170912')
+    expect(q.default({ region: 'eu-west-2' })).toBe('clawops-state-614126170912-eu-west-2')
+  })
+
+  it('follows the region the operator picked two questions earlier', () => {
+    const q = stateBucketQuestion('aws', '614126170912')
+    expect(q.default({ region: 'us-east-1' })).not.toBe(q.default({ region: 'eu-west-2' }))
+  })
+
+  it('falls back to the provider default region when that question was skipped', () => {
+    const q = stateBucketQuestion('aws', '614126170912')
+    expect(q.default({})).toBe('clawops-state-614126170912-us-east-1')
+  })
+
+  it('suggests nothing rather than something wrong when no account resolved', () => {
+    expect(stateBucketQuestion('gcp', undefined).default({})).toBeUndefined()
+  })
+
+  it('still suggests a name for Azure, which needs no account to be scoped', () => {
+    expect(stateBucketQuestion('azure', undefined).default({})).toBe('clawops-state')
+  })
+
+  it('validates what is typed against the provider that has to accept it', () => {
+    expect(stateBucketQuestion('aws', 'a').validate('my_bucket')).toContain('Underscores')
+    expect(stateBucketQuestion('gcp', 'a').validate('my_bucket')).toBe(true)
+  })
+
+  it('no longer sends the operator to their cloud console', () => {
+    expect(stateBucketQuestion('aws', 'a').message).not.toContain('console')
+    expect(stateBucketQuestion('aws', 'a').message).not.toContain('create one first')
   })
 })
