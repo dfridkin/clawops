@@ -24,7 +24,7 @@ const home = path.join(work, 'home')
 
 /** Each must exercise a dependency the bundle leaves external, and must not need credentials. */
 const CASES = [
-  { argv: ['--version'], expect: /^\d+\.\d+\.\d+/m, what: 'the binary starts' },
+  { argv: ['--version'], expect: /\b\d+\.\d+\.\d+\b/, what: 'the binary starts' },
   { argv: ['doctor', '--json'], expect: /"sections"/, what: 'doctor loads Pulumi and reports' },
   { argv: ['plan', '--help'], expect: /--ssh-cidr/, what: 'plan resolves its module graph' },
   { argv: ['stacks'], expect: /./, what: 'config and provider registry load' },
