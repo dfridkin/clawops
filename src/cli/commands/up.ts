@@ -14,7 +14,7 @@ export default defineCommand({
   args: {
     provider: { type: 'string', description: 'Cloud provider (gcp|aws|azure|local)' },
     region: { type: 'string', description: 'Cloud region' },
-    'instance-type': { type: 'string', description: 'Instance size alias (micro|small|medium|large|gpu)' },
+    'instance-type': { type: 'string', description: 'Instance size: a clawops alias (micro|small|medium|large|gpu) or a type your cloud names itself, e.g. t3.small' },
     'dry-run': { type: 'boolean', description: 'Preview without applying' },
     'no-wait': { type: 'boolean', description: 'Return immediately without waiting for healthy state' },
     'openclaw-version': { type: 'string', description: "OpenClaw release (e.g. 2026.7.1-2). Moving tags are resolved and range-checked" },

@@ -509,3 +509,43 @@ describe('the container check', () => {
     expect(check?.detail).not.toMatch(/^not found$/)
   })
 })
+
+describe('a preflight check clawops could not perform', () => {
+  it('is a warning, not a failure — and does not sink the report', async () => {
+    // Failing `doctor` over a denied read permission would be as wrong as passing it. The
+    // account may be perfectly set up; clawops could not ask.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockGetConfig.mockReturnValue(baseConfig as any)
+    mockGetProvider.mockReturnValue({
+      validateConfig: mockValidateConfig,
+      preflight: vi.fn().mockResolvedValue([
+        {
+          id: 'instance-type-offered',
+          label: 't3.small is offered in us-east-1',
+          ok: false,
+          unknown: true,
+          detail: 'clawops could not ask EC2: UnauthorizedOperation',
+        },
+      ]),
+    })
+    const report = await runDiagnostics({})
+    const check = find(report, 't3.small is offered in us-east-1')
+    expect(check?.status).toBe('warn')
+    expect(check?.detail).toMatch(/could not ask EC2/)
+    expect(report.ok).toBe(true)
+  })
+
+  it('still fails the report for a check that genuinely failed', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockGetConfig.mockReturnValue(baseConfig as any)
+    mockGetProvider.mockReturnValue({
+      validateConfig: mockValidateConfig,
+      preflight: vi.fn().mockResolvedValue([
+        { id: 'state-bucket', label: 'State bucket exists', ok: false, detail: 'it does not' },
+      ]),
+    })
+    const report = await runDiagnostics({})
+    expect(find(report, 'State bucket exists')?.status).toBe('fail')
+    expect(report.ok).toBe(false)
+  })
+})

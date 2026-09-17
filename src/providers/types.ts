@@ -100,6 +100,17 @@ export interface PreflightCheck {
   /** What is being checked, in the operator's terms. */
   label: string
   ok: boolean
+  /**
+   * clawops could not put the question — a denied read permission, an API that would not
+   * answer. Neither a pass nor a failure: the operator's account may be perfectly set up, and
+   * saying so would be a claim clawops cannot make.
+   *
+   * Dropping the check instead is worse. An operator whose credentials lack a read permission
+   * then sees one fewer line than everyone else and never learns why. The detail field carries
+   * the reason, and doctor renders these as warnings rather than failing the report over a
+   * question it could not ask.
+   */
+  unknown?: boolean
   /** Why it failed, and what it means — shown when ok is false. */
   detail?: string
   /**

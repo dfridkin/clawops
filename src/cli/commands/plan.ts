@@ -15,7 +15,7 @@ export default defineCommand({
     provider:          { type: 'string', description: 'Cloud provider (aws|gcp|azure)' },
     stack:             { type: 'string', description: 'Target stack name' },
     region:            { type: 'string', description: 'Cloud region' },
-    'instance-type':   { type: 'string', description: 'Instance size alias (micro|small|medium|large|gpu)' },
+    'instance-type':   { type: 'string', description: 'Instance size: a clawops alias (micro|small|medium|large|gpu) or a type your cloud names itself, e.g. t3.small' },
     'openclaw-version':{ type: 'string', description: "semver or 'stable'/'dev'" },
     'ssh-cidr':        { type: 'string', description: "CIDR(s) allowed to reach SSH, comma-separated, or 'auto' for this machine's IP. Omitted = none, and nothing will be able to connect" },
     'gateway-cidr':    { type: 'string', description: "CIDR(s) allowed to reach the gateway port, comma-separated, or 'auto'. Requires --publish-gateway all" },

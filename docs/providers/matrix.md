@@ -15,6 +15,24 @@ current implementation — not aspirational claims.
 | `clawops plan` / `clawops apply` | ✓ | ✓ | ✓ | — (use `clawops up`) |
 | `--dry-run` preview | ✓ | ✓ | ✓ | ✓ |
 
+## Account preflight
+
+What `clawops doctor --provider <cloud>` can verify about the account before a deploy spends
+anything. `clawops setup` runs the same checks and offers to fix the ones marked *fixable*.
+
+| Check | AWS | GCP | Azure | Local VM |
+|---|---|---|---|---|
+| Credentials name an account | ✓ (account id via STS) | ✓ (project) | ✓ (subscription) | — |
+| Prerequisite services enabled | — (none required) | ✓ (required APIs, *fixable*) | ✓ (resource providers, *fixable*) | — |
+| State backend exists | ✓ (S3 bucket, *fixable*) | ✓ (GCS bucket, *fixable*) | ✓ (storage account + key) | — (local file) |
+| Machine size available in this scope | ✓ (offered in region) | — | ✓ (offered to subscription) | — |
+| Quota headroom | Planned | Planned | Planned | — |
+
+A check clawops cannot perform — a listing the credentials may not read — reports as a warning
+naming the error and its likely cause, not as a pass or a failure. Azure's storage-account check
+is not fixable: the azblob backend needs `AZURE_STORAGE_ACCOUNT` and a key, which clawops will
+not create or store (R6).
+
 ## Networking
 
 | Capability | AWS | GCP | Azure | Local VM |

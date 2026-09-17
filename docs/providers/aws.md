@@ -42,6 +42,25 @@ Credentials NEVER appear in `~/.clawops/config.json`, CLI flags, MCP tool argume
 or audit logs. Only a `credentialsRef: { source: "env", envVars: ["AWS_PROFILE"] }` reference
 is stored in config.
 
+## Account setup clawops checks before it deploys
+
+`clawops doctor --provider aws` runs an account-level preflight:
+
+| Check | Why |
+|---|---|
+| Credentials resolve to an account | names the account id a deploy will land in |
+| State bucket exists | Pulumi needs its backend before it can run, so clawops cannot create it mid-deploy. Offered as a fix when the bucket is genuinely absent |
+| Instance type offered in the region | not every type is in every region, and the failure lands after the VPC, subnet, security group and address exist |
+
+**The state bucket is not created for you unless you ask.** A `404` means absent, and clawops
+offers to create it with versioning on and public access blocked. A `403` means the name belongs
+to another account — S3 bucket names are global — or your credentials cannot read it; clawops
+offers no fix there, because creating it would fail either way.
+
+**A check clawops could not perform says so.** Reading instance-type offerings needs
+`ec2:DescribeInstanceTypeOfferings`, which nothing else here does. Without it the check reports
+as a warning naming the error rather than passing, failing, or quietly disappearing.
+
 ## Required IAM Permissions
 
 **With Bedrock selected**, the identity running `clawops` also needs

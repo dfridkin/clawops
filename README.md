@@ -471,6 +471,51 @@ accepts the resources.
 `azure-native:subscriptionId`, both from the same resolver the preflight uses — otherwise an
 `az account set` between the check and the apply moves the deploy somewhere else silently.
 
+### Your cloud account is checked before anything is spent
+
+New in 2.0.1. A cloud account is not ready just because a credential resolves. A GCP project
+with the Compute API disabled, an Azure subscription with unregistered resource providers, a
+region that does not offer the machine size you asked for, a state bucket that was never
+created — each of these passed every check clawops made, and then failed partway through a
+deploy, after resources existed and the clock was running.
+
+`clawops doctor --provider <cloud>` now asks the account, with or without a stack:
+
+| | AWS | GCP | Azure |
+|---|---|---|---|
+| Credentials name an account | account id | project | subscription |
+| Prerequisites enabled | — | required APIs | resource providers |
+| State backend exists | S3 bucket | GCS bucket | storage account + key |
+| Machine size is available here | offered in region | — | offered to subscription |
+
+`--instance-type <size>` asks about the size you are about to deploy rather than the provider
+default. `clawops setup` runs the same checks and **offers to fix what it safely can**, naming
+the exact mutation before it makes it:
+
+```
+? Fix this now? Enables compute.googleapis.com on project my-project (Y/n)
+```
+
+Two deliberate limits. **A bucket is created, never adopted.** clawops offers to create a state
+bucket only when it is genuinely absent — on AWS a `404`. A `403` means the name belongs to
+another account (S3 names are global) or your credentials cannot read it, and creating it would
+fail either way; a prompt that cannot succeed is worse than no prompt. When clawops does create
+one it enables versioning, because Pulumi state with no history is a stack that can no longer be
+updated or destroyed.
+
+**And a check clawops could not perform says so**, rather than passing, failing the report, or
+quietly disappearing:
+
+```
+⚠  t3.small is offered in us-east-1
+     clawops could not ask EC2 whether t3.small is offered in us-east-1: UnauthorizedOperation.
+     This says nothing about the instance type — the usual cause is credentials without
+     ec2:DescribeInstanceTypeOfferings, which nothing else needs. A deploy can still succeed.
+```
+
+None of this is infrastructure, which is why none of it lives in the Pulumi program: the state
+backend has to exist before Pulumi can run at all, so a deploy cannot create it on the way past.
+
 ### A plan was written even when its state backend did not exist
 
 Fixed in 2.0.1. Opening a stack and previewing it failed into the same `catch`, which wrote a
@@ -1201,7 +1246,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (1210 tests, ~13s)
+pnpm test                  # vitest (1613 tests, ~11s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm typecheck             # tsc --noEmit

@@ -159,11 +159,17 @@ export function sizeCheck(
   requested: string = INSTANCE_TYPE_MAP[DEFAULT_ALIAS],
 ): PreflightCheck {
   if (!available) {
+    // Not a failure: the subscription may well be offered this size, and clawops could not ask.
+    // Failing here over a denied read would be as wrong as passing.
     return {
       id: 'vm-size-available',
       label: `${requested} is available in ${location}`,
       ok: false,
-      detail: 'Could not list the VM sizes this subscription is offered.',
+      unknown: true,
+      detail:
+        `clawops could not list the VM sizes this subscription is offered in ${location}. ` +
+        `This says nothing about ${requested} — the usual cause is credentials without ` +
+        'permission to read Microsoft.Compute/skus. A deploy can still succeed.',
     }
   }
   if (available.has(requested)) {
@@ -222,8 +228,9 @@ export async function azurePreflight(opts: PreflightOpts = {}): Promise<Prefligh
       label: 'Azure management API reachable',
       ok: false,
       detail:
-        'Could not get a management token. Run `az login`, or set AZURE_TENANT_ID + ' +
-        'AZURE_CLIENT_ID + AZURE_CLIENT_SECRET for a service principal.',
+        'Could not get a management token, so the resource providers and VM sizes below were ' +
+        'not checked. Run `az login`, or set AZURE_TENANT_ID + AZURE_CLIENT_ID + ' +
+        'AZURE_CLIENT_SECRET for a service principal.',
     })
     return checks
   }
