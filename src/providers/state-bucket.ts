@@ -61,8 +61,18 @@ export function deriveStateBucket(provider: CloudProvider, scope: StateBucketSco
   return { ok: true, name: `clawops-state-${scope.account}-${scope.region}` }
 }
 
-/** The scheme a derived name is addressed through, so callers build one URL and not three. */
+/**
+ * The scheme a derived name is addressed through, so callers build one URL and not three.
+ *
+ * The name must already be one the provider would accept. Interpolating an unchecked string
+ * here would put whatever it contains — a slash, a query string — into a URL that Pulumi then
+ * reads as a backend location, so the contract is enforced rather than documented and trusted.
+ * Every caller passes either a derived name or one the operator typed through
+ * `validateStateBucket`, so this throwing means clawops has a bug, not that the operator does.
+ */
 export function stateUrlFor(provider: CloudProvider, bucket: string): string {
+  const verdict = validateStateBucket(provider, bucket)
+  if (verdict !== true) throw new Error(`Not a usable ${provider} state backend name: ${verdict}`)
   const scheme = provider === 'aws' ? 's3://' : provider === 'gcp' ? 'gs://' : 'azblob://'
   // Azure's azblob backend addresses a container directly; the other two take a state prefix
   // inside the bucket, which is what keeps clawops' objects separable from anything else there.
@@ -83,8 +93,15 @@ export function validateStateBucket(provider: CloudProvider, name: string): true
   if (n === '') return 'Required'
   if (n !== name) return 'No leading or trailing spaces'
   if (n.length < 3) return `Too short — ${labelFor(provider)} names are at least 3 characters`
-  const max = 63
+  // Cloud Storage allows a dotted name up to 222 characters, each dot-separated component
+  // capped at 63 — that form is a domain name, and needs the domain verified. Everything else,
+  // on every cloud, stops at 63.
+  const dotted = provider === 'gcp' && n.includes('.')
+  const max = dotted ? 222 : 63
   if (n.length > max) return `Too long — ${labelFor(provider)} names are at most ${max} characters`
+  if (dotted && n.split('.').some((part) => part.length > 63)) {
+    return 'Each dot-separated part of a Cloud Storage name is at most 63 characters'
+  }
   if (n !== n.toLowerCase()) return 'Lowercase only'
 
   if (provider === 'azure') {
