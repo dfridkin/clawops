@@ -706,6 +706,12 @@ const MUTATIONS = [
     file: 'src/cli/commands/init.ts', from: '        if (!derived.ok) {', to: '        if (false) {', test: 'tests/cli/init.test.ts' },
   { name: 'the wizard suggests a bucket name ignoring the region just chosen',
     file: 'src/cli/commands/setup.ts', from: '        region: answers.region ?? defaultRegion(provider),', to: '        region: defaultRegion(provider),', test: 'tests/cli/setup-preflight.test.ts' },
+  { name: 'a state URL is built from an unchecked name',
+    file: 'src/providers/state-bucket.ts', from: '  if (verdict !== true) throw new Error', to: '  if (false) throw new Error', test: 'tests/providers/state-bucket.test.ts' },
+  { name: 'the dotted Cloud Storage allowance leaks to every name',
+    file: 'src/providers/state-bucket.ts', from: "  const dotted = provider === 'gcp' && n.includes('.')", to: '  const dotted = true', test: 'tests/providers/state-bucket.test.ts' },
+  { name: 'a dotted Cloud Storage name skips the per-part cap',
+    file: 'src/providers/state-bucket.ts', from: '  if (dotted && n.split(\'.\').some((part) => part.length > 63)) {', to: '  if (false) {', test: 'tests/providers/state-bucket.test.ts' },
 
 ]
 

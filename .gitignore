@@ -149,3 +149,6 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 .mutation-inflight.json
+
+# Graphify local analysis (scripts/dev/graph.mjs)
+graphify-out/

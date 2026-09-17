@@ -40,7 +40,8 @@
     "gen:schemas": "tsx scripts/gen-schemas.ts",
     "changeset": "changeset",
     "release": "pnpm build && changeset publish",
-    "test:mutation": "node scripts/dev/mutation-check.mjs"
+    "test:mutation": "node scripts/dev/mutation-check.mjs",
+    "graph": "node scripts/dev/graph.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock": "^3.1063.0",
