@@ -2,7 +2,7 @@
 // Holds resolved config, provider adapter, and a lazy Pulumi stack singleton.
 // Per Issue 14 (perf): LocalWorkspace is created at most once per process.
 
-import type { Stack } from '@pulumi/pulumi/automation'
+import type { Stack } from '@pulumi/pulumi/automation/index.js'
 import { requireConfig, getConfigDir, type ClawopsConfig } from '../config/store.js'
 import type { ProviderAdapter, ProviderName } from '../providers/types.js'
 import { readLocalState, type LocalState } from '../providers/local/state.js'

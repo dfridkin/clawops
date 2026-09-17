@@ -19,7 +19,12 @@
 
 import path from 'node:path'
 import process from 'node:process'
-import { PulumiCommand } from '@pulumi/pulumi/automation'
+// `/index.js`, not the bare directory. @pulumi/pulumi ships no "exports" map and no "main", so
+// `@pulumi/pulumi/automation` resolves only under CommonJS rules — which tsx and vitest apply and
+// Node's ESM loader does not. Every test and every source-run cloud deploy passed with the bare
+// specifier; the published bundle died on the first import, and nothing in this repo ran the
+// published bundle. `pnpm verify:pack` does now.
+import { PulumiCommand } from '@pulumi/pulumi/automation/index.js'
 
 /** Where clawops keeps its own CLI. Sibling of `.pulumi` (the CLI's *home*, a different thing). */
 export function pulumiCliRoot(configDir: string): string {

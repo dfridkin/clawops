@@ -2,7 +2,7 @@
 // Per SPEC §4: no pulumi.yaml on disk; inline program; state backend via env var.
 
 import path from 'node:path'
-import { LocalWorkspace, type Stack } from '@pulumi/pulumi/automation'
+import { LocalWorkspace, type Stack } from '@pulumi/pulumi/automation/index.js'
 import type { PulumiFn } from '../providers/types.js'
 import { getConfigDir } from '../config/store.js'
 import { ensurePulumiCli } from './cli.js'

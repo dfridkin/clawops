@@ -1019,6 +1019,7 @@ pnpm lint                  # eslint src/ tests/ scripts/ (--max-warnings=0)
 pnpm gen:schemas           # regenerate src/providers/types.ts + src/mcp/tools/_generated.ts
 pnpm gen:schemas --check   # CI guard: committed generated files match spec
 pnpm graph                 # local coupling report (--base <ref> for this branch's delta)
+pnpm verify:pack           # install the packed tarball elsewhere and run it (CI gate)
 pnpm changeset             # record a release note before merging
 ```
 

@@ -41,6 +41,13 @@ jobs:
       - name: Test
         run: pnpm test --coverage
 
+      # Everything above runs from source, where tsx and vitest resolve modules by CommonJS
+      # rules. 2.0.1 passed all of it and then failed on its first import once installed,
+      # because the published bundle is ESM and Node resolves it differently. This step runs
+      # the artifact a user gets.
+      - name: Verify the packed tarball runs
+        run: pnpm verify:pack
+
       - name: Upload coverage
         uses: codecov/codecov-action@v6
         with:
