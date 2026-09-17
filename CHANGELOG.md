@@ -1,5 +1,121 @@
 # @clawops/cli
 
+## 2.0.1
+
+### Patch Changes
+
+- 7382185: `clawops apply` connects with the SSH key from your config.
+- 9efa57b: `clawops doctor --provider aws` checks the account a deploy would land in: the account the
+  credentials resolve to, the state bucket, and whether the instance type is offered in the
+  region. It offers to create the bucket when it is genuinely absent, with versioning on and
+  public access blocked.
+
+  A check clawops could not perform — a denied listing — reports as a warning naming the error,
+  rather than as a pass or a failure. Azure's VM size check uses the same state.
+
+- 86eaf48: Azure accepts your `az login`. A service principal is no longer required.
+
+  `clawops doctor --provider <name>` checks one cloud's credentials and account setup, with or
+  without a stack of that provider.
+
+- 179d84e: `clawops doctor --provider azure` checks the subscription, the resource providers a deploy
+  needs registered, and the azblob credentials Pulumi authenticates to blob storage with.
+  `clawops setup` runs the same checks and offers to register the providers, naming the change
+  before making it.
+- 2bd8331: Azure account checks include whether the VM size is offered to your subscription in the
+  region, and list sizes that are when it is not.
+- bf88ecb: A deploy that times out prints what the host was doing, from its bootstrap log, instead of
+  only reporting the timeout.
+- c56bf58: A host still installing Docker is treated as still booting, not as a failed deploy.
+- d19d780: **The setup wizard writes model configuration OpenClaw accepts**, and installs the plugin your
+  chosen provider needs.
+
+  **Amazon Bedrock works.** clawops sets the transport Bedrock needs and resolves an inference
+  profile against your deployment region, preferring your own geography, and records the concrete
+  profile in the plan. This needs `bedrock:ListInferenceProfiles` on the identity running clawops.
+
+  **`clawops setup` checks your cloud account is ready before provisioning anything**, and
+  offers to fix what it safely can — enabling an API, creating a state bucket — naming the exact
+  change first. A bucket clawops creates has versioning enabled. `clawops doctor` reports the
+  same checks without offering to change anything.
+
+  **`clawops doctor` validates cloud credentials.**
+
+  **Cloud stacks are deployed with the ingress rules from the plan.**
+
+  **Documentation:** the GCP guide names the credential source clawops actually reads and
+  describes 2.0 firewall behaviour; the smoke-test plan covers 2.0, and `pnpm test:cloud` runs it
+  against a real deployment and destroys it afterwards.
+
+- 07146a9: `clawops apply` reports progress as it runs, instead of printing nothing for minutes on a
+  scripted or CI deploy.
+- 26c27c2: clawops tells a refused Docker socket from a missing container, and says which it found.
+- 9decf31: `clawops destroy` forgets the instance's host key, so deploying onto an address the cloud has
+  recycled no longer fails host-key verification.
+- 5923bb6: `gcloud config set project` is honoured, as the GCP guide always said it was.
+- aa3c7a4: `clawops init` keeps the stacks already registered in your config.
+- 0080d2a: `clawops init` generates an SSH key clawops can read.
+
+  If you ran `clawops init` before this release, `clawops doctor` reports whether your key is
+  usable and what to do if it is not.
+
+- 87b6dcd: `clawops logs` reads from the gateway on AWS.
+- 0080d2a: `clawops plan` → `clawops apply` provisions a cloud stack and deploys OpenClaw onto it.
+
+  - Stack configuration is written once, by one writer shared between preview and apply.
+  - The plan records the public key that may log in, resolved from your configured key.
+  - clawops creates and stores the passphrase a self-managed state backend requires
+    ([ADR 0011](https://github.com/dfridkin/clawops/blob/main/docs/decisions/0011-state-passphrase.md)).
+
+- bc5a4fc: `clawops plan` stops when it cannot open the state backend, and names the cause.
+- 1ea868e: `clawops plan` takes `--ssh-cidr`, `--gateway-cidr` and `--publish-gateway` to say who may
+  connect. `auto` resolves this machine's address while the plan is written, and a plan that
+  admits nothing says so.
+- bd614fd: `clawops plan --instance-type` takes a clawops alias (`micro`–`gpu`) or a machine type your
+  cloud names itself, and the plan records the concrete type the cloud will be asked for.
+- f35c64b: `clawops doctor --instance-type <size>` points the account checks at the size you are about to
+  deploy rather than the provider default, and `--provider` checks the provider you name rather
+  than the one your default stack happens to use.
+- 756c851: clawops installs the Pulumi CLI it needs into `~/.clawops/.pulumi-cli` the first time it needs
+  one, announcing the one-time download, and uses a compatible `pulumi` already on `$PATH`
+  instead when there is one. `$PATH` is never edited. `clawops doctor` reports which one it
+  found, from where, and at what version. See
+  [ADR 0010](https://github.com/dfridkin/clawops/blob/main/docs/decisions/0010-pulumi-cli-bootstrap.md).
+- 5906e0c: `doctor --stack`, `ssh`, `logs`, `gateway`, `config` and `agents` work against a deployed
+  stack.
+- 3f8a9cf: `clawops plan` resolves the provider before calling it.
+- 344822d: A deploy reuses the SSH session it just proved was working.
+- 9efa57b: The setup wizard checks the machine size you chose, not the provider default.
+
+  A check the wizard could not perform is reported as unanswered rather than counted as a
+  failure, and it offers no fix for a check it could not make.
+
+- 4c71175: Cloud Storage bucket names containing dots may be up to 222 characters, with each dot-separated
+  part capped at 63. clawops was rejecting them at 63.
+- 4a2564f: clawops names the state backend after the account it is deploying into, instead of asking you
+  for a name or writing a placeholder:
+
+  |       | derived name                         |
+  | ----- | ------------------------------------ |
+  | AWS   | `clawops-state-<accountId>-<region>` |
+  | GCP   | `clawops-state-<projectId>`          |
+  | Azure | `clawops-state`                      |
+
+  A name you type instead is checked against the rules of the cloud that has to accept it.
+  `clawops init` with no credentials and no `--state` stops and names the credential it needed,
+  rather than registering a stack that cannot deploy. `--state` still takes any URL verbatim and
+  existing configs are untouched. See
+  [ADR 0012](https://github.com/dfridkin/clawops/blob/main/docs/decisions/0012-state-bucket-naming.md).
+
+- 952eb88: `clawops up` deploys to AWS, GCP and Azure, running the same plan → apply path as
+  `clawops apply`. It gains `--ssh-cidr`, `--gateway-cidr` and `--publish-gateway` with it.
+
+  Deploys pin the account they were planned against: `gcp:project` on GCP,
+  `azure-native:subscriptionId` on Azure.
+
+- 2185853: `clawops apply` waits for the gateway to answer before reporting success.
+- 5d28a6d: `clawops apply` waits for the instance to accept SSH before reporting success.
+
 ## 2.0.0
 
 ### Major Changes
