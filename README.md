@@ -12,6 +12,83 @@ and Cursor drive them through typed MCP tools with explicit safety controls.
 
 ---
 
+## What's new in 2.0.1
+
+A patch release, and a large one: in 2.0.0 no cloud deploy succeeded by any path. Every item
+below is a fix or an addition in 2.0.1. The reasoning behind each one is in its commit message,
+and the decisions that came out of them are in [`docs/decisions/`](docs/decisions/).
+
+### Deploying to a cloud
+
+- `clawops plan` → `clawops apply` provisions a cloud stack and deploys OpenClaw onto it.
+- `clawops up` deploys to AWS, GCP and Azure, running the same path as `plan` → `apply`.
+- clawops installs the Pulumi CLI it needs into `~/.clawops/.pulumi-cli`, or uses a compatible
+  one already on `$PATH` ([ADR 0010](docs/decisions/0010-pulumi-cli-bootstrap.md)).
+- clawops creates and stores the passphrase its state backend requires
+  ([ADR 0011](docs/decisions/0011-state-passphrase.md)).
+- `clawops plan` takes `--ssh-cidr`, `--gateway-cidr` and `--publish-gateway`, and `apply`
+  passes them to the cloud firewall. `auto` resolves this machine's address.
+- `clawops plan` stops, and names the cause, when it cannot open the state backend.
+- `--instance-type` takes a clawops alias (`micro`–`gpu`) or a machine type your cloud names
+  itself, and the plan records the concrete type.
+- Deploys pin the account they were planned against: `gcp:project` on GCP,
+  `azure-native:subscriptionId` on Azure.
+
+### Checking the account before you spend
+
+- `clawops doctor --provider <cloud>` checks one cloud's credentials and account setup, with or
+  without a stack. `--instance-type` points the size check at the size you are deploying.
+- **AWS** — the account the credentials resolve to, the state bucket, and whether the instance
+  type is offered in the region.
+- **GCP** — the project, the APIs a deploy needs, and the state bucket.
+- **Azure** — the subscription, the resource providers, the VM size, and the azblob credentials
+  Pulumi authenticates with.
+- `clawops setup` runs the same checks and offers to fix what it safely can — enabling an API,
+  creating a state bucket with versioning on and public access blocked — naming the change
+  before making it.
+- A check clawops could not perform reports as a warning naming the error, rather than as a
+  pass or a failure.
+- Azure accepts your `az login`; a service principal is no longer required.
+
+### Naming, config and setup
+
+- clawops names the state backend after the account it is deploying into, instead of asking you
+  for a name or writing a placeholder
+  ([ADR 0012](docs/decisions/0012-state-bucket-naming.md)).
+- A name you type instead is checked against the rules of the cloud that has to accept it.
+- `clawops init` keeps the stacks already in your config.
+- `clawops init` generates an SSH key that clawops can read. If you ran `init` before this
+  release, `clawops doctor` will tell you whether yours is usable.
+- `gcloud config set project` is honoured.
+- The setup wizard writes model configuration that OpenClaw accepts, and installs the plugin
+  your chosen provider needs.
+- Amazon Bedrock works: the right transport, and an inference profile resolved against your
+  deployment region and recorded in the plan. Needs `bedrock:ListInferenceProfiles`.
+
+### While a deploy is running
+
+- `apply` waits for SSH, then waits for the gateway to answer, before reporting success.
+- `apply` reports progress as it goes instead of going quiet for minutes.
+- A deploy that times out prints what the host was doing, from its bootstrap log.
+- A host still installing Docker is treated as still booting rather than as a failed deploy.
+
+### Day-two commands
+
+- `clawops logs` reads from the gateway on AWS.
+- `doctor --stack`, `ssh`, `logs`, `gateway`, `config` and `agents` work against a freshly
+  deployed stack.
+- `clawops doctor` validates cloud credentials.
+- clawops tells a refused Docker socket from a missing container, and says which it found.
+- `clawops destroy` forgets the instance's host key, so redeploying onto an address the cloud
+  has recycled no longer fails verification.
+
+### Documentation
+
+- The GCP guide names the credential source clawops actually reads, and describes 2.0
+  firewall behaviour.
+- The smoke-test plan covers 2.0, and `pnpm test:cloud aws|gcp|azure` runs it against a real
+  deployment and destroys it afterwards.
+
 ## What's new in 2.0
 
 clawops 2.x targets **OpenClaw >= 2026.9.2**. The 1.x line continues for OpenClaw
@@ -352,354 +429,8 @@ was invisible.
 whole internet, on the path most first-time users take. It offers your own IP as a `/32` now,
 and when that cannot be detected it offers no default and requires an answer.
 
-**`clawops plan` could not express any of it** (fixed in 2.0.1). The flags did not exist, so
-every plan generated outside the wizard fell through to an empty network block: a deployment
-that admits nothing, including clawops' own day-two commands. `--ssh-cidr`, `--gateway-cidr`
-and `--publish-gateway` fill it now, `auto` resolves this machine's address while the plan is
-written, and a plan that admits nothing says so.
-
-**And `apply` never passed any of it to Pulumi** (fixed in 2.0.1). The plan validated the
-CIDRs, refused contradictory combinations, printed them in the summary — and then `apply` set
-six pieces of stack config, none of them the network ones. The programs read them from there,
-so they resolved empty and every stack was created with **no ingress rules at all**: not a
-narrower rule than intended, none. clawops builds its own VPC, so nothing else opened SSH
-either, and a freshly deployed instance was unreachable by `ssh`, `logs`, `tunnel` and
-`harden`. The whole firewall section of the plan was decorative.
-
-### Cloud deployments work on a machine without Pulumi
-
-clawops has always said you do not install Pulumi. The Automation API it uses is not an
-embedded engine, though — it spawns the `pulumi` binary for every operation, and with no
-binary on `$PATH` that is where `apply` stopped:
-
-```
-Error: spawn pulumi ENOENT
-```
-
-before any provider code ran, naming a tool the docs said was not required. The claim is now
-true rather than merely stated: clawops installs the CLI matching its bundled SDK into
-`~/.clawops/.pulumi-cli` the first time it needs one, announcing the one-time download. A
-compatible `pulumi` already on `$PATH` is used instead, and `$PATH` is never edited either
-way. `clawops doctor` reports which one it found, from where, and at what version.
-
-See [ADR 0010](docs/decisions/0010-pulumi-cli-bootstrap.md), which supersedes ADR 0006.
-
-### Redeploying onto a recycled cloud address failed host-key verification
-
-Fixed in 2.0.1. A cloud hands addresses back out: destroy a stack, deploy another, and the new
-instance can land on the address the old one just released — with a different host key.
-Trust-on-first-use then refused to connect, correctly, over a machine that no longer existed:
-
-```
-ERROR  SSH to 136.116.28.199:22 failed for a reason waiting will not fix:
-       Host denied (verification failed)
-```
-
-clawops creates these hosts and destroys them, so the moment it destroys one, that host's
-pinned key is stale by construction. `clawops destroy` forgets it — every other entry, every
-comment and the rest of the file are untouched, since `ssh.knownHostsPath` may be your own
-`~/.ssh/known_hosts`. Loosening verification would have been the other way to make this go
-away, and is not one clawops takes.
-
-When a mismatch does happen, the error names the file and the exact command to clear one
-entry — and still says that an address changing hands unexpectedly is the case where you
-should not.
-
-### `apply` reported success before OpenClaw existed
-
-Fixed in 2.0.1. Waiting for SSH is not the same as waiting for the deployment. The startup
-script pulls a ~3GB image, so for the first few minutes after a successful `apply`:
-
-```
-Remote health
-✗  Container    not found
-✗  Gateway      no response from the gateway
-```
-
-and `logs`, `gateway`, `config`, `agents` and `doctor --stack` all fail at whatever you try
-first. `apply` now waits for the gateway to answer `/startupz` — the same probe `doctor` uses —
-before reporting success, and says what it is waiting for every half minute rather than going
-silent through a long download.
-
-A running container is not accepted as a working gateway: that distinction is the whole reason
-`/startupz` exists. The container's state is read alongside the probe, so a timeout can say
-whether an image was still downloading or a container started and exited — both look like "no
-response" from outside, and they need different answers.
-
-### `apply` reported success while the instance was still booting
-
-Fixed in 2.0.1. Pulumi returns as soon as the cloud API accepts the resource; `sshd` starts a
-good half-minute later. `clawops apply` printed its success line, the gateway URL and the
-public IP at that moment, and every command run after it failed:
-
-```
-✗  Connection   SSH connection failed: connect ECONNREFUSED 34.70.45.162:22
-```
-
-So did apply's own config-overlay step, which connects immediately after the stack is up —
-meaning any plan carrying `openclaw.config` raced the boot. Nothing in clawops waited for
-anything.
-
-`apply` now waits for the host to accept SSH before it reports success, saying so once if the
-wait is more than momentary. `ECONNREFUSED` and a handshake timeout are expected in the first
-minute of a VM's life and are retried; a host-key mismatch or an unreadable key is raised
-immediately, because waiting will not fix it.
-
-### `clawops up` could not deploy to a cloud at all
-
-Fixed in 2.0.1. There were three implementations of deploying — `clawops up`, `clawops apply`
-and the `clawops_up` MCP tool — and the two that were not the plan path each wrote three pieces
-of stack config and nothing else:
-
-```ts
-await stack.setConfig('region', …)
-await stack.setConfig('instanceType', …)
-await stack.setConfig('openclawVersion', …)
-```
-
-No `sshPublicKey`, so every cloud program refused to run. No firewall rules, no GCP project pin,
-no readiness waits, and no way to say who may connect. The wizard builds a plan and applies it,
-so nothing exercised the path the README calls the primary command.
-
-`up` and the MCP tool now build a plan and apply it, like everything else. They gain
-`--ssh-cidr`, `--gateway-cidr` and `--publish-gateway`; `--gateway-port` works for cloud stacks
-rather than local only; and `--instance-type` accepts a provider-native machine type, which on
-Azure is often the only kind on offer. `--no-wait` still returns as soon as the cloud API
-accepts the resources.
-
-**The account a deploy lands in is pinned.** GCP pins `gcp:project` and Azure pins
-`azure-native:subscriptionId`, both from the same resolver the preflight uses — otherwise an
-`az account set` between the check and the apply moves the deploy somewhere else silently.
-
-### clawops names the state backend, instead of asking you to
-
-New in 2.0.1. `clawops init` used to write a placeholder into the stack —
-`s3://CHANGEME/clawops` — and explain it in a line of output. The wizard asked for a bucket name
-with no default and advised creating one by hand in your cloud console, forty lines before the
-preflight above offered to create it for you with versioning on and public access blocked.
-
-The placeholder was worse than a blank. `CHANGEME` is not a valid S3 bucket name, so S3 answers
-`403` rather than `404`, and `doctor` reported it as a bucket **belonging to somebody else**.
-
-Both now derive a name, and the name carries exactly the uniqueness its namespace demands:
-
-| | derived name | longest possible |
-|---|---|---|
-| AWS | `clawops-state-<accountId>-<region>` | 41 / 63 |
-| GCP | `clawops-state-<projectId>` | 44 / 63 |
-| Azure | `clawops-state` | 13 / 63 |
-
-S3 and Cloud Storage share one namespace across every customer, so those names need something
-nobody else can hold. An `azblob://` URL names a *container* inside the storage account you
-supply, so it is already scoped — a subscription GUID there would be 37 characters buying
-nothing. (The 3–24 character limit people associate with Azure storage is on storage *accounts*;
-clawops never names one, because it will not hold the key that goes with it.)
-
-AWS carries the region because an S3 bucket is a regional resource and Pulumi reads state on
-every operation. A bucket on another continent slows every `plan` and `apply` for no visible
-reason, and an extra bucket costs nothing.
-
-A name you type yourself is checked against the rules of the cloud that has to accept it —
-length, case, `xn--` and `-s3alias` on S3, `google` on Cloud Storage, hyphen placement on Azure
-— instead of being learned from a creation failure. And a name clawops cannot derive is not
-invented: `init` without credentials and without `--state` now stops and names what it needed.
-`--state` still takes any URL verbatim, and existing configs are untouched. [ADR 0012](docs/decisions/0012-state-bucket-naming.md).
-
-### Your cloud account is checked before anything is spent
-
-New in 2.0.1. A cloud account is not ready just because a credential resolves. A GCP project
-with the Compute API disabled, an Azure subscription with unregistered resource providers, a
-region that does not offer the machine size you asked for, a state bucket that was never
-created — each of these passed every check clawops made, and then failed partway through a
-deploy, after resources existed and the clock was running.
-
-`clawops doctor --provider <cloud>` now asks the account, with or without a stack:
-
-| | AWS | GCP | Azure |
-|---|---|---|---|
-| Credentials name an account | account id | project | subscription |
-| Prerequisites enabled | — | required APIs | resource providers |
-| State backend exists | S3 bucket | GCS bucket | storage account + key |
-| Machine size is available here | offered in region | — | offered to subscription |
-
-`--instance-type <size>` asks about the size you are about to deploy rather than the provider
-default. `clawops setup` runs the same checks and **offers to fix what it safely can**, naming
-the exact mutation before it makes it:
-
-```
-? Fix this now? Enables compute.googleapis.com on project my-project (Y/n)
-```
-
-Two deliberate limits. **A bucket is created, never adopted.** clawops offers to create a state
-bucket only when it is genuinely absent — on AWS a `404`. A `403` means the name belongs to
-another account (S3 names are global) or your credentials cannot read it, and creating it would
-fail either way; a prompt that cannot succeed is worse than no prompt. When clawops does create
-one it enables versioning, because Pulumi state with no history is a stack that can no longer be
-updated or destroyed.
-
-**And a check clawops could not perform says so**, rather than passing, failing the report, or
-quietly disappearing:
-
-```
-⚠  t3.small is offered in us-east-1
-     clawops could not ask EC2 whether t3.small is offered in us-east-1: UnauthorizedOperation.
-     This says nothing about the instance type — the usual cause is credentials without
-     ec2:DescribeInstanceTypeOfferings, which nothing else needs. A deploy can still succeed.
-```
-
-None of this is infrastructure, which is why none of it lives in the Pulumi program: the state
-backend has to exist before Pulumi can run at all, so a deploy cannot create it on the way past.
-
-### A plan was written even when its state backend did not exist
-
-Fixed in 2.0.1. Opening a stack and previewing it failed into the same `catch`, which wrote a
-warning and carried on. So a state bucket that does not exist produced this — and exit 0:
-
-```
-error: could not list bucket: NoSuchBucket: The specified bucket does not exist
-✔ Plan generated
-✓ Plan written to /tmp/plan.json
-(diff unavailable — preview could not run against this stack)
-```
-
-`doctor` said the provider was fine, `plan` said the plan was fine, and `apply` then failed with
-a raw Pulumi error about a bucket clawops had never mentioned.
-
-These are different failures and get different answers now. A backend clawops cannot open ends
-the command — a plan is only as good as the state it was computed against — and names the cause
-rather than Pulumi's exit code. A preview that fails on a stack which opened normally still
-writes the plan, without a diff, as before.
-
-### `clawops logs` never read from the gateway on AWS
-
-Fixed in 2.0.1. The probe that decides whether the gateway can serve its own logs was:
-
-```bash
-docker exec openclaw openclaw logs --limit 1 >/dev/null 2>&1 && echo ok || echo no
-```
-
-It discards stderr and exits 0 whatever happened, so clawops never escalated to `sudo` — and on
-AWS the SSH user is `ubuntu`, who is not in the docker group, so `docker exec` was always
-refused. The probe could only ever answer "no", and `logs` silently read container output
-instead, announcing it in one line that reads like a choice rather than a failure.
-
-GCP and Azure connect as `clawops`, who is in the group, which is why this was invisible until
-the first AWS deploy. The probe reports through its exit code now.
-
-### A healthy deployment could be reported as missing
-
-Fixed in 2.0.1. Every Docker probe was written like this:
-
-```bash
-docker inspect openclaw --format '{{.State.Status}}' 2>/dev/null || echo 'not found'
-```
-
-That discards stderr and exits 0 whatever happened. clawops escalates to `sudo` when a command
-looks like it was refused access to the Docker socket — and it checks the exit code first, so a
-command that always succeeds never escalates. A permission error became a confident
-`not found`, and the session remembered that `sudo` was unnecessary.
-
-It bit on a real deploy: `clawops apply` waited ten minutes for a container that was `Up 9
-minutes (healthy)` the whole time. Intermittent, because the SSH user's membership of the
-`docker` group is fixed when the session opens and clawops connects as soon as `sshd` answers —
-sometimes before the host has run `usermod`.
-
-A refusal and an absence are now different answers. `doctor` reports `could not ask docker —
-permission denied` instead of claiming the container is gone, `gateway status` will not print
-"not running" when it does not know, and the readiness wait stops on a refusal rather than
-polling through it.
-
-### Day-two commands failed with an error about provider loading
-
-Fixed in 2.0.1. `buildContext().adapter` was a proxy that loaded the provider module on its
-first *asynchronous* call, so every synchronous method on it threw until something else
-happened to trigger that:
-
-```
-✗  Connection   Provider not yet loaded. Call getStack() first.
-```
-
-Eighteen call sites depended on that ordering and nothing enforced it. `clawops up` worked
-because it awaits `validateConfig()` a few lines earlier; `clawops plan` did not, and against a
-freshly deployed instance `doctor --stack`, `ssh`, `logs` and `gateway restart` all failed
-with an error about provider loading rather than about the instance.
-
-The adapters are registered when they are imported now, and the context hands back the real
-one. They are small, and the Pulumi packages they eventually need load inside the program
-function, so nothing heavy moves to startup.
-
-### `--instance-type` named a size no cloud has
-
-Fixed in 2.0.1. `clawops plan` wrote the clawops size name — `micro`, `small`, `medium`,
-`large`, `gpu` — straight into the plan, and apply handed it to the cloud:
-
-```
-Error 400: Invalid value for field 'resource.machineType':
-'projects/…/machineTypes/small'. Machine type with name 'small' does not exist
-```
-
-after the network, subnet, address and firewall rule had already been created. The same on AWS,
-where the type is `t3.small`, and on Azure, where it is `Standard_B2s`.
-
-Every adapter has carried `normalizeInstanceType` from the start and `clawops up` calls it;
-`generatePlan` did not, though `spec/deploy-plan.schema.json` describes the field as a
-"provider-native instance type. Adapter normalizes from clawops alias before plan emission".
-It does now, so the plan records what the cloud will actually be asked for. A value that is not
-one of the five sizes is still passed through — an operator naming a real machine type knows
-their cloud's catalogue better than our table does — with a note saying so.
-
-### Registering a second stack deleted the first
-
-Fixed in 2.0.1. `clawops init` built a fresh config object with a single `stacks` entry and
-wrote it over `~/.clawops/config.json`, so:
-
-```bash
-clawops init --provider gcp --stack staging --force
-```
-
-dropped every other stack — and with it their `stateUrl`, the only pointer to where that
-stack's Pulumi state lives. The infrastructure stayed up, and clawops could no longer list,
-reach or destroy it. There was no other way to register a second stack.
-
-`init` is additive now. A stack that is not in the config is simply added, no `--force`
-required; `--force` is needed to overwrite a stack that *is* there, because changing a
-registered `stateUrl` orphans state just as thoroughly as deleting the entry. Everything
-outside `stacks` survives, and the default moves to the stack you just initialised.
-
-Related: `clawops plan` for an unregistered stack used to emit a plan with an empty `diff` and
-a warning far up the output, then fail at `apply` — after you had reviewed and approved it. It
-now fails at plan time and says to run `clawops init`.
-
-### `plan` → `apply` had never deployed anything
-
-Fixed in 2.0.1. Three things stood between a plan and an instance, and each hid the next:
-
-**Stack config was written twice, differently.** `plan` set three keys before its preview;
-`apply` set six. Neither set `sshPublicKey`, which every cloud program requires and refuses to
-run without — so the preview failed on every cloud plan ever generated, reported as one line:
-
-```
-[clawops] Warning: preview failed, diff section omitted
-```
-
-and the plan's `diff` section was quietly empty. Both sides now write stack config through the
-same function, so a preview shows what an apply would do.
-
-**The plan did not record the key.** It does now, in `spec.ssh.publicKey`, resolved from
-`ssh.keyPath` — the `.pub` beside the private key, or derived from the private key when there
-is none.
-
-**A self-managed state backend needs a passphrase.** `gs://`, `s3://` and Azure Blob have no
-key service behind them, so a new stack cannot create a secrets manager without one and
-`apply` stopped there. clawops generates one at `~/.clawops/secrets/pulumi-passphrase` and
-leaves an operator who sets `PULUMI_CONFIG_PASSPHRASE` alone. **Back that file up** — losing it
-makes that stack's secrets unreadable ([ADR 0011](docs/decisions/0011-state-passphrase.md)).
-
-Along the way: `doctor` now checks that your SSH key is one `ssh2` can actually use — a
-readable PKCS#8 key passed the old check and then failed at every connect — and reports the
-Pulumi CLI and the state passphrase. Egress-IP detection asks for `text/plain`, because
-`ifconfig.me` serves an HTML page to anything that does not look like curl, and the "detected
-IP" was a 4KB document on its way into a firewall rule.
+**`clawops plan` could not express any of it, and `apply` never passed any of it to Pulumi.**
+Both are fixed in 2.0.1 — see the list at the top of this section.
 
 ### The gateway port comes from the plan
 
