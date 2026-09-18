@@ -1,0 +1,86 @@
+---
+title: Azure
+description: A VM in a VNet clawops creates, with Blob Storage for state.
+---
+
+```bash
+az login
+clawops init --provider azure --region eastus
+clawops doctor --provider azure
+```
+
+## Credentials
+
+Your `az login` works — a service principal is not required. For CI, set `AZURE_CLIENT_ID`,
+`AZURE_CLIENT_SECRET` and `AZURE_TENANT_ID`, or use a federated credential.
+
+clawops pins `azure-native:subscriptionId` into the stack configuration at plan time, so a deploy
+lands in the subscription that was actually checked.
+
+## Account setup it checks
+
+| Check | Why |
+|---|---|
+| Subscription is set | names the subscription a deploy lands in |
+| `Microsoft.Compute` registered | nothing can be provisioned until it is |
+| `Microsoft.Network` registered | same |
+| `Microsoft.Storage` registered | needed for the state backend |
+| VM size available in the region | sizes are offered per subscription |
+| azblob state backend configured | Pulumi cannot open its state without it |
+
+`clawops setup` offers to register the resource providers.
+
+<Callout type="warn" title="The state backend does not use your az login">
+  Pulumi's azblob backend authenticates with `AZURE_STORAGE_ACCOUNT` plus `AZURE_STORAGE_KEY` or
+  `AZURE_STORAGE_SAS_TOKEN`. Every other check here can pass and the deploy still fail to open its
+  own state. clawops will not create the storage account or hold that key, so this is the one
+  account check it reports without offering a fix.
+</Callout>
+
+## Sizes are per subscription
+
+A size available to one account may not be offered to yours in that region. When it is not,
+`doctor` lists the ones that are:
+
+```
+✗  Standard_B2s is available in eastus
+   Standard_B2s is not offered to this subscription in eastus, so a deploy fails after the
+   network, NSG, public IP and NIC have been created. Available instead: Standard_D2ads_v7,
+   Standard_D2alds_v7, Standard_D2als_v7, Standard_D2as_v7 — pass one with
+   `clawops plan --instance-type <size>`.
+```
+
+## Permissions
+
+| Role | Scope |
+|---|---|
+| **Contributor** | subscription or resource group |
+| **Key Vault Administrator** | only with `keyVaultEnabled` — can be narrowed to Key Vault Secrets Officer |
+
+## State
+
+`azblob://clawops-state` — a **container**, addressed directly, with **no** `/clawops` prefix.
+AWS and GCP take `<bucket>/clawops`; Azure does not.
+
+The container is already scoped by the storage account you supply, so clawops adds no
+discriminator to its name. (The 3–24 character limit people associate with Azure storage is on
+storage *accounts*; a container has 63.)
+
+## Firewall
+
+Deny-all by default; `auto` resolves your public IP into a `/32` for SSH at plan time. **No NSG
+rule is created for the gateway under loopback publishing**, which is the default.
+
+## Sizes
+
+| Alias | Type | vCPU | Memory | ~cost |
+|---|---|---|---|---|
+| `micro` | Standard_B1s | 1 | 1 GB | ~$8/mo |
+| `small` | Standard_B2s | 2 | 4 GB | ~$30/mo |
+| `medium` | Standard_B4ms | 4 | 16 GB | ~$60/mo |
+| `large` | Standard_B8ms | 8 | 32 GB | |
+| `gpu` | Standard_NC6s_v3 | 6 | 112 GB + V100 | ~$850/mo |
+
+Indicative, not a quote — and check availability against your own subscription first.
+
+[Full Azure guide →](https://github.com/dfridkin/clawops/blob/main/docs/providers/azure.md)

@@ -115,7 +115,10 @@ The initial SSH user is `ubuntu` (Ubuntu default); the startup script creates a 
 ## State Backend
 
 - **URL pattern**: `s3://<bucket>/clawops`
-- **Bucket must exist** before first `clawops up`; clawops does not create it
+- **Default name**: `clawops-state-<accountId>-<region>`, derived by `clawops init`
+- **Must exist before Pulumi runs** — a deploy cannot create it on the way past. `clawops doctor
+  --provider aws` checks, and offers to create it with versioning on and public access blocked
+  when it is genuinely absent (a `404`, not a `403` — see the preflight section above)
 - **Encryption**: server-side encryption is controlled by your bucket policy
 
 ## Firewall Model
@@ -125,7 +128,7 @@ The security group ingress rules are controlled by the `accessMode` stack config
 | Mode | Behaviour | Use case |
 |---|---|---|
 | `restricted` *(default)* | Deny all by default; open only the CIDRs in `allowedCidrs` | Production |
-| `auto` | Detect caller's public IP at deploy time; open SSH + gateway to `<ip>/32` | MCP-driven / CI deployments |
+| `auto` | Detect caller's public IP at deploy time and open SSH to `<ip>/32` | MCP-driven / CI deployments |
 | `open` | `0.0.0.0/0` on both ports; emits a stderr warning | Sandbox / testing only |
 
 Per-port overrides (take precedence over `accessMode`):
@@ -134,6 +137,10 @@ Per-port overrides (take precedence over `accessMode`):
 pulumi config set sshCidrs     "10.0.0.0/8,203.0.113.5/32"
 pulumi config set gatewayCidrs "203.0.113.5/32"
 ```
+
+**No gateway rule is created under loopback publishing**, which is the default. The gateway binds
+`127.0.0.1`, so a security-group rule for its port would grant no access and misread as exposure.
+Gateway rules exist only with `--publish-gateway all`, and then only for the CIDRs you name.
 
 **Default security-group rules are deny-all (N10).** Never use `open` in production.
 

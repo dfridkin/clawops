@@ -1,0 +1,62 @@
+---
+title: Local
+description: Any Linux box you can reach over SSH. No cloud account, no state backend, no cost.
+---
+
+```bash
+clawops init --provider local --host 10.0.0.42
+clawops up --openclaw-version 2026.9.2
+clawops tunnel          # Control UI on http://127.0.0.1:18789
+```
+
+## What the host needs
+
+- Linux — Ubuntu 22.04+ or Debian 12+ recommended, RHEL-family works
+- An SSH server you can reach, with your public key in `~/.ssh/authorized_keys`
+- Outbound internet, to pull the OpenClaw image
+- `curl` or `wget`, and `systemd`
+
+Docker is installed for you if it is not already there.
+
+## How it differs
+
+The local adapter uses **no Pulumi and provisions no cloud resources**. It connects over SSH with
+`ssh2`, runs an idempotent bootstrap that installs Docker, creates the `clawops` system user,
+writes the default config and starts the container under systemd, and keeps stack state in
+`~/.clawops/state/` as a local file.
+
+Re-running `clawops up` is safe — the bootstrap is idempotent.
+
+<Callout type="warn" title="plan and apply are cloud-only">
+  There is no state backend to plan against, so use `clawops up` directly. `clawops plan` refuses
+  the local provider rather than producing an artifact it cannot apply.
+</Callout>
+
+## Credentials
+
+Only SSH. No cloud account, nothing to authenticate against, and nothing for `doctor --provider`
+to check — the local provider has no account-level preflight because it has no account.
+
+clawops connects as **`root`** by default on local hosts; `--ssh-user` overrides it at init.
+
+## Firewall
+
+Yours to manage on the host. `clawops harden` configures `ufw` — along with SSH hardening,
+fail2ban, unattended upgrades and five other modules — and opens only the port the container is
+really publishing.
+
+## State
+
+`file://~/.clawops/state/<stack>.json`, on your machine.
+
+<Callout type="warn">
+  This is local-only and is not replicated or backed up. Re-initialising over it loses the stack.
+  Back up `~/.clawops/state/` alongside your `clawops backup` archives.
+</Callout>
+
+## Sizes and regions
+
+Neither applies — you already have the hardware. The flags exist on `up` for the cloud
+providers; the local adapter has no use for them.
+
+[Full local guide →](https://github.com/dfridkin/clawops/blob/main/docs/providers/local.md)

@@ -20,7 +20,7 @@ succeed, and what it costs.
 | Recommended size | `small` — t3.small | `small` — e2-standard-2 | `small` — Standard_B2s | your hardware |
 | Roughly | ~$17/mo | ~$49/mo | ~$30/mo | free |
 | Cheapest | `micro` ~$8/mo | `micro` ~$6/mo (free tier) | `micro` ~$8/mo | — |
-| GPU | `g4dn.xlarge` ~$395/mo | `n1-standard-4` | `NC6s_v3` ~$850/mo | — |
+| GPU | `g4dn.xlarge` ~$395/mo | **not supported** | `NC6s_v3` ~$850/mo | — |
 | `plan` → `apply` | ✓ | ✓ | ✓ | — use `clawops up` |
 
 Prices are always-on, on-demand, in the default region, and exclude the static IP (~$3.60–7/mo
@@ -61,7 +61,7 @@ account and offers to create it with versioning on and public access blocked.
 **Sizes**: `micro` t3.micro · `small` t3.small · `medium` t3.medium · `large` t3.large ·
 `gpu` g4dn.xlarge. Or pass a type AWS names itself.
 
-[Full AWS guide →](https://github.com/dfridkin/clawops/blob/main/docs/providers/aws.md)
+[AWS in detail →](/docs/providers/aws)
 
 ---
 
@@ -87,9 +87,9 @@ the change first.
 **State** lives at `gs://clawops-state-<projectId>/clawops`.
 
 **Sizes**: `micro` e2-micro · `small` e2-standard-2 · `medium` e2-standard-4 · `large`
-e2-standard-8 · `gpu` n1-standard-4.
+e2-standard-8. `gpu` is refused on GCP rather than quietly deploying a CPU machine.
 
-[Full GCP guide →](https://github.com/dfridkin/clawops/blob/main/docs/providers/gcp.md)
+[GCP in detail →](/docs/providers/gcp)
 
 ---
 
@@ -126,7 +126,7 @@ Azure needs two things the other clouds do not, and both are checked:
 **Sizes**: `micro` Standard_B1s · `small` Standard_B2s · `medium` Standard_B4ms · `large`
 Standard_B8ms · `gpu` Standard_NC6s_v3.
 
-[Full Azure guide →](https://github.com/dfridkin/clawops/blob/main/docs/providers/azure.md)
+[Azure in detail →](/docs/providers/azure)
 
 ---
 
@@ -147,7 +147,7 @@ and starts OpenClaw under systemd.
 so use `clawops up` directly. Firewall rules are yours to manage on the host; `clawops harden`
 configures `ufw` for you.
 
-[Full local guide →](https://github.com/dfridkin/clawops/blob/main/docs/providers/local.md)
+[Local in detail →](/docs/providers/local)
 
 ---
 
