@@ -232,8 +232,8 @@ clawops up --provider local   # no plan file needed
 clawops plan --provider aws --stack default --ssh-cidr auto --out /tmp/plan.json
 clawops plan --provider gcp --instance-type medium --ssh-cidr 203.0.113.4/32 --out /tmp/plan.json
 
-# Publish the gateway on a routable interface and admit one network to it. Plaintext HTTP —
-# put TLS in front of it. Without --publish-gateway all, gateway CIDRs are refused: they
+# Publish the gateway on a routable interface and admit one network to it. Plaintext HTTP,
+# so put TLS in front of it. Without --publish-gateway all, gateway CIDRs are refused: they
 # would admit traffic to a port nothing routable is listening on.
 clawops plan --provider aws --ssh-cidr auto --publish-gateway all \
   --gateway-cidr 203.0.113.0/24 --out /tmp/plan.json
