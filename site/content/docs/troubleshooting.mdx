@@ -1,0 +1,88 @@
+---
+title: Troubleshooting
+description: The failures people actually hit, and what each one means.
+---
+
+Start here, whatever the symptom:
+
+```bash
+clawops doctor                    # your machine
+clawops doctor --provider aws     # your cloud account, no stack needed
+clawops doctor --stack prod       # the deployment
+```
+
+`doctor` exits non-zero when any check fails, and a check it could not perform reports as a
+warning naming the error rather than passing or failing — so a `⚠` is clawops declining to
+guess, not a problem it found.
+
+## Before anything is deployed
+
+**`Could not name a state backend for aws: clawops needs an AWS account id`**
+`clawops init` derives the state bucket name from the account, and no credentials resolved.
+Authenticate, or name the backend yourself with `--state s3://your-bucket/clawops`.
+
+**`State bucket … exists ✗`** with an offer to create it
+The bucket is genuinely absent. Accept the fix, or create it yourself with versioning on. Pulumi
+reads and writes state on every operation, so it has to exist before a deploy starts.
+
+**`… exists but these credentials cannot read it, or the name belongs to another account`**
+S3 and Cloud Storage names are global. Either someone else holds the name, or your credentials
+cannot see it. clawops offers no fix here because creating it would fail either way.
+
+**`Compute Engine API has not been used in project … before or it is disabled`**
+GCP needs its APIs enabled before a deploy, not during one. `clawops setup` offers to enable
+them; `doctor --provider gcp` lists which are missing.
+
+**`<size> is not offered to this subscription in <region>`**
+Azure offers SKU families per subscription. `doctor` lists the sizes you *can* have — pass one
+with `--instance-type`.
+
+**`azblob state backend is configured ✗`**
+Pulumi's azblob backend authenticates with `AZURE_STORAGE_ACCOUNT` and a key or SAS token, not
+your `az login`. Every other check can pass and the deploy still fail to open its state.
+
+## During a deploy
+
+**It stops with no output for minutes**
+It should not — `apply` reports progress as it goes. If it genuinely hangs, the host is usually
+still installing Docker; a deploy that times out prints the host's bootstrap log so you can see
+where it stopped.
+
+**`UnauthorizedOperation` / insufficient permissions**
+Compare your identity against the permission list for that cloud on
+[Providers](/docs/providers).
+
+**SSH times out after the instance appears**
+The security group is too restrictive — usually a plan written with no `--ssh-cidr`, which admits
+nothing at all. Re-plan with `--ssh-cidr auto` to allow your own address.
+
+## After it is running
+
+**Day-two commands fail on a fresh deployment**
+Check `clawops doctor --stack <name>` first. It probes the gateway rather than trusting the
+container to be running.
+
+**`clawops logs` returns nothing useful**
+clawops reads from the gateway where it can and `docker logs` otherwise, and says which it used.
+If the gateway is still starting, that is the difference.
+
+**Host key verification failed after redeploying**
+Clouds recycle addresses. `clawops destroy` forgets the old key, but if the instance was removed
+another way, delete the stale line from `~/.clawops/known_hosts`.
+
+**The gateway starts and then exits**
+Usually a config the runtime rejects, or a plugin that could not be installed —
+`clawhub.ai` and `registry.npmjs.org` are contacted during `apply`, and a blocked egress shows up
+exactly this way. `clawops config validate` and `clawops logs --tail 50`.
+
+**State lost after re-initialising a local stack**
+`file://` state is local-only. Back up `~/.clawops/state/` before re-initialising.
+
+## Getting help
+
+```bash
+clawops bug      # opens a pre-filled issue with system context from doctor
+```
+
+Per-provider troubleshooting tables live in the provider guides in
+[`docs/providers/`](https://github.com/dfridkin/clawops/tree/main/docs/providers).

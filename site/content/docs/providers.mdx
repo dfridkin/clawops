@@ -1,0 +1,158 @@
+---
+title: Providers
+description: What each cloud needs before it will deploy, and what clawops creates there.
+---
+
+clawops deploys to AWS, GCP, Azure, or any Linux box you can reach over SSH. The commands are
+the same everywhere; what differs is the account setup each cloud demands before a deploy can
+succeed, and what it costs.
+
+<Callout title="Check before you spend">
+  `clawops doctor --provider <cloud>` asks your account whether it is ready — credentials,
+  prerequisites, state bucket, and whether the machine size you want exists in your region. It
+  needs no stack, so you can run it before you have deployed anything.
+</Callout>
+
+## Choosing
+
+| | AWS | GCP | Azure | Local |
+|---|---|---|---|---|
+| Recommended size | `small` — t3.small | `small` — e2-standard-2 | `small` — Standard_B2s | your hardware |
+| Roughly | ~$17/mo | ~$49/mo | ~$30/mo | free |
+| Cheapest | `micro` ~$8/mo | `micro` ~$6/mo (free tier) | `micro` ~$8/mo | — |
+| GPU | `g4dn.xlarge` ~$395/mo | `n1-standard-4` | `NC6s_v3` ~$850/mo | — |
+| `plan` → `apply` | ✓ | ✓ | ✓ | — use `clawops up` |
+
+Prices are always-on, on-demand, in the default region, and exclude the static IP (~$3.60–7/mo
+when the instance is stopped) and state storage (under $1/mo). They are indicative, not a quote —
+clawops does not estimate cost before creating a stack.
+
+Every provider gets the same eight host-hardening modules. AWS adds four cloud-specific checks:
+security-group audit, SSM readiness, VPC flow logs and GuardDuty.
+
+---
+
+## AWS
+
+```bash
+export AWS_PROFILE=my-profile
+clawops init --provider aws --region us-east-1
+clawops doctor --provider aws
+```
+
+**Credentials** come from your existing profile chain — `AWS_PROFILE`, SSO, instance roles.
+clawops stores none of them.
+
+**Permissions** for `up` and `destroy`: full lifecycle on EC2 (`Vpc`, `Subnet`, `SecurityGroup`,
+`KeyPair`, `Instance`, `InternetGateway`, `RouteTable`, `Address`), the IAM actions that create
+and remove an instance profile for SSM, and `s3:GetObject`/`PutObject`/`DeleteObject`/`ListBucket`
+on the state bucket.
+
+Two extras worth knowing, because nothing else needs them:
+
+- `ec2:DescribeInstanceTypeOfferings` — lets `doctor` confirm your size exists in the region.
+  Without it the check reports as a warning rather than passing or failing.
+- `bedrock:ListInferenceProfiles` — only if you choose Bedrock. Bedrock refuses bare
+  foundation-model ids, so clawops resolves one to a regional inference profile at plan time.
+
+**State** lives at `s3://clawops-state-<accountId>-<region>/clawops`. clawops names it after your
+account and offers to create it with versioning on and public access blocked.
+
+**Sizes**: `micro` t3.micro · `small` t3.small · `medium` t3.medium · `large` t3.large ·
+`gpu` g4dn.xlarge. Or pass a type AWS names itself.
+
+[Full AWS guide →](https://github.com/dfridkin/clawops/blob/main/docs/providers/aws.md)
+
+---
+
+## GCP
+
+```bash
+gcloud auth application-default login
+gcloud config set project my-project
+clawops init --provider gcp --region us-central1
+clawops doctor --provider gcp
+```
+
+**Credentials** come from Application Default Credentials, or `GOOGLE_APPLICATION_CREDENTIALS`
+pointing at a service-account key. `gcloud config set project` is honoured.
+
+**Roles**: `roles/compute.instanceAdmin.v1` and `roles/compute.networkAdmin` for the VM and its
+network, plus `roles/storage.objectAdmin` on the state bucket.
+
+**APIs** have to be enabled before a deploy, not during one — `compute.googleapis.com` and
+`storage.googleapis.com`. `doctor` checks both and `clawops setup` offers to enable them, naming
+the change first.
+
+**State** lives at `gs://clawops-state-<projectId>/clawops`.
+
+**Sizes**: `micro` e2-micro · `small` e2-standard-2 · `medium` e2-standard-4 · `large`
+e2-standard-8 · `gpu` n1-standard-4.
+
+[Full GCP guide →](https://github.com/dfridkin/clawops/blob/main/docs/providers/gcp.md)
+
+---
+
+## Azure
+
+```bash
+az login
+clawops init --provider azure --region eastus
+clawops doctor --provider azure
+```
+
+**Credentials**: your `az login` works. A service principal
+(`AZURE_CLIENT_ID`/`AZURE_CLIENT_SECRET`/`AZURE_TENANT_ID`) also works and is what CI should use.
+
+**Role**: Contributor on the subscription or resource group. Key Vault Administrator as well, if
+you enable Key Vault.
+
+Azure needs two things the other clouds do not, and both are checked:
+
+- **Resource providers must be registered** on the subscription — `Microsoft.Compute`,
+  `Microsoft.Network`, `Microsoft.Storage`. `clawops setup` offers to register them.
+- **VM sizes are offered per subscription.** A size available to one account may not be offered
+  to yours in that region. When it is not, `doctor` lists the sizes that are.
+
+<Callout type="warn" title="The state backend does not use your az login">
+  Pulumi's azblob backend authenticates with `AZURE_STORAGE_ACCOUNT` plus `AZURE_STORAGE_KEY` or
+  `AZURE_STORAGE_SAS_TOKEN` — not your CLI login. Every other check can pass and the deploy still
+  fail to open its own state. clawops will not create or hold that key, so this is the one
+  account check it reports without offering a fix.
+</Callout>
+
+**State** lives at `azblob://clawops-state` — a container inside the storage account you supply.
+
+**Sizes**: `micro` Standard_B1s · `small` Standard_B2s · `medium` Standard_B4ms · `large`
+Standard_B8ms · `gpu` Standard_NC6s_v3.
+
+[Full Azure guide →](https://github.com/dfridkin/clawops/blob/main/docs/providers/azure.md)
+
+---
+
+## Local
+
+Any Ubuntu, Debian or RHEL-family host you can SSH into. No cloud account, no state backend, no
+cost.
+
+```bash
+clawops init --provider local --host 10.0.0.42
+clawops up --openclaw-version 2026.9.2
+```
+
+clawops installs Docker, creates a service user, writes a gateway token into a `0600` env file
+and starts OpenClaw under systemd.
+
+`plan` and `apply` are cloud-only — the local provider bootstraps over SSH with no state backend,
+so use `clawops up` directly. Firewall rules are yours to manage on the host; `clawops harden`
+configures `ufw` for you.
+
+[Full local guide →](https://github.com/dfridkin/clawops/blob/main/docs/providers/local.md)
+
+---
+
+## Capability matrix
+
+The per-capability breakdown — what is supported, partial, planned or not applicable on each
+provider — lives in
+[`docs/providers/matrix.md`](https://github.com/dfridkin/clawops/blob/main/docs/providers/matrix.md).

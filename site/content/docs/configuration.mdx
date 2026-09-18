@@ -1,0 +1,69 @@
+---
+title: Configuration
+description: The two files that matter — clawops' own config, and OpenClaw's.
+---
+
+There are two separate things called config, and keeping them apart saves confusion.
+
+| | Lives | Holds | Changed with |
+|---|---|---|---|
+| **clawops config** | `~/.clawops/config.json` on your machine | stacks, regions, state URLs, SSH paths | `clawops init`, edit directly |
+| **OpenClaw config** | on the deployed host | gateway, models, channels, agents | `clawops config set`, plan overlay |
+
+## clawops config
+
+Written by `clawops init`, and it holds **no secrets** — only connection metadata: which provider
+a stack uses, its region, where its Pulumi state lives, and the paths to your SSH key and
+`known_hosts`.
+
+```jsonc
+{
+  "version": 1,
+  "defaults": { "stack": "prod", "provider": "aws" },
+  "stacks": {
+    "prod": {
+      "provider": "aws",
+      "region": "us-east-1",
+      "stateUrl": "s3://clawops-state-614126170912-us-east-1/clawops",
+      "credentialsRef": { "source": "env", "envVars": ["AWS_PROFILE"] }
+    }
+  },
+  "ssh": { "keyPath": "~/.clawops/id_ed25519", "knownHostsPath": "~/.clawops/known_hosts" }
+}
+```
+
+`credentialsRef` is a **reference**, not a credential — it records which environment variable or
+profile to read at run time.
+
+<Callout type="warn" title="stateUrl is the only pointer to your state">
+  Changing a registered stack's `stateUrl` orphans everything Pulumi knows about that deployment.
+  `clawops init` refuses to overwrite a registered stack without `--force` for this reason.
+</Callout>
+
+## OpenClaw config
+
+Read and written through clawops, so it is validated before it lands:
+
+```bash
+clawops config get models
+clawops config set gateway.port 18789 --dry-run   # show the diff, change nothing
+clawops config set gateway.port 18789
+```
+
+Validation runs against OpenClaw's own schema. A key the runtime would reject is refused here
+rather than restarting the gateway into a broken state.
+
+A plan can also carry a config overlay, which is applied at deploy time — that is how you get a
+reproducible deployment rather than a series of manual `config set` calls.
+
+## Secret references
+
+Config never contains secret values. It contains references, resolved at apply time:
+
+```jsonc
+{ "models": { "providers": { "anthropic": { "apiKey": "$secret:ANTHROPIC_API_KEY" } } } }
+```
+
+See [Secrets](/docs/secrets) for where those values live and how to rotate them.
+
+[Full configuration reference →](https://github.com/dfridkin/clawops/blob/main/docs/configuration.md)

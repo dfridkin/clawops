@@ -1,0 +1,100 @@
+---
+title: Security
+description: What clawops protects, what it deliberately does not, and what leaves your network.
+---
+
+clawops provisions cloud infrastructure and hands an agent the keys to it, so it is worth being
+precise about the boundaries.
+
+## Credentials never enter clawops
+
+This is an invariant, not a default. `~/.clawops/config.json` holds a **reference** to where a
+credential lives — `AWS_PROFILE`, gcloud ADC, `AZURE_CLIENT_ID` — never the credential. Pulumi
+inherits cloud credentials from your process environment; clawops does not pass them through its
+own configuration.
+
+Your own secrets (API keys, bot tokens) live in `~/.clawops/secrets/` at mode `0600`, and plans
+and config carry `$secret:<NAME>` references rather than values. See [Secrets](/docs/secrets).
+
+## Network posture
+
+**Deny-all by default.** Security groups, firewall rules and NSGs start closed. A plan has to name
+the CIDRs that may reach SSH, and `auto` resolves your own address into a `/32` rather than
+opening the internet.
+
+**The gateway is not exposed.** It publishes on `127.0.0.1`; reach it with `clawops tunnel`.
+Publishing it to the network is an explicit plan-time choice, and it serves plaintext HTTP — put
+TLS in front of it yourself. There is no TLS or certificate automation.
+
+**SSH host keys are verified** against a `known_hosts` file. There is no "accept anything" mode.
+`clawops destroy` forgets the instance's key so a recycled address does not fail verification
+later.
+
+## What leaves your network
+
+From the deployed host:
+
+| Destination | When |
+|---|---|
+| `download.docker.com`, distro mirrors | first bootstrap only |
+| `ghcr.io` | bootstrap and every `gateway update` |
+| `clawhub.ai` | during `apply`, installing model-provider plugins |
+| `registry.npmjs.org` | during `apply`, when config names a channel |
+| `169.254.169.254` | AWS with Bedrock only — IMDSv2 region lookup |
+
+From your machine: your cloud provider's APIs and your state backend during stack operations, and
+`ifconfig.me` only when you use `auto` to resolve your public IP.
+
+<Callout title="clawhub.ai is needed at deploy time">
+  Model-provider plugins are installed during `apply`, not at boot. In an egress-restricted
+  environment this is the destination people miss, and the failure appears as a gateway that
+  starts and then exits.
+</Callout>
+
+## Agents driving clawops
+
+Every MCP tool carries explicit safety annotations — read-only, destructive, idempotent,
+open-world — so an agent can tell a query from an action. Destructive tools require confirmation
+unless `yes: true` is passed deliberately.
+
+Three modes, and most setups want the first:
+
+```bash
+clawops mcp serve --read-only        # queries only
+clawops mcp serve --no-destructive   # changes, but nothing irreversible
+clawops mcp serve                    # everything
+```
+
+`--read-only` stops clawops making changes. It does **not** sandbox the agent's other tools, and
+it is not a substitute for the agent having no shell.
+
+## Logs and the audit trail
+
+Every MCP tool call is logged with its name, sanitised arguments, duration and result.
+Redaction covers `Authorization`, `*token*`, `*secret*`, `*key*` (except `keyName` and
+`keyPath`), `password` and `connectionString`.
+
+Not redacted, deliberately: resource ids, ARNs, regions, instance types, stack names, file paths.
+An audit trail that hides these is not useful.
+
+## Threats considered
+
+The threat model covers credential leakage through logs, an agent invoking a destructive tool
+without consent, plan tampering between review and apply, state-backend compromise, token
+forwarding in MCP HTTP mode, supply-chain compromise and SSH key reuse — each with the mitigation
+in place and its limits.
+
+<Cards>
+  <Card title="Threat model" href="https://github.com/dfridkin/clawops/blob/main/docs/security/threat-model.md">
+    Assets, actors, and seven scenarios with mitigations.
+  </Card>
+  <Card title="Tool risk matrix" href="https://github.com/dfridkin/clawops/blob/main/docs/security/tool-risk-matrix.md">
+    Every MCP tool by risk level and annotation.
+  </Card>
+  <Card title="Redaction" href="https://github.com/dfridkin/clawops/blob/main/docs/security/redaction.md">
+    Exactly which keys are scrubbed, and which are not.
+  </Card>
+  <Card title="Egress" href="https://github.com/dfridkin/clawops/blob/main/docs/security/egress.md">
+    Every destination, when it is contacted, and what breaks if it is blocked.
+  </Card>
+</Cards>
