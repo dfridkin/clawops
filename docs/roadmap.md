@@ -4,9 +4,48 @@ This document tracks the public roadmap for clawops. Development milestones (M0�
 core implementation; adoption milestones (R1–R12) cover documentation, safety, operational
 maturity, and hardening.
 
-**Current state (v1.5.0, published):** all development milestones and adoption waves R1–R11 are
-complete. Remaining work is grouped into three release waves: v1.6 (bug reporting + quality),
-v1.7 (hardening MVP: core + local/VPS + AWS), v1.8 (hardening complete: GCP + Azure + Tailscale).
+**Current state (2.0.2, published):** all development milestones are complete, and adoption waves
+R1–R13 have shipped — bug reporting (`clawops bug`) and the hardening MVP landed in the 1.7 line.
+2.0 moved clawops onto OpenClaw 2.x; 2.0.1 and 2.0.2 made cloud deploys work on all three clouds
+and fixed a module resolution failure that broke every cloud command on an installed copy.
+
+Remaining work falls into three groups:
+
+| Group | Items | Notes |
+|---|---|---|
+| **Carried from the 1.x waves** | WO-31 (GCP hardening), WO-32 (Azure hardening), WO-34 (Tailscale) | `src/harden/modules/` has twelve modules; none are GCP- or Azure-specific, and Tailscale exists only as a reserved schema field |
+| **clawops 2.1** | WO-53 sandboxing, WO-54 config surface, WO-55 TLS and public origin, WO-56 observability, WO-57 fleet multi-tenancy | WO-55 gates Portals, Teams, Slack and Discord Activities |
+| **clawops 2.2 — alone** | WO-62 host agent | Ships by itself, behind preconditions. See below |
+| **Housekeeping** | WO-64 `server.json` drift | Split out of WO-62 so it is not gated behind it |
+
+### WO-62 ships on its own, and only after its preconditions
+
+Running clawops *on* the gateway host is not a feature with risks attached. It is a change of
+security posture delivered as a feature, and **every mitigation clawops has assumes a human is
+the operator** — plans get reviewed, destructive tools ask for confirmation, `--read-only` is an
+operator's choice. Put the agent in the operator's chair and each becomes a formality the agent
+performs on itself.
+
+Four failure modes drive the decision to ship it alone:
+
+- **Runaway spend.** There is no cost estimation, no budget guard, no instance-size ceiling and
+  no cap on stacks. A retry loop around a failing deploy is enough; malice is not required, and
+  billing alerts lag by hours.
+- **Injection reaching destructive tools.** Every channel message is untrusted input, and the
+  gateway MCP server runs without `--read-only` by WO-28's design note. Confirmation is a control
+  over a human's attention, not over an agent's.
+- **Self-destruction, complete.** The process performing a `destroy` runs on the instance being
+  destroyed, so it dies partway through finalising state — leaving a state file that disagrees
+  with reality, possibly locked by a process that no longer exists.
+- **Self-destruction, incomplete.** Likelier and worse: orphaned resources keep billing, and the
+  operator who would clean them up was the agent. Recovery needs an out-of-band human who, in an
+  unattended deployment, may not exist.
+
+The preconditions — an enforced spend ceiling, a self-targeting guard below the tool layer, a
+narrow cloud identity for the host, state it cannot delete, audit shipped off-host, a documented
+break-glass operator, and default `--read-only` — are listed in full in
+[`openclaw-2.0-migration-plan.md`](openclaw-2.0-migration-plan.md). Several are worth building on
+their own merits.
 
 ## Development milestones
 
@@ -27,7 +66,8 @@ All core development milestones are complete as of v1.0.
 ## Adoption milestones
 
 These milestones track documentation, security model, operational maturity, and hardening work.
-R1–R11 are complete. R12–R13 are in progress, grouped into release waves below.
+R1–R13 are complete. What remains from these waves is GCP and Azure hardening and the
+Tailscale integration.
 
 ### Wave status at a glance
 
@@ -37,18 +77,18 @@ R1–R11 are complete. R12–R13 are in progress, grouped into release waves bel
 | 9 | R9 | ✅ | Secret lifecycle CLI (`clawops secret`) |
 | 10 | R10 | ✅ | Stack monitoring dashboard + MCP tool |
 | 11 | R11 | ✅ | Gateway-agent MCP wiring (`clawops mcp wire`) |
-| 12 | R12 | ⏳ | Server hardening + Tailscale VPN (`clawops harden`) |
-| 13 | R13 | ⏳ | Integrated bug reporting (`clawops bug`) |
+| 12 | R12 | ✅ | Server hardening (`clawops harden`) — GCP, Azure and Tailscale modules still open |
+| 13 | R13 | ✅ | Integrated bug reporting (`clawops bug`) |
 
 ### Release groupings for remaining work
 
 Remaining WOs are batched into three releases to avoid a changeset per PR.
 
-| Release | WOs | Theme |
+| Release | WOs | Status |
 |---|---|---|
-| **v1.6** | WO-35, WO-18, M8 stubs | Bug reporting command, local e2e harness, internal stub implementations |
-| **v1.7** | WO-29, WO-33, WO-30 | Hardening MVP — core framework + local/VPS + AWS |
-| **v1.8** | WO-31, WO-32, WO-34 | Hardening complete — GCP + Azure + Tailscale VPN |
+| **v1.6** | WO-35, WO-18, M8 stubs | ✅ shipped |
+| **v1.7** | WO-29, WO-33, WO-30 | ✅ shipped — hardening MVP, core + local/VPS + AWS |
+| **v1.8** | WO-31, WO-32, WO-34 | open — GCP + Azure hardening, Tailscale VPN |
 
 ### R1 — First-Run Experience
 
@@ -108,7 +148,7 @@ Goal: show which provider paths are supported and prove the most important ones.
 | Work order | Status | Deliverable |
 |---|---|---|
 | WO-17 — Provider capability matrix | ✅ | `docs/providers/matrix.md` |
-| WO-18 — Local VM e2e test harness | ⏳ | `tests/e2e/local/` |
+| WO-18 — Local VM e2e test harness | ✅ | `tests/e2e/` |
 | WO-19 — Provider troubleshooting docs | ✅ | Per-provider troubleshooting guides |
 
 ### R7 — Developer Experience
@@ -174,7 +214,7 @@ Goal: let users report bugs without leaving the terminal, with system context pr
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-35 — `clawops bug` command | ⏳ | Doctor context + pre-filled GitHub issue URL + browser open |
+| WO-35 — `clawops bug` command | ✅ | Doctor context + pre-filled GitHub issue URL + browser open |
 
 ## What is not on the roadmap
 

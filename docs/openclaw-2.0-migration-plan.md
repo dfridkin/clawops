@@ -928,36 +928,100 @@ OpenClaw's default and what `--use-env` drives, so the catalog now configures th
 `clawhub.ai`. Installing channels during `apply` extends the deploy-time egress requirement to
 npm on the deployed host, which `docs/security/egress.md` already records.
 
-**WO-62 — clawops as a host agent** *(fast follow, after 2.0)*
+**WO-62 — clawops as a host agent** *(its own release, 2.2 — ships alone, gated)*
 
 For the gateway's AI to manage a stack unattended, clawops has to be installed and running on
-the gateway host. That is a bigger change than it sounds, and it is deferred past 2.0 on
-purpose.
+the gateway host. It was scoped as a fast follow after 2.0. That was wrong: it is not a feature
+with risks attached, it is a change of security posture that happens to be delivered as a
+feature, and it does not belong in a release with anything else.
 
-**The risks, stated plainly:**
+The shape of the problem is that **every mitigation clawops has assumes a human is the operator**.
+Plans are reviewed before they apply. Destructive tools ask for confirmation. `--read-only` is
+something an operator chooses. Put the agent in the operator's chair and each of those becomes a
+formality the agent performs on itself.
 
-- **Deployment credentials land on the deployed box.** Every useful tool needs them — even
-  `clawops_status` reads Pulumi state from the state backend. An agent host that can reach
-  S3 state and an instance role can `clawops destroy` its own stack. R6 says clawops never
-  *stores* credentials, and an instance role honours the letter of that while changing the
-  posture completely.
-- **The blast radius is the whole account, not the host.** A prompt injection through any
-  channel the gateway is connected to reaches a tool surface that creates and destroys
-  infrastructure. The MCP server for gateway use runs **without** `--read-only` by WO-28's
-  own design note.
-- **The token sits in plaintext in the gateway config**, alongside channel credentials, and
-  is therefore in every backup archive (see WO-46's warnings).
-- **It needs Node on the host**, which clawops does not currently install; the host runs
-  Docker and nothing else of ours.
+### The risks, stated plainly
 
-Anyone building it should start from `docs/security/threat-model.md`, add an ADR under
-`docs/decisions/` per R-meta-3, and default the host agent to `--read-only` with the
-destructive surface opt-in.
+**Runaway spend.** clawops has no cost estimation, no budget guard, no instance-size ceiling and
+no limit on how many stacks exist — verified, not assumed: nothing in `src/` or the plan schema
+caps any of it. `--instance-type` accepts any string the cloud recognises, deliberately, so an
+agent can plan a `g4dn.xlarge` (~$395/mo) or a `Standard_NC6s_v3` (~$850/mo) as easily as a
+`t3.small`, and can do it in a loop. Cloud billing alerts lag by hours, so the first signal
+arrives long after the spend. Nothing here requires malice — a retry loop around a failing
+`clawops up` is enough.
 
-**Also in scope — the committed `server.json` shows a stale version.** Found 2026-09-11 while
-confirming the MCP registry listing for 2.0.0. The registry is correct (`2.0.0`, `isLatest:
-true`), but the committed `server.json` still says `1.7.3`: the release workflow rewrites
-`version` and `packages[0].version` in CI just before registering, and never commits the change.
+**Injection reaching a destructive tool surface.** The gateway is connected to channels, and
+every message on them is untrusted input. WO-28's own design note has the gateway MCP server
+running **without** `--read-only`. That is untrusted text arriving at tools that create and
+destroy infrastructure, with the confirmation step — R19 elicitation — answered by the same agent
+that was injected. Confirmation is a control over a human's attention; it is not a control over
+an agent's.
+
+**Self-destruction, complete.** The agent runs `clawops destroy` against its own stack. The
+process performing the destroy is running on the instance being destroyed, so it dies partway
+through finalising state. What is left is a state file that disagrees with reality in whichever
+direction the timing produced, and possibly a lock held by a process that no longer exists — so
+the next operation refuses to run at all.
+
+**Self-destruction, incomplete.** Worse, and likelier. A partial destroy leaves orphans that keep
+billing — an Elastic IP is ~$3.60/mo detached, disks and NAT more — and the operator who would
+clean them up was the agent, which is now gone. Recovery needs an out-of-band human with
+credentials and a working clawops install elsewhere. In an unattended deployment, that person may
+not exist, and nothing in the current design requires them to.
+
+**Credentials become ambient and permanent.** Every useful tool needs them — even
+`clawops_status` reads Pulumi state from the state backend. An instance role honours the letter
+of R6, which says clawops never *stores* credentials, while changing the posture completely: the
+credential is now always present, never rotated by a human, and reachable by anything that
+achieves execution on the host.
+
+**The blast radius is the account, not the host.** And **the token sits in plaintext in the
+gateway config**, alongside channel credentials, so it is in every backup archive (WO-46).
+
+**The evidence dies with the host.** The MCP audit log defaults to `<configDir>/mcp-audit.log` —
+on the machine. A self-destruct takes the record of it along.
+
+**It needs Node on the host**, which clawops does not install; the host runs Docker and nothing
+else of ours.
+
+### Preconditions — none of this starts until these exist
+
+These are not implementation steps for WO-62. They are the things that must be true *before* it
+is reasonable to build, and several are useful on their own:
+
+1. **A spend ceiling that is not advisory.** An instance-size allowlist in the plan schema, a cap
+   on stacks per account, and a required cloud-native budget with an enforcement action wired up
+   before the host agent can be enabled. A budget *alert* is not a control.
+2. **A self-targeting guard.** clawops must refuse an operation whose target stack is the one it
+   is running on, and that refusal must live below the tool layer so it cannot be prompted away.
+3. **A separate, narrow cloud identity** for the host — not the deploying operator's. Denied
+   destroy on its own resources by tag condition, denied instance types above the allowlist.
+4. **State the host cannot delete.** Read and write its own stack's state; no delete on the
+   bucket, no access to other stacks' state.
+5. **Audit shipped off-host**, so the record survives the host.
+6. **A documented break-glass operator** — a named human, out of band, with credentials and a
+   clawops install elsewhere. If the answer is "there isn't one", the feature is not deployable.
+7. **Default `--read-only`**, with the destructive surface opt-in and per-tool rather than
+   all-or-nothing.
+
+### Before anyone writes code
+
+Start from `docs/security/threat-model.md` and add scenarios for the four above — the existing
+T2 covers an agent invoking a destructive tool without consent, but not spend, and not the
+operator-is-the-agent inversion. Then an ADR under `docs/decisions/` per R-meta-3, because this
+changes what R6 means in practice even while complying with its wording.
+
+The honest summary: this is the feature most likely to produce a bad day for a user, and the
+only one where clawops' existing safety model does not apply. It ships alone, or not yet.
+
+**WO-64 — the committed `server.json` drifts from the released version** *(S — was folded into
+WO-62; split out 2026-09-18 because it is an hour of work and WO-62 is now a gated release of its
+own)*
+
+Found 2026-09-11 while confirming the MCP registry listing for 2.0.0, and still true at 2.0.2:
+the registry is correct, but the committed `server.json` says `1.7.3` — five releases behind. The
+release workflow rewrites `version` and `packages[0].version` in CI just before registering, and
+never commits the change.
 It is harmless to the registry and misleading to anyone reading the repo — it misled the check
 that found it.
 
