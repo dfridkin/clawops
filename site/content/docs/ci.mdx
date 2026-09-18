@@ -1,0 +1,97 @@
+---
+title: Running in CI
+description: Deploying from a pipeline, with short-lived credentials instead of stored keys.
+---
+
+`clawops init` is interactive and must not run in CI. Write the config file directly and let the
+pipeline's identity supply the cloud credentials.
+
+## OIDC instead of stored keys
+
+Every cloud can hand a GitHub Actions job a short-lived credential in exchange for its OIDC
+token, so no long-lived key sits in your repository secrets. It works on all three providers,
+and clawops needs no special support for it — the credential lands in the
+environment, which is where clawops already looks.
+
+```yaml
+permissions:
+  id-token: write
+  contents: read
+
+steps:
+  - uses: aws-actions/configure-aws-credentials@v4
+    with:
+      role-to-assume: arn:aws:iam::123456789012:role/clawops-deploy
+      aws-region: us-east-1
+```
+
+GCP uses Workload Identity Federation, Azure uses a federated credential on an Entra app
+registration. Trust policies and role bindings for all three are in
+[`docs/github-actions-oidc.md`](https://github.com/dfridkin/clawops/blob/main/docs/github-actions-oidc.md).
+
+## Writing the config
+
+```yaml
+- name: Write clawops config
+  run: |
+    mkdir -p ~/.clawops
+    cat > ~/.clawops/config.json <<EOF
+    {
+      "version": 1,
+      "defaults": { "provider": "${{ vars.CLAWOPS_PROVIDER }}", "stack": "default" },
+      "stacks": {
+        "default": {
+          "provider": "${{ vars.CLAWOPS_PROVIDER }}",
+          "region": "${{ vars.CLAWOPS_REGION }}",
+          "stateUrl": "${{ vars.CLAWOPS_STATE_URL }}"
+        }
+      },
+      "ssh": {
+        "keyPath": "~/.clawops/id_ed25519",
+        "knownHostsPath": "~/.clawops/known_hosts"
+      }
+    }
+    EOF
+
+- name: Restore SSH key
+  run: |
+    install -m 600 /dev/null ~/.clawops/id_ed25519
+    echo "${{ secrets.CLAWOPS_SSH_PRIVATE_KEY }}" > ~/.clawops/id_ed25519
+```
+
+## The pipeline itself
+
+Plan and apply are separate steps, so the plan can be reviewed between them.
+
+```yaml
+- run: npx @clawops/cli doctor --provider aws
+- run: npx @clawops/cli plan --stack prod --out plan.json
+- uses: actions/upload-artifact@v4
+  with: { name: plan, path: plan.json }
+  # gate the next job on a review or an environment approval
+- run: npx @clawops/cli apply plan.json --yes
+```
+
+`doctor` exits non-zero when any check fails, so it works as a gate. Run it with `--provider`
+before the plan: an unregistered Azure resource provider or a missing state bucket fails the job
+in seconds rather than partway through provisioning.
+
+<Callout type="warn" title="Set the state passphrase explicitly">
+  A self-managed state backend needs `PULUMI_CONFIG_PASSPHRASE`. Locally clawops generates and
+  stores one; in CI there is no home directory to carry it between runs, so set it from a secret
+  or every run will create a stack it cannot read next time.
+</Callout>
+
+## Pinning
+
+`latest` moves between major lines. Pin the CLI in CI:
+
+```yaml
+- run: npm install -g @clawops/cli@2.0.2
+```
+
+Pin the OpenClaw version in the plan as well. clawops resolves a moving tag to a concrete
+release and refuses one it cannot resolve, so an unpinned deploy fails rather than drifting —
+but the resolved version depends on when the plan was generated.
+
+[Full CI guide →](https://github.com/dfridkin/clawops/blob/main/docs/ci.md)

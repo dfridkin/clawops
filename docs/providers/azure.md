@@ -144,8 +144,14 @@ When you run `clawops up`, the Azure adapter provisions:
 
 ## State Backend
 
-- **URL pattern**: `azblob://<container>/clawops`
-- **Storage account + container must exist** before first `clawops up`; clawops does not create them
+- **URL pattern**: `azblob://<container>` — a container, addressed directly, with no state
+  prefix. The other two providers take `<bucket>/clawops`; Azure does not
+- **Default name**: `clawops-state`. The container is already scoped by the storage account, so
+  clawops adds no discriminator to it
+- **Storage account and container must exist** before first `clawops up`. clawops will not create
+  the storage account: Pulumi's azblob backend authenticates with `AZURE_STORAGE_ACCOUNT` plus a
+  key or SAS token, and clawops does not hold that key (R6). This is the one account check it
+  reports without offering a fix
 - **Encryption**: Azure Storage encrypts at rest by default
 
 ## Firewall Model
@@ -155,7 +161,7 @@ NSG security rules are controlled by the `accessMode` stack config key:
 | Mode | Behaviour | Use case |
 |---|---|---|
 | `restricted` *(default)* | Deny all by default; open only the CIDRs in `allowedCidrs` | Production |
-| `auto` | Detect caller's public IP at deploy time; open SSH + gateway to `<ip>/32` | MCP-driven / CI deployments |
+| `auto` | Detect caller's public IP at deploy time and open SSH to `<ip>/32` | MCP-driven / CI deployments |
 | `open` | `0.0.0.0/0` on both ports; emits a stderr warning | Sandbox / testing only |
 
 Per-port overrides (take precedence over `accessMode`):
@@ -164,6 +170,10 @@ Per-port overrides (take precedence over `accessMode`):
 pulumi config set sshCidrs     "10.0.0.0/8,203.0.113.5/32"
 pulumi config set gatewayCidrs "203.0.113.5/32"
 ```
+
+**No gateway rule is created under loopback publishing**, which is the default. The gateway binds
+`127.0.0.1`, so an NSG rule for its port would grant no access and misread as exposure. Gateway
+rules exist only with `--publish-gateway all`, and then only for the CIDRs you name.
 
 **Default NSG rules are deny-all (N10).** Never use `open` in production.
 

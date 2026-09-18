@@ -44,6 +44,24 @@ Nothing is resolved from the credentials themselves: a service-account key names
 but the project you authenticate *as* and the project you deploy *into* are different
 questions.
 
+## Account setup clawops checks before it deploys
+
+`clawops doctor --provider gcp` runs an account-level preflight:
+
+| Check | Why |
+|---|---|
+| Project is set | names the project a deploy will land in |
+| `compute.googleapis.com` enabled | a disabled API fails partway through a deploy, after resources exist |
+| `storage.googleapis.com` enabled | needed for the state backend |
+| State bucket exists | Pulumi needs its backend before it can run |
+
+`clawops setup` runs the same checks and **asks** before changing anything, naming the exact
+mutation:
+
+```
+? Fix this now? Enables compute.googleapis.com on project my-project (Y/n)
+```
+
 ## Credentials
 
 clawops uses the GCP [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials) chain:
@@ -109,9 +127,17 @@ The exact resource graph is visible via `clawops plan`.
 | `small` | `e2-standard-2` | 2 | 8 GB |
 | `medium` | `e2-standard-4` | 4 | 16 GB |
 | `large` | `e2-standard-8` | 8 | 32 GB |
-| `gpu` | `n1-standard-4` | 4 | 15 GB |
+
 
 > GPU acceleration on `n1-standard-4` requires attaching an accelerator via `pulumi config set acceleratorType nvidia-tesla-t4`. This is not wired automatically in the current release — see `docs/limitations.md`.
+
+**`gpu` is not available on GCP.** `normalizeInstanceType('gpu')` refuses rather than
+silently deploying a CPU machine, and names the two providers that do have one:
+
+```
+GPU instances are not yet supported on GCP.
+Use --provider aws (g4dn.xlarge) or --provider azure (Standard_NC6s_v3) for GPU workloads.
+```
 
 ## Region Defaults
 
@@ -122,9 +148,12 @@ The exact resource graph is visible via `clawops plan`.
 ## State Backend
 
 - **URL pattern**: `gs://<bucket>/clawops`
-- **Bucket must exist** before first `clawops up`; clawops does not create it
+- **Default name**: `clawops-state-<projectId>`, derived by `clawops init` from the project
+- **Must exist before Pulumi runs** — a deploy cannot create it on the way past. `clawops doctor
+  --provider gcp` checks, and `clawops setup` offers to create it with versioning enabled
 - **Permissions**: the deploying identity needs `roles/storage.objectAdmin` on the bucket
-- **Versioning**: enable bucket versioning for state history (`gsutil versioning set on gs://<bucket>`)
+- **Versioning**: on for a bucket clawops creates. Pulumi state with no history is a stack that
+  can no longer be updated or destroyed
 
 ## Firewall Model
 

@@ -84,10 +84,11 @@ export default function Home() {
           </article>
 
           <article className={styles.card}>
-            <h3 className={styles.cardTitle}>Pulumi, embedded</h3>
+            <h3 className={styles.cardTitle}>Pulumi, handled for you</h3>
             <p className={styles.cardBody}>
-              The Automation API runs in-process. No separate Pulumi install, no CLI to keep in step,
-              no state backend to stand up before your first deploy.
+              clawops installs the Pulumi CLI it needs on first use, or uses a compatible one
+              already on your PATH. Your state lives in your own bucket, and clawops offers to
+              create it.
             </p>
           </article>
 

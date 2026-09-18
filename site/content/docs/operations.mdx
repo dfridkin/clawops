@@ -1,0 +1,124 @@
+---
+title: Operations
+description: Running a deployment after it exists — health, logs, upgrades, backups.
+---
+
+Everything here works the same on every provider. Commands take `--stack` when you have more than
+one; the default stack comes from `~/.clawops/config.json`.
+
+## Is it up
+
+```bash
+clawops status                 # outputs, region, provisioned time
+clawops doctor --stack prod    # local prerequisites plus remote health
+clawops monitor                # resource and container dashboard
+```
+
+`doctor --stack` probes the gateway's `/startupz` endpoint and reads the body, rather than
+trusting the container to be running — a running container means the process started, not that it
+serves. It also reports **which OpenClaw version the gateway is actually running**, which can differ
+from the requested version when the stack was created with a moving tag, and it exits non-zero
+when any check fails.
+
+## Logs
+
+```bash
+clawops logs                   # recent gateway logs
+clawops logs --follow          # tail
+clawops agents logs <name>     # one agent
+```
+
+Logs come from the gateway itself where it can serve them, and from `docker logs` otherwise.
+clawops tells you which source it used.
+
+## Reaching the gateway
+
+The gateway publishes on `127.0.0.1` and is not exposed to your network. Forward it:
+
+```bash
+clawops tunnel                 # Control UI on http://127.0.0.1:18789
+clawops ssh                    # a shell on the host
+```
+
+Exposing it instead is an explicit choice at plan time — `--publish-gateway all` with
+`--gateway-cidr`. It serves plaintext HTTP, so put TLS in front of it.
+
+## Upgrading OpenClaw
+
+Two paths, depending on whether the machine changes.
+
+**Gateway only** — new OpenClaw version, same instance:
+
+```bash
+clawops backup create
+clawops gateway update --version 2026.9.2
+clawops doctor --stack prod
+```
+
+**Through plan → apply** — when infrastructure changes too:
+
+```bash
+clawops plan --stack prod --openclaw-version 2026.9.2 --out plan.json
+# read the diff, then
+clawops apply plan.json
+```
+
+Before either, check the version is in the supported range and take a backup. Rolling back the
+gateway is the same command pointed at the previous version; rolling back infrastructure means
+applying the previous plan, which is why plans are worth committing.
+
+<Callout type="warn" title="A restart is not free">
+  `gateway restart`, `gateway update` and `config set` all restart the container. State survives
+  — it lives in a host directory bind-mounted into it — but in-flight work does not.
+</Callout>
+
+## Backups
+
+```bash
+clawops backup create          # archive state
+clawops backup list
+clawops backup validate <id>   # check it before you need it
+clawops backup restore <id>    # never in place — restores beside the current state
+```
+
+A backup covers the OpenClaw state directory: config, the SQLite database, sessions, transcripts
+and installed plugins. It does **not** cover your cloud infrastructure — that is what the state
+backend and your plans are for — and it does not include secrets held outside the state
+directory.
+
+Automating it is a cron job calling `clawops backup create` and copying the archive somewhere
+off-host. There is a worked example, including upload to S3 and a disaster-recovery checklist, in
+[`docs/backup-restore.md`](https://github.com/dfridkin/clawops/blob/main/docs/backup-restore.md).
+
+## Agents and config
+
+```bash
+clawops agents list
+clawops config get <key>
+clawops config set <key> <value> --dry-run   # see the diff first
+```
+
+Config changes are validated against OpenClaw's own schema before they are written, so a bad
+value is refused rather than restarting the gateway into a broken state.
+
+## Hardening
+
+```bash
+clawops harden                 # ssh, ufw, fail2ban, unattended-upgrades, and more
+clawops harden --dry-run
+```
+
+Eight modules run on every provider; AWS adds a security-group audit, SSM readiness, VPC flow
+logs and GuardDuty. `harden` reads the container's actual port bindings and opens only what the
+deployment really publishes.
+
+## Tearing it down
+
+```bash
+clawops destroy --stack prod   # irreversible
+```
+
+Destroy also forgets the instance's host key, so deploying onto an address the cloud later
+recycles does not fail verification.
+
+[Full operations guide →](https://github.com/dfridkin/clawops/blob/main/docs/operations.md)

@@ -1,0 +1,91 @@
+---
+title: GCP
+description: Compute Engine in a VPC clawops creates, with Cloud Storage for state.
+---
+
+```bash
+gcloud auth application-default login
+gcloud config set project my-project
+clawops init --provider gcp --region us-central1
+clawops doctor --provider gcp
+```
+
+## Credentials
+
+| Source | How |
+|---|---|
+| gcloud ADC | `gcloud auth application-default login` — the usual local setup |
+| Service account key | `GOOGLE_APPLICATION_CREDENTIALS=/path/key.json` — CI |
+| Instance metadata | automatic, when clawops runs on a GCE VM |
+| Access token | `GOOGLE_OAUTH_ACCESS_TOKEN`, short-lived |
+
+<Callout type="warn">
+  It is `GOOGLE_OAUTH_ACCESS_TOKEN`, not `CLOUDSDK_AUTH_ACCESS_TOKEN` — the latter is
+  gcloud-internal and the adapter does not read it.
+</Callout>
+
+## Which project it deploys into
+
+`gcloud config set project` is honoured. clawops also pins `gcp:project` into the stack
+configuration at plan time, so the deploy lands in the project whose APIs and state bucket were
+the ones actually checked — not whatever the ambient gcloud configuration happens to say later.
+
+## Account setup it checks
+
+| Check | Why |
+|---|---|
+| Project is set | names the project a deploy lands in |
+| `compute.googleapis.com` enabled | a disabled API fails partway through, after resources exist |
+| `storage.googleapis.com` enabled | needed for the state backend |
+| State bucket exists | Pulumi needs its backend before it can run |
+
+`clawops setup` offers to fix the first three, naming the change before making it:
+
+```
+? Fix this now? Enables compute.googleapis.com on project my-project (Y/n)
+```
+
+## Permissions
+
+| Role | Scope |
+|---|---|
+| `roles/compute.instanceAdmin.v1` | VM lifecycle |
+| `roles/compute.networkAdmin` | VPC, subnet, firewall, static IP |
+| `roles/storage.objectAdmin` | on the state bucket |
+
+## State
+
+`gs://clawops-state-<projectId>/clawops`, derived by `clawops init` from the project. Cloud
+Storage names are global, which is why the project id is in it.
+
+A bucket clawops creates has versioning enabled — Pulumi state with no history is a stack that
+can no longer be updated or destroyed.
+
+## Firewall
+
+Deny-all by default; `auto` resolves your public IP into a `/32` for SSH at plan time. **No
+gateway rule is created under loopback publishing**, which is the default — the gateway binds
+`127.0.0.1`, so a rule for its port would grant no access and misread as exposure.
+
+## Sizes
+
+| Alias | Type | vCPU | Memory | ~cost |
+|---|---|---|---|---|
+| `micro` | e2-micro | 2 (shared) | 1 GB | ~$6/mo, free-tier eligible |
+| `small` | e2-standard-2 | 2 | 8 GB | ~$49/mo |
+| `medium` | e2-standard-4 | 4 | 16 GB | ~$97/mo |
+| `large` | e2-standard-8 | 8 | 32 GB | ~$194/mo |
+
+<Callout type="warn" title="No GPU on GCP">
+  `--instance-type gpu` is refused rather than quietly deploying a CPU machine:
+
+  ```
+  GPU instances are not yet supported on GCP.
+  Use --provider aws (g4dn.xlarge) or --provider azure (Standard_NC6s_v3) for GPU workloads.
+  ```
+</Callout>
+
+Add ~$7/mo for the static IP while the instance is stopped, and under $1/mo for state.
+Indicative, not a quote.
+
+[Full GCP guide →](https://github.com/dfridkin/clawops/blob/main/docs/providers/gcp.md)

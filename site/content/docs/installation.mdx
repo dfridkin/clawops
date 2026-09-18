@@ -35,5 +35,32 @@ Run it against a deployed stack to include remote health:
 clawops doctor --stack production
 ```
 
-That form also reports **which OpenClaw version the gateway is actually running**, which matters if
-a stack was created with a moving tag.
+That form also reports **which OpenClaw version the gateway is actually running**, which can
+differ from the requested version when a stack was created with a moving tag.
+
+## Before a cloud deploy
+
+Two things have to be true before Pulumi can run at all, and `doctor` checks both:
+
+```bash
+clawops doctor --provider aws     # or gcp, azure — with or without a stack
+```
+
+**The Pulumi CLI.** clawops installs it into `~/.clawops/.pulumi-cli` the first time it needs
+one, announcing the one-time download, and uses a compatible `pulumi` already on your `PATH`
+instead when there is one. Your `PATH` is never edited.
+
+**A state bucket.** Pulumi reads and writes its state there on every operation, so it has to
+exist before a deploy starts — clawops cannot create it on the way past. `clawops init` names one
+after your account, and `clawops setup` offers to create it with versioning on and public access
+blocked.
+
+`doctor --provider` also checks the account-level things that otherwise fail partway through a
+deploy: enabled APIs on GCP, registered resource providers on Azure, and whether the machine size
+you asked for is offered in your region.
+
+<Callout title="A check it could not make says so">
+  Some checks need a read permission nothing else needs. When one cannot be performed, `doctor`
+  reports it as a warning naming the error rather than passing or failing — your account may be
+  perfectly set up, and clawops will not claim either way.
+</Callout>
