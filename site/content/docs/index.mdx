@@ -17,9 +17,9 @@ OpenClaw's job.
     `clawops plan` emits a JSON artifact you review, diff and commit. `clawops apply` executes
     exactly that. Nothing reaches your cloud account straight from a natural-language instruction.
   </Card>
-  <Card title="Embedded Pulumi" href="/docs/installation">
-    The Automation API runs in-process — no separate Pulumi install, no state backend to stand up
-    before your first deploy.
+  <Card title="Pulumi handled for you" href="/docs/installation">
+    clawops installs the CLI it needs on first use, generates its own state passphrase, and
+    checks your state bucket exists before a deploy can fail on it.
   </Card>
   <Card title="Typed MCP tools" href="/docs/mcp">
     Every operation is a tool with explicit safety annotations, so a coding agent knows what is
