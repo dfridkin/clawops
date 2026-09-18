@@ -41,7 +41,7 @@ WhatsApp and Microsoft Teams have no non-interactive setup in OpenClaw — `chan
 `--use-env` for them — so clawops installs their plugin and leaves the credentials to
 `openclaw channels add` on the host.
 
-## Versions are pinned, and that matters
+## Versions are pinned
 
 Plugin builds declare a minimum plugin API and move ahead of the runtime. The current `latest`
 Discord plugin refuses the supported floor outright:
@@ -55,7 +55,7 @@ change with the floor rather than a version bump.
 
 ## Egress
 
-Installing happens during `apply` — deliberately, so a blocked host fails in front of the person
+Installing happens during `apply`, so a blocked host fails in front of the person
 running the command rather than at 3am. The two plugin kinds come from **different** registries:
 
 | Plugin kind | Installed from |

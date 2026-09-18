@@ -6,11 +6,11 @@ description: Deploying from a pipeline, with short-lived credentials instead of 
 `clawops init` is interactive and must not run in CI. Write the config file directly and let the
 pipeline's identity supply the cloud credentials.
 
-## Prefer OIDC over stored keys
+## OIDC instead of stored keys
 
 Every cloud can hand a GitHub Actions job a short-lived credential in exchange for its OIDC
-token, so no long-lived key sits in your repository secrets. This is the recommended setup for
-all three providers, and clawops needs no special support for it — the credential lands in the
+token, so no long-lived key sits in your repository secrets. It works on all three providers,
+and clawops needs no special support for it — the credential lands in the
 environment, which is where clawops already looks.
 
 ```yaml
@@ -61,7 +61,7 @@ registration. Trust policies and role bindings for all three are in
 
 ## The pipeline itself
 
-Plan and apply are separate steps on purpose — the plan is the artifact a human approves.
+Plan and apply are separate steps, so the plan can be reviewed between them.
 
 ```yaml
 - run: npx @clawops/cli doctor --provider aws
@@ -90,8 +90,8 @@ in seconds rather than partway through provisioning.
 - run: npm install -g @clawops/cli@2.0.2
 ```
 
-And pin the OpenClaw version in the plan rather than relying on a moving tag — clawops resolves
-a tag to a concrete release and refuses one it cannot resolve, but a pin is what makes the
-deployment reproducible.
+Pin the OpenClaw version in the plan as well. clawops resolves a moving tag to a concrete
+release and refuses one it cannot resolve, so an unpinned deploy fails rather than drifting —
+but the resolved version depends on when the plan was generated.
 
 [Full CI guide →](https://github.com/dfridkin/clawops/blob/main/docs/ci.md)

@@ -17,7 +17,7 @@ succeed, and what it costs.
 
 | | AWS | GCP | Azure | Local |
 |---|---|---|---|---|
-| Recommended size | `small` — t3.small | `small` — e2-standard-2 | `small` — Standard_B2s | your hardware |
+| Smallest practical | `small` — t3.small | `small` — e2-standard-2 | `small` — Standard_B2s | your hardware |
 | Roughly | ~$17/mo | ~$49/mo | ~$30/mo | free |
 | Cheapest | `micro` ~$8/mo | `micro` ~$6/mo (free tier) | `micro` ~$8/mo | — |
 | GPU | `g4dn.xlarge` ~$395/mo | **not supported** | `NC6s_v3` ~$850/mo | — |
@@ -48,7 +48,7 @@ clawops stores none of them.
 and remove an instance profile for SSM, and `s3:GetObject`/`PutObject`/`DeleteObject`/`ListBucket`
 on the state bucket.
 
-Two extras worth knowing, because nothing else needs them:
+Two more, needed by nothing else:
 
 - `ec2:DescribeInstanceTypeOfferings` — lets `doctor` confirm your size exists in the region.
   Without it the check reports as a warning rather than passing or failing.
@@ -102,7 +102,8 @@ clawops doctor --provider azure
 ```
 
 **Credentials**: your `az login` works. A service principal
-(`AZURE_CLIENT_ID`/`AZURE_CLIENT_SECRET`/`AZURE_TENANT_ID`) also works and is what CI should use.
+(`AZURE_CLIENT_ID`/`AZURE_CLIENT_SECRET`/`AZURE_TENANT_ID`) also works, and is the usual
+choice in CI.
 
 **Role**: Contributor on the subscription or resource group. Key Vault Administrator as well, if
 you enable Key Vault.

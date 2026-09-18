@@ -16,9 +16,9 @@ clawops monitor                # resource and container dashboard
 
 `doctor --stack` probes the gateway's `/startupz` endpoint and reads the body, rather than
 trusting the container to be running — a running container means the process started, not that it
-serves. It also reports **which OpenClaw version the gateway is actually running**, which matters
-if the stack was created with a moving tag, and it exits non-zero when any check fails, so CI can
-depend on it.
+serves. It also reports **which OpenClaw version the gateway is actually running**, which can differ
+from the requested version when the stack was created with a moving tag, and it exits non-zero
+when any check fails.
 
 ## Logs
 
@@ -47,7 +47,7 @@ Exposing it instead is an explicit choice at plan time — `--publish-gateway al
 
 Two paths, depending on whether the machine changes.
 
-**Gateway only** — new OpenClaw version, same instance. Fast, and the usual case:
+**Gateway only** — new OpenClaw version, same instance:
 
 ```bash
 clawops backup create

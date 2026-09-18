@@ -1,10 +1,10 @@
 ---
 title: Security
-description: What clawops protects, what it deliberately does not, and what leaves your network.
+description: What clawops protects, what it does not, and what leaves your network.
 ---
 
-clawops provisions cloud infrastructure and hands an agent the keys to it, so it is worth being
-precise about the boundaries.
+clawops provisions cloud infrastructure and hands an agent the keys to it. This page states the
+boundaries: what is protected, what is not, and what leaves your network.
 
 ## Credentials never enter clawops
 
@@ -55,9 +55,9 @@ From your machine: your cloud provider's APIs and your state backend during stac
 
 Every MCP tool carries explicit safety annotations — read-only, destructive, idempotent,
 open-world — so an agent can tell a query from an action. Destructive tools require confirmation
-unless `yes: true` is passed deliberately.
+unless `yes: true` is passed.
 
-Three modes, and most setups want the first:
+Three modes:
 
 ```bash
 clawops mcp serve --read-only        # queries only
@@ -66,7 +66,7 @@ clawops mcp serve                    # everything
 ```
 
 `--read-only` stops clawops making changes. It does **not** sandbox the agent's other tools, and
-it is not a substitute for the agent having no shell.
+it has no effect on anything the agent can reach outside clawops.
 
 ## Logs and the audit trail
 
@@ -74,8 +74,7 @@ Every MCP tool call is logged with its name, sanitised arguments, duration and r
 Redaction covers `Authorization`, `*token*`, `*secret*`, `*key*` (except `keyName` and
 `keyPath`), `password` and `connectionString`.
 
-Not redacted, deliberately: resource ids, ARNs, regions, instance types, stack names, file paths.
-An audit trail that hides these is not useful.
+Not redacted: resource ids, ARNs, regions, instance types, stack names and file paths.
 
 ## Threats considered
 

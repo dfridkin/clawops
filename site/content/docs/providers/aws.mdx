@@ -86,9 +86,9 @@ Egress is unrestricted by default — see [Security](/docs/security) for what th
 Or pass a type AWS names itself. Add ~$3.60/mo for the Elastic IP while the instance is stopped,
 and under $1/mo for state. Indicative, not a quote.
 
-## Worth knowing
+## SSH user
 
-clawops connects as **`ubuntu`** on AWS, which is not in the docker group — day-two commands
-escalate with sudo. GCP and Azure connect as `clawops`, which is.
+clawops connects as **`ubuntu`** on AWS, which is not in the docker group, so day-two commands
+escalate with sudo. GCP and Azure connect as `clawops`, which is in the group.
 
 [Full AWS guide, including resources created and the stack diagram →](https://github.com/dfridkin/clawops/blob/main/docs/providers/aws.md)
