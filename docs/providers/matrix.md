@@ -1,7 +1,7 @@
 # Provider Capability Matrix
 
 This matrix shows which operations and features are supported for each provider. It reflects the
-current implementation — not aspirational claims.
+current implementation, not aspirational claims.
 
 **Legend:** ✓ supported · Partial = limited support · Planned = tracked in roadmap · — = not applicable or not supported
 
@@ -28,7 +28,7 @@ anything. `clawops setup` runs the same checks and offers to fix the ones marked
 | Machine size available in this scope | ✓ (offered in region) | — | ✓ (offered to subscription) | — |
 | Quota headroom | Planned | Planned | Planned | — |
 
-A check clawops cannot perform — a listing the credentials may not read — reports as a warning
+A check clawops cannot perform. A listing the credentials may not read, reports as a warning
 naming the error and its likely cause, not as a pass or a failure. Azure's storage-account check
 is not fixable: the azblob backend needs `AZURE_STORAGE_ACCOUNT` and a key, which clawops will
 not create or store (R6).
@@ -97,7 +97,7 @@ back up `~/.clawops/state/` alongside your stack backups.
 
 ### AWS
 
-- Elastic IP is always allocated — the public IP is stable across instance stops and restarts.
+- Elastic IP is always allocated. The public IP is stable across instance stops and restarts.
 - IAM instance profile gives the VM SSM-ready permissions, but the gateway token is currently
   configured via bootstrap script rather than being managed as an SSM Parameter.
 - Bedrock model provider requires `AWS_PROFILE` in the systemd `EnvironmentFile` (not
@@ -106,7 +106,7 @@ back up `~/.clawops/state/` alongside your stack backups.
 
 ### GCP
 
-- Uses `gcp.compute.Address` (regional static external IP), not a global IP — ensure the address
+- Uses `gcp.compute.Address` (regional static external IP), not a global IP, ensure the address
   and VM are in the same region.
 - No built-in secret management in the current implementation. The gateway token is set via the
   bootstrap script.
@@ -117,7 +117,7 @@ back up `~/.clawops/state/` alongside your stack backups.
   the deploy plan.
 - Key Vault is provisioned with the stack and stores the gateway token as a secret. Access is
   granted to the VM's Managed Identity.
-- Azure's Public IP resource may take a few seconds to propagate after provisioning — `clawops
+- Azure's Public IP resource may take a few seconds to propagate after provisioning, `clawops
   status` will retry until the IP is available.
 
 ### Local VM
@@ -125,7 +125,7 @@ back up `~/.clawops/state/` alongside your stack backups.
 - No cloud infrastructure is provisioned. clawops SSHes to the target host and runs an idempotent
   bootstrap script (installs Docker, Node.js 22, OpenClaw, configures systemd unit).
 - The host must be reachable over SSH and have `sudo` access for the bootstrap user.
-- No firewall rules are managed by clawops — configure host-level rules (`ufw`, `firewalld`) before
+- No firewall rules are managed by clawops. Configure host-level rules (`ufw`, `firewalld`) before
   running `clawops up`.
 - State is a local JSON file. The host's OpenClaw state is separate from clawops's record of the
   deployment.
@@ -142,5 +142,5 @@ Each provider maps the abstract size aliases to native instance types:
 | `large` | `t3.large` | `e2-standard-8` | `Standard_B8ms` | — |
 | `gpu` | `g4dn.xlarge` | `n1-standard-4` + T4 | `Standard_NC6s_v3` | — |
 
-For Local VM, instance type is determined by the host hardware — the `--instance-type` flag is
+For Local VM, instance type is determined by the host hardware, the `--instance-type` flag is
 ignored.

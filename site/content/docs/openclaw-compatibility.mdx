@@ -5,10 +5,10 @@ description: Which OpenClaw versions this release line supports, and what change
 
 | OpenClaw version | Support |
 |---|---|
-| `2026.9.2` | **Recommended** — the floor this line was built against |
+| `2026.9.2` | **Recommended**: the floor this line was built against |
 | `>= 2026.9.2` | Supported, no upper bound |
-| `2026.8.x` – `2026.9.1` | Not supported — 2.0 runtime, but the official Bedrock provider plugin requires `>= 2026.9.2` |
-| `<= 2026.7.1-2` | **Pre-2.0 contract** — use `npm install -g @clawops/cli@legacy` |
+| `2026.8.x` – `2026.9.1` | Not supported: 2.0 runtime, but the official Bedrock provider plugin requires `>= 2026.9.2` |
+| `<= 2026.7.1-2` | **Pre-2.0 contract**: use `npm install -g @clawops/cli@legacy` |
 
 `spec/openclaw-versions.yaml` is the canonical matrix, and it is **enforced**: `doctor`, `plan`,
 `up` and `apply` refuse a version outside the range.
@@ -24,14 +24,14 @@ OpenClaw `2026.8.1` changed the container runtime contract. Verified against rea
 - **Config moved to a writable path.** The file the 1.x line mounted was read by nothing.
 - **Model providers became install-gated plugins.** Twenty-four ship in the image; the rest are
   installed during `apply`, while the deploy still has egress.
-- **Chat channels became install-gated too** — all of them. A configured channel with no plugin
+- **Chat channels became install-gated too**, all of them. A configured channel with no plugin
   gives a gateway that starts, reports healthy, and never connects.
 
 ## Why the floor is 2026.9.2
 
 Not because 2.0 starts there. The official Amazon Bedrock provider plugin declares
 `requires plugin API >=2026.9.2` and refuses to install on `2026.9.1`, and clawops's AWS adapter
-makes Bedrock first-class — so a lower floor would offer a path that cannot work.
+makes Bedrock first-class, so a lower floor would offer a path that cannot work.
 
 ## Moving tags
 
@@ -47,7 +47,7 @@ clawops migrate --stack <name>
 ```
 
 Takes a verified backup inside the running container, extracts the state **from that running
-container** — stopping first would destroy it, since 1.x kept everything inside — starts 2.0
+container**. Stopping first would destroy it, since 1.x kept everything inside, starts 2.0
 against it, and waits for the gateway to come up. Device identity is preserved, so paired devices
 do not need re-pairing.
 

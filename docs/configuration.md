@@ -1,7 +1,7 @@
 # OpenClaw Configuration
 
-clawops manages the **infrastructure** that OpenClaw runs on. Configuring OpenClaw itself — setting
-up models, channels, agents, and gateway settings — is done through `clawops config` commands or
+clawops manages the **infrastructure** that OpenClaw runs on. Configuring OpenClaw itself, setting
+up models, channels, agents, and gateway settings. Is done through `clawops config` commands or
 by editing `openclaw.json` on the remote host.
 
 ## Where the config lives
@@ -100,7 +100,7 @@ openssl rand -hex 32
 ```
 
 **Never commit a real token to source control.** Pass it via an environment variable or secret
-manager reference — see [Secret sources](#secret-sources) below.
+manager reference. See [Secret sources](#secret-sources) below.
 
 ### Models
 
@@ -120,7 +120,7 @@ Ready-to-use starting points are in [`examples/configs/`](../examples/configs/).
 
 | File | Description |
 |---|---|
-| `openclaw.basic.json` | Minimal gateway config — no model or channel |
+| `openclaw.basic.json` | Minimal gateway config: no model or channel |
 | `openclaw.telegram.example.json` | Basic config with a Telegram bot channel |
 | `openclaw.discord.example.json` | Basic config with a Discord bot channel |
 
@@ -131,7 +131,7 @@ Ready-to-use starting points are in [`examples/configs/`](../examples/configs/).
    cp examples/configs/openclaw.basic.json /tmp/my-openclaw.json
    ```
 
-2. Edit `/tmp/my-openclaw.json` — replace all `YOUR_*` placeholders with real values.
+2. Edit `/tmp/my-openclaw.json`. Replace all `YOUR_*` placeholders with real values.
 
 3. Write the config to the remote host using `clawops config set` for individual fields:
    ```bash
@@ -162,10 +162,10 @@ Ready-to-use starting points are in [`examples/configs/`](../examples/configs/).
 |---|---|
 | Generate at deploy time | `openssl rand -hex 32` piped to `clawops config set` |
 | Environment variable on host | Set in systemd `EnvironmentFile` and reference in config |
-| Cloud secret manager | AWS SSM / GCP Secret Manager / Azure Key Vault — retrieve at startup |
+| Cloud secret manager | AWS SSM / GCP Secret Manager / Azure Key Vault, retrieve at startup |
 | clawops secrets (planned) | WO-15 will add centralized secret redaction and WO-16 a config wizard |
 
-The `clawops config get` output is **not** redacted by default in the current release — avoid
+The `clawops config get` output is **not** redacted by default in the current release, avoid
 running it in environments where logs are collected. Redaction is tracked in WO-15.
 
 ## Editing config directly over SSH
@@ -197,6 +197,6 @@ clawops status
 ```
 
 If the gateway fails to start after a config change, the most common causes are:
-- Syntax error in `openclaw.json` — run `clawops ssh --command "python3 -m json.tool /var/lib/clawops/openclaw/openclaw.json"` to check
-- Unknown field name — verify against your OpenClaw version's documentation
-- Missing required field — check `clawops logs --tail 50` for the specific error
+- Syntax error in `openclaw.json`. Run `clawops ssh --command "python3 -m json.tool /var/lib/clawops/openclaw/openclaw.json"` to check
+- Unknown field name. Verify against your OpenClaw version's documentation
+- Missing required field. Check `clawops logs --tail 50` for the specific error

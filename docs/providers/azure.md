@@ -3,7 +3,7 @@
 ## Quick Start
 
 ```bash
-# 1. Configure credentials — pick one method:
+# 1. Configure credentials: pick one method:
 
 # Option A: Service principal (recommended for production)
 export AZURE_CLIENT_ID=<app-id>
@@ -16,7 +16,7 @@ export AZURE_TENANT_ID=<tenant-id>
 export AZURE_FEDERATED_TOKEN_FILE=/var/run/secrets/azure/tokens/azure-identity-token
 
 # Option C: Managed identity (when running on an Azure VM)
-# No env vars needed — detected automatically via IMDS
+# No env vars needed: detected automatically via IMDS
 
 # 2. Initialize clawops for Azure
 clawops init --provider azure --region eastus --state azblob://my-container/clawops
@@ -33,15 +33,15 @@ clawops checks the following in order (first match wins):
 |---|---|---|
 | Service principal | `AZURE_CLIENT_ID` + `AZURE_TENANT_ID` + `AZURE_CLIENT_SECRET` | Static credentials |
 | Federated / OIDC | `AZURE_CLIENT_ID` + `AZURE_TENANT_ID` + `AZURE_FEDERATED_TOKEN_FILE` | GitHub Actions, workload identity |
-| Azure CLI | *(none — `az login`)* | Recommended for local dev. Read from `azureProfile.json` under `$AZURE_CONFIG_DIR` or `~/.azure` |
+| Azure CLI | *(none: `az login`)* | Recommended for local dev. Read from `azureProfile.json` under `$AZURE_CONFIG_DIR` or `~/.azure` |
 | Managed identity | *(auto-detected)* | Only when running on an Azure VM |
 
 The CLI login is last in that list and first in practice. Pulumi's `azure-native` provider
-falls back to it when no service principal is set, so a deploy will use it — clawops used to
+falls back to it when no service principal is set, so a deploy will use it, clawops used to
 refuse it and demand a service principal for a credential it was about to rely on anyway.
 
 The subscription a deploy lands in is `ARM_SUBSCRIPTION_ID`, then `AZURE_SUBSCRIPTION_ID`, then
-the CLI's default — Pulumi's own order, so `doctor` reports what `apply` will use.
+the CLI's default. Pulumi's own order, so `doctor` reports what `apply` will use.
 
 `clawops doctor --provider azure` validates which path will be used.
 
@@ -72,13 +72,13 @@ and names the subscription it will change.
 
 **The VM size clawops asks for may not be offered to you.** Azure gates SKU families per
 subscription and region: a subscription created in 2026 is commonly offered no B-series size at
-all in `eastus`, which is every non-GPU size clawops names. The failure arrives late —
+all in `eastus`, which is every non-GPU size clawops names. The failure arrives late,
 
 ```
 Status=409 Code="SkuNotAvailable" … 'Standard_B2s' is currently not available in location 'eastus'
 ```
 
-— after the virtual network, NSG, public IP and NIC have been created. The preflight checks the
+This happens after the virtual network, NSG, public IP and NIC have been created. The preflight checks the
 default size against what your subscription is actually offered and names alternatives; pass one
 with `clawops plan --instance-type Standard_D2als_v7`. No static map is right everywhere, which
 is why clawops names what you can have rather than guessing.
@@ -119,10 +119,10 @@ When you run `clawops up`, the Azure adapter provisions:
 - **Resource Group** (`clawops-<stackName>` by default)
 - **Virtual Network** (`10.0.0.0/16`)
 - **Subnet** (`10.0.1.0/24`)
-- **Network Security Group** — ingress controlled by `accessMode` (see [Firewall](#firewall-model))
-- **Public IP Address** (Static, Standard SKU) — persistent across VM restarts
+- **Network Security Group**. Ingress controlled by `accessMode` (see [Firewall](#firewall-model))
+- **Public IP Address** (Static, Standard SKU), persistent across VM restarts
 - **Network Interface** wiring subnet, pip, and NSG
-- **Virtual Machine** — Ubuntu 22.04 LTS, SystemAssigned managed identity, running OpenClaw via Docker
+- **Virtual Machine**. Ubuntu 22.04 LTS, SystemAssigned managed identity, running OpenClaw via Docker
   - Admin user: `clawops`
   - SSH public key injected at `/home/clawops/.ssh/authorized_keys`
 - *(Optional)* **Key Vault** + **Role Assignment** + **Secret** if `keyVaultEnabled=true`
@@ -144,7 +144,7 @@ When you run `clawops up`, the Azure adapter provisions:
 
 ## State Backend
 
-- **URL pattern**: `azblob://<container>` — a container, addressed directly, with no state
+- **URL pattern**: `azblob://<container>`. A container, addressed directly, with no state
   prefix. The other two providers take `<bucket>/clawops`; Azure does not
 - **Default name**: `clawops-state`. The container is already scoped by the storage account, so
   clawops adds no discriminator to it
@@ -178,7 +178,7 @@ rules exist only with `--publish-gateway all`, and then only for the CIDRs you n
 **Default NSG rules are deny-all (N10).** Never use `open` in production.
 
 **Egress.** Unrestricted by default. The host needs outbound access to `download.docker.com`
-and your package mirrors at first bootstrap, `ghcr.io` for the image, and — new in 2.0 —
+and your package mirrors at first bootstrap, `ghcr.io` for the image, and, new in 2.0,
 `clawhub.ai` **during `apply`** to install model-provider plugins. See
 [required outbound access](../security/egress.md) for what each failure looks like.
 
@@ -194,8 +194,8 @@ clawops up
 
 This provisions:
 1. `azure-native:keyvault:Vault` named `clawops-<stackName>-kv` (max 24 chars enforced)
-2. `azure-native:authorization:RoleAssignment` — **Key Vault Secrets User** role for the VM's managed identity
-3. `azure-native:keyvault:Secret` — placeholder `gateway-token` (update with your real token)
+2. `azure-native:authorization:RoleAssignment`. **Key Vault Secrets User** role for the VM's managed identity
+3. `azure-native:keyvault:Secret`. Placeholder `gateway-token` (update with your real token)
 
 The VM's SystemAssigned identity can read the secret without credentials in config.
 
@@ -295,7 +295,7 @@ flowchart TD
 
 ## See Also
 
-- `src/providers/azure/` — adapter + Pulumi program
-- `tests/providers/azure/` — adapter + program tests
-- `docs/github-actions-oidc.md` — CI/CD with OIDC / federated credentials
-- ADR 0004 — credential policy (R6)
+- `src/providers/azure/`, adapter + Pulumi program
+- `tests/providers/azure/`, adapter + program tests
+- `docs/github-actions-oidc.md`. CI/CD with OIDC / federated credentials
+- ADR 0004, credential policy (R6)

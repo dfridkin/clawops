@@ -1,6 +1,6 @@
 # Operations guide
 
-Day-2 operations for a running ClawOps stack. All commands assume a deployed stack — run
+Day-2 operations for a running ClawOps stack. All commands assume a deployed stack, run
 `clawops up` or `clawops apply` first if the stack has not been provisioned.
 
 ## Monitoring
@@ -56,7 +56,7 @@ things:
 | `container` | the gateway is not answering, or you passed `--since` | the container's stdout |
 
 `openclaw logs` reaches the gateway over RPC, so a gateway that is down cannot serve its own
-logs — which is exactly when you want them. clawops probes first and falls back to
+logs, which is exactly when you want them. clawops probes first and falls back to
 `docker logs`, saying so rather than leaving you to guess.
 
 `--since` is a container-log filter; the gateway command has no time window, so asking for one
@@ -64,7 +64,7 @@ selects the container source. That is reported too.
 
 Before 2.0 both this command and the MCP tool ran `journalctl -u openclaw || docker logs
 openclaw`. Only the local provider creates that systemd unit, so on every cloud VM the first
-command failed and the fallback answered — the right output for the wrong reason, with nothing
+command failed and the fallback answered. The right output for the wrong reason, with nothing
 saying which had run.
 
 ### Run a health check
@@ -89,13 +89,13 @@ With `--stack` it also connects to the host:
 - **Deployed:** which OpenClaw version the gateway is *actually* running, and whether this
   clawops line supports it. An unsupported one points at `clawops migrate`
 - **Gateway:** a real probe of `/startupz` whose response body is checked. A running
-  container means the process started, not that it serves — these are different questions
+  container means the process started, not that it serves, these are different questions
 - **Published:** whether the gateway port is bound to loopback or to every interface
 - **Disk:** usage on the state directory, where 2.0's SQLite lives
 - **Log rotation**, and **hardening** drift per module
 
 Every check reports `pass`, `fail`, `warn` or `info`. **Exit code is `1` if any check
-failed**, `0` otherwise — warnings do not fail it, so a machine that has not run
+failed**, `0` otherwise. Warnings do not fail it, so a machine that has not run
 `clawops init` yet is not reported as broken. `--json` emits the whole report, including the
 `counts` and the `ok` flag, for scripting.
 
@@ -120,7 +120,7 @@ clawops agents logs slack-bot --cursor <cursor>   # continue a previous page
 **This is a query, not a stream.** OpenClaw 2.0 removed `agents logs`; agent-scoped records
 live in the audit log, and clawops reads them with
 `openclaw audit --agent <id> --kind agent_run --json`. It returns a page and a cursor to
-continue from, so there is no `--follow` — presenting a poll loop as one would be a different
+continue from, so there is no `--follow`. Presenting a poll loop as one would be a different
 thing wearing the old command's name.
 
 `clawops logs` remains gateway-wide. Its envelope carries no agent key, so it cannot be
@@ -134,7 +134,7 @@ clawops gateway restart          # interrupts every agent on the host
 ```
 
 `clawops agents restart` exits with that explanation rather than quietly restarting
-everything — the scope difference matters on a host running several agents.
+everything. The scope difference matters on a host running several agents.
 
 `agents list` output:
 
@@ -180,7 +180,7 @@ Output:
 clawops gateway restart
 ```
 
-Restarts the container using the currently running image tag. Config is preserved — the container
+Restarts the container using the currently running image tag. Config is preserved, the container
 bind-mounts the state directory `/var/lib/clawops/openclaw`, so the config, the SQLite
 database and any installed plugins all survive the restart. Before 2.0 nothing was mounted
 and a restart discarded every session.
@@ -210,7 +210,7 @@ clawops ssh --stack prod              # specific stack
 ```
 
 Opens an SSH session to the remote host using the key and known_hosts path from
-`~/.clawops/config.json`. The session uses the `ssh2` library directly — no `ssh` binary required.
+`~/.clawops/config.json`. The session uses the `ssh2` library directly, no `ssh` binary required.
 
 ## Port forwarding
 
@@ -235,7 +235,7 @@ clawops backup create --out /backups/openclaw-$(date +%Y%m%d).tar.gz
 
 `clawops backup restore` works on this line. OpenClaw 2.0 ships a real restore and clawops
 delegates to it: the archive is verified upstream and expanded into a **fresh staging
-directory**, never in place. Adopting the restored state is a deliberate manual step — see
+directory**, never in place. Adopting the restored state is a deliberate manual step, see
 [backup-restore.md](backup-restore.md).
 
 On the clawops 1.x line the command is unavailable, because `2026.7.1-2` has no restore
@@ -250,7 +250,7 @@ clawops config set defaults.stack prod
 clawops config unset defaults.stack
 ```
 
-Config is stored at `~/.clawops/config.json`. Secrets are never stored in config — see
+Config is stored at `~/.clawops/config.json`. Secrets are never stored in config, see
 [`docs/security/redaction.md`](security/redaction.md).
 
 ## Routine maintenance
@@ -260,7 +260,7 @@ Config is stored at `~/.clawops/config.json`. Secrets are never stored in config
 Take a backup before any upgrade and on a regular schedule for production stacks:
 
 ```bash
-# Daily cron — adjust path as needed
+# Daily cron: adjust path as needed
 0 2 * * * clawops backup create --stack prod \
   --out /backups/openclaw-prod-$(date +\%Y\%m\%d).tar.gz
 ```

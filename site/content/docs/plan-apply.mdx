@@ -27,7 +27,7 @@ the OpenClaw version, and any config overlay. Secrets appear as **references**, 
 
 <Callout type="warn">
   `apply` is not immutable plan execution. It re-runs the provisioning with the parameters from
-  the reviewed plan — it does not replay a locked provider-level artifact. Cloud state that changed
+  the reviewed plan. It does not replay a locked provider-level artifact. Cloud state that changed
   between `plan` and `apply` is reconciled against live infrastructure, which can produce a
   different diff than the one you read.
 </Callout>
@@ -37,5 +37,5 @@ detected and surfaced rather than silently applied.
 
 ## Local provider
 
-`plan` and `apply` are cloud-only. The local provider bootstraps over SSH with no state backend —
-use `clawops up` directly.
+`plan` and `apply` are cloud-only. The local provider bootstraps over SSH with no state backend,
+so use `clawops up` directly.

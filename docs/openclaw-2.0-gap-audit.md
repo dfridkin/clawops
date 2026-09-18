@@ -1,4 +1,4 @@
-# WO-58 — Systematic gap audit
+# WO-58. Systematic gap audit
 
 Every file in `src/` that references `openclaw` (30 of them), read against the 2.0 runtime
 contract as **measured** in [SP-10](spikes/SP-10-openclaw-2.0-startup-contract.md), not as
@@ -9,18 +9,18 @@ Phase 1 was not scoped until this landed. Two items below change its shape.
 ## Method
 
 The earlier sweeps followed the trail of a reported failure and missed sibling instances
-twice — G32 (the MCP restart path) survived a fix that claimed to cover "all three restart
+twice. G32 (the MCP restart path) survived a fix that claimed to cover "all three restart
 paths", because the fix followed the three the bug report named. This audit enumerates the
 surface first, then checks every element against each contract dimension.
 
 ## Findings by severity
 
-### 1. No state persistence anywhere — G2, confirmed total
+### 1. No state persistence anywhere. G2, confirmed total
 
 **Not one of the 30 files mounts a state volume or sets `OPENCLAW_STATE_DIR`.**
 
 In 2.0 sessions, transcripts and credentials live in SQLite under the state directory.
-Every container replacement destroys all of it — and container replacement is not an edge
+Every container replacement destroys all of it, and container replacement is not an edge
 case, it is what `gateway restart`, `gateway update` and `config set` all do.
 
 This is the largest single item in Phase 1, and it is not partially done. It is absent.
@@ -29,9 +29,9 @@ This is the largest single item in Phase 1, and it is not partially done. It is 
 
 | File | Line |
 |---|---|
-| `openclaw/run-flags.ts` | 124 — the shared builder, so every restart path |
-| `providers/startup.ts` | 101 — cloud provisioning |
-| `providers/local/bootstrap.sh.tmpl` | 175, 199 — local provisioning, both paths |
+| `openclaw/run-flags.ts` | 124: the shared builder, so every restart path |
+| `providers/startup.ts` | 101: cloud provisioning |
+| `providers/local/bootstrap.sh.tmpl` | 175, 199: local provisioning, both paths |
 
 SP-10b §4: OpenClaw writes config by atomic rename, and renaming over a bind-mounted file
 fails `EBUSY` whether the mount is `:ro` or `rw`. On 2.0 this blocks `plugins install`
@@ -72,12 +72,12 @@ Only the local provider ever creates a systemd unit. Cloud VMs work by accident:
 command fails and falls through to `|| docker logs openclaw`. It produces the right output
 for the wrong reason, and the fallback hides which one ran. Make it explicit under WO-38.
 
-### 7. `pulumi/components/gateway.ts` — dead code that looks alive
+### 7. `pulumi/components/gateway.ts`, dead code that looks alive
 
 Wrong registry (`ghcr.io/anthropics/openclaw`, **G7**), no gateway command, no config
 mount, no port pin. Nothing constructs it except its own test, so no user is exposed. It
 is a trap for whoever wires it up next. Delete it or rebuild it on the shared builder under
-WO-38 — but do not leave it.
+WO-38, but do not leave it.
 
 ### 8. Two of the three `agents` subcommands clawops uses were **removed in 2.0**
 
@@ -86,8 +86,8 @@ Verified against `2026.9.2`:
 | clawops invokes | 2.0 | Replacement |
 |---|---|---|
 | `agents list --json` | ✅ exists (`--json`, `--bindings`, `--tree`) | — |
-| `agents restart [name]` | ❌ *"OpenClaw does not know the command"* | `gateway restart` — **gateway-wide, not per-agent** |
-| `agents logs <name> --follow` | ❌ *"OpenClaw does not know the command"* | `logs --follow` — **gateway-wide, not per-agent** |
+| `agents restart [name]` | ❌ *"OpenClaw does not know the command"* | `gateway restart`: **gateway-wide, not per-agent** |
+| `agents logs <name> --follow` | ❌ *"OpenClaw does not know the command"* | `logs --follow`: **gateway-wide, not per-agent** |
 
 2.0's `agents` surface is `add`, `bind`, `bindings`, `delete`, `list`, `set-identity`,
 `unbind`. Per-agent restart and per-agent log tailing are gone as concepts, not merely
@@ -95,13 +95,13 @@ renamed.
 
 This breaks two shipped commands and one MCP tool:
 
-- `cli/commands/agents.ts` — `clawops agents restart`, `clawops agents logs`
-- `mcp/tools/cli/agents.ts` — `clawops_agents_restart` (and its `spec/mcp-tools.yaml` entry)
+- `cli/commands/agents.ts`. `clawops agents restart`, `clawops agents logs`
+- `mcp/tools/cli/agents.ts`. `clawops_agents_restart` (and its `spec/mcp-tools.yaml` entry)
 
-### 8b. Per-agent scoping is not gone — it moved to `audit`
+### 8b. Per-agent scoping is not gone, it moved to `audit`
 
-The table above was the first answer, and it was incomplete. `openclaw audit` — "Inspect
-activity records and exact-run identity context" — carries exactly the scoping `logs` lost:
+The table above was the first answer, and it was incomplete. `openclaw audit`. "Inspect
+activity records and exact-run identity context". Carries exactly the scoping `logs` lost:
 
 ```
 --agent <id>       Filter by agent id
@@ -114,7 +114,7 @@ activity records and exact-run identity context" — carries exactly the scoping
 ```
 
 `openclaw logs` has **no** filter flags at all, and its envelope
-(`type, time, level, subsystem, message, raw, module`) carries no agent key — so filtering
+(`type, time, level, subsystem, message, raw, module`) carries no agent key, so filtering
 its output would mean substring-matching `message`/`raw`. `audit` is the structured
 per-agent surface, with `--cursor` for the follow case.
 
@@ -124,12 +124,12 @@ per-agent surface, with `--cursor` for the follow case.
 |---|---|---|
 | `clawops agents list` | unchanged | `agents list --json` survives |
 | `clawops agents logs <name>` | **kept**, re-point at `openclaw audit --agent <id> --json` | the capability exists upstream; removing it would discard something available |
-| `clawops agents restart` | **removed** | no per-agent restart exists anywhere in 2.0 — only `gateway restart` and `daemon restart`, both host-wide |
+| `clawops agents restart` | **removed** | no per-agent restart exists anywhere in 2.0, only `gateway restart` and `daemon restart`, both host-wide |
 
 Restart is removed rather than aliased because the substitute has a different blast radius:
 on a host running several isolated agents, `gateway restart` interrupts the ones you were
 not touching. `clawops gateway restart` already offers that under a name that says so. The
-MCP tool `clawops_agents_restart` is dropped for the same reason and more sharply — it is
+MCP tool `clawops_agents_restart` is dropped for the same reason and more sharply, it is
 `destructiveHint: true`, and a deprecation notice is a safeguard a human reads and an agent
 routinely does not.
 
@@ -142,7 +142,7 @@ Not gaps, but they change what WO-38 should build:
 
 | clawops does today | 2.0 offers |
 |---|---|
-| `journalctl -u openclaw \|\| docker logs openclaw` | `openclaw logs --follow --json --limit` — over RPC, structured |
+| `journalctl -u openclaw \|\| docker logs openclaw` | `openclaw logs --follow --json --limit`, over RPC, structured |
 | `curl /healthz` polling | `openclaw health`, `gateway health`, `gateway probe` |
 | `docker inspect` for gateway state | `gateway probe` (reachability, auth capability, read-probe) |
 
@@ -163,19 +163,19 @@ is contract-agnostic and already 2.0-ready. The plan/apply flow (`plan/generate.
 OpenClaw version as data and does not encode runtime shape. `config/secrets.ts` mentions
 openclaw only in a comment.
 
-`cli/commands/doctor.ts` uses `docker inspect ... || echo 'not found'` — a **reporting**
+`cli/commands/doctor.ts` uses `docker inspect ... || echo 'not found'`, a **reporting**
 fallback, not a deploy fallback, so it is not the defect class fixed in v1.7.6. Doctor is
 where the SP-10b provider reconcile (`plugins list --json`, compare `providerIds` against
 `models.providers` keys) should live.
 
 ## What this changes about Phase 1
 
-1. **WO-38 grows.** It is not only consolidation — it must convert the config mount from a
+1. **WO-38 grows.** It is not only consolidation, it must convert the config mount from a
    file to a directory across four sites, which is a shape change to the run command.
 2. **WO-39 does not shrink.** State persistence is absent rather than partial, so there is
    no existing behaviour to preserve or migrate around.
-3. **Decided (§8b).** `clawops agents restart` and its MCP tool are removed — no per-agent
+3. **Decided (§8b).** `clawops agents restart` and its MCP tool are removed, no per-agent
    restart exists in 2.0. `clawops agents logs` is kept and re-points at
    `openclaw audit --agent`, which is where per-agent scoping actually went.
-4. **WO-38 should build on 2.0's own CLI**, not around it — `logs`, `health` and
+4. **WO-38 should build on 2.0's own CLI**, not around it, `logs`, `health` and
    `gateway probe` replace the journalctl/curl/docker-inspect workarounds.

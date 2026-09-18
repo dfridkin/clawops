@@ -1,4 +1,4 @@
-# Development Guide — Your First Five PRs
+# Development Guide. Your First Five PRs
 
 This guide is for engineers picking up clawops fresh, whether you're the first one in or joining a team that's already underway. It walks through five concrete PRs that get you productive.
 
@@ -6,11 +6,11 @@ This guide is for engineers picking up clawops fresh, whether you're the first o
 
 Read in this order, ~30 minutes total:
 
-1. `README.md` — project map
-2. `PRD.md` § 1, 3, 4 — what we're building and why
-3. `SPEC.md` § 1, 2 — repo structure and architecture
-4. `DESIGN_RULES.md` — the 25 rules (skim; you'll re-read on demand)
-5. `CLAUDE.md` — what Claude Code expects when you open the repo
+1. `README.md`, project map
+2. `PRD.md` § 1, 3, 4, what we're building and why
+3. `SPEC.md` § 1, 2, repo structure and architecture
+4. `DESIGN_RULES.md`. The 25 rules (skim; you'll re-read on demand)
+5. `CLAUDE.md`. What Claude Code expects when you open the repo
 
 Then do a clean install:
 
@@ -48,11 +48,11 @@ If any of those fail, fix them before proceeding (file an issue if needed).
 **Goal:** prove the entire output contract works end-to-end with a trivial command.
 
 **Scope:**
-- `src/output/human.ts` — pretty-print + spinners
-- `src/output/json.ts` — `{ ok, data, error }` schema
-- `src/output/table.ts` — ASCII table renderer (used later by status, list)
-- `src/cli/index.ts` — citty wiring with global flags `--json`, `--quiet`, `--profile`, `--stack`
-- `src/cli/commands/version.ts` — read package.json, return version
+- `src/output/human.ts`, pretty-print + spinners
+- `src/output/json.ts`, `{ ok, data, error }` schema
+- `src/output/table.ts`. ASCII table renderer (used later by status, list)
+- `src/cli/index.ts`. Citty wiring with global flags `--json`, `--quiet`, `--profile`, `--stack`
+- `src/cli/commands/version.ts`, read package.json, return version
 - Tests: output formatters, version command (human + json modes)
 
 **Why this PR:** the output module is the contract every other command relies on. Building it first means every subsequent command can be tested for output correctness from PR #1.
@@ -70,11 +70,11 @@ If any of those fail, fix them before proceeding (file an issue if needed).
 **Goal:** `~/.clawops/config.json` reading, writing, and the precedence chain from ADR 0004.
 
 **Scope:**
-- `src/config/store.ts` — read/write config file with conf
-- `src/config/resolve.ts` — implement the `flag > env > config > default` chain
-- `src/config/types.ts` — config file schema (use Zod)
-- `src/cli/commands/init.ts` — non-interactive mode only for now
-- `src/cli/commands/doctor.ts` — checks config validity, reports resolved values + sources
+- `src/config/store.ts`, read/write config file with conf
+- `src/config/resolve.ts`. Implement the `flag > env > config > default` chain
+- `src/config/types.ts`, config file schema (use Zod)
+- `src/cli/commands/init.ts`, non-interactive mode only for now
+- `src/cli/commands/doctor.ts`. Checks config validity, reports resolved values + sources
 - Tests: precedence permutations, doctor output
 
 **Why this PR:** every command depends on `--stack`/`--profile` resolution. Get this right once, refer to it everywhere.
@@ -93,9 +93,9 @@ If any of those fail, fix them before proceeding (file an issue if needed).
 
 **Scope:**
 - Use `/add-provider` skill to scaffold `src/providers/gcp/`
-- `src/pulumi/automation.ts` — wrapper around `LocalWorkspace.createOrSelectStack`
-- `src/pulumi/components/server.ts` — first component (just a Compute Engine VM)
-- `src/cli/commands/up.ts` — wires it together
+- `src/pulumi/automation.ts`. Wrapper around `LocalWorkspace.createOrSelectStack`
+- `src/pulumi/components/server.ts`. First component (just a Compute Engine VM)
+- `src/cli/commands/up.ts`, wires it together
 - Tests: provider adapter satisfies schema, Pulumi mock test for component
 
 **Why this PR:** GCP first because the adapter is simplest; AWS has more IAM complexity. Dry-run only because real provisioning needs credentials and budget approval.
@@ -114,11 +114,11 @@ If any of those fail, fix them before proceeding (file an issue if needed).
 **Goal:** `clawops mcp serve` starts, registers `clawops_status` (read-only), responds to `tools/list` correctly.
 
 **Scope:**
-- `src/mcp/server.ts` — McpServer init, stdio transport
-- `src/mcp/tools/_generated.ts` — emit from `spec/mcp-tools.yaml` via `gen-schemas.ts`
-- `src/mcp/tools/cli/status.ts` — first concrete handler (delegates to `cli/commands/status.ts`)
-- `src/mcp/audit.ts` — audit logger with redaction
-- `src/cli/commands/mcp.ts` — `clawops mcp serve [--inspector]`
+- `src/mcp/server.ts`. McpServer init, stdio transport
+- `src/mcp/tools/_generated.ts`. Emit from `spec/mcp-tools.yaml` via `gen-schemas.ts`
+- `src/mcp/tools/cli/status.ts`. First concrete handler (delegates to `cli/commands/status.ts`)
+- `src/mcp/audit.ts`, audit logger with redaction
+- `src/cli/commands/mcp.ts`, `clawops mcp serve [--inspector]`
 - Tests: tools/list shape, tool invocation with mocked status, audit log entry, stdio purity (I7)
 
 **Why this PR:** establishes the MCP layer before all CLI commands are built, so subsequent commands can be exposed as tools immediately as they're added.
@@ -158,8 +158,8 @@ Suggested ordering for PRs 6-10:
 
 ## When You Get Stuck
 
-- Search the ADRs in `docs/decisions/` — your question may already have a decision recorded
-- Check `DESIGN_RULES.md` — the rule may explain why something is the way it is
+- Search the ADRs in `docs/decisions/`. Your question may already have a decision recorded
+- Check `DESIGN_RULES.md`. The rule may explain why something is the way it is
 - Open a GitHub Discussion before opening a PR with a contentious change
 
 Welcome aboard.

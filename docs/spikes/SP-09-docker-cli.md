@@ -1,6 +1,6 @@
-# SP-09 — Can we drive the sandbox backend without a derived image?
+# SP-09, Can we drive the sandbox backend without a derived image?
 
-**Status:** COMPLETE — 2026-09-05. EC2 spot `t3.medium`, x86_64, ECS-optimized AL2023
+**Status:** COMPLETE. 2026-09-05. EC2 spot `t3.medium`, x86_64, ECS-optimized AL2023
 (Docker 25.0.16 preinstalled), OpenClaw `2026.9.1`.
 
 **Answer: yes. Option A works, and WO-53 does not need a clawops-published image.**
@@ -12,7 +12,7 @@ WO-53 assumed clawops must publish and maintain a derived gateway image, because
 the sandbox backend shells out to `docker`. That assumption went from "the image lacks a binary"
 straight to "therefore we own an image", without testing the step between.
 
-## Result — official image, unmodified
+## Result, official image, unmodified
 
 Docker publishes standalone **statically linked** CLI binaries at
 `download.docker.com/linux/static/stable/<arch>/`. Fetched, verified, mounted read-only:
@@ -38,7 +38,7 @@ startupz : {"ok":true,"status":"started"}
 sandbox explain → backend: docker, runtime: sandboxed, mounts computed
 ```
 
-And the decisive test — spawning a sibling sandbox **from inside** the gateway, through the mounted
+And the decisive test. Spawning a sibling sandbox **from inside** the gateway, through the mounted
 CLI:
 
 ```
@@ -51,7 +51,7 @@ The sibling gets the hardened profile, and the workspace bind resolves host-side
 
 ## Why this beats the derived image
 
-| | Option A — mounted static CLI | Option B — derived image |
+| | Option A: mounted static CLI | Option B: derived image |
 |---|---|---|
 | Image | official, **unmodified** | `FROM` official, +70 MB (SP-03) |
 | Registry | none | ours to publish |
@@ -71,17 +71,17 @@ of work; publishing an image is.
    `/opt/clawops/bin/docker`.
 2. Mount it read-only at `/usr/local/bin/docker` alongside the socket and `--group-add <docker gid>`
    read at runtime.
-3. Keep **Option B as the fallback** — SP-03 proved the derived build works — for a host that cannot
+3. Keep **Option B as the fallback**. SP-03 proved the derived build works, for a host that cannot
    reach `download.docker.com`, or an air-gapped install.
 4. Drop the "we will maintain a container image" risk from the plan.
 
 Worth doing in parallel: ask upstream for a `-dockercli` variant. They already publish `slim`,
-`-browser` and `extended-stable-*`, so it is a reasonable request — and it would remove even the
+`-browser` and `extended-stable-*`, so it is a reasonable request, and it would remove even the
 mounted binary.
 
 ## Caveats
 
-- Host distro here was AL2023, not Ubuntu. Fine for this question — it tests container-side CLI
+- Host distro here was AL2023, not Ubuntu. Fine for this question, it tests container-side CLI
   behaviour, not host LSM policy. SP-04's AppArmor/userns finding remains Ubuntu-specific and
   unchanged.
 - Version skew was verified in one direction only (newer CLI, older daemon), which is the direction

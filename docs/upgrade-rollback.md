@@ -7,7 +7,7 @@ ClawOps supports two upgrade paths for OpenClaw. Choose based on the scope of th
 | Gateway-only | `clawops gateway update` | ~60s | OpenClaw patch/minor version bump, no infra changes |
 | Plan/apply | `clawops plan` + `clawops apply` | ~5–15 min | New infra requirements, env vars, port changes, or first upgrade to a version listed in `spec/openclaw-versions.yaml` |
 
-When in doubt, use plan/apply — it is safer and leaves an auditable trail.
+When in doubt, use plan/apply. It is safer and leaves an auditable trail.
 
 ## Pre-upgrade checklist
 
@@ -22,14 +22,14 @@ Before any upgrade:
    clawops gateway status
    # Image: ghcr.io/openclaw/openclaw:2026.4.5
    ```
-3. **Check agent state** — confirm agents are healthy before you start:
+3. **Check agent state**. Confirm agents are healthy before you start:
    ```bash
    clawops agents list
    ```
 
 ## Gateway-only upgrade
 
-Pulls the new Docker image and replaces the running container. Config is preserved — the container
+Pulls the new Docker image and replaces the running container. Config is preserved, the container
 bind-mounts the state directory `/var/lib/clawops/openclaw`, which holds the config, the
 SQLite database and installed plugins. The upgrade replaces the container, not the state.
 
@@ -62,7 +62,7 @@ clawops logs --tail 50                # check for errors in the first minute
 
 ## Plan/apply upgrade
 
-Use this path when the new OpenClaw version has infrastructure requirements — new environment
+Use this path when the new OpenClaw version has infrastructure requirements, new environment
 variables, changed ports, updated IAM policies, or when `spec/openclaw-versions.yaml` notes a
 breaking change for the target version.
 
@@ -82,7 +82,7 @@ clawops apply /tmp/upgrade-plan.json
 ```
 
 `clawops apply` will display the resource diff and prompt for confirmation before executing.
-The drift warning will fire if the stack was touched since you ran `plan` — review and confirm.
+The drift warning will fire if the stack was touched since you ran `plan`, review and confirm.
 
 Pulumi reconciles only what changed. If the new version requires a new IAM policy, Pulumi adds
 it. The EC2 instance or VM is not replaced unless the instance type changed.
@@ -136,7 +136,7 @@ which stops the gateway, unpacks the archive and restarts:
 
 ```bash
 # 1. Roll back the software (gateway or plan/apply as above)
-# 2. Recover data — see backup-restore.md#recovering-from-an-archive
+# 2. Recover data: see backup-restore.md#recovering-from-an-archive
 # 3. Restart gateway to pick up restored state
 clawops gateway restart
 # 4. Verify

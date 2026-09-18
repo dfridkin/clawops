@@ -1,4 +1,4 @@
-# SP-10 — The 2.0 startup contract, measured
+# SP-10. The 2.0 startup contract, measured
 
 **Image:** `ghcr.io/openclaw/openclaw:2026.9.1` · **Date:** 2026-09-06 · **Cost:** $0 (local Docker)
 
@@ -49,13 +49,13 @@ plugin inventory.
 ```
 
 Exit **1**. Under `--restart unless-stopped` the second boot converges: `restarts=1`, then
-stable. So it self-heals — but only if a restart policy is present, and only after a
+stable. So it self-heals, but only if a restart policy is present, and only after a
 visible failure that a health check will see.
 
 An earlier 12-second observation showed `running exit=0` and looked like success. The
 install had simply not finished. **Do not conclude from a short probe.**
 
-## 4. Without egress it "succeeds" — silently, without the provider
+## 4. Without egress it "succeeds", silently, without the provider
 
 `--network none`, same config: `running exit=0`, no convergence restart, no error. The
 gateway is healthy and the configured model provider is absent.
@@ -65,7 +65,7 @@ deny-all egress is the documented default.
 
 ## 5. The install does not survive container replacement
 
-The plugin lands at `/app/npm/projects/openclaw-amazon-bedrock-provider-<hash>` — the
+The plugin lands at `/app/npm/projects/openclaw-amazon-bedrock-provider-<hash>`, the
 container's writable layer, not a mount. Measured across `docker stop && docker rm &&
 docker run`, which is exactly what `gateway restart`, `gateway update` and `config set`
 do:
@@ -84,20 +84,20 @@ on ClawHub being reachable.
 
 ## 6. The captured schema earns its place
 
-It rejected a real mistake before startup — a Bedrock model entry with `id` but no
-`name` — with `/models/providers/amazon-bedrock/models/0 must have required property
+It rejected a real mistake before startup, a Bedrock model entry with `id` but no
+`name`, with `/models/providers/amazon-bedrock/models/0 must have required property
 'name'`. The gateway's own answer to the same config was exit 78.
 
 ---
 
-# SP-10b — Designing the fix (2026.9.2)
+# SP-10b. Designing the fix (2026.9.2)
 
 Follow-up run to validate the remedy for §4's silent case. Three of my own earlier
 conclusions did not survive it.
 
 ## 1. `plugins doctor` cannot be the check
 
-It never mentions the missing provider and never says "missing" — 64 lines, 0 matches for
+It never mentions the missing provider and never says "missing", 64 lines, 0 matches for
 `bedrock`. Worse, it **exits 1 during normal operation** whenever a config is mounted,
 because it reports "duplicate plugin id detected" for every bundled plugin. A gate that
 fails when nothing is wrong and stays quiet when something is, is worse than no gate.
@@ -111,7 +111,7 @@ fails when nothing is wrong and stays quiet when something is, is worse than no 
 | egress denied | **absent** |
 | converged with egress | `{enabled: true, status: "loaded", providerIds: ["amazon-bedrock"]}` |
 
-Reconcile on `providerIds`, not plugin `id` — the `google` plugin exposes
+Reconcile on `providerIds`, not plugin `id`, the `google` plugin exposes
 `["google","google-gemini-cli","google-vertex"]`, so a config naming `google-vertex`
 matches a plugin called `google`. 20 of 61 plugins expose provider ids.
 
@@ -126,8 +126,8 @@ but this OpenClaw runtime exposes 2026.9.1.
 ```
 
 The official Bedrock plugin will not install on the version the plan picked as its floor.
-Startup auto-install on 9.1 resolved *some* compatible build, but an explicit install —
-which is what provisioning would do — fails outright. AWS + Bedrock is clawops's flagship
+Startup auto-install on 9.1 resolved *some* compatible build, but an explicit install,
+which is what provisioning would do. Fails outright. AWS + Bedrock is clawops's flagship
 path, so the 2.x floor is **2026.9.2**.
 
 ## 4. The config must be mounted as a directory, not a file
@@ -142,7 +142,7 @@ EBUSY: resource busy or locked, rename '/app/config.json.14.<uuid>.tmp' -> '/app
 OpenClaw writes config by atomic rename, and you cannot rename over a mountpoint. Mounting
 the parent directory works. This is a hard constraint on WO-38/WO-39, not a preference.
 
-## 5. Plugins install beside the config — so they persist for free
+## 5. Plugins install beside the config, so they persist for free
 
 Explicit install lands in `<config-dir>/extensions/amazon-bedrock`, **not**
 `/app/npm/projects` (which is where the startup auto-install put it). Since clawops

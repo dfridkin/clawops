@@ -1,4 +1,4 @@
-# ADR 0005 — Error Taxonomy and Exit Codes
+# ADR 0005. Error Taxonomy and Exit Codes
 
 **Status:** Accepted
 **Date:** 2026-05-04

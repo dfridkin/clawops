@@ -1,4 +1,4 @@
-# ADR NNNN — <Short Title>
+# ADR NNNN, <Short Title>
 
 **Status:** Proposed | Accepted | Superseded by NNNN | Deprecated
 **Date:** YYYY-MM-DD

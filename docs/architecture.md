@@ -28,19 +28,19 @@ clawops is best understood as **three concentric surfaces** wrapping a determini
 └──────────────────────────────────────────────────────────────┘
 ```
 
-Each surface adds a different shape of input/output to the same deterministic core. The core never knows which surface called it. This is how we get CLI parity with the MCP server "for free" — both layers translate to the same internal `PlanRequest` / `ApplyRequest` / `StatusRequest`.
+Each surface adds a different shape of input/output to the same deterministic core. The core never knows which surface called it. This is how we get CLI parity with the MCP server "for free". Both layers translate to the same internal `PlanRequest` / `ApplyRequest` / `StatusRequest`.
 
 ## 2. Why Pulumi Automation API (Not Terraform / Direct SDK)
 
 We considered three approaches:
 
-1. **Direct cloud SDKs** (`@aws-sdk`, `@google-cloud/*`, `@azure/arm-*`) — fastest cold-start, no extra deps. Rejected because we'd reimplement state tracking, drift detection, and resource ordering — about 60% of what Pulumi gives us.
+1. **Direct cloud SDKs** (`@aws-sdk`, `@google-cloud/*`, `@azure/arm-*`). Fastest cold-start, no extra deps. Rejected because we'd reimplement state tracking, drift detection, and resource ordering, about 60% of what Pulumi gives us.
 
-2. **Terraform via shellout** — well-known, huge module ecosystem. Rejected because (a) requires user to install Terraform, (b) no programmatic state inspection, (c) HCL templating from TS is awkward.
+2. **Terraform via shellout**. Well-known, huge module ecosystem. Rejected because (a) requires user to install Terraform, (b) no programmatic state inspection, (c) HCL templating from TS is awkward.
 
-3. **Pulumi Automation API** — chosen. Pulumi as a TypeScript library means inline programs (no `pulumi.yaml` on disk), typed outputs, and a version we pin. The API drives a CLI subprocess rather than an in-process engine, so clawops installs that CLI into `~/.clawops/.pulumi-cli` on first use and the user still installs nothing (ADR 0010).
+3. **Pulumi Automation API**. Chosen. Pulumi as a TypeScript library means inline programs (no `pulumi.yaml` on disk), typed outputs, and a version we pin. The API drives a CLI subprocess rather than an in-process engine, so clawops installs that CLI into `~/.clawops/.pulumi-cli` on first use and the user still installs nothing (ADR 0010).
 
-The Automation API specifically (vs. requiring `pulumi` CLI) is the unlock — see ADR 0006.
+The Automation API specifically (vs. requiring `pulumi` CLI) is the unlock, see ADR 0006.
 
 ## 3. The Maker Pattern (Borrowed from Clanker)
 
@@ -59,7 +59,7 @@ Every destructive operation routes through a reviewable plan artifact:
 
 - **Auditability**: every change has a reviewable artifact in CI/git
 - **Determinism**: applying yesterday's plan today produces the same diff (modulo upstream API changes)
-- **Agent safety**: an LLM can't directly destroy infrastructure — it can only generate a plan that a human or elicitation flow approves
+- **Agent safety**: an LLM can't directly destroy infrastructure. It can only generate a plan that a human or elicitation flow approves
 
 The plan format is `spec/deploy-plan.schema.json`. The Maker flow is enforced by all destructive MCP tools (R19) and is the *only* path the `apply` command takes.
 
@@ -102,7 +102,7 @@ src/providers/aws/
 └── index.ts          # re-export
 ```
 
-The **inline Pulumi program** is the heart of each adapter — a TypeScript closure that, when invoked by the Pulumi engine, declares all the resources for one stack:
+The **inline Pulumi program** is the heart of each adapter. A TypeScript closure that, when invoked by the Pulumi engine, declares all the resources for one stack:
 
 ```typescript
 // src/providers/aws/pulumi.ts (illustrative)
@@ -130,9 +130,9 @@ This is what gets passed to `LocalWorkspace.createOrSelectStack({ program })`.
 
 Authoring tools in YAML, generating Zod schemas in TS, has three benefits:
 
-1. **Single source of truth** — the catalog can't drift from the implementation
-2. **Auditable** — adding a tool is a YAML diff, reviewable
-3. **R1 enforcement** — counting tools, checking prefixes, validating annotations is mechanical
+1. **Single source of truth**. The catalog can't drift from the implementation
+2. **Auditable**. Adding a tool is a YAML diff, reviewable
+3. **R1 enforcement**. Counting tools, checking prefixes, validating annotations is mechanical
 
 ### 6.2 Toolsets (R1)
 
@@ -180,7 +180,7 @@ The security model rests on five pillars (R6, R10–R11, R18–R22):
 1. **Credentials never in clawops's hands** (R6). All cloud auth happens via the cloud's native mechanism: env vars, CLI profiles, instance metadata.
 2. **Default deny, explicit allow** (N10). Generated firewalls allow nothing until the user specifies CIDRs.
 3. **Plan-then-apply** (Maker pattern). No direct destructive paths.
-4. **Filter at registration** (R18). `--read-only` mode doesn't soft-block destructive tools — they don't exist.
+4. **Filter at registration** (R18). `--read-only` mode doesn't soft-block destructive tools, they don't exist.
 5. **Audit everything** (R21). Every MCP tool call writes a sanitized JSON log entry.
 
 The five-layer egress defense from schmitthub/openclaw-deploy is documented as a *reference architecture* but not the default. Users opting into the secure profile via `clawops up --profile secure` get Tailscale + Envoy + UFW + DNS allowlist; the default profile is simpler.
@@ -189,9 +189,9 @@ The five-layer egress defense from schmitthub/openclaw-deploy is documented as a
 
 Three signals:
 
-- **Logs** — structured JSON to stderr, library is `pino` (see ADR 0007). Fields per logging spec.
-- **Metrics** — OpenTelemetry export optional (`OTEL_EXPORTER_OTLP_ENDPOINT`). Tool-call duration, plan apply duration, error rates.
-- **Traces** — also OTel. Useful for debugging the Pulumi engine ↔ provider ↔ SSH chain.
+- **Logs**. Structured JSON to stderr, library is `pino` (see ADR 0007). Fields per logging spec.
+- **Metrics**. OpenTelemetry export optional (`OTEL_EXPORTER_OTLP_ENDPOINT`). Tool-call duration, plan apply duration, error rates.
+- **Traces**. Also OTel. Useful for debugging the Pulumi engine ↔ provider ↔ SSH chain.
 
 All telemetry is opt-in. Default is logs-only.
 
@@ -260,7 +260,7 @@ Each will get its own ADR when prioritized.
 
 ## References
 
-- SPEC.md — technical specification
-- DESIGN_RULES.md — normative implementation rules
-- docs/decisions/ — historical reasoning
-- spec/ — machine-readable schemas
+- SPEC.md, technical specification
+- DESIGN_RULES.md, normative implementation rules
+- docs/decisions/, historical reasoning
+- spec/, machine-readable schemas

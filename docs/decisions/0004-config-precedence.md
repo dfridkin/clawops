@@ -1,4 +1,4 @@
-# ADR 0004 — Configuration Precedence
+# ADR 0004. Configuration Precedence
 
 **Status:** Accepted
 **Date:** 2026-05-04
@@ -28,7 +28,7 @@ flag > clawops env var > provider-native env var > config file > provider defaul
 
 **Specifically:**
 
-1. **CLI flag** (e.g., `--region us-west-2`) — highest priority
+1. **CLI flag** (e.g., `--region us-west-2`), highest priority
 2. **clawops-namespaced env var** (e.g., `CLAWOPS_REGION=us-west-2`)
 3. **Provider-native env var** (e.g., `AWS_REGION=us-west-2`)
 4. **Config file value** for the active stack (e.g., `stacks.prod-aws.region`)
@@ -37,7 +37,7 @@ flag > clawops env var > provider-native env var > config file > provider defaul
 **Exceptions to the rule:**
 
 - **Credentials (R6):** ONLY env vars or provider-native CLI profiles are consulted. Flags and config file are forbidden from carrying credentials.
-- **State backend URL:** ONLY config file (`stacks.<name>.stateUrl`). This is intentional — switching state backends mid-flight is a footgun.
+- **State backend URL:** ONLY config file (`stacks.<name>.stateUrl`). This is intentional. Switching state backends mid-flight is a footgun.
 - **Stack name:** flag (`--stack`) > `CLAWOPS_STACK` env var > config file `defaults.stack` > literal string `"default"`. (No provider default applies.)
 
 ## Resolution Order Implementation
@@ -72,7 +72,7 @@ function resolveConfig<T>(opts: {
 - CI-friendly: env-only deployment paths work cleanly
 
 **Negative:**
-- Slightly more error-prone than conservative precedence — a user with a `~/.clawops/config.json` value can be surprised by a leftover env var
+- Slightly more error-prone than conservative precedence. A user with a `~/.clawops/config.json` value can be surprised by a leftover env var
 - Mitigation: `clawops doctor` reports the resolved value AND its source for every key
 
 ## Verification

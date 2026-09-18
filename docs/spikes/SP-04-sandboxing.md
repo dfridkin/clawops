@@ -1,9 +1,9 @@
-# SP-04 — DooD sandboxing
+# SP-04. DooD sandboxing
 
-**Status:** COMPLETE (with one caveat) — 2026-09-04. EC2 spot `t3.medium`, x86_64,
+**Status:** COMPLETE (with one caveat). 2026-09-04. EC2 spot `t3.medium`, x86_64,
 Ubuntu 24.04.4, Docker 29.8.0, derived image `clawops-openclaw:2026.8.1-dockercli`.
 
-**Verdict: D4 is feasible. Sandboxing works — and it requires identity path mapping,
+**Verdict: D4 is feasible. Sandboxing works, and it requires identity path mapping,
 which a plain gateway does not.**
 
 ## What worked
@@ -17,7 +17,7 @@ which a plain gateway does not.**
 | `openclaw sandbox explain` | ✅ full effective policy, mounts, tool allow/deny |
 
 Requirements confirmed: derived image with `docker-ce-cli` (SP-03), `/var/run/docker.sock` mounted,
-`--group-add <host docker gid>` (988 here — host-specific, must be read at runtime).
+`--group-add <host docker gid>` (988 here. Host-specific, must be read at runtime).
 
 ## The finding: identity mapping is required, and its absence is silent
 
@@ -30,7 +30,7 @@ workspaceMounts:
 ```
 
 Those become bind-mount *sources* for sibling containers, and the Docker daemon resolves them in the
-**host** namespace — where they do not exist (`ls: cannot access '/home/node/.openclaw'`; the real
+**host** namespace. Where they do not exist (`ls: cannot access '/home/node/.openclaw'`; the real
 host path is `/var/lib/clawops/sb`).
 
 Simulated directly, with a marker file in the real workspace:
@@ -54,8 +54,8 @@ sandboxing needs identity mapping. **Both are true, so the layout is conditional
 
 | Deployment | State mount |
 |---|---|
-| Default (no sandbox) | Standard `/home/node/.openclaw` — matches upstream and Fleet |
-| Sandbox enabled | **Identity-mapped** — host path == container path |
+| Default (no sandbox) | Standard `/home/node/.openclaw`, matches upstream and Fleet |
+| Sandbox enabled | **Identity-mapped**: host path == container path |
 
 The earlier draft's "identity-map unconditionally, one layout beats two" was the right instinct for
 the wrong reason; the conditional is now evidence-based rather than assumed. It also reinforces the
@@ -74,7 +74,7 @@ sandbox needs an AppArmor profile granting the namespace, and the host-wide
 `kernel.apparmor_restrict_unprivileged_userns=0` fallback is a posture change we should not make on
 the user's behalf.
 
-## Caveat — what this spike did not exercise
+## Caveat, what this spike did not exercise
 
 Sandbox containers are created **lazily, on the first tool call**, which needs a configured model
 provider. `openclaw sandbox recreate` only rebuilds existing runtimes. So the config path, mount

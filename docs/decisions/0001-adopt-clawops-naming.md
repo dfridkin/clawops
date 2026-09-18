@@ -1,4 +1,4 @@
-# ADR 0001 — Adopt clawops Naming and Supersede the v0.1 Word Doc
+# ADR 0001. Adopt clawops Naming and Supersede the v0.1 Word Doc
 
 **Status:** Accepted
 **Date:** 2026-05-04
@@ -21,12 +21,12 @@ The project's v0.1 specification was authored as a Microsoft Word document (`cla
 
 1. **Rename the project to `clawops`.** Verified clear on npm (no existing package), GitHub, and domain availability.
 2. **Replace the Word doc with a structured spec set:**
-   - `PRD.md` — product requirements (narrative)
-   - `SPEC.md` — technical spec (narrative)
-   - `DESIGN_RULES.md` — normative R1–R25 rules
-   - `CLAUDE.md` — Claude Code root context
-   - `spec/*.{json,yaml}` — machine-readable schemas (ground truth)
-   - `docs/architecture.md`, `docs/decisions/`, `docs/providers/` — supporting prose
+   - `PRD.md`, product requirements (narrative)
+   - `SPEC.md`, technical spec (narrative)
+   - `DESIGN_RULES.md`, normative R1–R25 rules
+   - `CLAUDE.md`. Claude Code root context
+   - `spec/*.{json,yaml}`, machine-readable schemas (ground truth)
+   - `docs/architecture.md`, `docs/decisions/`, `docs/providers/`, supporting prose
 3. **Forbid `.docx`, `.pages`, `.rtf` in the repo** (R-meta-2). CI enforces via `scripts/verify-no-docx.ts`.
 4. **The Word doc is NOT migrated as a versioned artifact.** Its content has been carried forward into the structured set; the original is discarded.
 

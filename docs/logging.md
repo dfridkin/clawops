@@ -6,8 +6,8 @@ This document specifies clawops's logging behavior in implementation detail. ADR
 
 clawops has TWO logical log streams:
 
-1. **Application log** — operational events, debug info, errors
-2. **Audit log** — structured per-tool-call records (MCP-only)
+1. **Application log**, operational events, debug info, errors
+2. **Audit log**. Structured per-tool-call records (MCP-only)
 
 Both use pino under the hood. Both write to stderr by default. They are distinguished by a `stream` field.
 
@@ -99,7 +99,7 @@ log.info({ stackName, region }, 'Provisioning EC2 instance');
 
 ### Purpose
 
-Per R21: every MCP tool call writes a structured audit entry. This is operational forensics for security and debugging — separate stream, stricter schema.
+Per R21: every MCP tool call writes a structured audit entry. This is operational forensics for security and debugging, separate stream, stricter schema.
 
 ### Format
 
@@ -211,10 +211,10 @@ clawops doesn't manage log files (it writes to stderr). Users redirecting to a f
 
 ## Testing
 
-- `tests/logging/output.test.ts` — JSON shape, pretty mode toggling
-- `tests/logging/redaction.test.ts` — sensitive fields censored
-- `tests/mcp/audit-sanitization.test.ts` — audit logger redaction
-- `tests/mcp/stdio-purity.test.ts` — no stdout writes in stdio mode (I7)
+- `tests/logging/output.test.ts`. JSON shape, pretty mode toggling
+- `tests/logging/redaction.test.ts`, sensitive fields censored
+- `tests/mcp/audit-sanitization.test.ts`, audit logger redaction
+- `tests/mcp/stdio-purity.test.ts`, no stdout writes in stdio mode (I7)
 
 ## Examples
 

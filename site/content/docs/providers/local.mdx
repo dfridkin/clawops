@@ -11,7 +11,7 @@ clawops tunnel          # Control UI on http://127.0.0.1:18789
 
 ## What the host needs
 
-- Linux — Ubuntu 22.04+ and Debian 12+ are what this is tested against; RHEL-family works
+- Linux. Ubuntu 22.04+ and Debian 12+ are what this is tested against; RHEL-family works
 - An SSH server you can reach, with your public key in `~/.ssh/authorized_keys`
 - Outbound internet, to pull the OpenClaw image
 - `curl` or `wget`, and `systemd`
@@ -25,7 +25,7 @@ The local adapter uses **no Pulumi and provisions no cloud resources**. It conne
 writes the default config and starts the container under systemd, and keeps stack state in
 `~/.clawops/state/` as a local file.
 
-Re-running `clawops up` is safe — the bootstrap is idempotent.
+Re-running `clawops up` is safe, the bootstrap is idempotent.
 
 <Callout type="warn" title="plan and apply are cloud-only">
   There is no state backend to plan against, so use `clawops up` directly. `clawops plan` refuses
@@ -35,14 +35,14 @@ Re-running `clawops up` is safe — the bootstrap is idempotent.
 ## Credentials
 
 Only SSH. No cloud account, nothing to authenticate against, and nothing for `doctor --provider`
-to check — the local provider has no account-level preflight because it has no account.
+to check. The local provider has no account-level preflight because it has no account.
 
 clawops connects as **`root`** by default on local hosts; `--ssh-user` overrides it at init.
 
 ## Firewall
 
-Yours to manage on the host. `clawops harden` configures `ufw` — along with SSH hardening,
-fail2ban, unattended upgrades and five other modules — and opens only the port the container is
+Yours to manage on the host. `clawops harden` configures `ufw`, along with SSH hardening,
+fail2ban, unattended upgrades and five other modules, and opens only the port the container is
 really publishing.
 
 ## State
@@ -56,7 +56,7 @@ really publishing.
 
 ## Sizes and regions
 
-Neither applies — you already have the hardware. The flags exist on `up` for the cloud
+Neither applies. You already have the hardware. The flags exist on `up` for the cloud
 providers; the local adapter has no use for them.
 
 [Full local guide →](https://github.com/dfridkin/clawops/blob/main/docs/providers/local.md)

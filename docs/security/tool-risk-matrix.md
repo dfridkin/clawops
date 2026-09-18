@@ -4,7 +4,7 @@ All 18 clawops MCP tools, their risk classification, and which safety mode inclu
 
 The `--read-only` column is the `read` toolset, and the `--no-destructive` column is
 `destructiveHint: false`. Both come from `spec/mcp-tools.yaml`, and a test asserts this table
-still matches it — the table previously said 15 tools, listed 16, and marked three tools
+still matches it. The table previously said 15 tools, listed 16, and marked three tools
 unavailable in `--read-only` that the catalog put in the `read` toolset.
 
 ## Risk levels

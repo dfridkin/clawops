@@ -1,6 +1,6 @@
 # Local VM / VPS Quickstart
 
-This guide walks through deploying OpenClaw to any Linux host you can reach over SSH — a local VM
+This guide walks through deploying OpenClaw to any Linux host you can reach over SSH, a local VM
 (UTM, VirtualBox, Multipass, Proxmox), a cheap VPS (Hetzner, DigitalOcean, Linode), or bare metal.
 No cloud account required.
 
@@ -8,15 +8,15 @@ No cloud account required.
 
 ### On your local machine
 
-- **Node.js 22+** — check with `node --version`; install via [nvm](https://github.com/nvm-sh/nvm)
-- **clawops** — `npm install -g @clawops/cli`
-- **An SSH key pair** — clawops will generate one for you if you don't have one, or use `--key-path` to bring your own
+- **Node.js 22+**. Check with `node --version`; install via [nvm](https://github.com/nvm-sh/nvm)
+- **clawops**, `npm install -g @clawops/cli`
+- **An SSH key pair**. Clawops will generate one for you if you don't have one, or use `--key-path` to bring your own
 
 ### On the target host
 
-- **Ubuntu 22.04 or 24.04** (or Debian 12) — the bootstrap script uses `apt-get` and the Docker Ubuntu repository
-- **`sudo` access** for your SSH user — bootstrap installs Docker and writes a systemd unit as root
-- **Internet access** — the host needs to pull the OpenClaw Docker image from `ghcr.io`
+- **Ubuntu 22.04 or 24.04** (or Debian 12). The bootstrap script uses `apt-get` and the Docker Ubuntu repository
+- **`sudo` access** for your SSH user. Bootstrap installs Docker and writes a systemd unit as root
+- **Internet access**. The host needs to pull the OpenClaw Docker image from `ghcr.io`
 
 ### Firewall / inbound ports
 
@@ -34,7 +34,7 @@ sudo ufw allow from YOUR_CLIENT_IP to any port 18789 proto tcp
 sudo ufw --force enable
 ```
 
-Do **not** open port 18789 to `0.0.0.0/0`. The gateway runs without TLS in v1 — scope it to
+Do **not** open port 18789 to `0.0.0.0/0`. The gateway runs without TLS in v1, scope it to
 your IP or use `clawops tunnel` to access it over an SSH port-forward.
 
 ---
@@ -49,7 +49,7 @@ clawops doctor
 
 Expected output: Node version ✓, config directory ✓, SSH key path (will be generated in step 2).
 
-If `doctor` reports a missing provider credential — that's for cloud providers, not local. Ignore it
+If `doctor` reports a missing provider credential. That's for cloud providers, not local. Ignore it
 for a local deployment.
 
 ### 2. Configure clawops for your host
@@ -63,12 +63,12 @@ clawops init \
   --key-path ~/.ssh/id_ed25519
 ```
 
-If you don't have an SSH key yet, omit `--key-path` — clawops will generate one at
+If you don't have an SSH key yet, omit `--key-path`, clawops will generate one at
 `~/.clawops/id_ed25519` and print the public key. Add it to `~/.ssh/authorized_keys` on the
 target host before continuing.
 
 `init` writes `~/.clawops/config.json` with your host's connection details. It does **not** test
-connectivity yet — that happens in `doctor` (step 1) and `up` (step 3).
+connectivity yet. That happens in `doctor` (step 1) and `up` (step 3).
 
 ### 3. Verify SSH connectivity
 
@@ -93,7 +93,7 @@ clawops up
 What happens:
 1. clawops renders the bootstrap script with your chosen OpenClaw version.
 2. Connects to the host over SSH.
-3. Transfers the script (base64-encoded over SSH exec — no SCP required).
+3. Transfers the script (base64-encoded over SSH exec, no SCP required).
 4. Runs it as root via `sudo bash`.
 5. The script: creates a `clawops` system user, installs Docker, pulls the OpenClaw image, writes
    a default `openclaw.json`, and configures a systemd service unit.
@@ -105,7 +105,7 @@ Expected output:
 ✓ Gateway healthy at http://192.168.1.50:18789
 ```
 
-The bootstrap script is **idempotent** — safe to re-run if something fails partway through.
+The bootstrap script is **idempotent**. Safe to re-run if something fails partway through.
 
 ### 5. Verify the deployment
 
@@ -137,12 +137,12 @@ clawops ssh --command "systemctl status openclaw"
 
 ## Accessing the gateway
 
-**Option A — Direct access** (if you opened port 18789 to your IP):
+**Option A. Direct access** (if you opened port 18789 to your IP):
 ```
 http://192.168.1.50:18789
 ```
 
-**Option B — SSH tunnel** (recommended; no firewall change needed):
+**Option B. SSH tunnel** (recommended; no firewall change needed):
 ```bash
 clawops tunnel
 # Forwards localhost:18789 → host:18789 over SSH
@@ -153,11 +153,11 @@ clawops tunnel
 
 ## Configure a model and channel
 
-After deployment, OpenClaw runs with an empty config — no model or channel is active. Use
+After deployment, OpenClaw runs with an empty config, no model or channel is active. Use
 `clawops config set` to configure it remotely, or see [`docs/configuration.md`](../configuration.md)
 for example configs and the full reference.
 
-Minimal example — set a gateway auth token:
+Minimal example, set a gateway auth token:
 ```bash
 clawops config set gateway.auth.token "$(openssl rand -hex 32)"
 clawops gateway restart
@@ -195,7 +195,7 @@ Error: Authentication failed
 Error: Host key verification failed
 ```
 
-The host's SSH fingerprint changed — likely a VM rebuild. Remove the stale entry:
+The host's SSH fingerprint changed. Likely a VM rebuild. Remove the stale entry:
 ```bash
 ssh-keygen -R 192.168.1.50 -f ~/.clawops/known_hosts
 ```
@@ -208,11 +208,11 @@ Error: Bootstrap script failed (exit 1): ...
 ```
 
 - Does the SSH user have passwordless `sudo`? Check: `sudo -n true && echo ok`
-- Is the host Debian/Ubuntu? The bootstrap script uses `apt-get` — it does not support RHEL, Alpine,
+- Is the host Debian/Ubuntu? The bootstrap script uses `apt-get`, it does not support RHEL, Alpine,
   or other distros in v1.
 - Does the host have internet access to `ghcr.io`? Check: `curl -I https://ghcr.io`
 
-The bootstrap is idempotent — fix the issue and re-run `clawops up`.
+The bootstrap is idempotent, fix the issue and re-run `clawops up`.
 
 ### Gateway not healthy after 120 seconds
 
@@ -235,7 +235,7 @@ Common causes: Docker image pull failed (no internet), port 18789 blocked by hos
 will:
 - Skip Docker installation if already installed
 - Pull the OpenClaw image again (update if a newer tag is available)
-- Overwrite the systemd unit (safe — picks up any template changes)
+- Overwrite the systemd unit (safe, picks up any template changes)
 - Restart the OpenClaw service
 
 It will **not** overwrite `openclaw.json` if it already exists on the host.
@@ -269,7 +269,7 @@ clawops down --yes
 ```
 
 This removes the systemd unit and stops the container. It does **not** uninstall Docker or remove
-the `clawops` user from the host — those require manual cleanup if desired.
+the `clawops` user from the host. Those require manual cleanup if desired.
 
 ---
 

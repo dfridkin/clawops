@@ -1,4 +1,4 @@
-# ADR 0002 — schmitthub/openclaw-deploy Vendor Strategy
+# ADR 0002. Schmitthub/openclaw-deploy Vendor Strategy
 
 **Status:** Provisional (pending license verification)
 **Date:** 2026-05-04
@@ -20,7 +20,7 @@ The sibling repo `schmitthub/openclaw-docker` is confirmed MIT (verified via `pk
 
 Adopt a **three-track strategy** to avoid blocking on license verification:
 
-### Track 1 — Borrow patterns immediately (no license needed)
+### Track 1. Borrow patterns immediately (no license needed)
 
 Patterns are not copyrightable. We can adopt:
 - The URN naming convention (`clawops:<cat>:<Name>`)
@@ -30,7 +30,7 @@ Patterns are not copyrightable. We can adopt:
 
 These are reimplemented from scratch in clawops based on the *idea*, not the code.
 
-### Track 2 — Defer code vendoring until license confirmed
+### Track 2. Defer code vendoring until license confirmed
 
 Until we directly verify `LICENSE` is MIT or Apache-2.0:
 - Do NOT copy code verbatim from the schmitthub repo
@@ -40,7 +40,7 @@ If verified MIT/Apache:
 - Vendor `tests/components.test.ts` mock harness with attribution in `NOTICE`
 - Vendor any small utility files we have specific need for, with attribution
 
-### Track 3 — Build interop, not a fork
+### Track 3. Build interop, not a fork
 
 Whether or not we vendor code, we will NOT fork the project. Instead:
 - Document `schmitthub/openclaw-deploy` as a peer alternative for users who want its specific egress topology

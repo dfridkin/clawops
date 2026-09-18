@@ -1,11 +1,11 @@
-# ADR 0006 — Embedded Pulumi Automation API (Not User-Installed Pulumi CLI)
+# ADR 0006. Embedded Pulumi Automation API (Not User-Installed Pulumi CLI)
 
 **Status:** Superseded by [ADR 0010](0010-pulumi-cli-bootstrap.md)
 **Date:** 2026-05-04
 **Deciders:** Project author
 
 > **Superseded.** Its central premise is false: `@pulumi/pulumi/automation` is a client for
-> the Pulumi CLI, not an embedded engine — it spawns the binary for every operation. The
+> the Pulumi CLI, not an embedded engine. It spawns the binary for every operation. The
 > conclusion (the user installs nothing) still holds, but only because clawops now installs the
 > CLI itself. See [ADR 0010](0010-pulumi-cli-bootstrap.md). Kept for the rationale against
 > direct SDKs, which is unaffected.
@@ -14,7 +14,7 @@
 
 clawops needs to manage cloud infrastructure with a real IaC tool underneath. Three options:
 
-1. **Direct cloud SDKs** (`@aws-sdk`, etc.) — no IaC, we'd reimplement state, drift, ordering
+1. **Direct cloud SDKs** (`@aws-sdk`, etc.), no IaC, we'd reimplement state, drift, ordering
 2. **Shell out to Pulumi CLI** (require user to `brew install pulumi`)
 3. **Embed Pulumi Automation API** (Pulumi engine as a TypeScript library)
 

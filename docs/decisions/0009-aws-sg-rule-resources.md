@@ -1,4 +1,4 @@
-# ADR 0009 — AWS SecurityGroup: migrate from inline rules to SecurityGroupIngressRule/EgressRule
+# ADR 0009. AWS SecurityGroup: migrate from inline rules to SecurityGroupIngressRule/EgressRule
 
 **Date:** 2026-06-04  
 **Status:** Accepted  
@@ -26,7 +26,7 @@ The recommended replacements are `aws.vpc.SecurityGroupIngressRule` and `aws.vpc
 
 ## Problem
 
-When a user updates `allowedCidrs` on an existing stack (a routine day-2 operation — e.g. their office IP changes), Pulumi must replace the entire Security Group because the inline arrays changed. During the replacement window:
+When a user updates `allowedCidrs` on an existing stack (a routine day-2 operation. E.g. their office IP changes), Pulumi must replace the entire Security Group because the inline arrays changed. During the replacement window:
 
 1. Old SG is dissociated from the EC2 instance.
 2. New SG is created and associated.
@@ -70,13 +70,13 @@ On the first `clawops up` after this change, Pulumi will:
 Steps 1 and 2 will briefly disconnect the existing EC2 instance from its security group. To minimise risk on production stacks, operators should:
 
 ```bash
-# Option A — Planned maintenance window (recommended)
+# Option A: Planned maintenance window (recommended)
 clawops up --stack <name>  # accept the replacement during off-hours
 
-# Option B — Import existing SG, then migrate rules
+# Option B: Import existing SG, then migrate rules
 # 1. Note the existing SG ID from the AWS console or state output
 # 2. pulumi import aws:ec2/securityGroup:SecurityGroup clawops-sg sg-XXXXXXXX
-# 3. pulumi up — Pulumi will adopt the existing SG and add rules without replacement
+# 3. pulumi up: Pulumi will adopt the existing SG and add rules without replacement
 ```
 
 Option B avoids the replacement entirely but requires manual state manipulation. Document the SG ID before proceeding.

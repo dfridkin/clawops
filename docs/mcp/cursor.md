@@ -11,7 +11,7 @@ clawops mcp install
 This writes a `clawops` entry to `~/.cursor/mcp.json`.
 
 The entry uses `["mcp", "serve"]` with no safety flag. **Add `--read-only` before
-use** — see below.
+use**, see below.
 
 ## Manual configuration
 
@@ -50,7 +50,7 @@ Commit this file so all collaborators get `--read-only` by default.
 
 | You want | Flag |
 |---|---|
-| Query-only — status, logs, config reads | `--read-only` |
+| Query-only: status, logs, config reads | `--read-only` |
 | Plan generation + monitoring, no writes | `--no-destructive` |
 | Full control (deploy, destroy, config writes) | *(no flag)* |
 

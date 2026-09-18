@@ -1,7 +1,7 @@
 # Known Limitations
 
 This document states what clawops does not do, where behavior is constrained, and what is planned
-for future releases. These limitations are intentional design choices or deferred scope — they are
+for future releases. These limitations are intentional design choices or deferred scope, they are
 not bugs.
 
 ## Deployment topology
@@ -16,7 +16,7 @@ out of scope for v1.
 ## Plan/apply semantics
 
 **`clawops apply` is not an immutable plan execution.** `apply` re-runs `pulumi up` using the
-parameters from the reviewed plan JSON — it does not replay a locked provider-level execution
+parameters from the reviewed plan JSON. It does not replay a locked provider-level execution
 artifact. Cloud state that changes between `plan` and `apply` will be reconciled by Pulumi against
 live infrastructure, which may produce a different diff than the one you reviewed.
 
@@ -27,7 +27,7 @@ See [`docs/plan-apply.md`](plan-apply.md) for full semantics and drift guidance.
 **This clawops line requires OpenClaw >= 2026.9.2.** It deploys the 2.0 runtime contract:
 a writable state directory holding config, SQLite and plugins; `gateway.mode` written into
 the config; no `--allow-unconfigured`. A pre-2.0 OpenClaw understands none of that, so
-`doctor`, `plan`, `up` and `apply` refuse anything below the floor — the same guard that
+`doctor`, `plan`, `up` and `apply` refuse anything below the floor, the same guard that
 kept the 1.x line off 2.0, pointing the other way.
 
 The floor is `2026.9.2` rather than `2026.9.1` because the official Amazon Bedrock provider
@@ -76,7 +76,7 @@ A reverse proxy running **in a container** on the same host cannot reach the hos
 `--network host` or `host.docker.internal`. A proxy running directly on the host can.
 
 `clawops doctor` reports which scope a deployment is using, and `gateway restart`/`update` preserve
-it — a restart changes neither the version nor who can reach it.
+it. A restart changes neither the version nor who can reach it.
 
 Because loopback publishing means nothing is listening on a routable interface, clawops creates
 **no security-group rule for the gateway port** while that scope is in effect, and `clawops plan`
@@ -86,7 +86,7 @@ rule: it reads the running container's port bindings and opens the gateway port 
 the gateway is really published.
 
 **A reverse proxy's port is not opened for you.** `harden` opens SSH and, where applicable, the
-gateway port. If you terminate TLS on the host at 443, add that rule yourself — clawops does not
+gateway port. If you terminate TLS on the host at 443, add that rule yourself, clawops does not
 know the proxy is there.
 
 **No TLS or domain automation in the current release.** The gateway runs on port 18789 (or `network.gatewayPort`) without
@@ -114,7 +114,7 @@ key path, state backend URL). Protect it accordingly.
 bootstraps over SSH without a Pulumi state backend. Use `clawops up` directly.
 
 **Provider support varies by capability.** See [`docs/providers/matrix.md`](providers/matrix.md)
-for the full per-provider feature matrix — some capabilities (static IP, secret store, firewall
+for the full per-provider feature matrix. Some capabilities (static IP, secret store, firewall
 management) are cloud-specific.
 
 ## Platform
@@ -133,7 +133,7 @@ not set up Prometheus, Grafana, or alert routing. This is planned for a future r
 **Backups are created and restored, but never activated for you.** `clawops backup restore`
 verifies the archive and expands it into a fresh staging directory on the host; adopting it is a
 deliberate manual step (stop the gateway, replace the state directory, restart, re-apply to
-reinstall provider plugins). Restoring in place is not offered — writing an archive over a live
+reinstall provider plugins). Restoring in place is not offered, writing an archive over a live
 state directory is how a backup becomes corruption.
 
 **The archive is a credential.** It carries the state database, whose tables include
@@ -152,11 +152,11 @@ The following limitations are tracked in the roadmap and expected to be addresse
 
 | Limitation | Roadmap milestone |
 |---|---|
-| TLS/domain automation | R4 — Production Operations |
-| Deeper health checks | R4 — Production Operations |
-| Upgrade/rollback workflow | R4 — Production Operations |
-| Config validation command | R5 — Configuration and Secrets |
-| Monitoring hooks | R4 — Production Operations (later) |
-| Cost estimate output | R6 — Provider Reliability (later) |
+| TLS/domain automation | R4: Production Operations |
+| Deeper health checks | R4: Production Operations |
+| Upgrade/rollback workflow | R4: Production Operations |
+| Config validation command | R5: Configuration and Secrets |
+| Monitoring hooks | R4: Production Operations (later) |
+| Cost estimate output | R6: Provider Reliability (later) |
 
 See [`docs/roadmap.md`](roadmap.md) for the full adoption roadmap.

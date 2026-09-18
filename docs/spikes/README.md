@@ -4,7 +4,7 @@ Working notes for the spikes defined in
 [`docs/openclaw-2.0-migration-plan.md` §8](../openclaw-2.0-migration-plan.md).
 
 Each spike answers a question the plan is currently guessing at. A spike is finished when its
-result is recorded here **and** its assertion has graduated into a test (§5) — a finding that
+result is recorded here **and** its assertion has graduated into a test (§5), a finding that
 lives only in a scratch file is a fact we will rediscover.
 
 | Spike | Question | Status |
@@ -25,19 +25,19 @@ Recorded per spike, because it matters: uid/gid mapping, AppArmor, and Docker-ou
 behave differently on Docker Desktop for macOS than on a Linux host. Spikes marked "local VM" in
 the plan are **not** valid on Docker Desktop.
 
-## Results — all 8 complete (2026-09-04)
+## Results, all 8 complete (2026-09-04)
 
 | Spike | Outcome |
 |---|---|
 | SP-01 | G1 **refuted**, G2/G3/G5 confirmed, **G3 upgraded** (config read by nothing), **G25 found** (uid 1001 trap); standard state path sufficient; loopback + tunnel verified |
 | SP-02 | Seed config schema-**valid** (G4 refuted); channel blocks invalid (**G15 → P0**); 9 dangling `$ref`s (**G26**); `:ro` mount fatal |
 | SP-03 | Derived image builds clean, **+70 MB**; `docker` resolves as `node` |
-| SP-04 | Sandboxing **feasible**; identity mapping **required** — its absence is silent (empty workspace, no error) |
+| SP-04 | Sandboxing **feasible**; identity mapping **required**, its absence is silent (empty workspace, no error) |
 | SP-05 | Containerised Fleet **works** with `--network host`; no host `npm i -g openclaw` |
 | SP-06 | Documented Fleet cell profile **matches reality exactly** |
 | SP-07 | Migration works, but **1.x state is inside the container** and there is **no config to carry forward** |
-| SP-08 | Bedrock works — **only on ≥2026.9.1**. Floor moved. |
-| SP-09 | **No published image needed** — Docker's static CLI mounted into the unmodified official image drives the sandbox backend |
+| SP-08 | Bedrock works: **only on ≥2026.9.1**. Floor moved. |
+| SP-09 | **No published image needed**, Docker's static CLI mounted into the unmodified official image drives the sandbox backend |
 | SP-10 | The 2.0 startup contract, measured | [SP-10](SP-10-openclaw-2.0-startup-contract.md) | `gateway.mode` gate, plugin auto-install + convergence restart, silent absence without egress |
 | SP-11 | WO-39 audit: persisting state | [SP-11](SP-11-wo-39-state-audit.md) | one mount suffices; G25 verified as a chain; migration step required |
 

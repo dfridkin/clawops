@@ -12,7 +12,7 @@ clawops doctor --stack prod       # the deployment
 ```
 
 `doctor` exits non-zero when any check fails, and a check it could not perform reports as a
-warning naming the error rather than passing or failing — so a `⚠` is clawops declining to
+warning naming the error rather than passing or failing, so a `⚠` is clawops declining to
 guess, not a problem it found.
 
 ## Before anything is deployed
@@ -34,7 +34,7 @@ GCP needs its APIs enabled before a deploy, not during one. `clawops setup` offe
 them; `doctor --provider gcp` lists which are missing.
 
 **`<size> is not offered to this subscription in <region>`**
-Azure offers SKU families per subscription. `doctor` lists the sizes you *can* have — pass one
+Azure offers SKU families per subscription. `doctor` lists the sizes you *can* have, pass one
 with `--instance-type`.
 
 **`azblob state backend is configured ✗`**
@@ -44,7 +44,7 @@ your `az login`. Every other check can pass and the deploy still fail to open it
 ## During a deploy
 
 **It stops with no output for minutes**
-It should not — `apply` reports progress as it goes. If it genuinely hangs, the host is usually
+It should not: `apply` reports progress as it goes. If it genuinely hangs, the host is usually
 still installing Docker; a deploy that times out prints the host's bootstrap log so you can see
 where it stopped.
 
@@ -53,7 +53,7 @@ Compare your identity against the permission list for that cloud on
 [Providers](/docs/providers).
 
 **SSH times out after the instance appears**
-The security group is too restrictive — usually a plan written with no `--ssh-cidr`, which admits
+The security group is too restrictive, usually a plan written with no `--ssh-cidr`, which admits
 nothing at all. Re-plan with `--ssh-cidr auto` to allow your own address.
 
 ## After it is running
@@ -71,7 +71,7 @@ Clouds recycle addresses. `clawops destroy` forgets the old key, but if the inst
 another way, delete the stale line from `~/.clawops/known_hosts`.
 
 **The gateway starts and then exits**
-Usually a config the runtime rejects, or a plugin that could not be installed —
+Usually a config the runtime rejects, or a plugin that could not be installed.
 `clawhub.ai` and `registry.npmjs.org` are contacted during `apply`, and a blocked egress shows up
 exactly this way. `clawops config validate` and `clawops logs --tail 50`.
 

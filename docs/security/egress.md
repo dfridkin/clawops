@@ -1,7 +1,7 @@
 # Required outbound access
 
 clawops deploys onto hosts whose egress you control. This is the list of destinations that
-have to be reachable, from **where**, and **when** — and what the failure looks like when one
+have to be reachable, from **where**, and **when**, and what the failure looks like when one
 is missing, which is the part that costs time.
 
 Two machines are involved and they need different things. Blocking the wrong one produces a
@@ -50,13 +50,13 @@ its selection loop, so the exit code says nothing. clawops therefore installs ch
 with `openclaw plugins install`, which exits 1, and verifies against
 `openclaw channels list --all --json` by asserting `installed: true`.
 
-Both installs happen during `apply`, not at boot — so a blocked host fails in front of the
+Both installs happen during `apply`, not at boot, so a blocked host fails in front of the
 person running the deploy rather than at 3am.
 
 ## ClawHub is new in 2.0, and it is needed at deploy time
 
 OpenClaw 2.0 made model providers **install-gated plugins**. Twenty-four are bundled in the
-image — `anthropic`, `openai`, `google`, `ollama`, `openrouter` and others — but several are
+image. `anthropic`, `openai`, `google`, `ollama`, `openrouter` and others, but several are
 not, and clawops installs those from ClawHub during `apply`:
 
 ```
@@ -77,7 +77,7 @@ Resolving clawhub:@openclaw/deepseek-provider@2026.9.2…
 fetch failed | getaddrinfo EAI_AGAIN clawhub.ai | EAI_AGAIN
 ```
 
-The install exits **1**. The gateway itself is unaffected and will start and report healthy —
+The install exits **1**. The gateway itself is unaffected and will start and report healthy,
 with the twenty-four bundled providers and **without the one your config names**. A healthy
 gateway with no usable model backend is the failure this ordering exists to prevent, so
 clawops checks the installed provider IDs after the install and refuses to call the deploy
@@ -90,7 +90,7 @@ afterwards. The gateway does not contact ClawHub at runtime.
 
 - **No clawops telemetry.** clawops makes no outbound call of its own from the deployed host.
 - **No egress for `clawops tunnel`.** It forwards over the SSH connection you already have.
-- **The gateway does not need inbound access.** It publishes on `127.0.0.1` by default — see
+- **The gateway does not need inbound access.** It publishes on `127.0.0.1` by default, see
   the Firewall Model section in [aws.md](../providers/aws.md#firewall-model),
   [gcp.md](../providers/gcp.md#firewall-model) or [azure.md](../providers/azure.md#firewall-model).
 

@@ -3,7 +3,7 @@
 ## Quick Start
 
 ```bash
-# 1. Configure credentials — pick one method:
+# 1. Configure credentials: pick one method:
 
 # Option A: Application Default Credentials via gcloud (recommended for local dev)
 gcloud auth application-default login
@@ -12,7 +12,7 @@ gcloud auth application-default login
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 
 # Option C: Workload Identity / GCE metadata (automatic when running on GCP)
-# No env var needed — detected automatically
+# No env var needed: detected automatically
 
 # 2. Set your GCP project
 gcloud config set project my-project-id      # or: export GOOGLE_PROJECT=my-project-id
@@ -37,7 +37,7 @@ Resolved in this order, the first answer winning:
 | `core/project` in the active gcloud configuration | What `gcloud config set project` writes. Read from `$CLOUDSDK_CONFIG` (default `~/.config/gcloud`), following `active_config` |
 
 `clawops doctor` names the project it resolved, and `clawops apply` pins it as the stack's
-`gcp:project` — so the deploy lands in the project whose APIs and state bucket were checked,
+`gcp:project`, so the deploy lands in the project whose APIs and state bucket were checked,
 rather than in whichever project the environment happens to name at apply time.
 
 Nothing is resolved from the credentials themselves: a service-account key names a project,
@@ -83,7 +83,7 @@ reference is stored in config.
 
 ## Required IAM Permissions
 
-Minimum permissions for `clawops up` / `clawops destroy` — bind these to a dedicated service account:
+Minimum permissions for `clawops up` / `clawops destroy`. Bind these to a dedicated service account:
 
 | API | Role / Permission | Notes |
 |---|---|---|
@@ -110,11 +110,11 @@ gcloud projects add-iam-policy-binding $PROJECT \
 
 When you run `clawops up`, the GCP adapter provisions:
 
-- **VPC Network** — custom mode (`autoCreateSubnetworks: false`)
-- **Subnetwork** — `10.0.0.0/24` in the configured region
-- **Firewall rule** — ingress TCP on port 22 (SSH) and 18789 (gateway); tagged `clawops`
+- **VPC Network**. Custom mode (`autoCreateSubnetworks: false`)
+- **Subnetwork**, `10.0.0.0/24` in the configured region
+- **Firewall rule**. Ingress TCP on port 22 (SSH) and 18789 (gateway); tagged `clawops`
 - **Static external IP** (regional)
-- **Compute Engine VM** — Debian 12, tagged `clawops`, running OpenClaw via Docker
+- **Compute Engine VM**. Debian 12, tagged `clawops`, running OpenClaw via Docker
 - Startup script creates a `clawops` system user and installs Docker if absent
 
 The exact resource graph is visible via `clawops plan`.
@@ -129,7 +129,7 @@ The exact resource graph is visible via `clawops plan`.
 | `large` | `e2-standard-8` | 8 | 32 GB |
 
 
-> GPU acceleration on `n1-standard-4` requires attaching an accelerator via `pulumi config set acceleratorType nvidia-tesla-t4`. This is not wired automatically in the current release — see `docs/limitations.md`.
+> GPU acceleration on `n1-standard-4` requires attaching an accelerator via `pulumi config set acceleratorType nvidia-tesla-t4`. This is not wired automatically in the current release, see `docs/limitations.md`.
 
 **`gpu` is not available on GCP.** `normalizeInstanceType('gpu')` refuses rather than
 silently deploying a CPU machine, and names the two providers that do have one:
@@ -149,7 +149,7 @@ Use --provider aws (g4dn.xlarge) or --provider azure (Standard_NC6s_v3) for GPU 
 
 - **URL pattern**: `gs://<bucket>/clawops`
 - **Default name**: `clawops-state-<projectId>`, derived by `clawops init` from the project
-- **Must exist before Pulumi runs** — a deploy cannot create it on the way past. `clawops doctor
+- **Must exist before Pulumi runs**. A deploy cannot create it on the way past. `clawops doctor
   --provider gcp` checks, and `clawops setup` offers to create it with versioning enabled
 - **Permissions**: the deploying identity needs `roles/storage.objectAdmin` on the bucket
 - **Versioning**: on for a bucket clawops creates. Pulumi state with no history is a stack that
@@ -157,7 +157,7 @@ Use --provider aws (g4dn.xlarge) or --provider azure (Standard_NC6s_v3) for GPU 
 
 ## Firewall Model
 
-Per-CIDR, controlled by the `accessMode` stack config key, the same as AWS and Azure — this
+Per-CIDR, controlled by the `accessMode` stack config key, the same as AWS and Azure, this
 doc previously said the adapter opened both ports to `0.0.0.0/0` with per-CIDR "on the
 roadmap", which stopped being true in clawops 2.0.
 
@@ -174,7 +174,7 @@ clawops config set gateway.auth.token "$(openssl rand -hex 32)" --restart
 ```
 
 **Egress.** Unrestricted by default. The host needs outbound access to `download.docker.com`
-and your package mirrors at first bootstrap, `ghcr.io` for the image, and — new in 2.0 —
+and your package mirrors at first bootstrap, `ghcr.io` for the image, and, new in 2.0,
 `clawhub.ai` **during `apply`** to install model-provider plugins. See
 [required outbound access](../security/egress.md) for what each failure looks like.
 
@@ -254,7 +254,7 @@ flowchart TD
 
 ## See Also
 
-- `src/providers/gcp/` — adapter + Pulumi program
-- `tests/providers/gcp/` — adapter + program tests
-- `docs/providers/matrix.md` — provider capability comparison
-- ADR 0004 — credential policy (R6)
+- `src/providers/gcp/`, adapter + Pulumi program
+- `tests/providers/gcp/`, adapter + program tests
+- `docs/providers/matrix.md`, provider capability comparison
+- ADR 0004, credential policy (R6)

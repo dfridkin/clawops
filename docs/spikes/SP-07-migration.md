@@ -1,6 +1,6 @@
-# SP-07 — 1.x → 2.0 migration
+# SP-07, 1.x → 2.0 migration
 
-**Status:** COMPLETE — 2026-09-04. EC2 spot `t3.medium`, x86_64, Ubuntu 24.04.4.
+**Status:** COMPLETE. 2026-09-04. EC2 spot `t3.medium`, x86_64, Ubuntu 24.04.4.
 1.x deployment stood up exactly as clawops v1.7.x builds it (`2026.7.1`, config mounted at
 `/app/config.json:ro`, no state volume), then migrated to `2026.8.1`.
 
@@ -9,7 +9,7 @@ and one of them changes who can be migrated at all.
 
 ---
 
-## Finding 1 — there is nothing on the host to migrate
+## Finding 1, there is nothing on the host to migrate
 
 WO-52 was drafted as "detect the 1.x layout → relocate config and state into the new volume layout".
 There is no 1.x host layout to relocate:
@@ -20,7 +20,7 @@ on host          : openclaw.json                   (ignored — see G3)
 ```
 
 **All 1.x state lives inside the container.** The migration must extract it from the *running*
-container (`docker cp`, or `openclaw backup create` inside it — verified present in 2026.7.1) before
+container (`docker cp`, or `openclaw backup create` inside it, verified present in 2026.7.1) before
 that container is destroyed. A migration that stops the container first destroys what it came to
 save.
 
@@ -28,10 +28,10 @@ save.
 
 `clawops gateway restart`, `clawops gateway update` and `clawops config set` all do `docker rm` +
 `docker run`. On the 1.x line **every one of those has been silently destroying user state all
-along** — not just on upgrade. Many users will have nothing meaningful to migrate, and `clawops
+along**, not just on upgrade. Many users will have nothing meaningful to migrate, and `clawops
 migrate` should say so honestly rather than implying it rescued something.
 
-## Finding 2 — 1.x has no config to carry forward
+## Finding 2, 1.x has no config to carry forward
 
 The extracted state contains no `openclaw.json`; 1.x never wrote one (the config was mounted
 separately and ignored). 2.0 then blocks:
@@ -39,11 +39,11 @@ separately and ignored). 2.0 then blocks:
 > `Missing config. Run 'openclaw setup' or set gateway.mode=local (or pass --allow-unconfigured).` → exit 78
 
 **WO-52 must synthesise a valid 2.0 config**, not migrate one. Its source of truth is the deploy
-plan plus whatever the user had in the ignored `/home/clawops/openclaw.json` — which should be
+plan plus whatever the user had in the ignored `/home/clawops/openclaw.json`, which should be
 treated as *intent to review*, never applied blindly, since it has never been in force and may not
-validate against 2.0 (channel blocks certainly will not — G15).
+validate against 2.0 (channel blocks certainly will not. G15).
 
-## Finding 3 — the state migration itself is clean
+## Finding 3, the state migration itself is clean
 
 With the state volume mounted, 2.0 ran its upgrade pass automatically:
 
@@ -55,20 +55,20 @@ With the state volume mounted, 2.0 ran its upgrade pass automatically:
 ```
 
 After synthesising a config: `running`, `/startupz {"ok":true,"status":"started"}`, and healthy again
-after a further container replacement. **No `doctor --fix` fallback was needed** — the startup-safe
+after a further container replacement. **No `doctor --fix` fallback was needed**, the startup-safe
 migration path did the work, as upstream documents.
 
 ## Sequence that works
 
 1. Extract state from the **running** 1.x container → host directory
-2. `chown -R 1000:1000` (G25 — numeric, not `clawops:clawops`)
+2. `chown -R 1000:1000` (G25, numeric, not `clawops:clawops`)
 3. Stop and remove the 1.x container
 4. Synthesise a valid 2.0 `openclaw.json` (`gateway.mode: local` at minimum)
 5. Start 2.0 with the state volume, `OPENCLAW_CONFIG_PATH`, and `OPENCLAW_GATEWAY_TOKEN`
 6. Gate on `/startupz`; on failure run the documented one-shot `doctor --fix`
 7. Report what carried over and what needs operator attention
 
-## Open item — CLOSED 2026-09-09: device identity IS preserved
+## Open item. CLOSED 2026-09-09: device identity IS preserved
 
 Re-run locally with the real images (`2026.7.1-2` → `2026.9.2`), capturing the identifier
 before and after rather than inferring:
@@ -80,7 +80,7 @@ identity/ dir:   0 files       ← emptied, as expected; the value moved into SQ
 ```
 
 So `identity/` emptying is relocation, not loss, and the identifier paired devices key on
-survives. Pairings themselves still cannot be proven here — there is nothing to pair — but
+survives. Pairings themselves still cannot be proven here, there is nothing to pair, but
 the thing they depend on carries over.
 
 **And a correction to Finding 3.** The migration is *not* clean on the first start. The 2.0
@@ -92,7 +92,7 @@ Config health-state write failed: OpenClaw state database schema migration requi
 (audit-events-v2) … run openclaw doctor --fix to migrate it.
 ```
 
-It is healthy only after a **second** start — `/startupz` then returns
+It is healthy only after a **second** start, `/startupz` then returns
 `{"ok":true,"status":"started"}` with zero pending-migration complaints. So a 1.x→2.0
 migration takes **two starts**, and WO-52 must gate, restart, and re-gate rather than
 declaring success on the first.
@@ -100,7 +100,7 @@ declaring success on the first.
 This also revises WO-45's framing: the plan treats `doctor --fix` as exceptional on the
 strength of this spike. What the spike actually showed is that the *restart* completes the
 migration. In this re-run `doctor --fix` did nothing at all, because the command was
-malformed — see below.
+malformed, see below.
 
 ## A shipped bug this re-run exposed
 
@@ -113,21 +113,21 @@ doctor --json runs read-only lint checks and cannot be combined with --repair, -
 So the repair step in `clawops gateway update` could only ever fail. The unit tests drive a
 fake that returns success for any command, so nothing caught it until it ran against the
 image. Fixed to `--fix --non-interactive --yes` (no TTY during provisioning), with the exit
-code ignored — doctor exits 1 on advisories that are not repair failures — and a test that
+code ignored. Doctor exits 1 on advisories that are not repair failures, and a test that
 asserts the two flags are never combined.
 
-## Original open item — device identity continuity
+## Original open item, device identity continuity
 
 `identity/` is emptied by the migration ("Migrated primary device identity to SQLite"), which is
 expected 2.0 behavior rather than loss. **I did not independently verify the `deviceId` value
-survived** — `openclaw devices list` reports "No device pairing entries" on this install, so there
+survived**. `openclaw devices list` reports "No device pairing entries" on this install, so there
 was nothing paired to prove continuity against.
 
 This matters: if `deviceId` changes, paired nodes and devices need re-pairing. WO-52 must verify
 identity continuity on an install that actually has pairings, and say so in its report if they must
 be re-established.
 
-Note also that a changing `state/openclaw.sqlite` file hash is **not** evidence of state loss — the
+Note also that a changing `state/openclaw.sqlite` file hash is **not** evidence of state loss, the
 DB is written on every start. The reliable instrument is the install fingerprint
 (`config-journal-fingerprint.key`), which is what SP-01 used.
 

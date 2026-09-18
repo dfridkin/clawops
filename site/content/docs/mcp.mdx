@@ -40,19 +40,19 @@ Only tools annotated read-only are exposed. Nothing can create, modify or destro
 
 ## How the safety model works
 
-Every tool declares four hints — read-only, destructive, idempotent, and open-world — rather than
+Every tool declares four hints. Read-only, destructive, idempotent, and open-world, rather than
 relying on defaults. Destructive tools require explicit confirmation unless the caller passes
 `yes: true`.
 
 Long-running operations do not block: anything over a minute returns a task id immediately, and
 progress arrives as notifications.
 
-Tool calls are written to an audit log with arguments sanitised — `Authorization`, anything matching
+Tool calls are written to an audit log with arguments sanitised. `Authorization`, anything matching
 `*token*`, `*secret*` or `*key*`, passwords and connection strings are redacted before they are
 recorded.
 
-## Plans, not prose
+## Plan generation
 
 The MCP tools generate deploy plans. They do not apply infrastructure straight from a
-natural-language instruction — an agent produces a plan, you review it, and application is a
+natural-language instruction. An agent produces a plan, you review it, and application is a
 separate explicit step. See [Plan → Apply](/docs/plan-apply).

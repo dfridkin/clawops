@@ -9,7 +9,7 @@ OpenID Connect (OIDC) / Workload Identity Federation.
 - Tokens are short-lived (scoped to a single workflow run)
 - Auditable via cloud provider IAM logs
 
-## AWS — OIDC Setup
+## AWS. OIDC Setup
 
 ### 1. Create an IAM OIDC Identity Provider
 
@@ -90,7 +90,7 @@ jobs:
 ```
 
 The `aws-actions/configure-aws-credentials` action sets `AWS_ROLE_ARN` and
-`AWS_WEB_IDENTITY_TOKEN_FILE` — exactly the env vars that clawops's `validateConfig()`
+`AWS_WEB_IDENTITY_TOKEN_FILE`. Exactly the env vars that clawops's `validateConfig()`
 recognises as valid OIDC credentials.
 
 For `accessMode=auto`, clawops fetches the runner's egress IP from
@@ -98,7 +98,7 @@ For `accessMode=auto`, clawops fetches the runner's egress IP from
 
 ---
 
-## Azure — OIDC / Federated Credentials Setup
+## Azure. OIDC / Federated Credentials Setup
 
 ### 1. Register an App in Entra ID (Azure AD)
 
@@ -201,7 +201,7 @@ jobs:
 
 2. **Store `PULUMI_CONFIG_PASSPHRASE`** as a GitHub secret. This is the passphrase for the
    self-managed backend's secrets manager. Locally clawops generates one at
-   `~/.clawops/secrets/pulumi-passphrase` (ADR 0011); in CI, set the variable — a runner is
+   `~/.clawops/secrets/pulumi-passphrase` (ADR 0011); in CI, set the variable, a runner is
    disposable and a generated passphrase would not survive to the next run, leaving each run
    unable to read the state the last one wrote.
 
@@ -213,6 +213,6 @@ jobs:
 
 ## See Also
 
-- `docs/providers/aws.md` — AWS provider docs
-- `docs/providers/azure.md` — Azure provider docs
-- `.github/workflows/example-oidc-deploy.yml` — example workflow
+- `docs/providers/aws.md`. AWS provider docs
+- `docs/providers/azure.md`. Azure provider docs
+- `.github/workflows/example-oidc-deploy.yml`, example workflow

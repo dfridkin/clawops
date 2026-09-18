@@ -1,4 +1,4 @@
-# ADR 0008 — Apply-time drift detection via stack version
+# ADR 0008. Apply-time drift detection via stack version
 
 **Status:** Accepted  
 **Date:** 2026-05-08  
@@ -8,8 +8,8 @@
 
 `clawops apply` re-runs `pulumi up` against the current live state using parameters from a reviewed
 plan JSON. It does not replay a locked provider-level artifact. This means if anything touched the
-stack between `clawops plan` and `clawops apply` — another engineer, a manual console change, a
-parallel agent — the diff at apply time may differ from the diff the operator reviewed.
+stack between `clawops plan` and `clawops apply`. Another engineer, a manual console change, a
+parallel agent. The diff at apply time may differ from the diff the operator reviewed.
 
 SPEC.md §15 / R2 requires a drift warning on `clawops apply` when state has changed since plan
 generation.
@@ -48,7 +48,7 @@ Rejected: the latency cost is borne on every apply, even when no drift occurred.
 
 Compute a hash of the exported resource list. More granular than version but requires downloading
 the full state (`stack.exportStack()` returns `deployment: any`) and parsing an untyped blob.
-Version is sufficient since any state write — including refreshes — increments it.
+Version is sufficient since any state write, including refreshes, increments it.
 
 ## Consequences
 

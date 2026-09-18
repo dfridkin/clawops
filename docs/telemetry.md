@@ -79,7 +79,7 @@ Pino's `redact` config and the audit logger's sanitization strip:
 - Provider-native credential env var values (`AWS_ACCESS_KEY_ID`, etc.)
 - Connection strings
 
-If you find a sensitive field that's not redacted, that's a bug — please report per `SECURITY.md`.
+If you find a sensitive field that's not redacted, that's a bug, please report per `SECURITY.md`.
 
 ## Update Checks
 

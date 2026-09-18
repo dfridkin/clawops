@@ -1,4 +1,4 @@
-# Manual Smoke Testing Guide — Provider Integrations
+# Manual Smoke Testing Guide. Provider Integrations
 
 This guide covers manual end-to-end verification of each provider adapter. Run these
 checks before cutting a release or after a significant change to `src/providers/`,
@@ -24,13 +24,13 @@ before starting any provider test.
 
 ## What 2.0 changed, and what to check because of it
 
-These apply to every provider, and they are the assertions that matter most — each one is a
+These apply to every provider, and they are the assertions that matter most, each one is a
 failure the 1.x line had and could not see.
 
 | Check | Why | How |
 |---|---|---|
 | State survives a container replacement | Before 2.0 nothing was mounted; `gateway restart` discarded every session | hash `/var/lib/clawops/openclaw/openclaw.json`, `gateway restart`, hash again |
-| The gateway actually answers | A running container means the process started, not that it serves | `clawops doctor --stack <name>` — it probes `/startupz` and reads the body |
+| The gateway actually answers | A running container means the process started, not that it serves | `clawops doctor --stack <name>`, it probes `/startupz` and reads the body |
 | `doctor` exit code | It now exits 1 on any failed check, so it works in a script | `clawops doctor --stack <name>; echo $?` |
 | Published on loopback | A security group admitting the port is not the same as a port listening | `docker inspect openclaw --format '{{json .HostConfig.PortBindings}}'` → `127.0.0.1` |
 | Provider plugins installed | A configured-but-missing provider starts healthy with no model backend | `clawops apply` warns; `openclaw plugins list --json` confirms |
@@ -38,7 +38,7 @@ failure the 1.x line had and could not see.
 | Logs come from the gateway | The old `journalctl \|\| docker logs` chain never said which answered | `clawops logs --stack <name>` prints `source: gateway` |
 
 `scripts/e2e/cloud.sh gcp|azure` runs the whole sequence and destroys the stack afterwards,
-including when an assertion fails. Prefer it to doing this by hand — the failure mode here is
+including when an assertion fails. Prefer it to doing this by hand, the failure mode here is
 not a wrong answer, it is a VM nobody remembers leaving on.
 
 Migrating from 1.x has its own procedure; see [migrating](https://clawops.fyi/docs/migrating).
@@ -246,7 +246,7 @@ clawops destroy --stack smoke-gcp --yes
 ### Known quirks
 
 - **Firewall**: per-CIDR via `accessMode`, the same as AWS and Azure. Since 2.0 no gateway
-  rule is created at all while `network.publishGateway` is `loopback` (the default) — the
+  rule is created at all while `network.publishGateway` is `loopback` (the default), the
   port is not listening on a routable interface, so a rule for it would grant no access and
   misread as exposure. This entry previously said `accessMode` was unimplemented; that
   stopped being true in 2.0.
@@ -449,7 +449,7 @@ clawops down --stack local-smoke --yes
 **9. Verify destroy is blocked**
 ```bash
 clawops destroy --stack local-smoke --yes
-# Expect: UsageError — "local provider does not support destroy; use clawops down"
+# Expect: UsageError: "local provider does not support destroy; use clawops down"
 ```
 
 ### Known quirks
@@ -477,11 +477,11 @@ clawops mcp serve &
 MCP_PID=$!
 
 # Use the MCP inspector or any MCP client to:
-#   1. Call clawops_status (read toolset) — verify stack outputs returned
-#   2. Call clawops_logs_tail (read toolset, lines: 5) — verify log lines returned
-#   3. Call clawops_config_get (read toolset, key: "maxAgents") — verify value
-#   4. Call clawops_plan (cli toolset) — verify plan JSON returned
-#   5. Call clawops_destroy (cli toolset, without yes: true) — verify elicitation prompt
+#   1. Call clawops_status (read toolset), verify stack outputs returned
+#   2. Call clawops_logs_tail (read toolset, lines: 5), verify log lines returned
+#   3. Call clawops_config_get (read toolset, key: "maxAgents"), verify value
+#   4. Call clawops_plan (cli toolset), verify plan JSON returned
+#   5. Call clawops_destroy (cli toolset, without yes: true), verify elicitation prompt
 
 kill $MCP_PID
 
@@ -492,7 +492,7 @@ kill %1
 ```
 
 Key things to verify:
-- No output to stdout in stdio mode (only to stderr) — any stdout breaks the protocol
+- No output to stdout in stdio mode (only to stderr), any stdout breaks the protocol
 - Tool results are ≤ 8KB (Pulumi output trimmed)
 - Destructive tools (`clawops_destroy`) require `yes: true` or return an elicitation prompt
 

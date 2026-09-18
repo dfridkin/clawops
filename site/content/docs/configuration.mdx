@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: The two config files — clawops' own, and OpenClaw's.
+description: The two config files, clawops' own, and OpenClaw's.
 ---
 
 There are two separate things called config, and keeping them apart saves confusion.
@@ -12,7 +12,7 @@ There are two separate things called config, and keeping them apart saves confus
 
 ## clawops config
 
-Written by `clawops init`, and it holds **no secrets** — only connection metadata: which provider
+Written by `clawops init`, and it holds **no secrets**, only connection metadata: which provider
 a stack uses, its region, where its Pulumi state lives, and the paths to your SSH key and
 `known_hosts`.
 
@@ -32,7 +32,7 @@ a stack uses, its region, where its Pulumi state lives, and the paths to your SS
 }
 ```
 
-`credentialsRef` is a **reference**, not a credential — it records which environment variable or
+`credentialsRef` is a **reference**, not a credential. It records which environment variable or
 profile to read at run time.
 
 <Callout type="warn" title="stateUrl is the only pointer to your state">
@@ -53,7 +53,7 @@ clawops config set gateway.port 18789
 Validation runs against OpenClaw's own schema. A key the runtime would reject is refused here
 rather than restarting the gateway into a broken state.
 
-A plan can also carry a config overlay, which is applied at deploy time — that is how you get a
+A plan can also carry a config overlay, which is applied at deploy time. That is how you get a
 reproducible deployment rather than a series of manual `config set` calls.
 
 ## Secret references

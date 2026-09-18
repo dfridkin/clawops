@@ -3,7 +3,7 @@
 ## Quick Start
 
 ```bash
-# 1. Configure credentials — pick one method:
+# 1. Configure credentials: pick one method:
 
 # Option A: AWS named profile (recommended for local dev)
 export AWS_PROFILE=my-profile
@@ -54,7 +54,7 @@ is stored in config.
 
 **The state bucket is not created for you unless you ask.** A `404` means absent, and clawops
 offers to create it with versioning on and public access blocked. A `403` means the name belongs
-to another account — S3 bucket names are global — or your credentials cannot read it; clawops
+to another account. S3 bucket names are global, or your credentials cannot read it; clawops
 offers no fix there, because creating it would fail either way.
 
 **A check clawops could not perform says so.** Reading instance-type offerings needs
@@ -88,12 +88,12 @@ When you run `clawops up`, the AWS adapter provisions:
 - **Internet Gateway** + attachment
 - **Subnet** (`10.0.1.0/24`) in `<region>a`
 - **Route Table** with a default route to the IGW
-- **Security Group** — ingress controlled by `accessMode` (see [Firewall](#firewall-model)); egress unrestricted
+- **Security Group**. Ingress controlled by `accessMode` (see [Firewall](#firewall-model)); egress unrestricted
 - **IAM Role** with EC2 trust policy + `AmazonSSMManagedInstanceCore` (SSM Session Manager)
 - **IAM Instance Profile** bound to the role
 - **EC2 Key Pair** from `~/.clawops/id_ed25519.pub`
-- **EC2 Instance** — Ubuntu 22.04 LTS (Canonical AMI, `099720109477`), running OpenClaw via Docker
-- **Elastic IP** — static public IP assigned to the instance
+- **EC2 Instance**. Ubuntu 22.04 LTS (Canonical AMI, `099720109477`), running OpenClaw via Docker
+- **Elastic IP**. Static public IP assigned to the instance
 
 The initial SSH user is `ubuntu` (Ubuntu default); the startup script creates a `clawops` system user for OpenClaw operations.
 
@@ -116,9 +116,9 @@ The initial SSH user is `ubuntu` (Ubuntu default); the startup script creates a 
 
 - **URL pattern**: `s3://<bucket>/clawops`
 - **Default name**: `clawops-state-<accountId>-<region>`, derived by `clawops init`
-- **Must exist before Pulumi runs** — a deploy cannot create it on the way past. `clawops doctor
+- **Must exist before Pulumi runs**. A deploy cannot create it on the way past. `clawops doctor
   --provider aws` checks, and offers to create it with versioning on and public access blocked
-  when it is genuinely absent (a `404`, not a `403` — see the preflight section above)
+  when it is genuinely absent (a `404`, not a `403`, see the preflight section above)
 - **Encryption**: server-side encryption is controlled by your bucket policy
 
 ## Firewall Model
@@ -145,7 +145,7 @@ Gateway rules exist only with `--publish-gateway all`, and then only for the CID
 **Default security-group rules are deny-all (N10).** Never use `open` in production.
 
 **Egress.** Unrestricted by default. The host needs outbound access to `download.docker.com`
-and your package mirrors at first bootstrap, `ghcr.io` for the image, and — new in 2.0 —
+and your package mirrors at first bootstrap, `ghcr.io` for the image, and, new in 2.0,
 `clawhub.ai` **during `apply`** to install model-provider plugins. See
 [required outbound access](../security/egress.md) for what each failure looks like.
 
@@ -262,7 +262,7 @@ flowchart TD
 
 ## See Also
 
-- `src/providers/aws/` — adapter + Pulumi program
-- `tests/providers/aws/` — adapter + program tests
-- `docs/github-actions-oidc.md` — CI/CD with OIDC
-- ADR 0004 — credential policy (R6)
+- `src/providers/aws/`, adapter + Pulumi program
+- `tests/providers/aws/`, adapter + program tests
+- `docs/github-actions-oidc.md`. CI/CD with OIDC
+- ADR 0004, credential policy (R6)
