@@ -1,5 +1,41 @@
 # @clawops/cli
 
+## 2.0.3
+
+### Patch Changes
+
+- e698496: `clawops harden` gains three GCP checks, so the hardening report is no longer AWS-only on the
+  cloud side.
+
+  - **VPC firewall audit** reports any ingress rule on a clawops network that admits `0.0.0.0/0`
+    or `::/0`, naming the port and saying when it is SSH or the gateway.
+  - **Shielded VM** reports whether Secure Boot, vTPM and integrity monitoring are on.
+  - **OS Login** reports whether it is enabled.
+
+  All three are check-only, and the last two are check-only for reasons worth stating. Shielded VM
+  settings cannot be changed while the instance is running, and clawops will not stop a gateway in
+  order to harden it. Enabling OS Login makes the instance ignore metadata SSH keys, which is the
+  key clawops authenticates with: every day-two command would stop working. A hardening step whose
+  success locks the operator out is not one clawops will take, so it reports the posture and leaves
+  the decision where it belongs.
+
+  A check that cannot be performed reports as skipped, naming what was missing, rather than as a
+  pass.
+
+  Both lookups match the names Pulumi actually creates rather than the logical names in the
+  program, which carry a generated suffix. Matching a substring also matched the project name, so
+  in a project called `clawops-test` every rule on the default network was reported as a clawops
+  rule open to the internet.
+
+- f2e0a04: The MCP registry manifest (`server.json`) is bumped when the version is, rather than rewritten in
+  CI at publish time and never committed. The committed file had read `1.7.3` against a published
+  `2.0.2`.
+
+  The registry was always correct; only the file in the repository was stale. It is now updated by
+  `pnpm version:packages` inside the Version Packages PR, the publish step refuses to register a
+  manifest that disagrees with `package.json` instead of quietly rewriting it, and a test asserts
+  the two agree.
+
 ## 2.0.2
 
 ### Patch Changes
