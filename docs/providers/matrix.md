@@ -83,6 +83,24 @@ The `—` row for credentials-in-config is intentional: no provider stores crede
 The local provider's file-based state is not replicated or backed up automatically. For resilience,
 back up `~/.clawops/state/` alongside your stack backups.
 
+## Host hardening
+
+Eight modules run on every provider: SSH, UFW, fail2ban, unattended upgrades, Docker socket,
+auditd, lynis and sysctl. These are the cloud-specific additions.
+
+| Check | AWS | GCP | Azure | Local VM |
+|---|---|---|---|---|
+| Firewall / security group audit | ✓ (SG, incl. IPv6) | ✓ (VPC firewall) | Planned | — (manage on host) |
+| Remote-access agent readiness | ✓ (SSM) | — | Planned | — |
+| Flow logs | ✓ (VPC flow logs) | Planned | Planned | — |
+| Threat detection opt-in | ✓ (GuardDuty) | Planned | Planned | — |
+| Boot integrity | — | ✓ (Shielded VM, check-only) | Planned | — |
+| Identity-based SSH posture | — | ✓ (OS Login, check-only) | Planned | — |
+
+A check-only module reports and does not change anything. Two of the GCP checks are check-only
+for specific reasons: Shielded VM settings cannot be changed while the instance runs, and
+enabling OS Login would stop the instance accepting the metadata key clawops connects with.
+
 ## Observability
 
 | Capability | AWS | GCP | Azure | Local VM |

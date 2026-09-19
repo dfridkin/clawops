@@ -13,7 +13,7 @@ Remaining work falls into three groups:
 
 | Group | Items | Notes |
 |---|---|---|
-| **Carried from the 1.x waves** | WO-31 (GCP hardening), WO-32 (Azure hardening), WO-34 (Tailscale) | `src/harden/modules/` has twelve modules; none are GCP- or Azure-specific, and Tailscale exists only as a reserved schema field |
+| **Carried from the 1.x waves** | WO-32 (Azure hardening), WO-34 (Tailscale) | GCP landed in WO-31; no Azure-specific module exists yet, and Tailscale is still only a reserved schema field |
 | **clawops 2.1** | WO-53 sandboxing, WO-54 config surface, WO-55 TLS and public origin, WO-56 observability, WO-57 fleet multi-tenancy | WO-55 gates Portals, Teams, Slack and Discord Activities |
 | **clawops 2.2: alone** | WO-62 host agent | Ships by itself, behind preconditions. See below |
 | **Housekeeping** | WO-64 `server.json` drift | ✅ shipped. Bumped at version time, with a test that it agrees with `package.json` |
@@ -203,7 +203,7 @@ Goal: reduce attack surface and optionally route all traffic through a private T
 |---|---|---|
 | WO-29: `clawops harden` command + wizard integration | ✅ | Core hardening command, shared module framework, multi-select wizard step |
 | WO-30: AWS hardening | ✅ | VPC Flow Logs, GuardDuty opt-in, Security Group audit, Session Manager check |
-| WO-31: GCP hardening | ⏳ | Shielded VM check, VPC firewall audit, OS Login opt-in |
+| WO-31: GCP hardening | ✅ | VPC firewall audit, Shielded VM check, OS Login check. All check-only: see the changeset for why the last two do not apply |
 | WO-32: Azure hardening | ⏳ | JIT VM Access, Defender for Cloud, NSG audit, disk encryption check |
 | WO-33: Local/VPS hardening | ✅ | SSH hardening, UFW, fail2ban, unattended-upgrades, CIS Level 1 report |
 | WO-34: Tailscale VPN integration | ⏳ | Install Tailscale, join network, update SSH/gateway config, optional private-only mode |

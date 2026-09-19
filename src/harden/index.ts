@@ -33,6 +33,9 @@ import { awsSgAuditModule } from './modules/aws-sg-audit.js'
 import { awsSsmCheckModule } from './modules/aws-ssm-check.js'
 import { awsFlowLogsModule } from './modules/aws-flow-logs.js'
 import { awsGuardDutyModule } from './modules/aws-guardduty.js'
+import { gcpFirewallAuditModule } from './modules/gcp-firewall-audit.js'
+import { gcpShieldedVmModule } from './modules/gcp-shielded-vm.js'
+import { gcpOsLoginModule } from './modules/gcp-os-login.js'
 
 /** Full catalog of all hardening modules, ordered as they appear in the wizard. */
 export const MODULE_CATALOG: HardeningModule[] = [
@@ -51,4 +54,8 @@ export const MODULE_CATALOG: HardeningModule[] = [
   awsSsmCheckModule,
   awsFlowLogsModule,
   awsGuardDutyModule,
+  // GCP-specific
+  gcpFirewallAuditModule,
+  gcpShieldedVmModule,
+  gcpOsLoginModule,
 ]

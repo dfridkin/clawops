@@ -1,7 +1,7 @@
 # clawops. Technical Specification
 
 **Version:** 0.9
-**Status:** 2.0.2 published. M8 complete (1675 unit+e2e tests); Waves 1–13 complete. WO-01–WO-30, WO-33, WO-35 done; WO-31, WO-32, WO-34 open (GCP/Azure hardening, Tailscale). WO-53–WO-57 deferred to 2.1; WO-62 (host agent) ships alone as 2.2 behind preconditions
+**Status:** 2.0.2 published. M8 complete (1708 unit+e2e tests); Waves 1–13 complete. WO-01–WO-31, WO-33, WO-35 done; WO-32, WO-34 open (Azure hardening, Tailscale). WO-53–WO-57 deferred to 2.1; WO-62 (host agent) ships alone as 2.2 behind preconditions
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
