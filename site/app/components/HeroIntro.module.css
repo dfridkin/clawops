@@ -3,14 +3,9 @@
   position: fixed;
   inset: 0;
   z-index: 40;
-  /* The same glow as the hero, sized to the screen rather than to a column. */
-  background:
-    radial-gradient(
-      circle at 50% 50%,
-      color-mix(in srgb, var(--accent) 14%, transparent),
-      transparent 46%
-    ),
-    var(--ground);
+  /* Flat. The shell brings its own aura, dithered, and a smooth one behind it would sit
+     underneath the stipple as a soft halo the palette never produced. */
+  background: var(--ground);
   opacity: 1;
   transition: opacity 620ms cubic-bezier(0.22, 1, 0.36, 1);
 }

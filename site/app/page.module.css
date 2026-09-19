@@ -94,38 +94,23 @@
   justify-self: end;
   width: 100%;
 }
-/*
- * The glow the renderer used to paint on a plane behind the shell, moved to the page.
- * Inside the canvas it stopped at the canvas edge and drew a soft square; here it runs past
- * the art in every direction and fades into the page instead of into a boundary.
- */
-.heroArt::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 240%;
-  aspect-ratio: 1;
-  translate: -50% -50%;
-  /* Begins outside the canvas and carries the same colour outward, so the glow continues past
-     the art instead of ending at its edge. Kept faint: the canvas paints the bright part. */
-  background: radial-gradient(
-    circle closest-side,
-    transparent 38%,
-    color-mix(in srgb, var(--accent) 9%, transparent) 52%,
-    transparent 78%
-  );
-  pointer-events: none;
-  z-index: -1;
-}
-
 /* One column before the art is squeezed below its 2x scale. */
 @media (max-width: 62rem) {
   .hero {
     grid-template-columns: minmax(0, 1fr);
     max-width: 42rem;
   }
-  .heroArt { justify-self: center; max-width: 288px; }
+  .heroArt {
+    justify-self: center;
+    /*
+     * Edge to edge on a phone. 384 is 2x the 192px framebuffer and nine points short of an
+     * iPhone 16's 393, so it fills the width while every display pixel stays square. Sizing to
+     * 100vw instead would put it at 2.05x and make some pixels wider than others.
+     */
+    max-width: 384px;
+    width: 100vw;
+    margin-inline: calc(50% - 50vw);
+  }
 }
 .headline {
   font-family: var(--font-display), Georgia, serif;
