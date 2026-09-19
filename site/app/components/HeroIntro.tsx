@@ -46,14 +46,40 @@ export default function HeroIntro() {
     else delete document.body.dataset['introActive']
   }, [phase])
 
-  /** Tap starts the reveal. It does not cut it short. */
+  /**
+   * Tap starts the reveal. It does not cut it short, and it does not toggle it twice.
+   *
+   * The renderer binds its own click listener with addEventListener, so a tap that lands on the
+   * shell has already engaged it by the time React dispatches anything here. Synthesizing
+   * another click then toggled `pinned` straight back off, and the first tap looked dead. Only
+   * taps from outside the shell need a click made for them.
+   */
   const beginReveal = useCallback(() => {
     if (phase !== 'intro') return
     try { sessionStorage.setItem('clawops-intro', 'seen') } catch { /* private mode */ }
-    // A programmatic click arrives with detail 0, which is the path the renderer treats as a
-    // deliberate toggle rather than a hover.
-    art.current?.querySelector('button')?.click()
+    const trigger = art.current?.querySelector('button')
+    const engaged = trigger?.dataset['state'] === 'opening' || trigger?.dataset['state'] === 'open'
+    // A programmatic click arrives with detail 0, the path the renderer treats as a deliberate
+    // toggle rather than a hover.
+    if (!engaged) trigger?.click()
     setPhase('revealing')
+  }, [phase])
+
+  /*
+   * A click on the shell engages it through the renderer's own listener, without passing
+   * through beginReveal. Listen for the same click rather than watching data-state: on a
+   * desktop, hovering the shell also opens it, and hovering is not a decision to enter.
+   */
+  useEffect(() => {
+    if (phase !== 'intro') return
+    const trigger = art.current?.querySelector('button')
+    if (!trigger) return
+    const onClick = () => {
+      try { sessionStorage.setItem('clawops-intro', 'seen') } catch { /* private mode */ }
+      setPhase('revealing')
+    }
+    trigger.addEventListener('click', onClick)
+    return () => trigger.removeEventListener('click', onClick)
   }, [phase])
 
   /* Wait for the whole sweep: panels out, then the claw drawn. The renderer reports both. */
@@ -110,12 +136,7 @@ export default function HeroIntro() {
         />
       )}
       <div ref={slot} className={styles.slot} aria-hidden={phase === 'done' ? undefined : 'true'} />
-      <div
-        ref={art}
-        className={styles.art}
-        data-phase={phase}
-        onClickCapture={phase === 'intro' ? (e) => { e.stopPropagation(); beginReveal() } : undefined}
-      >
+      <div ref={art} className={styles.art} data-phase={phase}>
         <ShellHero caption={phase === 'done'} />
         {phase === 'intro' && (
           <button type="button" className={styles.enter} onClick={beginReveal}>
