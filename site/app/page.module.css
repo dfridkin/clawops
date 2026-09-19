@@ -88,11 +88,34 @@
 .heroCopy { min-width: 0; }
 .heroArt {
   min-width: 0;
+  position: relative;
   /* Integer scaling keeps the 192px framebuffer crisp: 384 is exactly 2x. */
   max-width: 384px;
   justify-self: end;
   width: 100%;
 }
+/*
+ * The glow the renderer used to paint on a plane behind the shell, moved to the page.
+ * Inside the canvas it stopped at the canvas edge and drew a soft square; here it runs past
+ * the art in every direction and fades into the page instead of into a boundary.
+ */
+.heroArt::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 240%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  background: radial-gradient(
+    circle closest-side,
+    color-mix(in srgb, var(--accent) 16%, transparent),
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: -1;
+}
+
 /* One column before the art is squeezed below its 2x scale. */
 @media (max-width: 62rem) {
   .hero {

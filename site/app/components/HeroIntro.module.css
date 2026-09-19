@@ -3,7 +3,14 @@
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: var(--ground);
+  /* The same glow as the hero, sized to the screen rather than to a column. */
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      color-mix(in srgb, var(--accent) 14%, transparent),
+      transparent 46%
+    ),
+    var(--ground);
   opacity: 1;
   transition: opacity 620ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -22,9 +29,25 @@
   inset: 0;
   margin: auto;
   z-index: 50;
-  width: min(576px, 76vw);
-  height: min(576px, 76vw);
+  /*
+   * Integer multiples of the 192px framebuffer only. 576 was 3x; 50% more would be 4.5x, which
+   * makes some display pixels four across and others five, on a piece whose whole idea is that
+   * they are all the same. 768 is 4x. The viewport clamps fall back to 3x and 2x rather than to
+   * an arbitrary fraction.
+   */
+  width: 768px;
+  height: 768px;
   transform-origin: center;
+}
+@media (max-width: 53rem), (max-height: 53rem) {
+  .art[data-phase='intro'],
+  .art[data-phase='revealing'],
+  .art[data-phase='leaving'] { width: 576px; height: 576px; }
+}
+@media (max-width: 40rem), (max-height: 40rem) {
+  .art[data-phase='intro'],
+  .art[data-phase='revealing'],
+  .art[data-phase='leaving'] { width: 384px; height: 384px; }
 }
 .art[data-phase='leaving'] {
   transition: transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
