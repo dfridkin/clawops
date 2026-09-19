@@ -79,7 +79,38 @@
    way of the install command. */
 .hero {
   padding: 7rem 0 6rem;
-  max-width: 42rem;
+  display: grid;
+  /* The copy keeps its measure; the art takes what is left and never drives the row. */
+  grid-template-columns: minmax(0, 42rem) minmax(0, 24rem);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: center;
+}
+.heroCopy { min-width: 0; }
+.heroArt {
+  min-width: 0;
+  position: relative;
+  /* Integer scaling keeps the 192px framebuffer crisp: 384 is exactly 2x. */
+  max-width: 384px;
+  justify-self: end;
+  width: 100%;
+}
+/* One column before the art is squeezed below its 2x scale. */
+@media (max-width: 62rem) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 42rem;
+  }
+  .heroArt {
+    justify-self: center;
+    /*
+     * Edge to edge on a phone. 384 is 2x the 192px framebuffer and nine points short of an
+     * iPhone 16's 393, so it fills the width while every display pixel stays square. Sizing to
+     * 100vw instead would put it at 2.05x and make some pixels wider than others.
+     */
+    max-width: 384px;
+    width: 100vw;
+    margin-inline: calc(50% - 50vw);
+  }
 }
 .headline {
   font-family: var(--font-display), Georgia, serif;

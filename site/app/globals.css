@@ -85,3 +85,11 @@ pre {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+
+/*
+ * While the intro is up, the page behind it is covered by a scrim rather than removed: it stays
+ * in the document, in the accessibility tree and in the markup a crawler reads. Scrolling is
+ * held so a click lands on the shell rather than somewhere the reader cannot see.
+ */
+body[data-intro-active='true'] { overflow: hidden; }
