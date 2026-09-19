@@ -47,6 +47,11 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
+          # Not the default `changeset version`: ours also writes the new version into
+          # server.json, so the MCP registry manifest is bumped inside the Version Packages
+          # PR and reviewed with it. Rewriting it at publish time instead is what let the
+          # committed file sit five releases behind what was registered.
+          version: pnpm version:packages
           # ci-publish.sh temporarily hides pnpm detection signals so
           # @changesets/cli calls `npm publish` instead of `pnpm publish`.
           # npm 11.5.1+ then performs the OIDC automated token exchange
@@ -81,14 +86,21 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           echo "Registering @clawops/cli@${VERSION} with the MCP registry"
 
-          # Sync server.json with the version that was just published.
+          # server.json is bumped at version time, in the release PR. If it disagrees here,
+          # that bump did not happen and the registry would be told a version nobody reviewed,
+          # so stop rather than quietly rewriting the file the way this step used to.
           node -e '
             const fs = require("fs");
             const version = process.argv[1];
             const s = JSON.parse(fs.readFileSync("server.json", "utf8"));
-            s.version = version;
-            s.packages[0].version = version;
-            fs.writeFileSync("server.json", JSON.stringify(s, null, 2) + "\n");
+            const found = [s.version, s.packages[0].version];
+            if (found.some((v) => v !== version)) {
+              console.error(
+                `server.json says ${found.join(" / ")} but package.json says ${version}. ` +
+                "Run `pnpm sync:server-json` and commit the result."
+              );
+              process.exit(1);
+            }
           ' "$VERSION"
 
           # The registry validates a submission by querying npm for the version, and

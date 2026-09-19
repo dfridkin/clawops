@@ -712,6 +712,10 @@ const MUTATIONS = [
     file: 'src/providers/state-bucket.ts', from: "  const dotted = provider === 'gcp' && n.includes('.')", to: '  const dotted = true', test: 'tests/providers/state-bucket.test.ts' },
   { name: 'a dotted Cloud Storage name skips the per-part cap',
     file: 'src/providers/state-bucket.ts', from: '  if (dotted && n.split(\'.\').some((part) => part.length > 63)) {', to: '  if (false) {', test: 'tests/providers/state-bucket.test.ts' },
+  { name: 'the manifest sync writes only one of the two version fields',
+    file: 'scripts/sync-server-json.mjs', from: 'server.packages[0].version = version', to: 'void version', test: 'tests/release/server-manifest.test.ts' },
+  { name: 'the manifest sync stops writing the file',
+    file: 'scripts/sync-server-json.mjs', from: 'writeFileSync(serverPath,', to: 'void 0; void (', test: 'tests/release/server-manifest.test.ts' },
 
 ]
 
