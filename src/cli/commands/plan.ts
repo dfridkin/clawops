@@ -2,9 +2,56 @@ import { defineCommand } from 'citty'
 import process from 'node:process'
 import { writeFileSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { success, spinner } from '../../output/human.js'
+import { success, spinner, warn } from '../../output/human.js'
 import { renderTable } from '../../output/table.js'
 import { UsageError } from '../../errors/index.js'
+import type { DeployPlan } from '../../plan/generate.js'
+
+/**
+ * Say what applying this plan does to a deployment that already exists.
+ *
+ * A plan against a fresh stack only creates, and needs no warning. A plan against a running one
+ * can interrupt it or destroy it, and the summary above says neither: "1 to update" does not
+ * convey that the gateway stops, and "1 to replace" does not convey that the boot disk, and
+ * every session and transcript on it, goes with the instance.
+ */
+export function disruptionWarnings(diff: NonNullable<DeployPlan['diff']>): string[] {
+  const out: string[] = []
+  const isInstance = (type: string) => /:(Instance|instance)/.test(type)
+
+  const replaced = (diff.replace ?? [])
+  if (replaced.length > 0) {
+    const instance = replaced.some((r) => isInstance(r.type))
+    out.push(
+      `This plan REPLACES ${replaced.length} existing resource${replaced.length === 1 ? '' : 's'}: ` +
+      replaced.map((r) => r.name ?? r.type).join(', ') + '.' +
+      (instance
+        ? ' Replacing the instance destroys its boot disk, and with it the OpenClaw config, ' +
+          'database, sessions and transcripts on the host. Take a backup first: `clawops backup create`.'
+        : ''),
+    )
+  }
+
+  if (diff.update.length > 0) {
+    const instance = diff.update.some((u) => isInstance(u.resource.type))
+    out.push(
+      `This plan modifies ${diff.update.length} existing resource${diff.update.length === 1 ? '' : 's'}.` +
+      (instance
+        ? ' Some instance changes require the machine to be stopped and started, so the gateway ' +
+          'goes down for the duration and in-flight work is lost. State on disk is kept.'
+        : ''),
+    )
+  }
+
+  if (diff.delete.length > 0) {
+    out.push(`This plan DELETES ${diff.delete.length} existing resource${diff.delete.length === 1 ? '' : 's'}.`)
+  }
+  return out
+}
+
+function warnAboutDisruption(diff: NonNullable<DeployPlan['diff']>): void {
+  for (const line of disruptionWarnings(diff)) warn(line)
+}
 
 export default defineCommand({
   meta: {
@@ -104,18 +151,21 @@ export default defineCommand({
     )
 
     if (plan.diff) {
-      const { create, update, delete: del, totalChanges } = plan.diff
+      const { create, update, delete: del, replace = [], totalChanges } = plan.diff
       process.stderr.write(
-        `\nChanges: ${create.length} to create, ${update.length} to update, ${del.length} to delete (${totalChanges} total)\n`,
+        `\nChanges: ${create.length} to create, ${update.length} to update, ` +
+        `${replace.length} to replace, ${del.length} to delete (${totalChanges} total)\n`,
       )
       const rows: string[][] = [
         ...create.map((r) => ['+', r.type, r.name ?? '']),
         ...update.map((r) => ['~', r.resource.type, r.resource.name ?? '']),
+        ...replace.map((r) => ['+-', r.type, r.name ?? '']),
         ...del.map((r) => ['-', r.type, r.name ?? '']),
       ]
       if (rows.length > 0) {
         process.stderr.write(renderTable(['Op', 'Resource Type', 'Name'], rows) + '\n')
       }
+      warnAboutDisruption(plan.diff)
     } else {
       process.stderr.write('\n(diff unavailable — preview could not run against this stack)\n')
     }
