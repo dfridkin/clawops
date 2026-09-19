@@ -1,0 +1,11 @@
+.shell { width: 100%; min-width: 0; align-self: center; }
+.trigger { display: block; width: 100%; padding: 0; border: 0; background: transparent; color: var(--ink); border-radius: 50%; touch-action: manipulation; cursor: pointer; }
+.canvas { display: block; width: 100%; height: auto; aspect-ratio: 1; }
+.caption { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.4rem; align-items: center; color: var(--ink-soft); font-family: var(--font-mono), monospace; font-size: 0.75rem; }
+.pause { padding: 0.3rem 0; border: 0; background: transparent; color: var(--ink-mid); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+@media (pointer: coarse) { .pause { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .pause { display: none; } }
+
+.trigger:focus-visible, .pause:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
+
+.canvas { image-rendering: pixelated; }
