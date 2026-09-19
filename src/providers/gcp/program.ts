@@ -102,6 +102,20 @@ export const gcpProgram: PulumiFn = async () => {
     machineType: instanceType,
     zone,
     tags: ['clawops'],
+    // debian-12 advertises UEFI_COMPATIBLE, so all three protections are available. Left
+    // unset, GCP turns on vTPM and integrity monitoring and leaves Secure Boot off, which is
+    // what `clawops harden` was reporting on every GCP stack.
+    //
+    // Changing this on an existing instance is an update, not a replacement: Pulumi stops the
+    // machine, applies it and starts it again, and the boot disk is untouched. Verified against
+    // a live stack — the preview reads "0 to create, 1 to update, 0 to delete". Without
+    // allowStoppingForUpdate the provider refuses the update rather than replacing anything.
+    allowStoppingForUpdate: true,
+    shieldedInstanceConfig: {
+      enableSecureBoot: true,
+      enableVtpm: true,
+      enableIntegrityMonitoring: true,
+    },
     bootDisk: {
       initializeParams: {
         image: 'debian-cloud/debian-12',

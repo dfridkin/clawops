@@ -308,3 +308,28 @@ describe('gcpProgram — static IP', () => {
     expect(result).toHaveProperty('region', 'us-central1')
   })
 })
+
+// Left unset, GCP enables vTPM and integrity monitoring and leaves Secure Boot off, so the
+// instance boots without verified firmware. debian-12 advertises UEFI_COMPATIBLE, so all three
+// are available and the program asks for all three.
+describe('shielded VM', () => {
+  it('asks for Secure Boot, vTPM and integrity monitoring', async () => {
+    setConfig(BASE_CONFIG)
+    await runProgram()
+
+    const vm = created.find(r => r.type === 'gcp:compute/instance:Instance')
+    expect(vm!.inputs['shieldedInstanceConfig']).toEqual({
+      enableSecureBoot: true,
+      enableVtpm: true,
+      enableIntegrityMonitoring: true,
+    })
+  })
+
+  it('permits the stop the provider needs to change it on a live instance', async () => {
+    setConfig(BASE_CONFIG)
+    await runProgram()
+
+    const vm = created.find(r => r.type === 'gcp:compute/instance:Instance')
+    expect(vm!.inputs['allowStoppingForUpdate']).toBe(true)
+  })
+})
