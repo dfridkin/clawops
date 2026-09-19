@@ -1,0 +1,57 @@
+/* The page behind the intro is present and readable; it is covered, not removed. */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--ground);
+  opacity: 1;
+  transition: opacity 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.scrim[data-leaving='true'] { opacity: 0; pointer-events: none; }
+
+/* Holds the art's place in the hero column while the art itself is fixed and centred. */
+.slot { width: 100%; max-width: 384px; aspect-ratio: 1; justify-self: end; }
+
+.art { width: 100%; }
+
+/* 576px is 3x the 192px framebuffer, so the pixels stay square during the intro too. */
+.art[data-phase='intro'],
+.art[data-phase='leaving'] {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  z-index: 50;
+  width: min(576px, 76vw);
+  height: min(576px, 76vw);
+  transform-origin: center;
+}
+.art[data-phase='leaving'] {
+  transition: transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+
+.enter {
+  position: absolute;
+  left: 50%;
+  bottom: -3.2rem;
+  transform: translateX(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--ink-mid);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  animation: pulse 2.6s ease-in-out infinite;
+}
+.enter:hover, .enter:focus-visible { color: var(--accent); }
+.enter:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+
+@keyframes pulse { 0%, 100% { opacity: 0.55 } 50% { opacity: 1 } }
+
+@media (prefers-reduced-motion: reduce) {
+  .scrim, .art[data-phase='leaving'] { transition: none; }
+  .enter { animation: none; }
+}

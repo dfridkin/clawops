@@ -1,5 +1,5 @@
 import styles from './page.module.css'
-import ShellHero from './components/ShellHero'
+import HeroIntro from './components/HeroIntro'
 
 const GITHUB = 'https://github.com/dfridkin/clawops'
 const NPM = 'https://www.npmjs.com/package/@clawops/cli'
@@ -64,7 +64,7 @@ export default function Home() {
         </div>
 
         <div className={styles.heroArt}>
-          <ShellHero />
+          <HeroIntro />
         </div>
       </header>
 

@@ -99,7 +99,7 @@
     grid-template-columns: minmax(0, 1fr);
     max-width: 42rem;
   }
-  .heroArt { justify-self: start; order: -1; max-width: 288px; }
+  .heroArt { justify-self: center; max-width: 288px; }
 }
 .headline {
   font-family: var(--font-display), Georgia, serif;
