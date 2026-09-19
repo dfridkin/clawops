@@ -329,6 +329,10 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
     core.visible=projection>.001
     core.scale.setScalar(.98+.18*open)
     trigger.dataset.state=engaged?(opening===1?'open':'opening'):(opening>0?'closing':'rotating')
+    // data-state reaches 'open' when the panels finish moving, which is before the claw has
+    // finished being drawn: the scan starts at open>.68 and takes about a second more. A caller
+    // waiting for the whole sweep needs to know about that second.
+    trigger.dataset.reveal=reveal>=1?'complete':reveal>0?'scanning':'idle'
     composer.render()
     const pointerMoving=Math.abs(targetX-parallax.x)+Math.abs(targetY-parallax.y)>.0001
     const transitioning=opening>0&&opening<1||engaged&&angle!==0||reveal!==scanTarget||pointerMoving

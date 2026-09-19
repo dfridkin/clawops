@@ -16,6 +16,7 @@
 
 /* 576px is 3x the 192px framebuffer, so the pixels stay square during the intro too. */
 .art[data-phase='intro'],
+.art[data-phase='revealing'],
 .art[data-phase='leaving'] {
   position: fixed;
   inset: 0;
@@ -55,3 +56,6 @@
   .scrim, .art[data-phase='leaving'] { transition: none; }
   .enter { animation: none; }
 }
+
+/* Once tapped, the label steps out of the way rather than sitting over the sweep. */
+.art[data-phase='revealing'] .enter { opacity: 0; transition: opacity 240ms ease-out; }
