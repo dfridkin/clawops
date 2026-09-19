@@ -42,8 +42,25 @@ export default function HeroIntro() {
   }, [])
 
   useEffect(() => {
-    if (phase === 'intro' || phase === 'revealing') document.body.dataset['introActive'] = 'true'
-    else delete document.body.dataset['introActive']
+    if (phase === 'intro' || phase === 'revealing') {
+      document.body.dataset['introActive'] = 'true'
+      return
+    }
+    delete document.body.dataset['introActive']
+    if (phase !== 'leaving') return
+
+    /*
+     * Land at the top of the page, not at the shell.
+     *
+     * The control that was tapped keeps focus, and on a phone the art it belongs to ends up in
+     * the hero column below the nav and the headline. Releasing the scroll lock with focus
+     * down there let the browser bring it into view, so entering the page skipped past the
+     * masthead and the first thing anyone is meant to read. Blur first, then reset, while the
+     * scrim is still covering the move.
+     */
+    const focused = document.activeElement
+    if (focused instanceof HTMLElement) focused.blur()
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior })
   }, [phase])
 
   /**
