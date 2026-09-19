@@ -3,7 +3,7 @@
   "name": "io.github.dfridkin/clawops",
   "title": "clawops",
   "description": "Deploy and manage self-hosted OpenClaw instances across clouds",
-  "version": "1.7.3",
+  "version": "2.0.2",
   "websiteUrl": "https://clawops.fyi",
   "repository": {
     "url": "https://github.com/dfridkin/clawops",
@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "identifier": "@clawops/cli",
-      "version": "1.7.3",
+      "version": "2.0.2",
       "packageArguments": [
         {
           "type": "positional",

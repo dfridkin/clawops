@@ -42,7 +42,9 @@
     "release": "pnpm build && changeset publish",
     "test:mutation": "node scripts/dev/mutation-check.mjs",
     "graph": "node scripts/dev/graph.mjs",
-    "verify:pack": "node scripts/dev/verify-pack.mjs"
+    "verify:pack": "node scripts/dev/verify-pack.mjs",
+    "version:packages": "changeset version && node scripts/sync-server-json.mjs",
+    "sync:server-json": "node scripts/sync-server-json.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock": "^3.1063.0",

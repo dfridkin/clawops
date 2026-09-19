@@ -1014,7 +1014,7 @@ changes what R6 means in practice even while complying with its wording.
 The honest summary: this is the feature most likely to produce a bad day for a user, and the
 only one where clawops' existing safety model does not apply. It ships alone, or not yet.
 
-**WO-64. The committed `server.json` drifts from the released version** *(S, was folded into
+**WO-64. The committed `server.json` drifts from the released version** ✅ **done** *(S, was folded into
 WO-62; split out 2026-09-18 because it is an hour of work and WO-62 is now a gated release of its
 own)*
 

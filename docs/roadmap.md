@@ -16,7 +16,7 @@ Remaining work falls into three groups:
 | **Carried from the 1.x waves** | WO-31 (GCP hardening), WO-32 (Azure hardening), WO-34 (Tailscale) | `src/harden/modules/` has twelve modules; none are GCP- or Azure-specific, and Tailscale exists only as a reserved schema field |
 | **clawops 2.1** | WO-53 sandboxing, WO-54 config surface, WO-55 TLS and public origin, WO-56 observability, WO-57 fleet multi-tenancy | WO-55 gates Portals, Teams, Slack and Discord Activities |
 | **clawops 2.2: alone** | WO-62 host agent | Ships by itself, behind preconditions. See below |
-| **Housekeeping** | WO-64 `server.json` drift | Split out of WO-62 so it is not gated behind it |
+| **Housekeeping** | WO-64 `server.json` drift | ✅ shipped. Bumped at version time, with a test that it agrees with `package.json` |
 
 ### WO-62 ships on its own, and only after its preconditions
 
