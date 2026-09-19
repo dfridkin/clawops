@@ -207,9 +207,15 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
     uniforms: hologram,
     vertexShader: `varying vec2 p; void main(){p=position.xy;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
     fragmentShader: `varying vec2 p; uniform vec3 teal; uniform float reveal; uniform float time;
-      void main(){float scan=pow(.5+.5*cos(p.y*1.6-time*.35),10.);float cut=smoothstep(p.y-4.,p.y+4.,-80.+reveal*174.);
+      // The claw is about 39 framebuffer pixels tall. At p.y*1.6 the scan period was 1.08 of
+      // them, under the two it takes to draw a line and a gap, so the pattern beat against the
+      // pixel grid instead of resolving: soft irregular banding rather than lines. 0.862 puts
+      // the period at exactly two pixels, which is the finest regular stripe this framebuffer
+      // can hold, and raising the exponent narrows the lit band inside it so the line reads
+      // thin rather than blurred.
+      void main(){float scan=pow(.5+.5*cos(p.y*.862-time*.35),15.);float cut=smoothstep(p.y-4.,p.y+4.,-80.+reveal*174.);
       float sweep=exp(-pow((p.y-(-80.+reveal*174.))/3.,2.))*(1.-step(.999,reveal));
-      gl_FragColor=vec4(teal,(.035+.13*scan+.32*sweep)*cut*reveal);}`,
+      gl_FragColor=vec4(teal,(.030+.19*scan+.32*sweep)*cut*reveal);}`,
   }))
   core.add(new THREE.Mesh(keepGeometry(new THREE.ShapeGeometry(outline, 48)), holoFill))
   const holoHalo = keepMaterial(new THREE.ShaderMaterial({
