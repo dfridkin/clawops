@@ -3,9 +3,10 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { RemoteExec } from '../../src/harden/types.js'
-import { describePorts, openFindings } from '../../src/harden/modules/gcp-firewall-audit.js'
+import { describePorts, openFindings, networkName } from '../../src/harden/modules/gcp-firewall-audit.js'
 import { missingProtections } from '../../src/harden/modules/gcp-shielded-vm.js'
 import { osLoginEnabled } from '../../src/harden/modules/gcp-os-login.js'
+import { isClawopsInstance } from '../../src/harden/gcp-api.js'
 
 const noopExec: RemoteExec = async () => ({ stdout: '', stderr: '', code: 0 })
 const CTX = { project: 'proj', token: 't' }
@@ -61,6 +62,26 @@ describe('firewall audit: which rules are findings', () => {
       { name: 'off', network: 'clawops-network', disabled: true, sourceRanges: ['0.0.0.0/0'], allowed: [] },
       { name: 'out', network: 'clawops-network', direction: 'EGRESS', sourceRanges: ['0.0.0.0/0'], allowed: [] },
     ])).toEqual([])
+  })
+
+  // Found by running the module against a real project. The self-link contains the project
+  // name, so a substring match on "clawops" flagged every default-network rule in a project
+  // called clawops-test. 29 unit tests passed because their fixtures used a project named "p".
+  it('does not mistake the project name for the network name', () => {
+    const real = 'https://www.googleapis.com/compute/v1/projects/clawops-test/global/networks/default'
+    expect(networkName(real)).toBe('default')
+    expect(openFindings([{
+      name: 'default-allow-ssh', network: real,
+      sourceRanges: ['0.0.0.0/0'], allowed: [{ IPProtocol: 'tcp', ports: ['22'] }],
+    }])).toEqual([])
+  })
+
+  it('still finds the rule on the network clawops made, suffix and all', () => {
+    const ours = 'https://www.googleapis.com/compute/v1/projects/clawops-test/global/networks/clawops-network-a1b2c3'
+    expect(openFindings([{
+      name: 'clawops-firewall-ssh', network: ours,
+      sourceRanges: ['0.0.0.0/0'], allowed: [{ IPProtocol: 'tcp', ports: ['22'] }],
+    }])).toHaveLength(1)
   })
 
   it('ignores networks that are not this deployment', () => {
@@ -192,5 +213,20 @@ describe('the catalog', () => {
     expect(gcp.map((m) => m.id).sort())
       .toEqual(['gcp-firewall-audit', 'gcp-os-login', 'gcp-shielded-vm'])
     for (const m of gcp) expect(m.providers).toEqual(['gcp'])
+  })
+})
+
+// Both of these were found by running against a real deployment, not by reading the code.
+// Pulumi auto-names its resources, so neither the network nor the instance carries the bare
+// logical name the modules were written to look for.
+describe('names as they exist after a deploy, not as written in the program', () => {
+  it('recognises the instance Pulumi actually created', () => {
+    expect(isClawopsInstance('clawops-instance-7f3a9c1')).toBe(true)
+    expect(isClawopsInstance('clawops-instance')).toBe(true)
+  })
+
+  it('does not claim someone else\'s instance', () => {
+    expect(isClawopsInstance('build-runner-3')).toBe(false)
+    expect(isClawopsInstance(undefined)).toBe(false)
   })
 })

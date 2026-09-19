@@ -34,6 +34,19 @@ export function describePorts(allowed: Firewall['allowed']): string {
   return parts.length > 0 ? parts.join(', ') : 'no ports'
 }
 
+/**
+ * The network's own name, out of the self-link the API returns:
+ *
+ *   https://www.googleapis.com/compute/v1/projects/<project>/global/networks/<name>
+ *
+ * Matching "clawops" anywhere in that URL matches the *project* too, so in a project called
+ * `clawops-test` every rule on the default network was reported as a clawops rule open to the
+ * internet. Only the last segment names the network.
+ */
+export function networkName(selfLink: string): string {
+  return selfLink.split('/').pop() ?? ''
+}
+
 /** Ingress rules on a clawops network that admit the whole internet. */
 export function openFindings(firewalls: Firewall[]): string[] {
   const out: string[] = []
@@ -41,7 +54,7 @@ export function openFindings(firewalls: Firewall[]): string[] {
     if (fw.disabled) continue
     // GCP defaults direction to INGRESS when the field is absent; egress is not this audit's job.
     if ((fw.direction ?? 'INGRESS') !== 'INGRESS') continue
-    if (!(fw.network ?? '').includes('clawops')) continue
+    if (!networkName(fw.network ?? '').startsWith('clawops-')) continue
     const world = (fw.sourceRanges ?? []).filter((r) => WORLD.has(r))
     if (world.length === 0) continue
     out.push(`${fw.name ?? 'unnamed rule'} admits ${world.join(' and ')} on ${describePorts(fw.allowed)}`)

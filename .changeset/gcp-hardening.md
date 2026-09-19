@@ -19,3 +19,8 @@ the decision where it belongs.
 
 A check that cannot be performed reports as skipped, naming what was missing, rather than as a
 pass.
+
+Both lookups match the names Pulumi actually creates rather than the logical names in the
+program, which carry a generated suffix. Matching a substring also matched the project name, so
+in a project called `clawops-test` every rule on the default network was reported as a clawops
+rule open to the internet.

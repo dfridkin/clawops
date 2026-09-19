@@ -730,6 +730,10 @@ const MUTATIONS = [
     file: 'src/harden/modules/gcp-os-login.ts', from: '    return enabled', to: '    return false', test: 'tests/harden/gcp-modules.test.ts' },
   { name: 'OS Login becomes on by default, so the wizard pre-checks it',
     file: 'src/harden/modules/gcp-os-login.ts', from: '  defaultOn: false,', to: '  defaultOn: true,', test: 'tests/harden/gcp-modules.test.ts' },
+  { name: 'the firewall audit matches the project name instead of the network name',
+    file: 'src/harden/modules/gcp-firewall-audit.ts', from: "    if (!networkName(fw.network ?? '').startsWith('clawops-')) continue", to: "    if (!(fw.network ?? '').includes('clawops')) continue", test: 'tests/harden/gcp-modules.test.ts' },
+  { name: 'the instance lookup demands an exact name Pulumi never uses',
+    file: 'src/harden/gcp-api.ts', from: "  return typeof name === 'string' && name.startsWith('clawops-instance')", to: "  return name === 'clawops-instance'", test: 'tests/harden/gcp-modules.test.ts' },
 
 ]
 

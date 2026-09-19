@@ -63,15 +63,21 @@ export async function findClawopsInstance(
   signal?: AbortSignal,
 ): Promise<GceInstance | undefined> {
   type Aggregated = { items?: Record<string, { instances?: GceInstance[] }> }
-  const body = await computeGet<Aggregated>(
-    ctx, 'aggregated/instances?filter=name%3Dclawops-instance', signal,
-  )
+  // No server-side name filter: Pulumi auto-names the resource, so the instance is
+  // `clawops-instance-<suffix>` and an exact match finds nothing. Matching a prefix here found
+  // a live instance that an exact match had reported as absent.
+  const body = await computeGet<Aggregated>(ctx, 'aggregated/instances', signal)
   for (const scope of Object.values(body?.items ?? {})) {
     for (const inst of scope.instances ?? []) {
-      if (inst.name === 'clawops-instance') return inst
+      if (isClawopsInstance(inst.name)) return inst
     }
   }
   return undefined
+}
+
+/** `clawops-instance` as deployed, with whatever suffix Pulumi gave it. */
+export function isClawopsInstance(name: string | undefined): boolean {
+  return typeof name === 'string' && name.startsWith('clawops-instance')
 }
 
 /** Instance metadata wins over project metadata, so read it where the deploy set it. */
