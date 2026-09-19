@@ -14,9 +14,9 @@ const surface = (lat: number, lon: number, radius = R) => new THREE.Vector3(radi
 
 /** Real surfaces, physical rims, centered decals and restrained emissive light. */
 export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement, pause: HTMLButtonElement) {
-  const context = canvas.getContext('webgl2', { antialias: false, alpha: true })
+  const context = canvas.getContext('webgl2', { antialias: false, alpha: false })
   if (!context) return mountFallback(canvas, trigger, pause)
-  const renderer = new THREE.WebGLRenderer({ canvas, context, antialias: false, alpha: true, powerPreference: 'low-power' })
+  const renderer = new THREE.WebGLRenderer({ canvas, context, antialias: false, alpha: false, powerPreference: 'low-power' })
   renderer.setPixelRatio(1)
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -49,10 +49,7 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
       palette[8]=vec3(.31,.71,.68);palette[9]=vec3(.64,1.,.88);
       float best=100.;vec3 chosen=palette[0];
       for(int i=0;i<10;i++){vec3 d=c-palette[i];float distance=dot(d,d);if(distance<best){best=distance;chosen=palette[i];}}
-      // Alpha is quantised too, and hard: a pixel belongs to the art or it does not. Keeping a
-      // soft edge here would put antialiased fringes on a piece whose whole idea is that there
-      // are none.
-      gl_FragColor=vec4(chosen,step(.5,texture2D(tDiffuse,vUv).a));}`,
+      gl_FragColor=vec4(chosen,1.);}`,
   })
   composer.addPass(pixelPass)
 
@@ -97,6 +94,24 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
     vertexShader:hologramVertex,fragmentShader:hologramFragment,
   }))
 
+  const atmosphere = keepMaterial(new THREE.ShaderMaterial({
+    depthWrite: false,
+    uniforms: { base: { value: new THREE.Color() }, teal: { value: new THREE.Color() }, strength: { value: 0.1 } },
+    vertexShader: `varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+    fragmentShader: `varying vec2 vUv; uniform vec3 base; uniform vec3 teal; uniform float strength;
+      // The falloff has to reach the ground colour before the edge of the frame, or the glow is
+      // still tinted where the canvas stops and the page sees a soft square. The camera shows
+      // roughly p = +/-0.4 of this plane when the shell is closed, which at exp(-5) still left
+      // about 2% of teal in the corners. exp(-11) is under a quarter of a percent there, and the
+      // glow around the shell itself is barely changed because that is near p = 0.
+      void main(){vec2 p=(vUv-.5)*2.; float a=exp(-11.*dot(p,p)); gl_FragColor=vec4(mix(base,teal,a*strength),1.);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+      }`,
+  }))
+  const backdrop = new THREE.Mesh(keepGeometry(new THREE.PlaneGeometry(1400, 1400)), atmosphere)
+  backdrop.position.z = -500
+  scene.add(backdrop)
 
   function tube(points: THREE.Vector3[], radius: number, material: THREE.Material, parent: THREE.Object3D, smooth = false) {
     if (points.length < 2) return
@@ -237,7 +252,7 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
     const read=(token:string)=>{probe.style.color=css.getPropertyValue(token);return new THREE.Color(getComputedStyle(probe).color)}
     const ground=read('--ground'), ink=read('--ink'), accent=read('--accent');probe.remove()
     const isDark=ground.getHSL({h:0,s:0,l:0}).l<.4
-    scene.background=null   // the page shows through
+    scene.background=ground
     body.uniforms.ground.value.copy(ground);body.uniforms.ink.value.copy(ink);body.uniforms.teal.value.copy(accent);body.uniforms.isDark.value=isDark?1:0
     rim.color.copy(ground).lerp(accent,isDark?.22:.10)
     edge.color.copy(ink).multiplyScalar(.68)
@@ -247,6 +262,7 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
     hologram.teal.value.copy(accent).lerp(ink,.18).multiplyScalar(isDark?2.5:.9)
     projectionMaterial.color.copy(accent)
     beamMaterial.uniforms.teal.value.copy(accent)
+    atmosphere.uniforms.base.value.copy(ground);atmosphere.uniforms.teal.value.copy(accent);atmosphere.uniforms.strength.value=isDark?.115:.038
   }
   function schedule(){if(!disposed&&!raf&&visible&&!document.hidden)raf=requestAnimationFrame(tick)}
   function refresh(){palette();schedule()}
