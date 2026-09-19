@@ -1,4 +1,4 @@
-# ADR 0011 — clawops generates and stores the Pulumi state passphrase
+# ADR 0011. Clawops generates and stores the Pulumi state passphrase
 
 **Status:** Accepted
 **Date:** 2026-09-14
@@ -6,7 +6,7 @@
 
 ## Context
 
-clawops keeps Pulumi state in the operator's own object storage — `gs://`, `s3://`, Azure Blob.
+clawops keeps Pulumi state in the operator's own object storage, `gs://`, `s3://`, Azure Blob.
 These are Pulumi's *self-managed* backends, and they have no key service behind them. Every
 stack still needs a secrets manager, and the only one available without a cloud KMS is a
 passphrase, so creating a stack fails before anything is provisioned:
@@ -19,7 +19,7 @@ PULUMI_CONFIG_PASSPHRASE or PULUMI_CONFIG_PASSPHRASE_FILE environment variables
 clawops never set one. `clawops plan` swallowed this as a one-line warning and produced a plan
 with no diff; `clawops apply` could not create a stack at all. The CI guide
 (`docs/github-actions-oidc.md`) has told people to set `PULUMI_CONFIG_PASSPHRASE` from a GitHub
-secret since the beginning — the local path had no story, and the failure named a variable
+secret since the beginning. The local path had no story, and the failure named a variable
 nothing in clawops' own documentation mentioned.
 
 R6 is the tension: *never store cloud credentials in clawops config.*
@@ -30,7 +30,7 @@ R6 is the tension: *never store cloud credentials in clawops config.*
 mode `0600`.** An operator who sets `PULUMI_CONFIG_PASSPHRASE` or
 `PULUMI_CONFIG_PASSPHRASE_FILE` themselves is left alone; clawops sets nothing in that case.
 
-R6 is not violated. R6 governs *cloud credentials* — issued by a provider, belonging to the
+R6 is not violated. R6 governs *cloud credentials*, issued by a provider, belonging to the
 operator, revocable, and usable against real infrastructure by anyone who obtains them. This is
 a local encryption key clawops generates for its own state file, alongside the gateway tokens
 already kept in `~/.clawops/secrets/`. It grants nothing on its own.
@@ -51,7 +51,7 @@ already kept in `~/.clawops/secrets/`. It grants nothing on its own.
 ## Consequences
 
 **Positive:**
-- `plan` produces a real diff and `apply` can create a stack — neither worked on a fresh
+- `plan` produces a real diff and `apply` can create a stack, neither worked on a fresh
   machine before.
 - The key is 32 random bytes, not something a person chose.
 - `clawops doctor` reports which of the three states the machine is in.

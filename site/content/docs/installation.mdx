@@ -9,7 +9,7 @@ description: Install the CLI and verify your machine before provisioning anythin
 |---|---|
 | Node.js | 22 or newer |
 | Target host | Ubuntu, Debian or RHEL-family Linux, reachable over SSH |
-| Cloud credentials | Only for cloud providers — via your existing CLI profiles |
+| Cloud credentials | Only for cloud providers: via your existing CLI profiles |
 
 clawops never stores cloud credentials. It reads the profiles you already have: `AWS_PROFILE`,
 gcloud ADC, `AZURE_CLIENT_ID` and friends.
@@ -22,7 +22,7 @@ npm install -g @clawops/cli
 
 ## Verify
 
-`doctor` checks the things that break a deploy at the worst moment — Node version, SSH key and
+`doctor` checks the things that break a deploy at the worst moment. Node version, SSH key and
 `known_hosts` readability, cloud credentials per configured stack, and the supported OpenClaw range.
 
 ```bash
@@ -43,7 +43,7 @@ differ from the requested version when a stack was created with a moving tag.
 Two things have to be true before Pulumi can run at all, and `doctor` checks both:
 
 ```bash
-clawops doctor --provider aws     # or gcp, azure — with or without a stack
+clawops doctor --provider aws     # or gcp, azure: with or without a stack
 ```
 
 **The Pulumi CLI.** clawops installs it into `~/.clawops/.pulumi-cli` the first time it needs
@@ -51,7 +51,7 @@ one, announcing the one-time download, and uses a compatible `pulumi` already on
 instead when there is one. Your `PATH` is never edited.
 
 **A state bucket.** Pulumi reads and writes its state there on every operation, so it has to
-exist before a deploy starts — clawops cannot create it on the way past. `clawops init` names one
+exist before a deploy starts. Clawops cannot create it on the way past. `clawops init` names one
 after your account, and `clawops setup` offers to create it with versioning on and public access
 blocked.
 
@@ -60,7 +60,7 @@ deploy: enabled APIs on GCP, registered resource providers on Azure, and whether
 you asked for is offered in your region.
 
 <Callout title="A check it could not make says so">
-  Some checks need a read permission nothing else needs. When one cannot be performed, `doctor`
-  reports it as a warning naming the error rather than passing or failing — your account may be
-  perfectly set up, and clawops will not claim either way.
+  Some checks need a read permission that no other clawops operation requires. When a check
+  cannot be performed, `doctor` reports it as a warning naming the error rather than as a pass
+  or a failure.
 </Callout>

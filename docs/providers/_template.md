@@ -88,7 +88,7 @@ See `spec/openclaw-versions.yaml` for the support matrix. Provider-specific quir
 Approximate monthly cost for the default deployment:
 
 - **Idle**: $`<X>`/month (instance always-on)
-- **With auto-stop**: $`<Y>`/month (using `clawops scheduling` features — v1.1+)
+- **With auto-stop**: $`<Y>`/month (using `clawops scheduling` features, v1.1+)
 
 These are estimates only; check your cloud bill.
 
@@ -117,6 +117,6 @@ clawops logs --stack <name> --tail 100
 
 ## See Also
 
-- ADR 0005 — error taxonomy
-- `src/providers/<name>/` — implementation
-- `tests/providers/<name>/` — test fixtures
+- ADR 0005, error taxonomy
+- `src/providers/<name>/`, implementation
+- `tests/providers/<name>/`, test fixtures

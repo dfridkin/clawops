@@ -2,13 +2,13 @@
 
 Running clawops in `--read-only` mode limits the MCP server to the **11 tools** in the
 curated `read` toolset. The agent can answer questions, diagnose a deployment, generate
-plans for human review, and run recovery diagnostics — but cannot apply any changes.
+plans for human review, and run recovery diagnostics, but cannot apply any changes.
 
 ## What `--read-only` enables
 
 | Tool | What it does |
 |---|---|
-| `clawops_status` | Show what is deployed for a stack — outputs, not health |
+| `clawops_status` | Show what is deployed for a stack, outputs, not health |
 | `clawops_doctor` | Diagnose the local machine and, with a stack, the deployment |
 | `clawops_logs_tail` | Stream recent container logs |
 | `clawops_monitor` | Sample gateway and host metrics |
@@ -21,7 +21,7 @@ plans for human review, and run recovery diagnostics — but cannot apply any ch
 | `clawops_workflow_recover` | Investigate a stuck deployment (reads logs + status) |
 
 All write, restart, and infrastructure tools are disabled at server startup. The
-disabled tools are not registered — they never appear in the tool list sent to the
+disabled tools are not registered. They never appear in the tool list sent to the
 AI client.
 
 ## Configuration
@@ -97,13 +97,13 @@ If you want to allow the agent to generate plans and check task status but still
 block config writes and infrastructure changes, replace `--read-only` with
 `--no-destructive` in the args array. Both modes currently enable the same 11 tools; the
 difference is the mechanism. `--read-only` serves one fixed toolset, while
-`--no-destructive` filters `destructiveHint: true` out of whatever toolsets are active — so
+`--no-destructive` filters `destructiveHint: true` out of whatever toolsets are active, so
 it is the one to combine with `--toolsets`.
 
 ## Upgrading to full access
 
 Remove the flag entirely to enable all 18 tools. Destructive tools will still
-require `yes: true` in the call — the agent sees a confirmation prompt without it.
+require `yes: true` in the call. The agent sees a confirmation prompt without it.
 
 See [mcp-safety.md](../security/mcp-safety.md) for a full description of each mode
 and [tool-risk-matrix.md](../security/tool-risk-matrix.md) for the per-tool breakdown.

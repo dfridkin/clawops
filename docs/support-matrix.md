@@ -45,15 +45,15 @@ The MCP server in stdio mode requires a POSIX-like environment for the working-d
 ## OpenClaw Versions
 
 `spec/openclaw-versions.yaml` is the canonical machine-readable matrix, and since v1.7.2 it is
-**enforced** — `doctor`, `plan`, `up` and `apply` refuse a version outside the supported range
+**enforced**. `doctor`, `plan`, `up` and `apply` refuse a version outside the supported range
 rather than deploying something that cannot work.
 
 | OpenClaw Version | Support |
 |---|---|
-| 2026.9.2 | ✅ Recommended — the floor this line was built against |
+| 2026.9.2 | ✅ Recommended: the floor this line was built against |
 | >= 2026.9.2 | ✅ Supported, no upper bound |
 | 2026.8.x – 2026.9.1 | ❌ 2.0 runtime, but the official Bedrock plugin requires >= 2026.9.2 |
-| **<= 2026.7.1-2** | ❌ **Pre-2.0 contract** — use `@clawops/cli@legacy` |
+| **<= 2026.7.1-2** | ❌ **Pre-2.0 contract**: use `@clawops/cli@legacy` |
 
 ### OpenClaw 2.0 (2026.8.1 and later)
 
@@ -62,7 +62,7 @@ OpenClaw 2.0 changed the container runtime contract. Verified against `2026.8.1`
 - Sessions, transcripts and credentials moved into SQLite under a state directory the 1.x line does
   not mount, so every container replacement discards them.
 - Config moved to a writable path; the file this line mounts is read by nothing.
-- Model providers became install-gated plugins — a configured but uninstalled provider prevents the
+- Model providers became install-gated plugins. A configured but uninstalled provider prevents the
   gateway from starting at all.
 
 Deploying it from this line produces a crash-looping gateway (exit 78). clawops refuses it instead.
@@ -77,8 +77,8 @@ resolve rather than assuming compatibility. The default is a concrete pin.
 ### Bedrock
 
 The 2.0-era form is `auth.profiles.<id>.mode: "aws-sdk"` in `openclaw.json`, and the Bedrock
-provider is a separately installed plugin requiring OpenClaw >= 2026.9.1. The older guidance —
-`AWS_PROFILE` in the systemd EnvironmentFile, with `auth: "aws-sdk"` ignored — applied to the
+provider is a separately installed plugin requiring OpenClaw >= 2026.9.1. The older guidance.
+`AWS_PROFILE` in the systemd EnvironmentFile, with `auth: "aws-sdk"` ignored, applied to the
 2026.4.x line and no longer describes current behaviour.
 
 
@@ -104,7 +104,7 @@ provider is a separately installed plugin requiring OpenClaw >= 2026.9.1. The ol
 | `@pulumi/gcp` | 7.x |
 | `@pulumi/azure-native` | 2.x |
 
-The user does not install the Pulumi CLI — but one is required, and clawops installs it into `~/.clawops/.pulumi-cli` on first use, matching the bundled SDK (ADR 0010, superseding ADR 0006). A compatible `pulumi` already on `$PATH` is used instead, and `clawops doctor` reports which. `$PATH` is never edited.
+The user does not install the Pulumi CLI, but one is required, and clawops installs it into `~/.clawops/.pulumi-cli` on first use, matching the bundled SDK (ADR 0010, superseding ADR 0006). A compatible `pulumi` already on `$PATH` is used instead, and `clawops doctor` reports which. `$PATH` is never edited.
 
 ## Package Manager
 
@@ -129,13 +129,13 @@ The user does not install the Pulumi CLI — but one is required, and clawops in
 clawops can deploy OpenClaw to:
 
 - x86_64 instances (default)
-- arm64 instances (provider-dependent — AWS Graviton, GCP T2A, Azure Ampere)
+- arm64 instances (provider-dependent. AWS Graviton, GCP T2A, Azure Ampere)
 
 ## Support Lifecycle
 
 ### Two release lines
 
-OpenClaw 2.0 changed the container runtime contract — state moved into SQLite, config moved to a
+OpenClaw 2.0 changed the container runtime contract. State moved into SQLite, config moved to a
 writable path, and model providers became install-gated plugins. A single clawops line cannot
 deploy both correctly, so there are two, each pinned to the OpenClaw range it can actually run.
 
@@ -145,8 +145,8 @@ deploy both correctly, so there are two, each pinned to the OpenClaw range it ca
 | **1.x** | `legacy` | `1.x` | `<= 2026.7.1-2` | maintenance until **2027-03-31** |
 
 ```bash
-npm install -g @clawops/cli          # 2.x — the current line
-npm install -g @clawops/cli@legacy   # 1.x — maintenance
+npm install -g @clawops/cli          # 2.x: the current line
+npm install -g @clawops/cli@legacy   # 1.x: maintenance
 ```
 
 Pin the tag in CI. `latest` moves to 2.x, so a pipeline installing `@clawops/cli` unpinned will
@@ -163,7 +163,7 @@ range, and `v1`, `v1.x` and `1.x` all parse as `>=1.0.0 <2.0.0-0`.
 | Provider-adapter fix for a cloud API change | ✅ |
 | Bug fix in shared code | Only if it causes data loss or an unrecoverable deployment |
 | New feature | ❌ |
-| OpenClaw 2.0 support | ❌ — this is what 2.x is for |
+| OpenClaw 2.0 support | ❌: this is what 2.x is for |
 
 The branch point is **v1.7.7**. v1.7.5 and v1.7.6 each repaired defects that were live in the
 shipped product, and v1.7.7 carries the release wiring both lines need, so 1.x starts from the

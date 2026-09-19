@@ -1,6 +1,6 @@
-# SP-12 — What Bedrock actually needs in `openclaw.json`
+# SP-12. What Bedrock actually needs in `openclaw.json`
 
-**Status:** COMPLETE — 2026-09-13. Local Docker against `ghcr.io/openclaw/openclaw:2026.9.2`,
+**Status:** COMPLETE. 2026-09-13. Local Docker against `ghcr.io/openclaw/openclaw:2026.9.2`,
 plus real Bedrock inference from AWS account `064318812234` (three Haiku calls, well under $0.01).
 
 **Verdict: the auth shape SP-08 asked about does not matter. Two other things do, and clawops
@@ -14,7 +14,7 @@ which one to write.
 
 Answer: **neither is load-bearing.** What matters is the transport and the model ID.
 
-## Finding 1 — `api: "bedrock-converse-stream"` is required
+## Finding 1. `api: "bedrock-converse-stream"` is required
 
 Without it, the provider is routed through the OpenAI-compatible transport and every call fails:
 
@@ -27,7 +27,7 @@ OpenAI-compatible API. Reload provider metadata or configure an endpoint.
 `api` is an enum on both the provider block and each model entry. The Bedrock value is
 `bedrock-converse-stream`. clawops sets neither.
 
-## Finding 2 — model IDs must be inference profiles, not foundation models
+## Finding 2. Model IDs must be inference profiles, not foundation models
 
 With the transport fixed, Bedrock itself rejects a bare foundation-model ID:
 
@@ -37,12 +37,12 @@ on-demand throughput isn't supported. Retry your request with the ID or ARN of a
 inference profile that contains…
 ```
 
-The working ID is the cross-region inference profile — `us.anthropic.claude-haiku-4-5-20251001-v1:0`.
+The working ID is the cross-region inference profile. `us.anthropic.claude-haiku-4-5-20251001-v1:0`.
 **All ten Bedrock models in `spec/models.yaml` are bare IDs**, so every one of them would fail
 this way. `aws bedrock list-inference-profiles` shows `us.`, `eu.`, `apac.` and `global.`
 variants, which means the prefix is **region-dependent** and cannot be hardcoded to `us.`.
 
-## Finding 3 — the provider needs an explicit `models[]` array
+## Finding 3. The provider needs an explicit `models[]` array
 
 With no `models[]`, `openclaw models list` shows nothing for the provider and there is no model
 to select. With one, the model appears and is chosen as the default:
@@ -51,7 +51,7 @@ to select. With one, the model appears and is chosen as the default:
 amazon-bedrock/anthropic.claude-sonnet-4-6  text  200k  no  yes  default
 ```
 
-## Finding 4 — the auth declaration changes nothing
+## Finding 4, the auth declaration changes nothing
 
 Measured three ways, with the transport correct:
 
@@ -62,21 +62,21 @@ Measured three ways, with the transport correct:
 | no auth declared at all | yes |
 
 Credentials resolve through the standard AWS SDK chain at call time, not from anything in the
-config. SP-08's shape was verified on a working gateway, so it was never wrong — it just was not
+config. SP-08's shape was verified on a working gateway, so it was never wrong, it just was not
 the part doing the work.
 
 **Recommendation:** write `auth: "aws-sdk"` in the provider block anyway. It is one key, it
 validates, it is local to the provider it describes, and it documents the intent for anyone
 reading the config. But do not treat it as the fix.
 
-## Finding 5 — startup is blocked by the missing plugin, not by config shape
+## Finding 5. Startup is blocked by the missing plugin, not by config shape
 
 All three shapes started cleanly and served `/startupz`. SP-08's Finding 2 stands, and is
 narrower than it reads: it is the **uninstalled plugin** that exits 78, not a misconfigured one.
 
 ## The config that works
 
-Verified end to end — `openclaw agent --local` returned `ok` with `stopReason=stop`:
+Verified end to end. `openclaw agent --local` returned `ok` with `stopReason=stop`:
 
 ```json
 "models": {
@@ -103,10 +103,10 @@ Verified end to end — `openclaw agent --local` returned `ok` with `stopReason=
 
 Four defects in one object:
 
-1. `models.provider` is not a key — the schema has `models.providers`. Rejected by validation as
+1. `models.provider` is not a key. The schema has `models.providers`. Rejected by validation as
    `unknown key "provider"`, **for every provider, not just Bedrock**
 2. because the key is wrong, `requiredPlugins` reads `models.providers` and finds nothing, so the
-   Bedrock plugin is never installed — which *is* startup-blocking (Finding 5)
+   Bedrock plugin is never installed, which *is* startup-blocking (Finding 5)
 3. no `api`, so the call routes through the wrong transport (Finding 1)
 4. a bare foundation-model ID, which Bedrock rejects (Finding 2)
 
@@ -128,4 +128,4 @@ It did not stop the run. Worth a look, not part of WO-64.
 3. Bedrock model IDs in `spec/models.yaml` are inference profiles, and the region prefix is derived
    from the deployment region rather than hardcoded. *(unit)*
 4. A Bedrock config causes `requiredPlugins` to return the Bedrock plugin. *(unit)*
-5. Instance-role credentials resolve from inside the container. *(VM, AWS-only — already SP-08's #4)*
+5. Instance-role credentials resolve from inside the container. *(VM, AWS-only, already SP-08's #4)*

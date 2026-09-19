@@ -9,7 +9,7 @@ boundaries: what is protected, what is not, and what leaves your network.
 ## Credentials never enter clawops
 
 This is an invariant, not a default. `~/.clawops/config.json` holds a **reference** to where a
-credential lives — `AWS_PROFILE`, gcloud ADC, `AZURE_CLIENT_ID` — never the credential. Pulumi
+credential lives. `AWS_PROFILE`, gcloud ADC, `AZURE_CLIENT_ID`, never the credential. Pulumi
 inherits cloud credentials from your process environment; clawops does not pass them through its
 own configuration.
 
@@ -23,7 +23,7 @@ the CIDRs that may reach SSH, and `auto` resolves your own address into a `/32` 
 opening the internet.
 
 **The gateway is not exposed.** It publishes on `127.0.0.1`; reach it with `clawops tunnel`.
-Publishing it to the network is an explicit plan-time choice, and it serves plaintext HTTP — put
+Publishing it to the network is an explicit plan-time choice, and it serves plaintext HTTP, put
 TLS in front of it yourself. There is no TLS or certificate automation.
 
 **SSH host keys are verified** against a `known_hosts` file. There is no "accept anything" mode.
@@ -40,7 +40,7 @@ From the deployed host:
 | `ghcr.io` | bootstrap and every `gateway update` |
 | `clawhub.ai` | during `apply`, installing model-provider plugins |
 | `registry.npmjs.org` | during `apply`, when config names a channel |
-| `169.254.169.254` | AWS with Bedrock only — IMDSv2 region lookup |
+| `169.254.169.254` | AWS with Bedrock only: IMDSv2 region lookup |
 
 From your machine: your cloud provider's APIs and your state backend during stack operations, and
 `ifconfig.me` only when you use `auto` to resolve your public IP.
@@ -53,8 +53,8 @@ From your machine: your cloud provider's APIs and your state backend during stac
 
 ## Agents driving clawops
 
-Every MCP tool carries explicit safety annotations — read-only, destructive, idempotent,
-open-world — so an agent can tell a query from an action. Destructive tools require confirmation
+Every MCP tool carries explicit safety annotations, read-only, destructive, idempotent,
+open-world, so an agent can tell a query from an action. Destructive tools require confirmation
 unless `yes: true` is passed.
 
 Three modes:
@@ -80,7 +80,7 @@ Not redacted: resource ids, ARNs, regions, instance types, stack names and file 
 
 The threat model covers credential leakage through logs, an agent invoking a destructive tool
 without consent, plan tampering between review and apply, state-backend compromise, token
-forwarding in MCP HTTP mode, supply-chain compromise and SSH key reuse — each with the mitigation
+forwarding in MCP HTTP mode, supply-chain compromise and SSH key reuse, each with the mitigation
 in place and its limits.
 
 <Cards>

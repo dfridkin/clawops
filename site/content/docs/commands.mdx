@@ -22,7 +22,7 @@ description: Every clawops command, grouped by what you reach for it.
 | Command | Does |
 |---|---|
 | `init` | Choose a provider, name the state backend after your account (or pass `--state` to name it yourself), generate an SSH key |
-| `setup` | Interactive wizard — configure and deploy in one pass |
+| `setup` | Interactive wizard: configure and deploy in one pass |
 | `doctor` | Check the local machine; with `--stack`, the deployment too; with `--provider`, one cloud's credentials and account setup whether or not a stack exists; with `--instance-type`, account checks ask about that size. Exits 1 on any failure |
 
 ## Provisioning
@@ -33,7 +33,7 @@ description: Every clawops command, grouped by what you reach for it.
 | `plan` | Generate a deploy plan without applying it (`--ssh-cidr`, `--gateway-cidr`, `--publish-gateway` say who may connect; `--instance-type` picks the machine size) |
 | `apply` | Apply a plan produced by `clawops plan` |
 | `down` | Destroy provisioned resources for a stack |
-| `destroy` | Destroy everything in a stack — irreversible |
+| `destroy` | Destroy everything in a stack, irreversible |
 | `migrate` | Move an existing 1.x deployment onto the 2.0 runtime, keeping its state |
 | `stacks` | List or delete stacks |
 | `status` | Outputs, region, provisioned time |
@@ -47,9 +47,9 @@ description: Every clawops command, grouped by what you reach for it.
 | `ssh` | Open a session to the instance |
 | `tunnel` | Forward the gateway port to localhost |
 | `gateway` | `status`, `restart`, `update [version]` |
-| `agents` | `list`, `logs <name>` — per-agent activity from the audit log. OpenClaw 2.0 has no per-agent restart |
+| `agents` | `list`, `logs <name>`: per-agent activity from the audit log. OpenClaw 2.0 has no per-agent restart |
 | `config` | `get`, `set`, `unset` on the gateway configuration |
-| `backup` | `create`, `restore` — restore expands into a staging directory, never in place |
+| `backup` | `create`, `restore`: restore expands into a staging directory, never in place |
 
 ## Security
 
@@ -62,6 +62,6 @@ description: Every clawops command, grouped by what you reach for it.
 
 | Command | Does |
 |---|---|
-| `mcp` | MCP server operations — see [MCP](/docs/mcp) |
+| `mcp` | MCP server operations: see [MCP](/docs/mcp) |
 | `bug` | Open a pre-filled GitHub issue with system context |
 | `help` | Available commands and global flags |

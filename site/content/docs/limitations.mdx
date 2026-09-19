@@ -27,7 +27,7 @@ runs on. Authoring agents, skills and prompts is OpenClaw's job.
 
 **Ollama and other host-local runtimes** are reached at `host.docker.internal`, because `localhost`
 inside the gateway container is the container. clawops passes the right `--add-host` and defaults
-the address accordingly — but the runtime must listen somewhere the container can reach
+the address accordingly, but the runtime must listen somewhere the container can reach
 (`OLLAMA_HOST=0.0.0.0:11434 ollama serve`).
 
 ## Providers
@@ -35,8 +35,8 @@ the address accordingly — but the runtime must listen somewhere the container 
 **`plan` and `apply` are cloud-only.** The local provider bootstraps over SSH without a state
 backend; use `clawops up`.
 
-**Capabilities vary by provider.** The eight host-hardening modules — SSH, UFW, fail2ban,
-unattended upgrades, Docker socket, auditd, lynis, sysctl — run on every provider. AWS adds four
+**Capabilities vary by provider.** The eight host-hardening modules. SSH, UFW, fail2ban,
+unattended upgrades, Docker socket, auditd, lynis, sysctl, run on every provider. AWS adds four
 cloud-specific checks: security-group audit, SSM readiness, VPC flow logs and GuardDuty.
 
 ## Platform
@@ -54,5 +54,5 @@ Grafana and alert routing are not set up for you.
 ## Secrets
 
 **No automatic rotation.** Rotate manually by updating the value in your secret store and
-re-applying. `~/.clawops/config.json` holds no secrets, but it does hold connection metadata —
-protect it accordingly.
+re-applying. `~/.clawops/config.json` holds no secrets, but it does hold connection metadata,
+so protect it accordingly.

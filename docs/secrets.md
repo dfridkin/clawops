@@ -1,7 +1,7 @@
 # Secret Lifecycle
 
 clawops stores secrets (API keys, gateway tokens, bot tokens) as local files in
-`~/.clawops/secrets/` with `chmod 600`. Config overlays reference them as `$secret:<NAME>` — the
+`~/.clawops/secrets/` with `chmod 600`. Config overlays reference them as `$secret:<NAME>`, the
 value is substituted at apply time and never written to the stack config on disk.
 
 ---
@@ -18,7 +18,7 @@ source types are supported:
 | `file` | You point to an existing file on disk; the path is recorded in the overlay |
 
 Cloud secret manager sources (`aws-sm`, `aws-ssm`, `gcp-sm`, `azure-kv`) are recognised in plan
-files but are not yet resolved automatically — a warning is emitted and the ref is left in place
+files but are not yet resolved automatically. A warning is emitted and the ref is left in place
 for manual handling.
 
 ---
@@ -53,7 +53,7 @@ clawops secret set ANTHROPIC_API_KEY
 # ✓  Secret "ANTHROPIC_API_KEY" saved to ~/.clawops/secrets/ANTHROPIC_API_KEY  (chmod 600)
 ```
 
-Pass `--value <val>` to skip the prompt (useful in scripts — prefer env vars over inline values).
+Pass `--value <val>` to skip the prompt (useful in scripts, prefer env vars over inline values).
 
 After `set`, the secret file is updated but the running OpenClaw gateway is not yet aware of the
 change. Use `clawops secret rotate` to propagate.
@@ -73,7 +73,7 @@ Rotate does three things:
 3. Restarts the OpenClaw gateway on the target stack
 
 The overlay is stored automatically by `clawops setup` and `clawops apply`. If no overlay is
-stored for the stack, rotate updates the file and warns — you will need to re-run `setup` or
+stored for the stack, rotate updates the file and warns, you will need to re-run `setup` or
 `apply` to propagate.
 
 ### `clawops secret delete <name>`
@@ -156,7 +156,7 @@ clawops setup                          # re-run wizard for local stacks
 - Secret files are stored with `chmod 600` (owner read/write only).
 - The `~/.clawops/secrets/` directory is `chmod 700`.
 - Secret values are never written to `~/.clawops/config.json` or any plan file.
-- Stored overlays (`~/.clawops/overlays/`) contain `$secret:<NAME>` refs, not resolved values —
+- Stored overlays (`~/.clawops/overlays/`) contain `$secret:<NAME>` refs, not resolved values,
   they are safe to back up alongside the config.
 - `clawops secret list` and `clawops secret audit` never print secret values.
 
@@ -168,6 +168,6 @@ clawops setup                          # re-run wizard for local stacks
   or Azure Key Vault must be rotated in the cloud console. Update the version/alias as needed;
   clawops will re-read the ref at next apply.
 - **SSH key rotation.** Managed separately via `ssh-keygen` and `clawops init --key-path`.
-- **Pulumi state encryption keys.** Out of scope — managed by your Pulumi backend.
+- **Pulumi state encryption keys.** Out of scope, managed by your Pulumi backend.
 
 See [`docs/limitations.md`](limitations.md) for the full list of what clawops does not automate.

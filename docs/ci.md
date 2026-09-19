@@ -21,7 +21,7 @@ The plan → apply split lets reviewers inspect the diff before infrastructure c
 ## Prerequisites
 
 1. **clawops installed** in the CI image. Either `npm install -g clawops` in a step or add it as a `devDependency`.
-2. **Config file present.** Never use `clawops init` in CI — it is interactive. Write `~/.clawops/config.json` from environment variables instead (see [Writing config from env vars](#writing-config-from-env-vars)).
+2. **Config file present.** Never use `clawops init` in CI. It is interactive. Write `~/.clawops/config.json` from environment variables instead (see [Writing config from env vars](#writing-config-from-env-vars)).
 3. **SSH key pair.** Generate locally (`clawops init`), then store the private key in a repository secret. Restore it in CI.
 4. **Cloud credentials.** Provided via OIDC (preferred) or long-lived secrets. See provider sections below.
 
@@ -63,7 +63,7 @@ The plan → apply split lets reviewers inspect the diff before infrastructure c
 
 ---
 
-## GitHub Actions — AWS (OIDC)
+## GitHub Actions. AWS (OIDC)
 
 OIDC is strongly preferred over long-lived `AWS_ACCESS_KEY_ID` secrets.
 
@@ -132,7 +132,7 @@ jobs:
 
 ---
 
-## GitHub Actions — GCP (Workload Identity Federation)
+## GitHub Actions. GCP (Workload Identity Federation)
 
 ### 1. Create Workload Identity Pool
 
@@ -246,7 +246,7 @@ jobs:
       - run: clawops apply plan.json --yes
 ```
 
-Note: plans are generated at PR time and applied on merge. The plan's `metadata.generatedAt` timestamp is informational — `clawops apply` re-validates the plan schema but does not enforce a freshness TTL.
+Note: plans are generated at PR time and applied on merge. The plan's `metadata.generatedAt` timestamp is informational. `clawops apply` re-validates the plan schema but does not enforce a freshness TTL.
 
 ---
 
@@ -272,8 +272,8 @@ clawops doctor   # checks Node version, config validity, SSH key, provider crede
 
 `clawops init` is an interactive wizard. In CI:
 
-- It prompts for provider selection, region, and state URL — there is no TTY.
-- It generates an SSH key pair to disk — you should use a key stored in secrets.
-- It writes `~/.clawops/config.json` — write this yourself (see [Writing config from env vars](#writing-config-from-env-vars)).
+- It prompts for provider selection, region, and state URL, there is no TTY.
+- It generates an SSH key pair to disk, you should use a key stored in secrets.
+- It writes `~/.clawops/config.json`. Write this yourself (see [Writing config from env vars](#writing-config-from-env-vars)).
 
 Per R6, **cloud credentials are never stored in `~/.clawops/config.json`**. Always provide them via environment variables or OIDC. The config file stores only non-secret settings: provider name, region, state URL, and SSH key path.

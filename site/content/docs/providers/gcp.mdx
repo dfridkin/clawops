@@ -14,13 +14,13 @@ clawops doctor --provider gcp
 
 | Source | How |
 |---|---|
-| gcloud ADC | `gcloud auth application-default login` — the usual local setup |
-| Service account key | `GOOGLE_APPLICATION_CREDENTIALS=/path/key.json` — CI |
+| gcloud ADC | `gcloud auth application-default login`, the usual local setup |
+| Service account key | `GOOGLE_APPLICATION_CREDENTIALS=/path/key.json`, CI |
 | Instance metadata | automatic, when clawops runs on a GCE VM |
 | Access token | `GOOGLE_OAUTH_ACCESS_TOKEN`, short-lived |
 
 <Callout type="warn">
-  It is `GOOGLE_OAUTH_ACCESS_TOKEN`, not `CLOUDSDK_AUTH_ACCESS_TOKEN` — the latter is
+  It is `GOOGLE_OAUTH_ACCESS_TOKEN`, not `CLOUDSDK_AUTH_ACCESS_TOKEN`, the latter is
   gcloud-internal and the adapter does not read it.
 </Callout>
 
@@ -28,7 +28,7 @@ clawops doctor --provider gcp
 
 `gcloud config set project` is honoured. clawops also pins `gcp:project` into the stack
 configuration at plan time, so the deploy lands in the project whose APIs and state bucket were
-the ones actually checked — not whatever the ambient gcloud configuration happens to say later.
+the ones actually checked, not whatever the ambient gcloud configuration happens to say later.
 
 ## Account setup it checks
 
@@ -56,15 +56,15 @@ the ones actually checked — not whatever the ambient gcloud configuration happ
 ## State
 
 `gs://clawops-state-<projectId>/clawops`, derived by `clawops init` from the project. Cloud
-Storage names are global, which is why the project id is in it.
+Cloud Storage bucket names are global, so the name includes the project id.
 
-A bucket clawops creates has versioning enabled — Pulumi state with no history is a stack that
+A bucket clawops creates has versioning enabled. Pulumi state with no history is a stack that
 can no longer be updated or destroyed.
 
 ## Firewall
 
 Deny-all by default; `auto` resolves your public IP into a `/32` for SSH at plan time. **No
-gateway rule is created under loopback publishing**, which is the default — the gateway binds
+gateway rule is created under loopback publishing**, which is the default, the gateway binds
 `127.0.0.1`, so a rule for its port would grant no access and misread as exposure.
 
 ## Sizes

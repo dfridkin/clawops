@@ -3,11 +3,11 @@
 [![npm version](https://img.shields.io/npm/v/@clawops/cli)](https://www.npmjs.com/package/@clawops/cli)
 [![npm downloads](https://img.shields.io/npm/dm/@clawops/cli)](https://www.npmjs.com/package/@clawops/cli)
 
-MCP-native infrastructure ops for OpenClaw — with read-only mode, destructive-action confirmation, and audit logs built in.
+MCP-native infrastructure ops for OpenClaw, with read-only mode, destructive-action confirmation, and audit logs built in.
 
 **clawops** is a CLI and [MCP](https://modelcontextprotocol.io/) server for deploying and operating
 self-hosted [OpenClaw](https://github.com/openclaw/openclaw) instances. Provision on AWS, GCP,
-Azure, or any Linux VM — then manage day-to-day operations from the terminal, or let Claude Code
+Azure, or any Linux VM, then manage day-to-day operations from the terminal, or let Claude Code
 and Cursor drive them through typed MCP tools with explicit safety controls.
 
 ---
@@ -38,13 +38,13 @@ and the decisions that came out of them are in [`docs/decisions/`](docs/decision
 
 - `clawops doctor --provider <cloud>` checks one cloud's credentials and account setup, with or
   without a stack. `--instance-type` points the size check at the size you are deploying.
-- **AWS** — the account the credentials resolve to, the state bucket, and whether the instance
+- **AWS**. The account the credentials resolve to, the state bucket, and whether the instance
   type is offered in the region.
-- **GCP** — the project, the APIs a deploy needs, and the state bucket.
-- **Azure** — the subscription, the resource providers, the VM size, and the azblob credentials
+- **GCP**. The project, the APIs a deploy needs, and the state bucket.
+- **Azure**. The subscription, the resource providers, the VM size, and the azblob credentials
   Pulumi authenticates with.
-- `clawops setup` runs the same checks and offers to fix what it safely can — enabling an API,
-  creating a state bucket with versioning on and public access blocked — naming the change
+- `clawops setup` runs the same checks and offers to fix what it safely can, enabling an API,
+  creating a state bucket with versioning on and public access blocked, naming the change
   before making it.
 - A check clawops could not perform reports as a warning naming the error, rather than as a
   pass or a failure.
@@ -99,14 +99,14 @@ npm install -g @clawops/cli            # 2.x
 npm install -g @clawops/cli@legacy     # 1.x maintenance
 ```
 
-Pin the tag in CI — `latest` moves to 2.x, so an unpinned pipeline will change lines.
+Pin the tag in CI. `latest` moves to 2.x, so an unpinned pipeline will change lines.
 [`CHANGELOG.md`](CHANGELOG.md) carries the full history; this section covers what changed
 about *how clawops behaves*.
 
 ### Your deployment keeps its state
 
 OpenClaw 2.0 stores sessions, transcripts and credentials in SQLite. clawops mounted no
-state at all, so **every restart destroyed them** — and a restart is what `gateway restart`,
+state at all, so **every restart destroyed them**, and a restart is what `gateway restart`,
 `gateway update` and `config set` all do.
 
 One host directory (`/var/lib/clawops/openclaw`) is now bind-mounted at OpenClaw's own
@@ -118,10 +118,10 @@ deployments migrate on the next `up`/`apply`.
 ```mermaid
 flowchart TD
     A["clawops plan"] --> B{"config valid<br/>against OpenClaw schema?"}
-    B -- no --> B1["refuse — plan is still<br/>a file you can edit"]
+    B -- no --> B1["refuse: plan is still<br/>a file you can edit"]
     B -- yes --> C["clawops apply"]
     C --> D{"OpenClaw version<br/>in supported range?"}
-    D -- no --> D1["refuse — names<br/>@clawops/cli@legacy"]
+    D -- no --> D1["refuse: names<br/>@clawops/cli@legacy"]
     D -- yes --> E["provision host"]
     E --> F["state dir, owned 1000:1000<br/>migrate any pre-2.0 config"]
     F --> G["write config<br/>validated before writing"]
@@ -130,7 +130,7 @@ flowchart TD
     I --> J{"/startupz says started?"}
     J -- no --> J1["fail with the reason"]
     J -- yes --> K{"configured providers<br/>all loaded?"}
-    K -- no --> K1["warn — healthy gateway,<br/>missing model backend"]
+    K -- no --> K1["warn: healthy gateway,<br/>missing model backend"]
     K -- yes --> L["done"]
 ```
 
@@ -142,7 +142,7 @@ plugins were left to be fetched at boot (or silently missing on a deny-all host)
 ### `clawops gateway update`
 
 Previously: pull, run, report success. `docker run` exiting 0 means the container was
-*created* — and the container it replaced is already gone.
+*created*, and the container it replaced is already gone.
 
 ```mermaid
 flowchart TD
@@ -150,18 +150,18 @@ flowchart TD
     B -- no --> B1["refuse before pulling"]
     B -- yes --> C["docker pull X"]
     C --> D["snapshot state database"]
-    D -- cannot snapshot --> D1["refuse — no rollback point"]
+    D -- cannot snapshot --> D1["refuse: no rollback point"]
     D --> E{"target release understands<br/>this schema?"}
-    E -- no --> E1["refuse — downgrade across<br/>a schema boundary"]
+    E -- no --> E1["refuse: downgrade across<br/>a schema boundary"]
     E -- yes --> F["swap container"]
     F --> G{"/startupz says started?"}
     G -- yes --> H["done"]
     G -- no --> I["one-shot doctor --fix<br/>in a throwaway container"]
     I --> J["re-run, re-gate"]
-    J -- started --> K["done — reported as repaired"]
+    J -- started --> K["done: reported as repaired"]
     J -- still not --> L["roll back to previous image"]
     L -- started --> M["rolled back, reason reported"]
-    L -- still not --> N["failed — snapshot path named"]
+    L -- still not --> N["failed: snapshot path named"]
 ```
 
 The snapshot is not only a rollback point: `database preflight` refuses a live database
@@ -176,7 +176,7 @@ back from the running container rather than guessed:
 ```mermaid
 flowchart LR
     A["gateway restart"] --> B["read current image"]
-    B -- no container --> B1["refuse — nothing to reuse.<br/>latest and stable point at 2.0"]
+    B -- no container --> B1["refuse: nothing to reuse.<br/>latest and stable point at 2.0"]
     B --> C["read current publish scope"]
     C --> D["recreate with the same<br/>version and reachability"]
     D --> E{"/startupz says started?"}
@@ -189,18 +189,18 @@ flowchart LR
 ```mermaid
 flowchart TD
     A["clawops migrate"] --> B{"1.x container running?"}
-    B -- no --> B1["nothing to rescue — state was<br/>already lost to an earlier restart"]
+    B -- no --> B1["nothing to rescue: state was<br/>already lost to an earlier restart"]
     B -- yes --> C["verified backup, inside the running container"]
-    C -- "backup fails" --> C1["refused — nothing touched"]
+    C -- "backup fails" --> C1["refused: nothing touched"]
     C --> D["extract state from the RUNNING container"]
     D --> E["chown 1000:1000"]
     E --> F["stop and remove 1.x"]
     F --> G["synthesise a valid 2.0 config"]
     G --> H["start 2.0 with the state directory"]
     H --> I{"/startupz started?"}
-    I -- "no — schema still migrating" --> J["restart once"]
+    I -- "no: schema still migrating" --> J["restart once"]
     J --> K{"started?"}
-    K -- no --> K1["failed — points at the backup"]
+    K -- no --> K1["failed: points at the backup"]
     K --> L["report"]
     I -- yes --> L
     L --> M["what carried over,<br/>device identity, config to review"]
@@ -208,18 +208,18 @@ flowchart TD
 
 Two things about that shape are not obvious, and both came from running a real migration:
 
-**State is extracted from the *running* container.** All 1.x state lived inside it — clawops
-mounted none — so stopping first destroys what the migration came to save.
+**State is extracted from the *running* container.** All 1.x state lived inside it, clawops
+mounted none, so stopping first destroys what the migration came to save.
 
 **The config is synthesised, not carried forward.** 1.x never had one that applied; the file
 clawops mounted was read by nothing. Your old settings are reported as *intent to review*,
-never applied blindly — their channel blocks would not validate against 2.0 anyway.
+never applied blindly. Their channel blocks would not validate against 2.0 anyway.
 
 The gateway also needs two starts: the first performs the state-schema migration and reports
 it as pending. `migrate` waits for the second rather than declaring success early.
 
 If you ran `gateway restart`, `gateway update` or `config set` on a clawops before 2.0, your
-state is already gone — nothing was mounted to survive the container replacement. `migrate`
+state is already gone, nothing was mounted to survive the container replacement. `migrate`
 says so plainly rather than pretending to rescue it.
 
 ### `clawops backup restore` works again, and never in place
@@ -240,17 +240,17 @@ flowchart TD
 
 clawops does not extract archives itself and does not restore in place. The final step is
 manual on purpose, and re-applying matters: the archive does not carry plugin
-`node_modules`, so a restored deployment starts without its model providers — looking
+`node_modules`, so a restored deployment starts without its model providers, looking
 healthy while doing it.
 
-**The archive is a credential.** It carries the state database — `mcp_oauth_stores`,
-`secret_store_entries`, `worker_environment_credentials`, `device_auth_tokens` — unencrypted.
+**The archive is a credential.** It carries the state database, `mcp_oauth_stores`,
+`secret_store_entries`, `worker_environment_credentials`, `device_auth_tokens`, unencrypted.
 clawops now writes it `0600` locally; it previously used the default `0644`.
 
 ### Model providers that need a plugin are installed for you
 
-OpenClaw 2.0 made model providers **install-gated plugins**. Twenty-four ship in the image —
-`anthropic`, `openai`, `google`, `ollama`, `openrouter` among them — but not all of them.
+OpenClaw 2.0 made model providers **install-gated plugins**. Twenty-four ship in the image,
+`anthropic`, `openai`, `google`, `ollama`, `openrouter` among them, but not all of them.
 Configuring one that is not bundled, without installing it, produces a gateway that starts,
 reports healthy, and has no model backend.
 
@@ -263,7 +263,7 @@ Installed plugin: deepseek
 ```
 
 **This adds an outbound dependency the 1.x line did not have: `clawhub.ai`.** It is needed
-while `apply` is running, not at boot — deliberately, so a failure reaches the person running
+while `apply` is running, not at boot. Deliberately, so a failure reaches the person running
 the command rather than a locked-down host at 3am. Blocked, it looks like this:
 
 ```
@@ -285,20 +285,20 @@ they are really installed:
 discord. They will never connect.
 ```
 
-It has to ask. `openclaw channels add` — the obvious command — returns success even when the
+It has to ask. `openclaw channels add`. The obvious command, returns success even when the
 plugin install fails, so clawops uses `openclaw plugins install` and verifies against
 `channels list --all --json`.
 
 Channel plugins are pinned to the supported runtime. The current `latest` does not install on
 it: `plugin "discord" requires plugin API >=2026.9.3, but this OpenClaw runtime exposes
-2026.9.2` — the same drift that forced version pins on model providers.
+2026.9.2`. The same drift that forced version pins on model providers.
 
 Telegram needs nothing installed: it ships in the image.
 
 ### Bad config is caught before it is written
 
-Config is validated against **OpenClaw's own schema** — captured from the image, not
-hand-written — before anything is sent to the host, and again before a write replaces a
+Config is validated against **OpenClaw's own schema**, captured from the image, not
+hand-written, before anything is sent to the host, and again before a write replaces a
 working file. `clawops plan` refuses a plan whose config the gateway would reject, while the
 plan is still a file you can edit.
 
@@ -306,7 +306,7 @@ A rejected config is kept at `<path>.rejected.<timestamp>` and the live one is l
 a validation failure never costs you what you were trying to write.
 
 One rule is clawops's own: `gateway.mode` is optional in the schema and **mandatory in
-practice** — a config without it passes `openclaw config validate` and then exits 78.
+practice**. A config without it passes `openclaw config validate` and then exits 78.
 
 ### Containers are hardened
 
@@ -326,7 +326,7 @@ The container publishes on `127.0.0.1:18789` instead of `0.0.0.0:18789`. Reach i
 `clawops tunnel` or a reverse proxy on the host.
 
 Previously the wizard set `allowedGatewayCidrs` from the CIDR you gave for **SSH**, so a
-plaintext HTTP dashboard — token in the URL — was opened to your whole shell-access network
+plaintext HTTP dashboard. Token in the URL. Was opened to your whole shell-access network
 as a side effect of one unrelated answer. To bind all interfaces deliberately, set
 `network.publishGateway: "all"`.
 
@@ -346,15 +346,15 @@ with HTML**:
 
 clawops probed with `curl -fsS … >/dev/null`, which succeeds on a typo. It proved something
 was listening on the port, not that the gateway was healthy. Probes now read the response
-body, and the restart gate uses `/startupz` rather than liveness — after a restart the
+body, and the restart gate uses `/startupz` rather than liveness, after a restart the
 process listens long before startup finishes.
 
 ### `clawops mcp wire` actually wires something now
 
-It has never worked — not on 2.0, not on any 1.x release. It wrote `gateway.mcpClients`,
+It has never worked, not on 2.0, not on any 1.x release. It wrote `gateway.mcpClients`,
 which is **not a key OpenClaw has**: checked against the config schemas of `2026.4.5`,
 `2026.7.1-2` and `2026.9.2`. The real key is top-level `mcp.servers`. And the entry it wrote
-was `command: "clawops"` over stdio, which spawns *inside the gateway container* — where
+was `command: "clawops"` over stdio, which spawns *inside the gateway container*, where
 clawops is not installed and nothing installs it.
 
 On 1.x nothing validated the write, so clawops stored a key nothing read, restarted your
@@ -369,7 +369,7 @@ flowchart TD
     D --> E["openclaw mcp reload"]
 ```
 
-It delegates to `openclaw mcp add` now, which **probes the server before saving** — so
+It delegates to `openclaw mcp add` now, which **probes the server before saving**, so
 "wired" means the gateway connected, not that a file was written.
 
 **You have to run the server yourself.** clawops is not installed on the gateway host:
@@ -388,7 +388,7 @@ channel it is connected to. See `docs/security/threat-model.md` T11.
 Two bugs, found by testing against a real gateway rather than a mock.
 
 It built **one transport for the whole process**, so the first client to connect claimed it
-and every later one — a second editor, a reconnect, the gateway's own probe — was answered
+and every later one. A second editor, a reconnect, the gateway's own probe, was answered
 `"Server already initialized"`. HTTP mode is the multi-client mode.
 
 It had **no authentication**, while exposing every tool including `clawops_destroy`. It now
@@ -401,7 +401,7 @@ without one.
 flowchart TD
     A["clawops plan"] --> B{"publishGateway?"}
     B -- "loopback (default)" --> C{"allowedGatewayCidrs empty?"}
-    C -- no --> C1["refuse — those rules would admit<br/>traffic to a closed port"]
+    C -- no --> C1["refuse: those rules would admit<br/>traffic to a closed port"]
     C -- yes --> D["SSH rules only"]
     B -- all --> E["SSH rules + gateway rules<br/>on spec.network.gatewayPort"]
     D --> F["clawops harden"]
@@ -416,7 +416,7 @@ Three security controls were doing the opposite of what they say.
 
 **`clawops harden` opened the gateway port on every deployment.** The `ufw` module ran
 `ufw allow 18789/tcp` unconditionally. Since the gateway publishes on `127.0.0.1`, that
-opened a port nothing was listening on — a hardening step widening the firewall past what the
+opened a port nothing was listening on. A hardening step widening the firewall past what the
 deployment exposes. It now reads the running container's port bindings and adds the rule only
 when the gateway is really published, on whatever port it is published on.
 
@@ -430,7 +430,7 @@ whole internet, on the path most first-time users take. It offers your own IP as
 and when that cannot be detected it offers no default and requires an answer.
 
 **`clawops plan` could not express any of it, and `apply` never passed any of it to Pulumi.**
-Both are fixed in 2.0.1 — see the list at the top of this section.
+Both are fixed in 2.0.1. See the list at the top of this section.
 
 ### The gateway port comes from the plan
 
@@ -445,7 +445,7 @@ Both are fixed in 2.0.1 — see the list at the top of this section.
 
 One value now reaches the security-group rules, the container publish flag, the default
 `gateway.port` and the gateway URL. It was a constant redeclared in eleven places, so
-changing it meant finding all of them — and missing one produced a container publishing one
+changing it meant finding all of them, and missing one produced a container publishing one
 port, a gateway listening on another, and a firewall opening a third.
 
 Local deployments use `clawops up --gateway-port 9443`.
@@ -467,16 +467,16 @@ flowchart TD
     Y -- yes --> Y2["exit 1"]
 ```
 
-Three changes worth knowing:
+Three changes:
 
 **It asks the gateway.** `doctor` used to read `docker inspect`'s healthcheck field, which
-the OpenClaw image does not set — so it reported "no healthcheck configured" and moved on. A
+the OpenClaw image does not set, so it reported "no healthcheck configured" and moved on. A
 running container means the process started, not that it serves. It now probes `/startupz`
 and reads the body.
 
 **It exits 1 when something failed.** Only an old Node.js used to do that; an unreadable SSH
 key or an unsupported gateway exited 0, so a CI step running `clawops doctor` read a broken
-deployment as success. Warnings still exit 0 — a fresh machine with no stacks is
+deployment as success. Warnings still exit 0, a fresh machine with no stacks is
 unconfigured, not broken.
 
 **It is an MCP tool.** `clawops_doctor` returns the same report as structured data, so an
@@ -486,7 +486,7 @@ agent that hits a failure can find out why. It reports only; it never runs `open
 ### `clawops agents list` stops inventing an empty list
 
 The command ended in `|| echo '[]'`, so a stopped container, a gateway still starting, or a
-Docker permission error all produced **"No agents running."** — a wrong answer rather than an
+Docker permission error all produced **"No agents running."**, a wrong answer rather than an
 error. It now fails, and says which.
 
 ### Day-two commands work on AWS
@@ -494,12 +494,12 @@ error. It now fails, and says which.
 `gateway restart`, `logs`, `monitor`, `backup`, `agents`, `config set` and `doctor`'s
 container checks were **all broken on AWS**: clawops connects as `ubuntu`, but provisioning
 only put `clawops` in the docker group, so every Docker command failed with `permission
-denied`. GCP and Azure connect as `clawops`, which is why only AWS was affected.
+denied`. GCP and Azure connect as `clawops`, so only AWS was affected.
 
 ### Removed
 
 **`clawops agents restart`** and the `clawops_agents_restart` MCP tool. OpenClaw 2.0 has no
-per-agent restart — only `gateway restart` and `daemon restart`, both of which interrupt
+per-agent restart, only `gateway restart` and `daemon restart`, both of which interrupt
 every agent on the host. Use `clawops gateway restart`, or stay on `@clawops/cli@legacy`.
 
 `clawops agents list` and `clawops agents logs` are unaffected.
@@ -511,7 +511,7 @@ every agent on the host. Use `clawops gateway restart`, or stay on `@clawops/cli
 - **OpenClaw users** who want the simplest path to self-hosting across cloud or local VMs, with
   reliable deploy, status checks, logs, backups, and upgrades in a single CLI.
 - **Claude Code / Cursor / MCP users** looking for a real-world reference implementation of safe
-  infrastructure operations through MCP — typed tool schemas, read-only mode, destructive-action
+  infrastructure operations through MCP. Typed tool schemas, read-only mode, destructive-action
   confirmation, and audit logs.
 - **Self-hosted AI and local-first developers** who want to run their own AI assistant without
   committing to Kubernetes, a managed SaaS platform, or a single cloud provider.
@@ -521,13 +521,13 @@ every agent on the host. Use `clawops gateway restart`, or stay on `@clawops/cli
 ## What clawops does
 
 - Provisions and tears down OpenClaw infrastructure on **AWS, GCP, Azure, and local VMs** using
-  the Pulumi Automation API — you do not install Pulumi; clawops installs the CLI it needs into
+  the Pulumi Automation API. You do not install Pulumi; clawops installs the CLI it needs into
   `~/.clawops/.pulumi-cli` on first use.
 - Manages day-to-day operations: status, logs, SSH, tunnels, config, agents, gateway, backups.
 - Exposes every operation as a **typed MCP tool** so AI agents can drive ops safely.
 - Enforces a **plan → review → apply** discipline for cloud deployments.
 - Emits **JSON output everywhere** (`--json`) for scripting and automation.
-- Never stores cloud credentials — reads them from your environment's existing CLI profiles.
+- Never stores cloud credentials. Reads them from your environment's existing CLI profiles.
 
 ## What clawops does not do
 
@@ -551,35 +551,35 @@ clawops setup
 ```
 
 `clawops setup` is an interactive wizard that gets OpenClaw running in about 2 minutes. It
-handles everything in one flow — no config files to write by hand, no commands to memorize.
+handles everything in one flow, no config files to write by hand, no commands to memorize.
 
 ### What the wizard does
 
-**Step 1 — Choose a deployment target**
+**Step 1. Choose a deployment target**
 
 Pick an existing server you can SSH into (Linux or macOS), or a new cloud VM on AWS, GCP, or
 Azure. Cloud deployments walk you through authenticating with the provider CLI if you aren't
 already signed in.
 
-**Step 2 — Pick an LLM provider**
+**Step 2. Pick an LLM provider**
 
 Choose from Anthropic, OpenAI, Amazon Bedrock, Ollama, or others. The wizard prompts for your
-API key and saves it locally (in `~/.clawops/secrets/`, chmod 600) — it is never sent anywhere
+API key and saves it locally (in `~/.clawops/secrets/`, chmod 600), it is never sent anywhere
 except to OpenClaw on the target host when the config is applied.
 
-**Step 3 — Add chat integrations (optional)**
+**Step 3. Add chat integrations (optional)**
 
 Select any combination of Discord, Telegram, Slack, WhatsApp, or Teams. The wizard collects each
-integration's bot token the same way as the API key — paste it in, reference an env var, or point
+integration's bot token the same way as the API key. Paste it in, reference an env var, or point
 to a file.
 
-**Step 4 — Wire your AI editor**
+**Step 4. Wire your AI editor**
 
-Select which AI apps should have access to clawops — Claude Desktop, Claude Code, Cursor,
+Select which AI apps should have access to clawops. Claude Desktop, Claude Code, Cursor,
 Windsurf, VS Code, and Zed are all supported. The wizard writes an MCP server entry into each
 app's config file using the absolute binary path so the app can launch it independently.
 
-**Step 5 — Deploy**
+**Step 5. Deploy**
 
 The wizard bootstraps OpenClaw on the target host over SSH (installs Docker, pulls the image,
 starts the container), applies your LLM and integration config, generates a gateway auth token,
@@ -593,14 +593,14 @@ and prints a direct dashboard URL:
 
 **Prerequisites:** Node.js ≥ 22, an SSH key, and either an SSH-reachable Linux/macOS host or a
 cloud account with CLI credentials configured (`aws configure`, `gcloud auth login`, or `az login`).
-You do not need Pulumi — the first cloud deployment installs the CLI clawops drives into
+You do not need Pulumi. The first cloud deployment installs the CLI clawops drives into
 `~/.clawops/.pulumi-cli` and says so while it does.
 
 For a full narrated walkthrough with example output, see [`docs/demo-script.md`](docs/demo-script.md).
 
 ---
 
-### Manual setup — existing server
+### Manual setup, existing server
 
 If you prefer step-by-step control, or are adding clawops to an already-running deployment:
 
@@ -617,7 +617,7 @@ clawops status
 See [`docs/examples/local-vm.md`](docs/examples/local-vm.md) for SSH prerequisites, firewall
 setup, and troubleshooting.
 
-### Manual setup — cloud (AWS)
+### Manual setup, cloud (AWS)
 
 ```bash
 npm install -g @clawops/cli
@@ -625,15 +625,15 @@ npm install -g @clawops/cli
 # Requires AWS credentials in your environment (AWS_PROFILE or ~/.aws/credentials)
 clawops init --provider aws
 
-# Edit ~/.clawops/config.json — set stateUrl to your S3 bucket
+# Edit ~/.clawops/config.json: set stateUrl to your S3 bucket
 
 clawops plan --provider aws --stack default --ssh-cidr auto --out /tmp/plan.json
 clawops apply /tmp/plan.json
 ```
 
 `--ssh-cidr auto` allows SSH from this machine's public IP, resolved while the plan is
-generated and written into it. Without it the plan allows no ingress at all and nothing —
-including clawops — will be able to connect.
+generated and written into it. Without it the plan allows no ingress at all and nothing,
+including clawops, will be able to connect.
 
 ---
 
@@ -645,7 +645,7 @@ The `setup` wizard handles this automatically (Step 4). To wire or re-wire edito
 clawops mcp install
 ```
 
-This opens the same interactive checkbox used in the wizard — select Claude Desktop, Claude Code,
+This opens the same interactive checkbox used in the wizard, select Claude Desktop, Claude Code,
 Cursor, Windsurf, VS Code, or Zed and clawops writes the MCP entry into each app's config using
 the correct absolute binary path.
 
@@ -675,12 +675,12 @@ Replace `/path/to/clawops` with the output of `which clawops`. Config file locat
 | VS Code (Linux) | `~/.config/Code/User/mcp.json` |
 | Zed | `~/.config/zed/settings.json` (key: `context_servers`) |
 
-**Start with `--read-only`** — it enables status, logs, config reads, and diagnostics while
+**Start with `--read-only`**. It enables status, logs, config reads, and diagnostics while
 blocking mutations. Remove it only after reviewing
 [`docs/security/mcp-safety.md`](docs/security/mcp-safety.md).
 
 Destructive tools (`clawops_destroy`, `clawops_up`, `clawops_config_set`, etc.) require explicit
-confirmation before executing — they will never run silently.
+confirmation before executing, they will never run silently.
 
 For HTTP mode setup see [`docs/mcp/`](docs/mcp/).
 
@@ -709,8 +709,8 @@ clawops down --yes          # Destroy local-provider stack
 
 | Command | Description |
 |---|---|
-| `setup` | First-run wizard — guided LLM, integrations, and deploy-plan generation |
-| `init` | Register a stack in `~/.clawops/config.json` without provisioning. Additive — existing stacks are kept; `--force` is needed only to overwrite one |
+| `setup` | First-run wizard: guided LLM, integrations, and deploy-plan generation |
+| `init` | Register a stack in `~/.clawops/config.json` without provisioning. Additive, existing stacks are kept; `--force` is needed only to overwrite one |
 | `up` | Provision or update stack (`--dry-run` for preview, `--gateway-port` for a non-default port) |
 | `down` | Destroy local-provider stack (requires `--yes`; `--dry-run` shows current outputs) |
 | `destroy` | Destroy cloud-provider stack with confirmation prompt (`--dry-run` shows current outputs) |
@@ -744,14 +744,14 @@ Full flag reference: `clawops <command> --help`
 For non-local providers, clawops enforces a review-before-apply discipline:
 
 ```bash
-# 1. Generate a plan — runs `pulumi preview` internally, produces JSON
+# 1. Generate a plan: runs `pulumi preview` internally, produces JSON
 #    --ssh-cidr decides who may connect. `auto` means this machine; omit it and nobody can.
 clawops plan --provider aws --region us-east-1 --ssh-cidr auto --out /tmp/plan.json
 
-# 2. Review plan.json — the `diff` field shows projected changes at plan-generation time
+# 2. Review plan.json: the `diff` field shows projected changes at plan-generation time
 cat /tmp/plan.json | jq .diff
 
-# 3. Apply — reads and validates the plan file, then runs `pulumi up`
+# 3. Apply: reads and validates the plan file, then runs `pulumi up`
 clawops apply /tmp/plan.json
 
 # Without --yes, apply prompts: "Continue? (y/N)"
@@ -760,7 +760,7 @@ clawops apply /tmp/plan.json --yes    # skip prompt in automation
 
 The plan JSON conforms to `spec/deploy-plan.schema.json` (AJV-validated) and captures reviewed
 intent: provider, region, instance type, CIDR ranges, and OpenClaw version. `apply` re-runs
-`pulumi up` using those parameters against the current live state — it does not replay a locked
+`pulumi up` using those parameters against the current live state, it does not replay a locked
 execution artifact. Review and apply in the same session to minimize drift risk.
 
 See [`docs/plan-apply.md`](docs/plan-apply.md) for full semantics, drift guidance, and the safe CI pattern.
@@ -775,7 +775,7 @@ any MCP-compatible agent can drive deployments without leaving the chat interfac
 ### Wire your editor
 
 ```bash
-clawops mcp install   # interactive checkbox — writes config for selected apps
+clawops mcp install   # interactive checkbox: writes config for selected apps
 ```
 
 The wizard resolves the absolute binary path automatically so app launchers can find `clawops`
@@ -800,7 +800,7 @@ Start the server manually or confirm your config is correct:
 
 ```bash
 clawops mcp serve --read-only   # safe for first evaluation
-clawops mcp serve               # full mode — enables provisioning, config write, ssh exec
+clawops mcp serve               # full mode: enables provisioning, config write, ssh exec
 ```
 
 ### HTTP mode (remote / multi-client)
@@ -868,7 +868,7 @@ Config lives at `~/.clawops/config.json` (override with `$CLAWOPS_HOME`).
 }
 ```
 
-**Cloud credentials are never stored in config** — clawops reads them from the environment:
+**Cloud credentials are never stored in config**. Clawops reads them from the environment:
 
 | Provider | Credential source |
 |---|---|
@@ -883,10 +883,10 @@ Config lives at `~/.clawops/config.json` (override with `$CLAWOPS_HOME`).
 
 See [`docs/limitations.md`](docs/limitations.md) for the full list. Key points:
 
-- **Single-node deployments only** — not a high-availability or clustering platform.
-- **`clawops apply` is not an immutable plan execution** — see [`docs/plan-apply.md`](docs/plan-apply.md).
+- **Single-node deployments only**, not a high-availability or clustering platform.
+- **`clawops apply` is not an immutable plan execution**. See [`docs/plan-apply.md`](docs/plan-apply.md).
 - **No TLS/domain automation** in the current release.
-- **MCP tools execute privileged operations** — use `--read-only` for first evaluation.
+- **MCP tools execute privileged operations**, use `--read-only` for first evaluation.
 
 ---
 
@@ -912,8 +912,8 @@ clawops
 
 Key design decisions:
 
-- **Pulumi Automation API:** the user installs no Pulumi — clawops installs the CLI the API drives into `~/.clawops/.pulumi-cli`, pinned to the bundled SDK, without editing `$PATH` (ADR 0010); Pulumi home is sandboxed to `~/.clawops/.pulumi`; stack programs are inline TypeScript closures
-- **State in cloud blob storage:** GCS (`gs://`), S3 (`s3://`), Azure Blob — no local state files, no `pulumi.yaml`
+- **Pulumi Automation API:** the user installs no Pulumi. Clawops installs the CLI the API drives into `~/.clawops/.pulumi-cli`, pinned to the bundled SDK, without editing `$PATH` (ADR 0010); Pulumi home is sandboxed to `~/.clawops/.pulumi`; stack programs are inline TypeScript closures
+- **State in cloud blob storage:** GCS (`gs://`), S3 (`s3://`), Azure Blob, no local state files, no `pulumi.yaml`
 - **SSH via `ssh2`:** never shells out to `/usr/bin/ssh`; TOFU host verification against `~/.clawops/known_hosts`; connection pool with 5-min idle TTL
 - **Plan → apply discipline:** every non-local deployment goes through `generatePlan()` → review → `applyPlan()`; destructive changes always require human review of the plan JSON
 - **MCP-first:** every CLI operation has a typed MCP tool; schemas generated from `spec/mcp-tools.yaml`; all destructive tools use elicitation
@@ -1043,14 +1043,14 @@ pnpm changeset             # record a release note before merging
 
 Two files are generated from `spec/` and must not be hand-edited:
 
-- `src/providers/types.ts` — `ProviderAdapter` interface from `spec/providers.schema.json`
-- `src/mcp/tools/_generated.ts` — Zod schemas and type exports from `spec/mcp-tools.yaml`
+- `src/providers/types.ts`. `ProviderAdapter` interface from `spec/providers.schema.json`
+- `src/mcp/tools/_generated.ts`. Zod schemas and type exports from `spec/mcp-tools.yaml`
 
 Run `pnpm gen:schemas` after modifying either spec file. CI enforces this with `--check`.
 
 ### Adding a provider
 
-Use the `/add-provider` skill in Claude Code, or follow [`src/providers/CLAUDE.md`](src/providers/CLAUDE.md). Every adapter must satisfy `ProviderAdapter` in `src/providers/types.ts` — do not relax the schema to fit the adapter.
+Use the `/add-provider` skill in Claude Code, or follow [`src/providers/CLAUDE.md`](src/providers/CLAUDE.md). Every adapter must satisfy `ProviderAdapter` in `src/providers/types.ts`. Do not relax the schema to fit the adapter.
 
 ### Adding an MCP tool
 
@@ -1072,14 +1072,14 @@ Use `pnpm changeset` to record a release note before merging a `feat` or `fix`.
 
 | Milestone | Status | What ships |
 |---|---|---|
-| M0 — Scaffold | ✅ | Tooling, CI, stubs, generated types |
-| M1 — GCP MVP | ✅ | `init` / `up` / `down` / `status` / `ssh` / `logs` on GCP |
-| M2 — Remote Mgmt | ✅ | `tunnel`, `config`, `agents`, `gateway`; SSH connection pool |
-| M3 — AWS + Azure | ✅ | AWS EC2 + Azure VM adapters; `stacks list` |
-| M4 — Local VM | ✅ | Local adapter (SSH bootstrap, no Pulumi); `doctor` |
-| M5 — MCP Layer | ✅ | `mcp serve` (stdio), all CLI ops as MCP tools, progress tracking |
-| M6 — Plan/Apply | ✅ | `plan` + `apply`; deploy-plan schema; MCP HTTP transport; `workflow_deploy_app` |
-| M7 — v1.0 Polish | ✅ | Full `doctor` surface; `destroy` command; `--dry-run` across commands; CI guide |
+| M0: Scaffold | ✅ | Tooling, CI, stubs, generated types |
+| M1: GCP MVP | ✅ | `init` / `up` / `down` / `status` / `ssh` / `logs` on GCP |
+| M2: Remote Mgmt | ✅ | `tunnel`, `config`, `agents`, `gateway`; SSH connection pool |
+| M3: AWS + Azure | ✅ | AWS EC2 + Azure VM adapters; `stacks list` |
+| M4: Local VM | ✅ | Local adapter (SSH bootstrap, no Pulumi); `doctor` |
+| M5: MCP Layer | ✅ | `mcp serve` (stdio), all CLI ops as MCP tools, progress tracking |
+| M6: Plan/Apply | ✅ | `plan` + `apply`; deploy-plan schema; MCP HTTP transport; `workflow_deploy_app` |
+| M7: v1.0 Polish | ✅ | Full `doctor` surface; `destroy` command; `--dry-run` across commands; CI guide |
 
 See [`docs/roadmap.md`](docs/roadmap.md) for the public roadmap and upcoming work.
 
@@ -1087,4 +1087,4 @@ See [`docs/roadmap.md`](docs/roadmap.md) for the public roadmap and upcoming wor
 
 ## License
 
-MPL-2.0 — see [LICENSE](LICENSE).
+MPL-2.0, see [LICENSE](LICENSE).

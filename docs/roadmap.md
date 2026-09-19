@@ -5,7 +5,7 @@ core implementation; adoption milestones (R1–R12) cover documentation, safety,
 maturity, and hardening.
 
 **Current state (2.0.2, published):** all development milestones are complete, and adoption waves
-R1–R13 have shipped — bug reporting (`clawops bug`) and the hardening MVP landed in the 1.7 line.
+R1–R13 have shipped. Bug reporting (`clawops bug`) and the hardening MVP landed in the 1.7 line.
 2.0 moved clawops onto OpenClaw 2.x; 2.0.1 and 2.0.2 made cloud deploys work on all three clouds
 and fixed a module resolution failure that broke every cloud command on an installed copy.
 
@@ -15,14 +15,14 @@ Remaining work falls into three groups:
 |---|---|---|
 | **Carried from the 1.x waves** | WO-31 (GCP hardening), WO-32 (Azure hardening), WO-34 (Tailscale) | `src/harden/modules/` has twelve modules; none are GCP- or Azure-specific, and Tailscale exists only as a reserved schema field |
 | **clawops 2.1** | WO-53 sandboxing, WO-54 config surface, WO-55 TLS and public origin, WO-56 observability, WO-57 fleet multi-tenancy | WO-55 gates Portals, Teams, Slack and Discord Activities |
-| **clawops 2.2 — alone** | WO-62 host agent | Ships by itself, behind preconditions. See below |
+| **clawops 2.2: alone** | WO-62 host agent | Ships by itself, behind preconditions. See below |
 | **Housekeeping** | WO-64 `server.json` drift | Split out of WO-62 so it is not gated behind it |
 
 ### WO-62 ships on its own, and only after its preconditions
 
 Running clawops *on* the gateway host is not a feature with risks attached. It is a change of
 security posture delivered as a feature, and **every mitigation clawops has assumes a human is
-the operator** — plans get reviewed, destructive tools ask for confirmation, `--read-only` is an
+the operator**. Plans get reviewed, destructive tools ask for confirmation, `--read-only` is an
 operator's choice. Put the agent in the operator's chair and each becomes a formality the agent
 performs on itself.
 
@@ -35,15 +35,15 @@ Four failure modes drive the decision to ship it alone:
   gateway MCP server runs without `--read-only` by WO-28's design note. Confirmation is a control
   over a human's attention, not over an agent's.
 - **Self-destruction, complete.** The process performing a `destroy` runs on the instance being
-  destroyed, so it dies partway through finalising state — leaving a state file that disagrees
+  destroyed, so it dies partway through finalising state, leaving a state file that disagrees
   with reality, possibly locked by a process that no longer exists.
 - **Self-destruction, incomplete.** Likelier and worse: orphaned resources keep billing, and the
   operator who would clean them up was the agent. Recovery needs an out-of-band human who, in an
   unattended deployment, may not exist.
 
-The preconditions — an enforced spend ceiling, a self-targeting guard below the tool layer, a
+The preconditions. An enforced spend ceiling, a self-targeting guard below the tool layer, a
 narrow cloud identity for the host, state it cannot delete, audit shipped off-host, a documented
-break-glass operator, and default `--read-only` — are listed in full in
+break-glass operator, and default `--read-only`, are listed in full in
 [`openclaw-2.0-migration-plan.md`](openclaw-2.0-migration-plan.md). Several are worth building on
 their own merits.
 
@@ -53,15 +53,15 @@ All core development milestones are complete as of v1.0.
 
 | Milestone | Status | Summary |
 |---|---|---|
-| M0 — Scaffold | ✅ | Tooling, CI, generated types, stubs |
-| M1 — GCP MVP | ✅ | `init` / `up` / `down` / `status` / `ssh` / `logs` on GCP |
-| M2 — Remote Mgmt | ✅ | `tunnel`, `config`, `agents`, `gateway`; SSH connection pool |
-| M3 — AWS + Azure | ✅ | AWS EC2 + Azure VM adapters; `stacks list` |
-| M4 — Local VM | ✅ | Local adapter (SSH bootstrap, no Pulumi); `doctor` |
-| M5 — MCP Layer | ✅ | `mcp serve` (stdio + HTTP), all CLI ops as MCP tools |
-| M6 — Plan/Apply | ✅ | `plan` + `apply`; deploy-plan schema; `workflow_deploy_app` |
-| M7 — v1.0 Polish | ✅ | Full `doctor`; `destroy`; `--dry-run` across commands; CI guide |
-| M8 — Test Coverage | ✅ | 539 tests; SSH integration harness; e2e mock suite |
+| M0: Scaffold | ✅ | Tooling, CI, generated types, stubs |
+| M1: GCP MVP | ✅ | `init` / `up` / `down` / `status` / `ssh` / `logs` on GCP |
+| M2: Remote Mgmt | ✅ | `tunnel`, `config`, `agents`, `gateway`; SSH connection pool |
+| M3: AWS + Azure | ✅ | AWS EC2 + Azure VM adapters; `stacks list` |
+| M4: Local VM | ✅ | Local adapter (SSH bootstrap, no Pulumi); `doctor` |
+| M5: MCP Layer | ✅ | `mcp serve` (stdio + HTTP), all CLI ops as MCP tools |
+| M6: Plan/Apply | ✅ | `plan` + `apply`; deploy-plan schema; `workflow_deploy_app` |
+| M7: v1.0 Polish | ✅ | Full `doctor`; `destroy`; `--dry-run` across commands; CI guide |
+| M8: Test Coverage | ✅ | 539 tests; SSH integration harness; e2e mock suite |
 
 ## Adoption milestones
 
@@ -77,7 +77,7 @@ Tailscale integration.
 | 9 | R9 | ✅ | Secret lifecycle CLI (`clawops secret`) |
 | 10 | R10 | ✅ | Stack monitoring dashboard + MCP tool |
 | 11 | R11 | ✅ | Gateway-agent MCP wiring (`clawops mcp wire`) |
-| 12 | R12 | ✅ | Server hardening (`clawops harden`) — GCP, Azure and Tailscale modules still open |
+| 12 | R12 | ✅ | Server hardening (`clawops harden`), GCP, Azure and Tailscale modules still open |
 | 13 | R13 | ✅ | Integrated bug reporting (`clawops bug`) |
 
 ### Release groupings for remaining work
@@ -87,134 +87,134 @@ Remaining WOs are batched into three releases to avoid a changeset per PR.
 | Release | WOs | Status |
 |---|---|---|
 | **v1.6** | WO-35, WO-18, M8 stubs | ✅ shipped |
-| **v1.7** | WO-29, WO-33, WO-30 | ✅ shipped — hardening MVP, core + local/VPS + AWS |
-| **v1.8** | WO-31, WO-32, WO-34 | open — GCP + Azure hardening, Tailscale VPN |
+| **v1.7** | WO-29, WO-33, WO-30 | ✅ shipped: hardening MVP, core + local/VPS + AWS |
+| **v1.8** | WO-31, WO-32, WO-34 | open: GCP + Azure hardening, Tailscale VPN |
 
-### R1 — First-Run Experience
+### R1. First-Run Experience
 
 Goal: let someone understand, install, deploy, and validate clawops quickly.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-01 — README rewrite | ✅ | Clear positioning, local VM quickstart, Claude Code connect |
-| WO-02 — Local/VPS quickstart | ✅ | `examples/local-vm.md` |
-| WO-03 — Example OpenClaw configs | ✅ | `examples/configs/` with model and channel examples |
+| WO-01: README rewrite | ✅ | Clear positioning, local VM quickstart, Claude Code connect |
+| WO-02: Local/VPS quickstart | ✅ | `examples/local-vm.md` |
+| WO-03: Example OpenClaw configs | ✅ | `examples/configs/` with model and channel examples |
 
-### R2 — Plan/Apply Trust Model
+### R2. Plan/Apply Trust Model
 
 Goal: make plan/apply behavior accurate, inspectable, and safe.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-04 — Plan/apply semantics | ✅ | `docs/plan-apply.md` |
-| WO-05 — Plan summary output | ✅ | Per-resource summary in human + JSON output |
-| WO-06 — Apply-time drift warning | ✅ | Warning when state changed since plan (design-first) |
+| WO-04: Plan/apply semantics | ✅ | `docs/plan-apply.md` |
+| WO-05: Plan summary output | ✅ | Per-resource summary in human + JSON output |
+| WO-06: Apply-time drift warning | ✅ | Warning when state changed since plan (design-first) |
 
-### R3 — Security and MCP Safety
+### R3. Security and MCP Safety
 
 Goal: give users a clear safety model for clawops as privileged tooling and MCP server.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-07 — MCP safety docs + risk matrix | ✅ | `docs/security/mcp-safety.md`, `docs/security/tool-risk-matrix.md` |
-| WO-08 — Read-only / no-destructive docs | ✅ | `docs/mcp/claude-code.md`, `docs/mcp/read-only.md` |
-| WO-09 — Audit log + redaction docs | ✅ | `docs/security/audit-logs.md`, `docs/security/redaction.md` |
+| WO-07: MCP safety docs + risk matrix | ✅ | `docs/security/mcp-safety.md`, `docs/security/tool-risk-matrix.md` |
+| WO-08: Read-only / no-destructive docs | ✅ | `docs/mcp/claude-code.md`, `docs/mcp/read-only.md` |
+| WO-09: Audit log + redaction docs | ✅ | `docs/security/audit-logs.md`, `docs/security/redaction.md` |
 
-### R4 — Production Operations
+### R4. Production Operations
 
 Goal: make single-node deployments credible for ongoing use.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-10 — Operations guide | ✅ | `docs/operations.md` |
-| WO-11 — Backup/restore validation | ✅ | `docs/backup-restore.md` |
-| WO-12 — Health check expansion | ✅ | Deeper status checks beyond "container running" |
-| WO-13 — Upgrade/rollback design | ✅ | `docs/upgrade-rollback.md` |
+| WO-10: Operations guide | ✅ | `docs/operations.md` |
+| WO-11: Backup/restore validation | ✅ | `docs/backup-restore.md` |
+| WO-12: Health check expansion | ✅ | Deeper status checks beyond "container running" |
+| WO-13: Upgrade/rollback design | ✅ | `docs/upgrade-rollback.md` |
 
-### R5 — Configuration and Secrets
+### R5. Configuration and Secrets
 
 Goal: make real OpenClaw configuration safe, inspectable, and less confusing.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-14 — Config validation | ✅ | `clawops config validate` command |
-| WO-15 — Secret redaction audit | ✅ | Centralized redaction utility + tests |
-| WO-16 — Config wizard design + implementation | ✅ | `clawops setup` — interactive first-run wizard |
+| WO-14: Config validation | ✅ | `clawops config validate` command |
+| WO-15: Secret redaction audit | ✅ | Centralized redaction utility + tests |
+| WO-16: Config wizard design + implementation | ✅ | `clawops setup`: interactive first-run wizard |
 
-### R6 — Provider Reliability
+### R6. Provider Reliability
 
 Goal: show which provider paths are supported and prove the most important ones.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-17 — Provider capability matrix | ✅ | `docs/providers/matrix.md` |
-| WO-18 — Local VM e2e test harness | ✅ | `tests/e2e/` |
-| WO-19 — Provider troubleshooting docs | ✅ | Per-provider troubleshooting guides |
+| WO-17: Provider capability matrix | ✅ | `docs/providers/matrix.md` |
+| WO-18: Local VM e2e test harness | ✅ | `tests/e2e/` |
+| WO-19: Provider troubleshooting docs | ✅ | Per-provider troubleshooting guides |
 
-### R7 — Developer Experience
+### R7. Developer Experience
 
 Goal: make external contribution safer and easier.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-20 — Contributor workflow docs | ✅ | Improved `CONTRIBUTING.md` |
-| WO-21 — Generated spec workflow docs | ✅ | `docs/generated-files.md` |
+| WO-20: Contributor workflow docs | ✅ | Improved `CONTRIBUTING.md` |
+| WO-21: Generated spec workflow docs | ✅ | `docs/generated-files.md` |
 
-### R8 — Adoption and Launch
+### R8. Adoption and Launch
 
 Goal: make the repository easy to evaluate, share, and launch.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-22 — Public roadmap + limitations | ✅ | `docs/roadmap.md`, `docs/limitations.md` |
-| WO-23 — Demo script | ✅ | `docs/demo-script.md` |
-| WO-24 — Launch issue set | ✅ | `.github/ISSUE_TEMPLATE/` + seeded issues |
+| WO-22: Public roadmap + limitations | ✅ | `docs/roadmap.md`, `docs/limitations.md` |
+| WO-23: Demo script | ✅ | `docs/demo-script.md` |
+| WO-24: Launch issue set | ✅ | `.github/ISSUE_TEMPLATE/` + seeded issues |
 
-### R9 — Secret Lifecycle Management
+### R9. Secret Lifecycle Management
 
 Goal: give operators a first-class CLI for creating, rotating, and auditing secrets.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-25 — Secret lifecycle CLI | ✅ | `clawops secret list/set/delete/rotate/audit`; `docs/secrets.md` |
+| WO-25: Secret lifecycle CLI | ✅ | `clawops secret list/set/delete/rotate/audit`; `docs/secrets.md` |
 
-### R10 — Stack Monitoring
+### R10. Stack Monitoring
 
 Goal: live terminal dashboard and MCP tool for continuous stack health visibility.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-26 — `clawops monitor` interactive dashboard | ✅ | Refreshing ANSI dashboard: gateway health, sessions, model usage, log tail |
-| WO-27 — `clawops_monitor` MCP tool | ✅ | Structured JSON health snapshot for agents |
+| WO-26: `clawops monitor` interactive dashboard | ✅ | Refreshing ANSI dashboard: gateway health, sessions, model usage, log tail |
+| WO-27: `clawops_monitor` MCP tool | ✅ | Structured JSON health snapshot for agents |
 
-### R11 — Gateway-Agent MCP Wiring
+### R11. Gateway-Agent MCP Wiring
 
 Goal: let the OpenClaw gateway's own AI agent invoke clawops management commands via MCP.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-28 — Gateway-agent MCP client config | ⚠️ | `clawops mcp wire` command; optional wizard step. **Shipped non-functional in v1.5** — wrote `gateway.mcpClients`, a key OpenClaw has never had. Corrected in WO-61 (2.0) |
+| WO-28: Gateway-agent MCP client config | ⚠️ | `clawops mcp wire` command; optional wizard step. **Shipped non-functional in v1.5**, wrote `gateway.mcpClients`, a key OpenClaw has never had. Corrected in WO-61 (2.0) |
 
-### R12 — Server Hardening
+### R12. Server Hardening
 
 Goal: reduce attack surface and optionally route all traffic through a private Tailscale network, with provider-specific hardening steps and a multi-select wizard step during setup.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-29 — `clawops harden` command + wizard integration | ✅ | Core hardening command, shared module framework, multi-select wizard step |
-| WO-30 — AWS hardening | ✅ | VPC Flow Logs, GuardDuty opt-in, Security Group audit, Session Manager check |
-| WO-31 — GCP hardening | ⏳ | Shielded VM check, VPC firewall audit, OS Login opt-in |
-| WO-32 — Azure hardening | ⏳ | JIT VM Access, Defender for Cloud, NSG audit, disk encryption check |
-| WO-33 — Local/VPS hardening | ✅ | SSH hardening, UFW, fail2ban, unattended-upgrades, CIS Level 1 report |
-| WO-34 — Tailscale VPN integration | ⏳ | Install Tailscale, join network, update SSH/gateway config, optional private-only mode |
+| WO-29: `clawops harden` command + wizard integration | ✅ | Core hardening command, shared module framework, multi-select wizard step |
+| WO-30: AWS hardening | ✅ | VPC Flow Logs, GuardDuty opt-in, Security Group audit, Session Manager check |
+| WO-31: GCP hardening | ⏳ | Shielded VM check, VPC firewall audit, OS Login opt-in |
+| WO-32: Azure hardening | ⏳ | JIT VM Access, Defender for Cloud, NSG audit, disk encryption check |
+| WO-33: Local/VPS hardening | ✅ | SSH hardening, UFW, fail2ban, unattended-upgrades, CIS Level 1 report |
+| WO-34: Tailscale VPN integration | ⏳ | Install Tailscale, join network, update SSH/gateway config, optional private-only mode |
 
-### R13 — Integrated Bug Reporting
+### R13. Integrated Bug Reporting
 
 Goal: let users report bugs without leaving the terminal, with system context pre-filled.
 
 | Work order | Status | Deliverable |
 |---|---|---|
-| WO-35 — `clawops bug` command | ✅ | Doctor context + pre-filled GitHub issue URL + browser open |
+| WO-35: `clawops bug` command | ✅ | Doctor context + pre-filled GitHub issue URL + browser open |
 
 ## What is not on the roadmap
 

@@ -37,7 +37,7 @@ into stack config. Three flags fill it:
 | `--gateway-cidr <list\|auto>` | CIDRs allowed to reach the gateway port. Requires `--publish-gateway all`. |
 | `--publish-gateway loopback\|all` | Which interface the gateway binds. `loopback` (default) keeps it off the network; reach it with `clawops tunnel`. |
 
-Omitting `--ssh-cidr` is a valid plan and produces **no ingress rules at all** — deny-all is
+Omitting `--ssh-cidr` is a valid plan and produces **no ingress rules at all**, deny-all is
 the default N10 requires. `clawops plan` warns when it happens, because a host nothing can
 reach is rarely what was intended:
 
@@ -48,13 +48,13 @@ it. Pass `--ssh-cidr auto` (this machine) or an explicit CIDR when generating th
 ```
 
 A bare IP is refused rather than assumed to be a `/32`, and `auto` failing to resolve stops
-the plan rather than falling back — neither an empty list nor `0.0.0.0/0` is a safe guess
+the plan rather than falling back. Neither an empty list nor `0.0.0.0/0` is a safe guess
 about who should be let in.
 
 ## Which key can log in
 
 The plan carries the SSH public key the instance will accept, in `spec.ssh.publicKey`, resolved
-from `ssh.keyPath` in `~/.clawops/config.json` — the `.pub` beside the private key, or derived
+from `ssh.keyPath` in `~/.clawops/config.json`. The `.pub` beside the private key, or derived
 from the private key when there is none. Every cloud program requires it and refuses to run
 without it.
 
@@ -96,7 +96,7 @@ that conforms to `spec/deploy-plan.schema.json`:
 ```
 
 The `diff` field is populated from `pulumi preview` output at plan-generation time. It is intended
-for human review — you can inspect it to understand what will change before committing.
+for human review. You can inspect it to understand what will change before committing.
 
 If the preview cannot run (missing credentials, no existing stack state), `plan` still succeeds and
 emits the structural JSON without a `diff` field. `apply` will still work; it just cannot show you
@@ -164,7 +164,7 @@ To suppress the prompt in automation, pass `--yes`:
 clawops apply /tmp/plan.json --yes   # skips both the confirmation and the drift prompt
 ```
 
-The warning is non-blocking — you can proceed after confirming. It is a signal to re-run
+The warning is non-blocking. You can proceed after confirming. It is a signal to re-run
 `clawops plan` and review the new diff before applying if the change is unexpected.
 
 New stacks (no prior deploys) have no version history; the drift check is skipped silently.
@@ -199,12 +199,12 @@ cat /tmp/plan.json | jq '.diff.delete'
 ## Safe automation pattern (CI)
 
 ```yaml
-# CI job 1 — plan
+# CI job 1: plan
 - run: clawops plan --provider aws --stack $STACK --out $PLAN_PATH
 - uses: actions/upload-artifact@v4
   with: { name: deploy-plan, path: $PLAN_PATH }
 
-# CI job 2 — apply (requires manual approval gate in GitHub Actions)
+# CI job 2: apply (requires manual approval gate in GitHub Actions)
 - uses: actions/download-artifact@v4
   with: { name: deploy-plan }
 - run: clawops apply $PLAN_PATH --yes
@@ -219,7 +219,7 @@ See [`docs/ci.md`](ci.md) for the full CI integration guide including OIDC crede
 ## Local provider
 
 `clawops plan` and `clawops apply` are not supported for the local provider. Use `clawops up`
-directly — the local provider bootstraps over SSH without a Pulumi state backend.
+directly. The local provider bootstraps over SSH without a Pulumi state backend.
 
 ```bash
 # For local VMs:
@@ -232,8 +232,8 @@ clawops up --provider local   # no plan file needed
 clawops plan --provider aws --stack default --ssh-cidr auto --out /tmp/plan.json
 clawops plan --provider gcp --instance-type medium --ssh-cidr 203.0.113.4/32 --out /tmp/plan.json
 
-# Publish the gateway on a routable interface and admit one network to it. Plaintext HTTP —
-# put TLS in front of it. Without --publish-gateway all, gateway CIDRs are refused: they
+# Publish the gateway on a routable interface and admit one network to it. Plaintext HTTP,
+# so put TLS in front of it. Without --publish-gateway all, gateway CIDRs are refused: they
 # would admit traffic to a port nothing routable is listening on.
 clawops plan --provider aws --ssh-cidr auto --publish-gateway all \
   --gateway-cidr 203.0.113.0/24 --out /tmp/plan.json

@@ -10,7 +10,7 @@ pipeline's identity supply the cloud credentials.
 
 Every cloud can hand a GitHub Actions job a short-lived credential in exchange for its OIDC
 token, so no long-lived key sits in your repository secrets. It works on all three providers,
-and clawops needs no special support for it — the credential lands in the
+and clawops needs no special support for it, the credential lands in the
 environment, which is where clawops already looks.
 
 ```yaml
@@ -91,7 +91,7 @@ in seconds rather than partway through provisioning.
 ```
 
 Pin the OpenClaw version in the plan as well. clawops resolves a moving tag to a concrete
-release and refuses one it cannot resolve, so an unpinned deploy fails rather than drifting —
+release and refuses one it cannot resolve, so an unpinned deploy fails rather than drifting,
 but the resolved version depends on when the plan was generated.
 
 [Full CI guide →](https://github.com/dfridkin/clawops/blob/main/docs/ci.md)

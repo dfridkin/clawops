@@ -14,7 +14,7 @@ clawops apply plan.json
 ## Credentials
 
 The standard chain, unchanged: `AWS_PROFILE`, SSO, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`,
-or an instance role. clawops stores none of them — `~/.clawops/config.json` records which profile
+or an instance role. clawops stores none of them. `~/.clawops/config.json` records which profile
 to read, never the credential.
 
 ## Account setup it checks
@@ -29,7 +29,7 @@ to read, never the credential.
 
 **The bucket is created only when it is genuinely absent.** A `404` means missing, and clawops
 offers to create it with versioning on and public access blocked. A `403` means the name belongs
-to another account — S3 names are global — or your credentials cannot read it, and clawops offers
+to another account. S3 names are global, or your credentials cannot read it, and clawops offers
 no fix there because creating it would fail either way.
 
 ## Permissions
@@ -37,14 +37,14 @@ no fix there because creating it would fail either way.
 | Service | Actions |
 |---|---|
 | EC2 | `ec2:*Vpc*`, `ec2:*Subnet*`, `ec2:*SecurityGroup*`, `ec2:*KeyPair*`, `ec2:*Instance*`, `ec2:*InternetGateway*`, `ec2:*RouteTable*`, `ec2:*Address*` |
-| IAM | `CreateRole`, `AttachRolePolicy`, `CreateInstanceProfile`, `AddRoleToInstanceProfile` and their delete counterparts — the instance profile for SSM |
+| IAM | `CreateRole`, `AttachRolePolicy`, `CreateInstanceProfile`, `AddRoleToInstanceProfile` and their delete counterparts, the instance profile for SSM |
 | S3 | `GetObject`, `PutObject`, `DeleteObject`, `ListBucket` on the state bucket |
 
-Two more that nothing else needs:
+Two additional permissions, used only by these checks:
 
-- **`ec2:DescribeInstanceTypeOfferings`** — lets `doctor` confirm your size exists in the region.
+- **`ec2:DescribeInstanceTypeOfferings`**. Lets `doctor` confirm your size exists in the region.
   Without it the check reports as a warning naming the error, rather than passing or failing.
-- **`bedrock:ListInferenceProfiles`** — only with Bedrock. It refuses bare foundation-model ids
+- **`bedrock:ListInferenceProfiles`**, only with Bedrock. It refuses bare foundation-model ids
   for on-demand inference, so clawops resolves each model to a regional inference profile at plan
   time and records it in the plan. Without the permission it warns and leaves the bare id, which
   Bedrock rejects. This is separate from the instance role, which needs only `bedrock:InvokeModel`
@@ -56,7 +56,7 @@ Two more that nothing else needs:
 region. Server-side encryption follows your bucket policy.
 
 The region is in the name because an S3 bucket is a regional resource and Pulumi reads state on
-every operation — a bucket on another continent slows every `plan` and `apply` for no visible
+every operation. A bucket on another continent slows every `plan` and `apply` for no visible
 reason. S3 bills for storage and requests, never for the bucket itself.
 
 ## Firewall
@@ -71,7 +71,7 @@ reason. S3 bills for storage and requests, never for the bucket itself.
 `127.0.0.1`, so a rule for its port would grant no access and misread as exposure. Gateway rules
 appear only with `--publish-gateway all`, for the CIDRs you name.
 
-Egress is unrestricted by default — see [Security](/docs/security) for what the host reaches.
+Egress is unrestricted by default. See [Security](/docs/security) for what the host reaches.
 
 ## Sizes
 

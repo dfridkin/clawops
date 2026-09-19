@@ -8,7 +8,7 @@ screencasters, and contributors who want to see the complete workflow from insta
 - Node.js 22+ on your local machine
 - An SSH key with access to the host
 
-No cloud account required for this demo — the local provider bootstraps OpenClaw over SSH directly.
+No cloud account required for this demo. The local provider bootstraps OpenClaw over SSH directly.
 
 ---
 
@@ -99,7 +99,7 @@ clawops status
 Stack: my-vm  Provider: local  Region: —
 
   IP address    192.168.1.50
-  Gateway URL   http://127.0.0.1:18789  (loopback — reach it with `clawops tunnel`)
+  Gateway URL   http://127.0.0.1:18789  (loopback: reach it with `clawops tunnel`)
   SSH host      192.168.1.50:22  (user: ubuntu)
   Provisioned   2026-05-13T14:22:01Z
 
@@ -177,7 +177,7 @@ clawops config get maxAgents
 
 ## 8. Port-forward the gateway UI
 
-No public port needed — access the gateway over an SSH tunnel:
+No public port needed, access the gateway over an SSH tunnel:
 
 ```bash
 clawops tunnel
@@ -231,14 +231,14 @@ clawops backup create
   Size: 4.2 KB
 ```
 
-Restoring works on this line — OpenClaw 2.0 ships a real restore and clawops delegates to it:
+Restoring works on this line. OpenClaw 2.0 ships a real restore and clawops delegates to it:
 
 ```bash
 clawops backup restore --file ~/.clawops/backups/my-vm-2026-05-13T14-35-00Z.tar.gz
 ```
 
 It verifies the archive and expands it into a **fresh staging directory**, never in place, and
-prints upstream's warnings verbatim — restoring is time travel, and channel credentials need
+prints upstream's warnings verbatim. Restoring is time travel, and channel credentials need
 relinking afterwards. See [backup-restore.md](backup-restore.md).
 
 ---
@@ -290,7 +290,7 @@ The local path above requires no cloud account. For AWS, the workflow adds a pla
 export AWS_PROFILE=my-profile
 
 clawops init --provider aws
-# Edit ~/.clawops/config.json — set stateUrl to your S3 bucket
+# Edit ~/.clawops/config.json: set stateUrl to your S3 bucket
 
 # Generate a plan (dry-run safe)
 clawops plan --provider aws --stack default --out /tmp/plan.json
@@ -334,8 +334,8 @@ clawops backup create --json | jq .path
 
 ## What to look at next
 
-- [`docs/examples/local-vm.md`](examples/local-vm.md) — full local VM walkthrough with troubleshooting
-- [`docs/security/mcp-safety.md`](security/mcp-safety.md) — MCP safety model and tool risk matrix
-- [`docs/plan-apply.md`](plan-apply.md) — plan/apply semantics for cloud providers
-- [`docs/operations.md`](operations.md) — day-to-day operations reference
-- [`README.md`](../README.md) — project overview and command reference
+- [`docs/examples/local-vm.md`](examples/local-vm.md). Full local VM walkthrough with troubleshooting
+- [`docs/security/mcp-safety.md`](security/mcp-safety.md). MCP safety model and tool risk matrix
+- [`docs/plan-apply.md`](plan-apply.md). Plan/apply semantics for cloud providers
+- [`docs/operations.md`](operations.md), day-to-day operations reference
+- [`README.md`](../README.md), project overview and command reference

@@ -24,10 +24,10 @@ if they also match a sensitive pattern:
 
 | Exempt pattern | Rationale |
 |---|---|
-| `keyname` | AWS key pair name — a label, not a secret |
-| `keypath` | File path to an SSH private key — the path is not the key |
+| `keyname` | AWS key pair name: a label, not a secret |
+| `keypath` | File path to an SSH private key, the path is not the key |
 | `privatekeypath` | Same rationale as keypath |
-| `knownhostspath` | Path to known_hosts file — not sensitive |
+| `knownhostspath` | Path to known_hosts file: not sensitive |
 
 ## ARN replacement
 

@@ -11,7 +11,7 @@ clawops doctor --provider azure
 
 ## Credentials
 
-Your `az login` works — a service principal is not required. For CI, set `AZURE_CLIENT_ID`,
+Your `az login` works. A service principal is not required. For CI, set `AZURE_CLIENT_ID`,
 `AZURE_CLIENT_SECRET` and `AZURE_TENANT_ID`, or use a federated credential.
 
 clawops pins `azure-native:subscriptionId` into the stack configuration at plan time, so a deploy
@@ -55,11 +55,11 @@ A size available to one account may not be offered to yours in that region. When
 | Role | Scope |
 |---|---|
 | **Contributor** | subscription or resource group |
-| **Key Vault Administrator** | only with `keyVaultEnabled` — can be narrowed to Key Vault Secrets Officer |
+| **Key Vault Administrator** | only with `keyVaultEnabled`: can be narrowed to Key Vault Secrets Officer |
 
 ## State
 
-`azblob://clawops-state` — a **container**, addressed directly, with **no** `/clawops` prefix.
+`azblob://clawops-state`. A **container**, addressed directly, with **no** `/clawops` prefix.
 AWS and GCP take `<bucket>/clawops`; Azure does not.
 
 The container is already scoped by the storage account you supply, so clawops adds no
@@ -81,6 +81,6 @@ rule is created for the gateway under loopback publishing**, which is the defaul
 | `large` | Standard_B8ms | 8 | 32 GB | |
 | `gpu` | Standard_NC6s_v3 | 6 | 112 GB + V100 | ~$850/mo |
 
-Indicative, not a quote — and check availability against your own subscription first.
+Indicative, not a quote, and check availability against your own subscription first.
 
 [Full Azure guide →](https://github.com/dfridkin/clawops/blob/main/docs/providers/azure.md)

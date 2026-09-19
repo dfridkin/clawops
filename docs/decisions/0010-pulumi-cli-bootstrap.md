@@ -1,4 +1,4 @@
-# ADR 0010 — clawops installs the Pulumi CLI; the Automation API never embedded one
+# ADR 0010. Clawops installs the Pulumi CLI; the Automation API never embedded one
 
 **Status:** Accepted
 **Date:** 2026-09-14
@@ -23,7 +23,7 @@ const { stdout } = await exec(command, ["version"], …);
 
 Every `LocalWorkspace` operation spawns that binary. With no `pulumiCommand` option it spawns
 bare `pulumi`, so on a machine without one on `$PATH` the first stack operation dies at the
-spawn — before any provider code runs, with an error naming a tool the user was told they did
+spawn, before any provider code runs, with an error naming a tool the user was told they did
 not need.
 
 This was found while preparing the first real cloud end-to-end run, on the author's own
@@ -38,29 +38,29 @@ engine.
 **Keep the user-facing promise and make it true: clawops installs the CLI itself.**
 
 `PulumiCommand.install({ root })` downloads the CLI matching the bundled SDK, passing
-`--no-edit-path`, into a root we choose — `~/.clawops/.pulumi-cli`. The result is handed to
+`--no-edit-path`, into a root we choose. `~/.clawops/.pulumi-cli`. The result is handed to
 `LocalWorkspace` as `pulumiCommand`. Nothing outside `~/.clawops` is written, `$PATH` is not
 edited, and a user's own Pulumi installation is untouched.
 
 Resolution order, in `src/pulumi/cli.ts`:
 
-1. **Our copy** (`~/.clawops/.pulumi-cli`) — pinned to the SDK the programs were written
+1. **Our copy** (`~/.clawops/.pulumi-cli`). Pinned to the SDK the programs were written
    against, so it wins when present.
-2. **A CLI on `$PATH`** — a compatible CLI already on the machine is worth more than a
+2. **A CLI on `$PATH`**. A compatible CLI already on the machine is worth more than a
    download, and the Automation API version-checks it for us.
-3. **Install ours** — announced on stderr before the download, since a command that appears to
+3. **Install ours**. Announced on stderr before the download, since a command that appears to
    hang is worse than a slow one that said why.
 
 ## Rationale
 
 The alternatives were worse:
 
-- **Document the prerequisite** — honest, and it gives up the thing ADR 0006 was right about.
+- **Document the prerequisite**. Honest, and it gives up the thing ADR 0006 was right about.
   Install friction at a second boundary is real, and the one-command install is a large part of
   why clawops exists rather than a README of Pulumi steps.
-- **Vendor the binary in the npm package** — ~200MB across platforms, a package per arch, and
+- **Vendor the binary in the npm package**. ~200MB across platforms, a package per arch, and
   we would own updating it. Pulumi already publishes an installer for every platform.
-- **Reimplement on cloud SDKs** — the option ADR 0006 rejected for good reasons that have not
+- **Reimplement on cloud SDKs**. The option ADR 0006 rejected for good reasons that have not
   changed.
 
 What ADR 0006 got right survives: a pinned version, inline programs, no `pulumi.yaml` on disk,
@@ -72,7 +72,7 @@ typed outputs. What changes is the mechanism and one sentence of prose. The cost
 **Positive:**
 - `clawops apply` works on a clean machine, which it did not before.
 - The version we run is the version we pinned, even when the user has another Pulumi.
-- `clawops doctor` reports the CLI — found, from where, and at what version.
+- `clawops doctor` reports the CLI, found, from where, and at what version.
 
 **Negative:**
 - First `apply` on a new machine reaches the network and takes tens of seconds longer. Warned
@@ -89,7 +89,7 @@ Unlike ADR 0006, these were run:
 - `which pulumi` → not found, and `clawops doctor` reports `Pulumi CLI  not installed` with the
   path the first apply will use.
 - After one `clawops apply`, `~/.clawops/.pulumi-cli/bin/pulumi version` matches the bundled
-  SDK, and `which pulumi` still returns nothing — `$PATH` was not edited.
+  SDK, and `which pulumi` still returns nothing, `$PATH` was not edited.
 - A `pulumi` on `$PATH` with no copy of ours is used as-is, with no download.
 
 ## Revisit when

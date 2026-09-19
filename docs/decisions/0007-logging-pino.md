@@ -1,4 +1,4 @@
-# ADR 0007 — Logging Library and Format
+# ADR 0007. Logging Library and Format
 
 **Status:** Accepted
 **Date:** 2026-05-04
@@ -119,8 +119,8 @@ This is in addition to the explicit sanitization in `src/mcp/audit.ts` per R21.
 
 Two distinct log streams:
 
-1. **Application log** (`logger` from above) — operational events, errors, debug info. Can be verbose.
-2. **Audit log** (`src/mcp/audit.ts`) — structured per-tool-call records. Always written, separate stream, narrowly scoped fields.
+1. **Application log** (`logger` from above). Operational events, errors, debug info. Can be verbose.
+2. **Audit log** (`src/mcp/audit.ts`). Structured per-tool-call records. Always written, separate stream, narrowly scoped fields.
 
 The audit log uses pino under the hood but with a stricter schema and stricter redaction (R21).
 

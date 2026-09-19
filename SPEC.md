@@ -1,7 +1,7 @@
-# clawops — Technical Specification
+# clawops. Technical Specification
 
 **Version:** 0.9
-**Status:** 2.0.2 published. M8 complete (1669 unit+e2e tests); Waves 1–13 complete — WO-01–WO-30, WO-33, WO-35 done; WO-31, WO-32, WO-34 open (GCP/Azure hardening, Tailscale). WO-53–WO-57 deferred to 2.1; WO-62 (host agent) ships alone as 2.2 behind preconditions; WO-64 (`server.json` drift) outstanding
+**Status:** 2.0.2 published. M8 complete (1669 unit+e2e tests); Waves 1–13 complete. WO-01–WO-30, WO-33, WO-35 done; WO-31, WO-32, WO-34 open (GCP/Azure hardening, Tailscale). WO-53–WO-57 deferred to 2.1; WO-62 (host agent) ships alone as 2.2 behind preconditions; WO-64 (`server.json` drift) outstanding
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -220,7 +220,7 @@ clawops/
 ### 3.1 ProviderAdapter (generated from `spec/providers.schema.json`)
 
 ```typescript
-// src/providers/types.ts — GENERATED. Do not hand-edit.
+// src/providers/types.ts: GENERATED. Do not hand-edit.
 import type { Stack } from "@pulumi/pulumi/automation";
 
 export interface ProviderAdapter {
@@ -382,7 +382,7 @@ Key properties:
 - **No `pulumi.yaml` written to disk.** Project is ephemeral, in-memory.
 - **State backend URL** comes from `~/.clawops/config.json` (set during `clawops init`).
 - **`pulumiHome`** sandboxed under `~/.clawops/.pulumi` to avoid clobbering user's other Pulumi projects.
-- **Inline programs** are closures from each ProviderAdapter — no shelling out to `pulumi up` external binary.
+- **Inline programs** are closures from each ProviderAdapter, no shelling out to `pulumi up` external binary.
 
 ### 4.1 Pulumi Component Convention (borrowed from schmitthub/openclaw-deploy)
 
@@ -523,9 +523,9 @@ clawops mcp install --claude | --cursor | --vscode | --windsurf | --zed
 
 **State backend:** `s3://bucket/clawops`
 
-**Bedrock integration:** When `--openclaw-config-bedrock` is set, registers Bedrock as a model provider in the rendered `openclaw.json`. **Important:** OpenClaw 2026.4.5+ requires `AWS_PROFILE` set in the systemd `EnvironmentFile=` (not `auth: "aws-sdk"` in openclaw.json). Adapter emits both for compatibility — see `spec/openclaw-versions.yaml`.
+**Bedrock integration:** When `--openclaw-config-bedrock` is set, registers Bedrock as a model provider in the rendered `openclaw.json`. **Important:** OpenClaw 2026.4.5+ requires `AWS_PROFILE` set in the systemd `EnvironmentFile=` (not `auth: "aws-sdk"` in openclaw.json). Adapter emits both for compatibility, see `spec/openclaw-versions.yaml`.
 
-**OIDC pattern for CI:** clawops's own release/CI workflow uses the OIDC pattern documented in Yash-Kavaiya/openclaw-bedrock-ec2's `github-oidc.tf` (re-implemented from GitHub docs, not vendored — license blocker).
+**OIDC pattern for CI:** clawops's own release/CI workflow uses the OIDC pattern documented in Yash-Kavaiya/openclaw-bedrock-ec2's `github-oidc.tf` (re-implemented from GitHub docs, not vendored, license blocker).
 
 ### 6.2 GCP Adapter (`src/providers/gcp/`)
 
@@ -547,7 +547,7 @@ clawops mcp install --claude | --cursor | --vscode | --windsurf | --zed
 
 **Targets:** Any Linux VM reachable over SSH (UTM, VirtualBox, bare metal, Proxmox).
 
-**Provisioning:** No Pulumi. Adapter SSHes in and runs an idempotent bootstrap script (install Node.js 22, Docker, OpenClaw, configure systemd unit). Bootstrap script is in `src/providers/local/bootstrap.sh.tmpl` — borrows the systemd unit hygiene pattern from Yash-Kavaiya/openclaw-bedrock-ec2.
+**Provisioning:** No Pulumi. Adapter SSHes in and runs an idempotent bootstrap script (install Node.js 22, Docker, OpenClaw, configure systemd unit). Bootstrap script is in `src/providers/local/bootstrap.sh.tmpl`. Borrows the systemd unit hygiene pattern from Yash-Kavaiya/openclaw-bedrock-ec2.
 
 **State:** `file://~/.clawops/state/<stack>.json`
 
@@ -567,27 +567,27 @@ Per R1–R25.
 ### 7.2 Tool Categories
 
 **Toolsets (R1):**
-- `cli` — 1:1 wrappers for every CLI command (`clawops_cli_up`, `clawops_cli_status`, etc.)
-- `workflow` — 2–3 carefully chosen composites (R2):
+- `cli`. 1:1 wrappers for every CLI command (`clawops_cli_up`, `clawops_cli_status`, etc.)
+- `workflow`, 2–3 carefully chosen composites (R2):
   - `clawops_workflow_deploy_app` (preview → confirm → up → verify)
   - `clawops_workflow_recover` (status → logs → diagnostic)
   - `clawops_workflow_migrate_provider` (export → provision new → restore → cutover)
-- `read` — explicitly read-only subset enabled in `--read-only` mode (R18)
-- `admin` — multi-stack ops, requires elevated profile
+- `read`. Explicitly read-only subset enabled in `--read-only` mode (R18)
+- `admin`. Multi-stack ops, requires elevated profile
 
 ### 7.3 Resources (R4)
 
-- `clawops://current-context` — active stack name, provider, region
-- `clawops://stacks` — enumeration of known stacks
-- `clawops://stacks/{name}/last-run` — full Pulumi output from last `up`/`destroy`
-- `clawops://providers/{name}/regions` — available regions per provider
-- `clawops://openclaw-versions` — supported OpenClaw versions
+- `clawops://current-context`, active stack name, provider, region
+- `clawops://stacks`, enumeration of known stacks
+- `clawops://stacks/{name}/last-run`. Full Pulumi output from last `up`/`destroy`
+- `clawops://providers/{name}/regions`, available regions per provider
+- `clawops://openclaw-versions`, supported OpenClaw versions
 
 ### 7.4 Prompts (R4)
 
-- `deploy-to-aws` — guided AWS deployment workflow
-- `recover-failed-stack` — diagnostic/remediation playbook
-- `migrate-to-clawops` — onboarding workflow for users coming from manual deployments
+- `deploy-to-aws`, guided AWS deployment workflow
+- `recover-failed-stack`, diagnostic/remediation playbook
+- `migrate-to-clawops`. Onboarding workflow for users coming from manual deployments
 
 ### 7.5 Long-Running Operations (R12, R13)
 
@@ -737,7 +737,7 @@ Uses `changesets/action@v1`:
 - On merge to `main`: opens or updates a "Version Packages" PR
 - On merge of Version Packages PR: runs `pnpm release` (which calls `tsup build && npm publish --provenance`)
 - Provenance via `id-token: write` + `--provenance` flag
-- Publish step guarded by `HAS_NPM_TOKEN` env check — no-ops safely when `NPM_TOKEN` secret is absent
+- Publish step guarded by `HAS_NPM_TOKEN` env check. No-ops safely when `NPM_TOKEN` secret is absent
 
 ### 10.3 CI Deployments (`docs/ci.md`)
 
@@ -786,7 +786,7 @@ Per the TDD rule and the Claude Code research findings:
 
 (Mirrors PRD §7. Detail of acceptance criteria per milestone.)
 
-### M0 — Skeleton (Week 1) ✅
+### M0. Skeleton (Week 1) ✅
 - [x] Repo scaffold with all directories from §1
 - [x] `pnpm install`, `pnpm typecheck`, `pnpm test` all green on empty test
 - [x] CI pipeline running on PR
@@ -795,7 +795,7 @@ Per the TDD rule and the Claude Code research findings:
 - [x] CLAUDE.md, AGENTS.md, all `.claude/skills/` and `.claude/rules/` present
 - [x] First ADR (0001-supersede-word-doc.md) committed
 
-### M1 — GCP MVP (Week 3) ✅
+### M1. GCP MVP (Week 3) ✅
 - [x] `src/pulumi/automation.ts` working against `gs://` backend
 - [x] GCP adapter: provision VM + firewall + static IP
 - [x] `clawops init --provider gcp --non-interactive` writes valid config
@@ -805,21 +805,21 @@ Per the TDD rule and the Claude Code research findings:
 - [x] `clawops ssh` opens session
 - [x] `clawops logs -f` streams gateway logs
 
-### M2 — Remote Mgmt (Week 5) ✅
+### M2. Remote Mgmt (Week 5) ✅
 - [x] `clawops tunnel` forwards port + opens browser
 - [x] `clawops config get/set/unset` against remote OpenClaw
 - [x] `clawops agents list/restart` proxies cleanly
 - [x] `clawops gateway status/restart/update` works
 - [x] SSH transport supports cancellation (R13)
 
-### M3 — AWS + Azure (Week 8) ✅
+### M3. AWS + Azure (Week 8) ✅
 - [x] AWS adapter: full lifecycle, Bedrock optional
 - [x] Azure adapter: full lifecycle, Key Vault integration
 - [x] `clawops stacks list/delete` for multi-stack
 - [x] `--stack` flag fully wired across all commands
 - [x] OIDC GitHub Actions workflow as docs/example
 
-### M4 — Local VM (Week 10) ✅
+### M4. Local VM (Week 10) ✅
 - [x] Local adapter: SSH bootstrap, no Pulumi
 - [x] `file://` state backend (`~/.clawops/state/<stack>.json`, atomic write)
 - [x] `clawops backup create/restore` (docker exec streaming)
@@ -829,7 +829,7 @@ Per the TDD rule and the Claude Code research findings:
 - [x] `clawops ssh` local path: connects using `LocalState` connection info
 - [x] Pre-M5 coverage pass: 239 tests across 27 files (errors, outputs, validate, pool, context, init, status, up); 336 tests across 40 files at M6
 
-### M5 — MCP Layer (Week 12) ✅
+### M5. MCP Layer (Week 12) ✅
 - [x] `clawops mcp serve` (stdio) with all CLI tools registered
 - [x] All tools annotated per R10
 - [x] `--read-only` and `--no-destructive` modes filtering at registration
@@ -839,7 +839,7 @@ Per the TDD rule and the Claude Code research findings:
 - [x] Audit log writing structured JSON (stderr + disk)
 - [x] **HTTP transport:** `--http` flag initially threw UsageError (M5); implemented in M6 via `StreamableHTTPServerTransport`.
 
-### M6 — Plan/Apply (Week 14) ✅
+### M6. Plan/Apply (Week 14) ✅
 - [x] `spec/deploy-plan.schema.json` finalized
 - [x] `clawops plan [--out plan.json]` emits valid plan; diff table rendered to stderr
 - [x] `clawops apply <plan.json>` executes deterministically with readline confirmation
@@ -848,7 +848,7 @@ Per the TDD rule and the Claude Code research findings:
 - [x] `clawops mcp serve --http <port>` implemented via `StreamableHTTPServerTransport`
 - [x] 336 tests passing across 40 test files
 
-### M7 — v1.0 Polish (Week 16) ✅
+### M7, v1.0 Polish (Week 16) ✅
 - [x] `clawops doctor` covers Node version, config validity, SSH key, provider credentials, Pulumi home dir
 - [x] All mutating commands support `--dry-run` (`up` already had it; added to `down`, `destroy`, `apply`, `config`)
 - [x] CI integration guide (`docs/ci.md`): OIDC for AWS/GCP, env vars reference, plan/apply in CI, no `clawops init` in CI
@@ -859,7 +859,7 @@ Per the TDD rule and the Claude Code research findings:
 - [ ] README + docs site (clawops.dev) live
 - [ ] Demo video / blog post
 
-### M8 — Test Coverage & SSH Hardening (Week 20)
+### M8. Test Coverage & SSH Hardening (Week 20)
 - [x] GCP Pulumi program unit test (parity with AWS + Azure)
 - [x] Firewall module unit tests (`resolveIngressCidrs`, `detectEgressIp`, all access modes)
 - [x] CLI unit tests: `logs`, `ssh`, `backup`, `mcp serve`
@@ -871,8 +871,8 @@ Per the TDD rule and the Claude Code research findings:
 - [x] SSH error path integration tests: ECONNREFUSED, auth failure, TOFU, host-key mismatch, mid-exec abort, tunnel EADDRINUSE
 - [x] Local bootstrap integration tests: happy path, non-zero exit, health poll timeout, abort
 - [x] Output module unit tests (`human.ts`, `table.ts`)
-- [ ] `src/config/profiles.ts` + `secrets.ts` — implement stubs fully + tests
-- [ ] `src/pulumi/components/` — implement `Gateway`, `Network`, `Secrets`, `Server` ComponentResources + tests
+- [ ] `src/config/profiles.ts` + `secrets.ts`, implement stubs fully + tests
+- [ ] `src/pulumi/components/`. Implement `Gateway`, `Network`, `Secrets`, `Server` ComponentResources + tests
 - [x] 493 tests passing (unit + e2e); integration suite separate (`pnpm test:integration`, Docker required)
 
 ---
@@ -932,7 +932,7 @@ WO-04 must be completed before WO-01 to avoid perpetuating inaccurate plan/apply
 | 12b | WO-29, WO-33, WO-30 | R12 | v1.7 | Hardening MVP (core + local/VPS + AWS) |
 | 12c | WO-31, WO-32, WO-34 | R12 | v1.8 | Hardening complete (GCP + Azure + Tailscale) |
 
-### R1 — First-Run Experience
+### R1. First-Run Experience
 
 Goal: let someone understand, install, deploy, and validate ClawOps quickly.
 
@@ -950,7 +950,7 @@ Status:
 - [x] WO-02: Local/VPS quickstart
 - [x] WO-03: Example OpenClaw model/channel configs
 
-### R2 — Plan/Apply Trust Model
+### R2. Plan/Apply Trust Model
 
 Goal: make plan/apply behavior accurate, inspectable, and safe.
 
@@ -965,16 +965,16 @@ WO-06 (apply-time drift warning) touches `spec/deploy-plan.schema.json`, generat
 `src/plan/apply.ts`. Treat as design-first: ADR required before implementation.
 
 Deliverables:
-- `docs/plan-apply.md` — precise semantics, what "plan" guarantees vs. does not guarantee
+- `docs/plan-apply.md`. Precise semantics, what "plan" guarantees vs. does not guarantee
 - Plan summary table in `clawops plan` output
 - Drift warning on `clawops apply` when state changed since plan generation
 
 Status:
 - [x] WO-04: Plan/apply semantics docs
 - [x] WO-05: Plan summary output
-- [x] WO-06: Apply-time drift warning (design-first — ADR before code)
+- [x] WO-06: Apply-time drift warning (design-first. ADR before code)
 
-### R3 — Security and MCP Safety
+### R3. Security and MCP Safety
 
 Goal: give users a clear safety model for ClawOps as privileged tooling and MCP server.
 
@@ -1005,7 +1005,7 @@ Status:
 - [x] WO-08: Read-only/no-destructive MCP setup docs
 - [x] WO-09: Audit log examples and redaction guarantees
 
-### R4 — Production Operations
+### R4. Production Operations
 
 Goal: make single-node OpenClaw deployments credible for ongoing use.
 
@@ -1026,7 +1026,7 @@ Status:
 - [x] WO-12: Health check expansion
 - [x] WO-13: Upgrade/rollback design
 
-### R5 — Configuration and Secrets
+### R5. Configuration and Secrets
 
 Goal: make real OpenClaw configuration safe, inspectable, and less confusing.
 
@@ -1045,7 +1045,7 @@ Status:
 - [x] WO-15: Secret redaction audit
 - [x] WO-16: Model/channel config wizard design + implementation (`clawops setup`)
 
-### R6 — Provider Reliability
+### R6. Provider Reliability
 
 Goal: show which provider paths are supported and prove the most important ones.
 
@@ -1062,7 +1062,7 @@ Status:
 - [ ] WO-18: Local VM end-to-end test harness
 - [x] WO-19: Provider troubleshooting docs
 
-### R7 — Developer Experience
+### R7. Developer Experience
 
 Goal: make external contribution safer and easier.
 
@@ -1078,7 +1078,7 @@ Status:
 - [x] WO-20: Contributor workflow docs
 - [x] WO-21: Generated spec workflow docs
 
-### R8 — Adoption and Launch
+### R8. Adoption and Launch
 
 Goal: make the repository easy to evaluate, share, and launch.
 
@@ -1100,17 +1100,17 @@ Status:
 - [x] WO-23: Demo script
 - [x] WO-24: Launch issue set
 
-### R10 — Stack Monitoring
+### R10. Stack Monitoring
 
-Goal: give operators a live, interactive view of a running OpenClaw stack's health, resource usage, and recent activity — without leaving the terminal.
+Goal: give operators a live, interactive view of a running OpenClaw stack's health, resource usage, and recent activity, without leaving the terminal.
 
 Work orders: WO-26 (`clawops monitor` command), WO-27 (MCP monitor tool).
 
-Background: `clawops doctor` and `clawops status` provide point-in-time snapshots. Operators running production stacks need continuous visibility — gateway reachability, model latency, active agent sessions, and log streams — surfaced in a single interactive command.
+Background: `clawops doctor` and `clawops status` provide point-in-time snapshots. Operators running production stacks need continuous visibility. Gateway reachability, model latency, active agent sessions, and log streams. Surfaced in a single interactive command.
 
 Deliverables:
 
-**WO-26 — `clawops monitor` interactive wizard**
+**WO-26, `clawops monitor` interactive wizard**
 
 `clawops monitor [--stack <name>] [--interval <seconds>]`
 
@@ -1124,7 +1124,7 @@ A refreshing terminal dashboard that shows:
 
 Interaction model:
 - Polls on a configurable interval (default 10s); renders via ANSI terminal output
-- `q` / `Ctrl-C` exits cleanly (no process hang — calls `drainPool()`)
+- `q` / `Ctrl-C` exits cleanly (no process hang, calls `drainPool()`)
 - `r` forces an immediate refresh
 - `l` toggles the log tail panel on/off
 - `d` runs a full `clawops doctor` check and displays results inline
@@ -1134,7 +1134,7 @@ Implementation notes:
 - Uses existing `readRemoteConfig`, `doctor` check helpers, and `clawops logs` infrastructure
 - Renders with ANSI escape codes (no heavy TUI dependency); falls back to plain-text if `--no-color`
 
-**WO-27 — MCP monitor tool**
+**WO-27. MCP monitor tool**
 
 `clawops_monitor` MCP tool: returns a structured JSON snapshot (gateway health, session count, model usage, last 5 log lines) that an agent can poll or summarise. Complements the interactive CLI by giving agents a machine-readable health signal.
 
@@ -1142,7 +1142,7 @@ Status:
 - [ ] WO-26: `clawops monitor` interactive dashboard
 - [ ] WO-27: `clawops_monitor` MCP tool
 
-### R9 — Secret Lifecycle Management
+### R9. Secret Lifecycle Management
 
 Goal: give operators a first-class way to create, rotate, and audit secrets without manually editing files or rerunning the full setup wizard.
 
@@ -1151,19 +1151,19 @@ Work orders: WO-25 (secret lifecycle CLI).
 Background: the `clawops setup` wizard stores pasted secrets in `~/.clawops/secrets/<NAME>` (chmod 600) and references them via `$secret:<NAME>` in config overlays. This works for single-operator use but has no rotation path and no visibility into which secrets are stale or missing.
 
 Deliverables:
-- `clawops secret list` — show all known secret names, their source type, and whether the ref is currently resolvable
-- `clawops secret set <name>` — create or update a secret (paste, env var ref, or file path); propagates to any running stack via config overlay re-apply
-- `clawops secret delete <name>` — remove a local secret file; warns if the secret is still referenced in any stack config
-- `clawops secret rotate <name>` — shorthand for `set` followed by automatic config overlay re-apply and gateway restart on all stacks that reference the secret
-- `clawops secret audit` — scan all stack configs for unresolved `$secret:` refs and secrets whose source file or env var is missing
-- `docs/secrets.md` — document the full secret lifecycle: creation, rotation, deletion, and the manual fallback procedure for secrets that cannot be auto-rotated (e.g. cloud SM sources)
+- `clawops secret list`. Show all known secret names, their source type, and whether the ref is currently resolvable
+- `clawops secret set <name>`. Create or update a secret (paste, env var ref, or file path); propagates to any running stack via config overlay re-apply
+- `clawops secret delete <name>`. Remove a local secret file; warns if the secret is still referenced in any stack config
+- `clawops secret rotate <name>`. Shorthand for `set` followed by automatic config overlay re-apply and gateway restart on all stacks that reference the secret
+- `clawops secret audit`. Scan all stack configs for unresolved `$secret:` refs and secrets whose source file or env var is missing
+- `docs/secrets.md`. Document the full secret lifecycle: creation, rotation, deletion, and the manual fallback procedure for secrets that cannot be auto-rotated (e.g. cloud SM sources)
 
 Status:
 - [ ] WO-25: Secret lifecycle CLI and docs
 
-### R11 — Gateway-Agent MCP Wiring
+### R11. Gateway-Agent MCP Wiring
 
-Goal: let the AI agent running *inside* an OpenClaw gateway control clawops management commands (doctor, status, config, logs) via MCP — without the user leaving the chat interface.
+Goal: let the AI agent running *inside* an OpenClaw gateway control clawops management commands (doctor, status, config, logs) via MCP, without the user leaving the chat interface.
 
 Work orders: WO-28 (gateway-side MCP client config).
 
@@ -1171,16 +1171,16 @@ Background: the `clawops setup` wizard already wires local AI editors (Claude De
 
 Deliverables:
 
-**WO-28 — Gateway-agent MCP client config**
+**WO-28. Gateway-agent MCP client config**
 
 New optional wizard step in `clawops setup` (and as a standalone `clawops mcp wire --stack <name>`):
 
 1. Detect whether the deployed gateway's OpenClaw version supports MCP client connections (read `meta.lastTouchedVersion` from remote config; require ≥ 2026.4).
-2. Prompt: *"Should the OpenClaw gateway's AI also be able to manage this stack?"* (default: no — opt-in only).
+2. Prompt: *"Should the OpenClaw gateway's AI also be able to manage this stack?"* (default: no, opt-in only).
 3. If yes, add the entry with `openclaw mcp add`, which probes the server before saving.
 
    > **Corrected in WO-61 (clawops 2.0).** This step originally specified writing
-   > `gateway.mcpClients` directly. **That key does not exist in OpenClaw** — verified
+   > `gateway.mcpClients` directly. **That key does not exist in OpenClaw**, verified
    > against the config schemas of both `2026.7.1-2` and `2026.9.2`. The real key is
    > top-level `mcp.servers.<name>`. The entry was also `command: "clawops"` over stdio,
    > which spawns inside the gateway container, where clawops is not installed. The step
@@ -1193,25 +1193,25 @@ New optional wizard step in `clawops setup` (and as a standalone `clawops mcp wi
      --url http://host.docker.internal:18790/ \
      --header "Authorization=Bearer <token>"
    ```
-4. Call `openclaw mcp reload` to apply the change — cheaper than a gateway restart.
+4. Call `openclaw mcp reload` to apply the change, cheaper than a gateway restart.
 5. Show a confirmation: *"The gateway's AI can now run clawops commands. Try: 'check if my stack is healthy'"*.
 
 Implementation notes:
 - Delegate to the `openclaw mcp` CLI rather than writing config directly. Both supported
-  OpenClaw lines ship it, and `add` probes before saving — so clawops cannot report a
+  OpenClaw lines ship it, and `add` probes before saving, so clawops cannot report a
   wiring that does not work. (Originally: "use `atomicWriteConfig` + `restartGateway`".)
 - **clawops does not run on the gateway host.** The gateway reaches it over HTTP at
   `host.docker.internal`, so the operator must be running `clawops mcp serve --http`
-  somewhere reachable. Installing clawops on the host is WO-62, deferred past 2.0 — see the
+  somewhere reachable. Installing clawops on the host is WO-62, deferred past 2.0, see the
   migration plan for why.
 - The MCP server for gateway use runs **without** `--read-only` (the gateway agent needs write access for config updates and gateway restarts).
 - If the gateway cannot reach the server, surface the probe error and change nothing.
 - Add a `clawops mcp wire --stack <name>` command as a standalone entry point (not just via setup wizard) so operators can add this to existing deployments without re-running full setup.
 
 Status:
-- [x] WO-28: Gateway-agent MCP client config (wizard step + standalone command) — **shipped broken in v1.5, corrected in WO-61**
+- [x] WO-28: Gateway-agent MCP client config (wizard step + standalone command). **Shipped broken in v1.5, corrected in WO-61**
 
-### R12 — Server Hardening
+### R12. Server Hardening
 
 Goal: reduce the attack surface of every deployed stack and optionally route traffic through a private Tailscale network, with sensible defaults applied via a multi-select wizard step and a standalone `clawops harden` command.
 
@@ -1221,24 +1221,24 @@ Background: `clawops up` provisions a server that is reachable on the public int
 
 #### Hardening options (multi-select, applied via `clawops harden`)
 
-Each option is idempotent — re-running `clawops harden` is safe. A `--dry-run` flag prints what would change without applying.
+Each option is idempotent. Re-running `clawops harden` is safe. A `--dry-run` flag prints what would change without applying.
 
 | Option | Default | Applies to |
 |---|---|---|
-| SSH hardening | ON | all — disable root login, disable password auth, restrict to clawops user |
-| Automatic security updates | ON | all — `unattended-upgrades` (Ubuntu/Debian); OS-appropriate elsewhere |
-| Fail2ban | ON | all — SSH jail: 5 failures → 10-min ban |
-| UFW firewall | ON | all — default deny inbound; allow configured SSH + gateway ports only |
-| Docker socket hardening | ON | all — restrict `/var/run/docker.sock` to the `docker` group; verify no world-readable |
-| auditd | OFF | all — kernel audit logging for privileged commands, file access, network |
-| Tailscale VPN | OFF | all — see WO-34 |
+| SSH hardening | ON | all: disable root login, disable password auth, restrict to clawops user |
+| Automatic security updates | ON | all: `unattended-upgrades` (Ubuntu/Debian); OS-appropriate elsewhere |
+| Fail2ban | ON | all: SSH jail: 5 failures → 10-min ban |
+| UFW firewall | ON | all: default deny inbound; allow configured SSH + gateway ports only |
+| Docker socket hardening | ON | all: restrict `/var/run/docker.sock` to the `docker` group; verify no world-readable |
+| auditd | OFF | all: kernel audit logging for privileged commands, file access, network |
+| Tailscale VPN | OFF | all: see WO-34 |
 | Provider-specific | varies | see WO-30–WO-33 |
 
 Wizard integration: after the deploy step in `clawops setup`, a new multi-select step presents the options above (defaults pre-checked). Selecting at least one option runs `clawops harden` before the wizard exits. The wizard step can be skipped with `--no-harden`.
 
 ---
 
-**WO-29 — `clawops harden` command + wizard integration**
+**WO-29. `clawops harden` command + wizard integration**
 
 `clawops harden [--stack <name>] [--dry-run] [--options ssh,ufw,fail2ban,...]`
 
@@ -1252,7 +1252,7 @@ Core deliverables:
 
 Implementation notes:
 - All hardening scripts emit POSIX sh compatible with Ubuntu 22.04 and Debian 12 (the two supported OS images). Scripts are embedded in TypeScript template literals (same pattern as `makeStartupScript`).
-- `check()` must be non-destructive — only reads `/etc/`, `systemctl status`, and package query commands.
+- `check()` must be non-destructive, only reads `/etc/`, `systemctl status`, and package query commands.
 - Each module writes a sentinel file (`/etc/clawops/hardening/<module>.applied`) so `check()` can detect previous runs without re-reading full config.
 
 Status:
@@ -1260,7 +1260,7 @@ Status:
 
 ---
 
-**WO-30 — AWS hardening**
+**WO-30. AWS hardening**
 
 Provider-specific options surfaced by `clawops harden --stack <name>` when `config.provider === 'aws'`:
 
@@ -1281,7 +1281,7 @@ Status:
 
 ---
 
-**WO-31 — GCP hardening**
+**WO-31. GCP hardening**
 
 Provider-specific options for `config.provider === 'gcp'`:
 
@@ -1289,7 +1289,7 @@ Provider-specific options for `config.provider === 'gcp'`:
 |---|---|---|
 | VPC Firewall audit | ON (check-only) | Warns if any firewall rule has `sourceRanges: ["0.0.0.0/0"]` on ports other than configured |
 | Shielded VM | OFF | Requires re-provision (boot disk change); wizard warns and offers to re-run `clawops up` with shielded options enabled |
-| OS Login | OFF | Replaces SSH-key-based auth with Google IAM identity; disabling clawops SSH key injection — use only when team has Google accounts configured |
+| OS Login | OFF | Replaces SSH-key-based auth with Google IAM identity; disabling clawops SSH key injection, use only when team has Google accounts configured |
 | Cloud Audit Logs | ON (check-only) | Verifies admin activity logging is enabled on the project; no new resources required |
 
 Implementation notes:
@@ -1302,7 +1302,7 @@ Status:
 
 ---
 
-**WO-32 — Azure hardening**
+**WO-32. Azure hardening**
 
 Provider-specific options for `config.provider === 'azure'`:
 
@@ -1314,7 +1314,7 @@ Provider-specific options for `config.provider === 'azure'`:
 | JIT VM Access | OFF | Requires Defender for Servers P1; configures NSG to deny port 22 by default and open it on-demand via Azure portal / CLI |
 
 Implementation notes:
-- NSG audit and disk encryption check are read-only Azure REST describe calls — no ARM changes.
+- NSG audit and disk encryption check are read-only Azure REST describe calls, no ARM changes.
 - Defender for Cloud and JIT VM Access require an active Defender for Servers plan. WO-32 checks for the plan before offering these options; if not enabled, shows estimated monthly cost and a link to enable.
 - JIT VM Access, when applied, updates the NSG (via Pulumi state update) to add a deny-all rule for port 22 with higher priority than existing allow rules, with a corresponding JIT policy resource.
 
@@ -1323,7 +1323,7 @@ Status:
 
 ---
 
-**WO-33 — Local/VPS hardening**
+**WO-33. Local/VPS hardening**
 
 For `config.provider === 'local'`. No cloud-specific options; applies the full common module set plus:
 
@@ -1348,19 +1348,19 @@ Status:
 
 ---
 
-**WO-34 — Tailscale VPN integration**
+**WO-34. Tailscale VPN integration**
 
 Available on all providers. Converts a stack from public-internet exposure to private Tailscale network access, optionally removing public port exposure entirely.
 
 `clawops harden --tailscale [--tailscale-key <key>] [--private-only]`
 
 Steps applied:
-1. **Install Tailscale** — runs the official install script (`https://tailscale.com/install.sh`) via SSH. Idempotent: checks for existing `tailscale` binary first.
-2. **Join network** — runs `tailscale up --auth-key=<key> --hostname=clawops-<stackName> --accept-routes`. Auth key sourced from: `--tailscale-key` flag → `$secret:TAILSCALE_AUTH_KEY` → interactive prompt (stored as a secret if entered interactively).
-3. **Read Tailscale IP** — runs `tailscale ip -4` to get the assigned `100.x.x.x` IP.
-4. **Update clawops config** — rewrites `sshHost` to the Tailscale IP and `gatewayUrl` to `https://<tailscale-ip>:18789` in `~/.clawops/config.json`. Backs up the original values under `_preTailscale` so the change can be reverted.
-5. **Verify connectivity** — opens a new SSH session via the Tailscale IP to confirm reachability before removing public access.
-6. **Private-only mode** (`--private-only`) — after successful Tailscale verification, removes public port exposure:
+1. **Install Tailscale**. Runs the official install script (`https://tailscale.com/install.sh`) via SSH. Idempotent: checks for existing `tailscale` binary first.
+2. **Join network**. Runs `tailscale up --auth-key=<key> --hostname=clawops-<stackName> --accept-routes`. Auth key sourced from: `--tailscale-key` flag → `$secret:TAILSCALE_AUTH_KEY` → interactive prompt (stored as a secret if entered interactively).
+3. **Read Tailscale IP**. Runs `tailscale ip -4` to get the assigned `100.x.x.x` IP.
+4. **Update clawops config**. Rewrites `sshHost` to the Tailscale IP and `gatewayUrl` to `https://<tailscale-ip>:18789` in `~/.clawops/config.json`. Backs up the original values under `_preTailscale` so the change can be reverted.
+5. **Verify connectivity**. Opens a new SSH session via the Tailscale IP to confirm reachability before removing public access.
+6. **Private-only mode** (`--private-only`), after successful Tailscale verification, removes public port exposure:
    - AWS: removes Security Group ingress rules for ports 22 and 18789.
    - GCP: deletes `clawops-firewall-ssh` and `clawops-firewall-gateway` Firewall resources (via Pulumi update).
    - Azure: updates NSG to deny ports 22 and 18789 from `Internet`.
@@ -1375,13 +1375,13 @@ Status:
 
 ---
 
-### R13 — Integrated Bug Reporting
+### R13. Integrated Bug Reporting
 
 Work orders: WO-35 (clawops bug command).
 
 **Goal:** Let users report bugs without leaving the terminal, with system context pre-filled.
 
-**WO-35 — `clawops bug` command**
+**WO-35, `clawops bug` command**
 
 ```
 clawops bug
@@ -1416,9 +1416,9 @@ Non-interactive / `--json` mode: emit the URL as JSON only, skip the browser ope
 `clawops doctor` integration: add a footer line `Run \`clawops bug\` to open a pre-filled GitHub issue.` when doctor finds any failures.
 
 Status:
-- [ ] WO-35: `clawops bug` command — doctor context + pre-filled GitHub issue URL + browser open
+- [ ] WO-35: `clawops bug` command. Doctor context + pre-filled GitHub issue URL + browser open
 
-### R12 — Server Hardening
+### R12. Server Hardening
 
 Goal: reduce the attack surface of every deployed stack and optionally route traffic through a private Tailscale network, with sensible defaults applied via a multi-select wizard step and a standalone `clawops harden` command.
 
@@ -1428,24 +1428,24 @@ Background: `clawops up` provisions a server that is reachable on the public int
 
 #### Hardening options (multi-select, applied via `clawops harden`)
 
-Each option is idempotent — re-running `clawops harden` is safe. A `--dry-run` flag prints what would change without applying.
+Each option is idempotent. Re-running `clawops harden` is safe. A `--dry-run` flag prints what would change without applying.
 
 | Option | Default | Applies to |
 |---|---|---|
-| SSH hardening | ON | all — disable root login, disable password auth, restrict to clawops user |
-| Automatic security updates | ON | all — `unattended-upgrades` (Ubuntu/Debian); OS-appropriate elsewhere |
-| Fail2ban | ON | all — SSH jail: 5 failures → 10-min ban |
-| UFW firewall | ON | all — default deny inbound; allow configured SSH + gateway ports only |
-| Docker socket hardening | ON | all — restrict `/var/run/docker.sock` to the `docker` group; verify no world-readable |
-| auditd | OFF | all — kernel audit logging for privileged commands, file access, network |
-| Tailscale VPN | OFF | all — see WO-34 |
+| SSH hardening | ON | all: disable root login, disable password auth, restrict to clawops user |
+| Automatic security updates | ON | all: `unattended-upgrades` (Ubuntu/Debian); OS-appropriate elsewhere |
+| Fail2ban | ON | all: SSH jail: 5 failures → 10-min ban |
+| UFW firewall | ON | all: default deny inbound; allow configured SSH + gateway ports only |
+| Docker socket hardening | ON | all: restrict `/var/run/docker.sock` to the `docker` group; verify no world-readable |
+| auditd | OFF | all: kernel audit logging for privileged commands, file access, network |
+| Tailscale VPN | OFF | all: see WO-34 |
 | Provider-specific | varies | see WO-30–WO-33 |
 
 Wizard integration: after the deploy step in `clawops setup`, a new multi-select step presents the options above (defaults pre-checked). Selecting at least one option runs `clawops harden` before the wizard exits. The wizard step can be skipped with `--no-harden`.
 
 ---
 
-**WO-29 — `clawops harden` command + wizard integration**
+**WO-29. `clawops harden` command + wizard integration**
 
 `clawops harden [--stack <name>] [--dry-run] [--options ssh,ufw,fail2ban,...]`
 
@@ -1459,7 +1459,7 @@ Core deliverables:
 
 Implementation notes:
 - All hardening scripts emit POSIX sh compatible with Ubuntu 22.04 and Debian 12 (the two supported OS images). Scripts are embedded in TypeScript template literals (same pattern as `makeStartupScript`).
-- `check()` must be non-destructive — only reads `/etc/`, `systemctl status`, and package query commands.
+- `check()` must be non-destructive, only reads `/etc/`, `systemctl status`, and package query commands.
 - Each module writes a sentinel file (`/etc/clawops/hardening/<module>.applied`) so `check()` can detect previous runs without re-reading full config.
 
 Status:
@@ -1467,7 +1467,7 @@ Status:
 
 ---
 
-**WO-30 — AWS hardening**
+**WO-30. AWS hardening**
 
 Provider-specific options surfaced by `clawops harden --stack <name>` when `config.provider === 'aws'`:
 
@@ -1488,7 +1488,7 @@ Status:
 
 ---
 
-**WO-31 — GCP hardening**
+**WO-31. GCP hardening**
 
 Provider-specific options for `config.provider === 'gcp'`:
 
@@ -1496,7 +1496,7 @@ Provider-specific options for `config.provider === 'gcp'`:
 |---|---|---|
 | VPC Firewall audit | ON (check-only) | Warns if any firewall rule has `sourceRanges: ["0.0.0.0/0"]` on ports other than configured |
 | Shielded VM | OFF | Requires re-provision (boot disk change); wizard warns and offers to re-run `clawops up` with shielded options enabled |
-| OS Login | OFF | Replaces SSH-key-based auth with Google IAM identity; disabling clawops SSH key injection — use only when team has Google accounts configured |
+| OS Login | OFF | Replaces SSH-key-based auth with Google IAM identity; disabling clawops SSH key injection, use only when team has Google accounts configured |
 | Cloud Audit Logs | ON (check-only) | Verifies admin activity logging is enabled on the project; no new resources required |
 
 Implementation notes:
@@ -1509,7 +1509,7 @@ Status:
 
 ---
 
-**WO-32 — Azure hardening**
+**WO-32. Azure hardening**
 
 Provider-specific options for `config.provider === 'azure'`:
 
@@ -1521,7 +1521,7 @@ Provider-specific options for `config.provider === 'azure'`:
 | JIT VM Access | OFF | Requires Defender for Servers P1; configures NSG to deny port 22 by default and open it on-demand via Azure portal / CLI |
 
 Implementation notes:
-- NSG audit and disk encryption check are read-only Azure REST describe calls — no ARM changes.
+- NSG audit and disk encryption check are read-only Azure REST describe calls, no ARM changes.
 - Defender for Cloud and JIT VM Access require an active Defender for Servers plan. WO-32 checks for the plan before offering these options; if not enabled, shows estimated monthly cost and a link to enable.
 - JIT VM Access, when applied, updates the NSG (via Pulumi state update) to add a deny-all rule for port 22 with higher priority than existing allow rules, with a corresponding JIT policy resource.
 
@@ -1530,7 +1530,7 @@ Status:
 
 ---
 
-**WO-33 — Local/VPS hardening**
+**WO-33. Local/VPS hardening**
 
 For `config.provider === 'local'`. No cloud-specific options; applies the full common module set plus:
 
@@ -1555,19 +1555,19 @@ Status:
 
 ---
 
-**WO-34 — Tailscale VPN integration**
+**WO-34. Tailscale VPN integration**
 
 Available on all providers. Converts a stack from public-internet exposure to private Tailscale network access, optionally removing public port exposure entirely.
 
 `clawops harden --tailscale [--tailscale-key <key>] [--private-only]`
 
 Steps applied:
-1. **Install Tailscale** — runs the official install script (`https://tailscale.com/install.sh`) via SSH. Idempotent: checks for existing `tailscale` binary first.
-2. **Join network** — runs `tailscale up --auth-key=<key> --hostname=clawops-<stackName> --accept-routes`. Auth key sourced from: `--tailscale-key` flag → `$secret:TAILSCALE_AUTH_KEY` → interactive prompt (stored as a secret if entered interactively).
-3. **Read Tailscale IP** — runs `tailscale ip -4` to get the assigned `100.x.x.x` IP.
-4. **Update clawops config** — rewrites `sshHost` to the Tailscale IP and `gatewayUrl` to `https://<tailscale-ip>:18789` in `~/.clawops/config.json`. Backs up the original values under `_preTailscale` so the change can be reverted.
-5. **Verify connectivity** — opens a new SSH session via the Tailscale IP to confirm reachability before removing public access.
-6. **Private-only mode** (`--private-only`) — after successful Tailscale verification, removes public port exposure:
+1. **Install Tailscale**. Runs the official install script (`https://tailscale.com/install.sh`) via SSH. Idempotent: checks for existing `tailscale` binary first.
+2. **Join network**. Runs `tailscale up --auth-key=<key> --hostname=clawops-<stackName> --accept-routes`. Auth key sourced from: `--tailscale-key` flag → `$secret:TAILSCALE_AUTH_KEY` → interactive prompt (stored as a secret if entered interactively).
+3. **Read Tailscale IP**. Runs `tailscale ip -4` to get the assigned `100.x.x.x` IP.
+4. **Update clawops config**. Rewrites `sshHost` to the Tailscale IP and `gatewayUrl` to `https://<tailscale-ip>:18789` in `~/.clawops/config.json`. Backs up the original values under `_preTailscale` so the change can be reverted.
+5. **Verify connectivity**. Opens a new SSH session via the Tailscale IP to confirm reachability before removing public access.
+6. **Private-only mode** (`--private-only`), after successful Tailscale verification, removes public port exposure:
    - AWS: removes Security Group ingress rules for ports 22 and 18789.
    - GCP: deletes `clawops-firewall-ssh` and `clawops-firewall-gateway` Firewall resources (via Pulumi update).
    - Azure: updates NSG to deny ports 22 and 18789 from `Internet`.

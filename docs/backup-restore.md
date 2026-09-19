@@ -5,7 +5,7 @@ application data over SSH.
 
 > **The archive is a credential.** It contains the state database, whose tables include
 > `mcp_oauth_stores`, `secret_store_entries`, `worker_environment_credentials` and
-> `device_auth_tokens` — unencrypted. clawops writes it `0600`; keep it that way, and
+> `device_auth_tokens`. Unencrypted. clawops writes it `0600`; keep it that way, and
 > encrypt it at rest for anything you would not hand over.
 
 ## What gets backed up
@@ -49,14 +49,14 @@ clawops backup create --stack prod --out /backups/openclaw-prod-20260508.tar.gz
 The command:
 1. Opens an SSH session to the remote host
 2. Runs `openclaw backup create --output /tmp/clawops-backup.tar.gz --verify --json` in the
-   container — `--verify` makes OpenClaw check the archive it just wrote
+   container. `--verify` makes OpenClaw check the archive it just wrote
 3. Streams the archive out with `docker exec openclaw cat`, then removes the temporary copy
 4. Reports the local output path on success
 
 OpenClaw has no stdout mode for backups; `--output` takes a path, not `-`. The temporary file
 inside the container is why the host needs a little free space in `/tmp` during a backup.
 
-Backups are plain `.tar.gz` archives. No encryption is applied by ClawOps — encrypt at rest
+Backups are plain `.tar.gz` archives. No encryption is applied by ClawOps, encrypt at rest
 using your storage layer (S3 SSE, GPG, etc.) for sensitive deployments.
 
 ## Validating a backup
@@ -83,7 +83,7 @@ clawops backup restore --file /backups/openclaw-prod-20260908.tar.gz
 
 clawops does not extract the archive itself. It uploads it and calls
 `openclaw backup restore`, which verifies the archive and expands it into a **fresh staging
-directory** — refusing a non-empty target. Nothing is activated:
+directory**. Refusing a non-empty target. Nothing is activated:
 
 ```
 ✓ Archive verified and restored to /tmp/clawops-restored-1757... on the host.
@@ -109,7 +109,7 @@ clawops gateway restart
 clawops apply <plan>.json     # reinstalls provider plugins
 ```
 
-The last step is not optional if you use a provider whose plugin is not bundled — the
+The last step is not optional if you use a provider whose plugin is not bundled, the
 archive does not carry plugin `node_modules`, so the gateway would start without its model
 providers and look healthy while doing it.
 
@@ -157,7 +157,7 @@ Use S3 Lifecycle rules to transition backups to Glacier after 30 days and expire
    ```
 3. **Recover the most recent backup** using the manual procedure in
    [Recovering from an archive](#recovering-from-an-archive). Budget real time for this step and
-   rehearse it before an outage — it is not a one-liner on this release line.
+   rehearse it before an outage. It is not a one-liner on this release line.
 4. **Restart the gateway:**
    ```bash
    clawops gateway restart

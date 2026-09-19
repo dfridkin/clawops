@@ -1,10 +1,10 @@
-# OpenClaw 2.0 support — migration plan
+# OpenClaw 2.0 support, migration plan
 
 **Status:** re-cut 2026-09-04, after all 8 spikes. §4 is verified against a real host, not inferred.
 **Target:** clawops **v2.0.0** (`main`) + a maintained **`1.x`** line (published: v1.7.1)
-**Upstream floor:** OpenClaw **`2026.9.1`** — *not* 2026.8.1; see G27
+**Upstream floor:** OpenClaw **`2026.9.1`**, *not* 2026.8.1; see G27
 **Pre-2.0 ceiling:** OpenClaw `2026.7.1-2`
-**Evidence:** [`docs/spikes/`](spikes/) — SP-01 … SP-08
+**Evidence:** [`docs/spikes/`](spikes/). SP-01 … SP-08
 **Sources:** [release notes](https://docs.openclaw.ai/releases/2026.8.1) · [Docker install](https://docs.openclaw.ai/install/docker) · [Configuration reference](https://docs.openclaw.ai/gateway/configuration-reference) · [Sandboxing](https://docs.openclaw.ai/gateway/sandboxing) · [Fleet](https://docs.openclaw.ai/cli/fleet) · upstream `Dockerfile` + `docker-compose.yml`
 
 ---
@@ -12,7 +12,7 @@
 ## 1. Verdict
 
 **clawops v1.7.x cannot deploy OpenClaw 2.0.** Reproduced on x86_64 Ubuntu 24.04: run the current
-path unmodified against `2026.8.1` and the container **crash-loops on first deploy** — exit 78, five
+path unmodified against `2026.8.1` and the container **crash-loops on first deploy**, exit 78, five
 restarts and climbing, `Refusing to bind gateway to auto without auth`.
 
 The first draft of this plan got the mechanism wrong in an instructive way, and the spikes corrected
@@ -21,10 +21,10 @@ it twice over.
 **It is loud, not silent.** The original verdict rested on "the container reports healthy while being
 unreachable". That failure mode does not exist: OpenClaw 2.0 detects a container environment and
 binds `0.0.0.0`, so the documented loopback default never applies to us. What happens is an obvious
-crash-loop — a better failure than a silent one.
+crash-loop, a better failure than a silent one.
 
 **The worst defect was never a 2.0 problem at all.** `~/.openclaw/openclaw.json` does not exist in a
-running container; `/app/config.json` — the path clawops mounts — is read by nothing. A config
+running container; `/app/config.json`. The path clawops mounts, is read by nothing. A config
 declaring `gateway.port: 19999` is ignored by **both** `2026.7.1` and `2026.8.1`; both bind 18789.
 **`clawops config set` has never delivered configuration to the gateway, on either OpenClaw line.**
 Models, channels, auth mode: all silently discarded, today, on the shipping product. Deployments work
@@ -33,7 +33,7 @@ only because the auth token arrives on the command line.
 Two more findings reshape the work rather than confirm it:
 
 - **State has always been ephemeral.** Nothing is mounted but the config file, so `gateway restart`,
-  `gateway update` and `config set` — all of which `docker rm` — have been destroying sessions,
+  `gateway update` and `config set`, all of which `docker rm`, have been destroying sessions,
   transcripts and credentials on the 1.x line all along.
 - **A headline feature cannot run on our intended floor.** Bedrock is now a ClawHub plugin whose API
   requires `>=2026.9.1`; configuring it without the plugin makes the gateway refuse to start.
@@ -41,11 +41,11 @@ Two more findings reshape the work rather than confirm it:
 **Framing (D1): two release lines, one runtime contract each.** clawops `2.x` targets OpenClaw
 `>= 2026.9.1`; a maintained `1.x` stays pinned to `<= 2026.7.1-2`. Neither branch carries both.
 
-The pin is only real if it is enforced — §2.
+The pin is only real if it is enforced, §2.
 
 ---
 
-## 2. Ship first — v1.7.2
+## 2. Ship first, v1.7.2
 
 `spec/openclaw-versions.yaml` declares `support.max: ""`. **The published clawops accepts any
 OpenClaw version**, upstream's `latest` has already moved, and anyone on `"latest"` or `"stable"` is
@@ -54,16 +54,16 @@ one `clawops up` from a crash-looping gateway.
 Design is parked in [`docs/spikes/v1.7.2-pr-design.md`](spikes/v1.7.2-pr-design.md); every mechanism
 is verified on both `2026.7.1` and `2026.8.1`.
 
-1. **Version ceiling** — `support.max: "2026.7.1-2"`; refuse in `doctor`, plan validation, `up`,
+1. **Version ceiling**. `support.max: "2026.7.1-2"`; refuse in `doctor`, plan validation, `up`,
    `apply`. Resolve `latest`/`stable` to a concrete version **before** the range check. The error
    names the fix and points at **2.x for `>= 2026.9.1`**.
-2. **Detect-and-warn** on deployments already running 2.x — inspect the *running* container's image
+2. **Detect-and-warn** on deployments already running 2.x, inspect the *running* container's image
    tag; gating future operations does nothing for someone already broken.
-3. **Config delivery (G3)** — `-e OPENCLAW_CONFIG_PATH=/app/config.json`. Verified to make both lines
+3. **Config delivery (G3)**. `-e OPENCLAW_CONFIG_PATH=/app/config.json`. Verified to make both lines
    honour config. Guarded four ways: normalise `gateway.port` to 18789 with a warning, pin
    `--port 18789` on argv (verified to override config), skip delivery if the file will not parse,
    and health-gate the result with a revert to the prior command.
-4. **Ollama (G23)** — `--add-host=host.docker.internal:host-gateway` (verified: resolves to
+4. **Ollama (G23)**. `--add-host=host.docker.internal:host-gateway` (verified: resolves to
    `172.17.0.1`; absent otherwise) plus the corrected `baseUrlDefault`. Depends on #3.
 
 Items 3 and 4 touch all six `docker run` sites. Keep the edits mechanical; consolidation is WO-38's
@@ -78,11 +78,11 @@ irrelevant to clawops.
 - **State moved to SQLite.** Sessions, transcripts, auth profiles and the shared credential store all
   live under the state directory. A state volume is mandatory, and downgrade past the migration is a
   one-way door.
-- **Config is `~/.openclaw/openclaw.json`** (JSON5), or `OPENCLAW_CONFIG_PATH`. Validation is strict —
+- **Config is `~/.openclaw/openclaw.json`** (JSON5), or `OPENCLAW_CONFIG_PATH`. Validation is strict,
   unknown keys make the gateway refuse to start. Startup *writes* the file (migrations, `.bak` ring,
   last-known-good), so the mount must be writable.
 - **Providers are plugins.** Only `anthropic` and `openai` are bundled. Bedrock, Mistral, Cohere and
-  the rest install from ClawHub with capability consent — and a configured-but-missing provider
+  the rest install from ClawHub with capability consent, and a configured-but-missing provider
   **blocks startup**.
 - **`codex/*` and `openai-codex/*` routes retired** → `openai/*`; default `openai/gpt-5.6-sol`.
 - **Bedrock's shape changed** to `auth.profiles.<id>.mode: "aws-sdk"`. The `AWS_PROFILE`-in-
@@ -96,51 +96,51 @@ irrelevant to clawops.
 
 ---
 
-## 4. Gap analysis — verified
+## 4. Gap analysis, verified
 
 All 8 spikes complete. **Two P0s refuted, four new gaps found, two upgraded, one floor moved.**
 Evidence in [`docs/spikes/`](spikes/).
 
-### P0 — blocking
+### P0, blocking
 
 | # | Defect | Status | Effect |
 |---|---|---|---|
-| **G3** | clawops config is read by nothing. `/app/config.json` unread; `OPENCLAW_CONFIG_PATH` unset. Verified on **both** lines: config says port 19999, both bind 18789. | ✅ **confirmed, upgraded** | **`clawops config set` has never worked.** Not a 2.0 regression — a latent bug in the shipping product. Fix verified: one env var. |
-| **G2** | No state volume; `state/openclaw.sqlite` lives only inside the container. | ✅ confirmed | Install fingerprint changes across replacement — all state lost. Happens on every `restart`/`update`/`config set`. |
+| **G3** | clawops config is read by nothing. `/app/config.json` unread; `OPENCLAW_CONFIG_PATH` unset. Verified on **both** lines: config says port 19999, both bind 18789. | ✅ **confirmed, upgraded** | **`clawops config set` has never worked.** Not a 2.0 regression, a latent bug in the shipping product. Fix verified: one env var. |
+| **G2** | No state volume; `state/openclaw.sqlite` lives only inside the container. | ✅ confirmed | Install fingerprint changes across replacement, all state lost. Happens on every `restart`/`update`/`config set`. |
 | **G27** | **Provider plugins are consent-gated and not bundled.** Configuring Bedrock without installing `clawhub:@openclaw/amazon-bedrock-provider` → `plugin verification failed`, exit 1. The plugin needs API **>=2026.9.1**. | 🆕 **new** | clawops's AWS adapter makes Bedrock first-class, so on 2026.8.1 that path yields a gateway that will not start. **Moves the floor to 2026.9.1.** |
 | **G1′** | No gateway token on first boot → `Refusing to bind gateway to auto without auth`, exit 78. | ✅ confirmed | Infinite crash-loop under `--restart unless-stopped`. |
 | **G25** | **uid mismatch.** `ubuntu` holds uid 1000 on cloud images, so our `clawops` user gets 1001; the container runs as 1000. | 🆕 **new** | State dir owned by 1001 → `EACCES … openclaw.sqlite-wal`, exit 1. We chown by name in three places. Ownership must be **numeric**. |
 | **G15** | Channel configs are schema-invalid: Discord's field is `token` not `botToken`; every channel requires `dmPolicy` and `groupPolicy`; `additionalProperties: false`. | ⬆️ P1→**P0** | Any deployment configuring a channel produces a rejected config. |
 | **G5** | Permanent `--allow-unconfigured`; missing `gateway.mode` → exit 78. | ✅ confirmed | Never reaches a supported configured state. |
-| **G6** | Token on argv. | ✅ confirmed — **load-bearing** | Given G3, this is the *only* reason deployments work. Visible in `ps`/`docker inspect`. |
-| **G7** | `ghcr.io/anthropics/openclaw` in the Pulumi component. | ✅ confirmed, **downgraded** | Pull fails, but nothing constructs `Gateway` — only its own test does. Dead code, so no user hits it. It is a trap for whoever wires it up next; fixed or deleted under WO-38. |
+| **G6** | Token on argv. | ✅ confirmed: **load-bearing** | Given G3, this is the *only* reason deployments work. Visible in `ps`/`docker inspect`. |
+| **G7** | `ghcr.io/anthropics/openclaw` in the Pulumi component. | ✅ confirmed, **downgraded** | Pull fails, but nothing constructs `Gateway`, only its own test does. Dead code, so no user hits it. It is a trap for whoever wires it up next; fixed or deleted under WO-38. |
 
-### Refuted — the plan was wrong
+### Refuted, the plan was wrong
 
 | # | Claim | Finding |
 |---|---|---|
-| **G1** | "Binds loopback in-container; published port silently unreachable." | ❌ **Refuted.** `Container environment detected — the gateway defaults to bind=auto (0.0.0.0)`. `--bind lan` unnecessary. |
+| **G1** | "Binds loopback in-container; published port silently unreachable." | ❌ **Refuted.** `Container environment detected, the gateway defaults to bind=auto (0.0.0.0)`. `--bind lan` unnecessary. |
 | **G4** | "Seed config is schema-invalid." | ❌ **Refuted.** It validates, `meta.lastTouchedVersion: "2026.4"` included. The blocker is missing `gateway.mode` (G5). |
 
 ### P1
 
 | # | Gap | Status |
 |---|---|---|
-| **G26** | `openclaw config schema` emits 9 dangling `#/$defs/` refs from two plugin sub-schemas; will not compile as published. Rebasing onto the nearest ancestor `$defs` resolves all 9. | 🆕 new — WO-36 needs a normalisation pass |
-| **G28** | **Plugin/runtime version skew.** The Bedrock plugin advertised v2026.9.1 against a v2026.8.1 runtime and refused. | 🆕 new — `models.yaml` must record a minimum runtime per plugin |
-| **G23** | Ollama default `localhost` unreachable from the container; `--add-host` never existed in the repo. | confirmed — **not** fixed by `9ea10ff`, which changed only prompt wording |
+| **G26** | `openclaw config schema` emits 9 dangling `#/$defs/` refs from two plugin sub-schemas; will not compile as published. Rebasing onto the nearest ancestor `$defs` resolves all 9. | 🆕 new: WO-36 needs a normalisation pass |
+| **G28** | **Plugin/runtime version skew.** The Bedrock plugin advertised v2026.9.1 against a v2026.8.1 runtime and refused. | 🆕 new: `models.yaml` must record a minimum runtime per plugin |
+| **G23** | Ollama default `localhost` unreachable from the container; `--add-host` never existed in the repo. | confirmed: **not** fixed by `9ea10ff`, which changed only prompt wording |
 | G10 · G11 · G12 · G13 · G14 · G16 · G17 · G22 | Health checks, backup of live SQLite, no post-upgrade repair, supervisor conflict, stale catalog, hardcoded ports, Node drift, plaintext OAuth at rest | carried forward; not spike-covered |
 
-WO-58's systematic audit still applies — the spikes covered runtime and config, not the remaining ~22 files.
+WO-58's systematic audit still applies. The spikes covered runtime and config, not the remaining ~22 files.
 
 ---
 ## 5. Work orders
 
 Sizes are T-shirts (S / M / L), not estimates. **v2.0.0 ships Phases 0–3 plus WO-49.**
 
-### Phase 0 — ground truth and release structure
+### Phase 0, ground truth and release structure
 
-**WO-50 — Cut the two release lines** *(D1 — M)* — ✅ **done**
+**WO-50. Cut the two release lines** *(D1. M)*, ✅ **done**
 Branched `1.x` at **v1.7.7**. Dist-tag is **`legacy`**, not `v1`: npm refuses any dist-tag that
 parses as a SemVer range, and `v1`, `v1.x` and `1.x` all parse as `>=1.0.0 <2.0.0-0`. One
 `release.yml` serves both branches; MCP registry publishing is restricted to `main`, since the
@@ -149,17 +149,17 @@ registry serves one current version per server. EOL **2027-03-31** recorded in `
 
 
 Branch `1.x` from v1.7.2; `main` becomes 2.x. Dist-tags `latest` → 2.x, `v1` → 1.x. Decide three
-things rather than gesture at them: the **EOL date — decided: 2027-03-31 (end of Q1 2027)**,
-recorded as a date in `SECURITY.md` and `docs/support-matrix.md` rather than a duration; backport scope (security + provider-adapter fixes only), and **which gaps apply to `1.x`** —
-**which gaps apply to `1.x`** — re-checked against shipped code, not the original
+things rather than gesture at them: the **EOL date, decided: 2027-03-31 (end of Q1 2027)**,
+recorded as a date in `SECURITY.md` and `docs/support-matrix.md` rather than a duration; backport scope (security + provider-adapter fixes only), and **which gaps apply to `1.x`**,
+**which gaps apply to `1.x`**. Re-checked against shipped code, not the original
 survey: **G3 was fixed in v1.7.2** (config delivery); **G7 survives only in the unreachable Pulumi
-`Gateway` component**, so no user is exposed. Branch point is **v1.7.6**, not v1.7.2 — v1.7.5 and
+`Gateway` component**, so no user is exposed. Branch point is **v1.7.6**, not v1.7.2, v1.7.5 and
 v1.7.6 both fixed live defects. The npm OIDC publish path is fussy; budget for it, and note that
 publishing from `1.x` must pass `--tag v1` or it will steal `latest` back from 2.x.
 
-**WO-58 — Systematic gap audit** *(M)* — ✅ **done** → [`docs/openclaw-2.0-gap-audit.md`](openclaw-2.0-gap-audit.md)
+**WO-58. Systematic gap audit** *(M)*. ✅ **done** → [`docs/openclaw-2.0-gap-audit.md`](openclaw-2.0-gap-audit.md)
 All 30 files read against the measured contract. Two results change Phase 1: **WO-38 grows** (the
-config mount must become a directory across four sites — a shape change, not a value change), and
+config mount must become a directory across four sites. A shape change, not a value change), and
 **WO-39 does not shrink** (state persistence is absent everywhere, not partial). One prerequisite is
 resolved: **`clawops agents restart` and its MCP tool are removed** (2.0 has no per-agent restart
 at all), while **`clawops agents logs` is kept** and re-points at `openclaw audit --agent`, which is
@@ -175,37 +175,37 @@ Findings so far, by where they landed:
 | G29 `openclaw-ctl` is not a binary | backup, MCP agents | fixed, v1.7.5 |
 | G30 restart paths pass no gateway command | `gateway restart`/`update`, `config set` | fixed, v1.7.5 |
 | G31 backup flags wrong; no `restore` upstream | backup | fixed, v1.7.5 |
-| **G32** MCP `clawops_gateway_restart` hand-rolled its own run command — same defect as G30, missed by the v1.7.5 sweep | `src/mcp/tools/cli/gateway.ts` | fixed, v1.7.6 |
-| **G33** restart paths fell back to `:latest`/`:stable` when no container was found — resolving to 2.0, *past* the version guard | 3 restart paths | fixed, v1.7.6 |
+| **G32** MCP `clawops_gateway_restart` hand-rolled its own run command, same defect as G30, missed by the v1.7.5 sweep | `src/mcp/tools/cli/gateway.ts` | fixed, v1.7.6 |
+| **G33** restart paths fell back to `:latest`/`:stable` when no container was found, resolving to 2.0, *past* the version guard | 3 restart paths | fixed, v1.7.6 |
 | G7 wrong registry | `src/pulumi/components/gateway.ts` | dead code → WO-38 |
-| Port hardcoded in 16 files | widespread | **WO-48** — fixed. The real count was 11 definitions (16 counted tests and comments); the two the WO-58 audit's list of 9 missed, `harden/modules/{ufw,aws-sg-audit}.ts`, were the two where it was a correctness bug rather than a maintenance one |
+| Port hardcoded in 16 files | widespread | **WO-48**: fixed. The real count was 11 definitions (16 counted tests and comments); the two the WO-58 audit's list of 9 missed, `harden/modules/{ufw,aws-sg-audit}.ts`, were the two where it was a correctness bug rather than a maintenance one |
 | `logs.ts` assumes a `journalctl -u openclaw` unit only the local provider creates | `src/cli/commands/logs.ts` | 2.0; falls through to `docker logs` by accident today |
 | `monitor.ts` reads `/home/clawops/openclaw.json` directly | `src/cli/commands/monitor.ts` | WO-39 |
 
 **Method note.** G32 and G33 were found by enumerating *every* site that starts a gateway container
-and asking which lacked the command — not by reading the diff of the previous fix. The v1.7.5 sweep
+and asking which lacked the command, not by reading the diff of the previous fix. The v1.7.5 sweep
 missed them because it followed the three paths a bug report named. Enumerate the surface, then
 check each element; do not follow the trail of the last defect.
 
-**WO-36 — Capture and normalise the config schema** *(S)* — ✅ **done**
+**WO-36. Capture and normalise the config schema** *(S)*, ✅ **done**
 Captured from `2026.9.1`. G26 confirmed: 9 refs, 7 distinct targets, **no root `$defs` at all**, and
 ajv refuses the document outright (`can't resolve reference #/$defs/account from id #`).
 
-The diagnosis is narrower than "dangling refs". The definitions **do** exist — nested under the two
+The diagnosis is narrower than "dangling refs". The definitions **do** exist, nested under the two
 plugins that own them (`plugins.entries.imap.config.$defs`, `…webhooks.config.$defs`). Upstream
 inlines each plugin's schema into the parent without hoisting its `$defs` or rewriting the pointers
 inside it, so root-relative refs point at definitions several levels down.
 
 `scripts/openclaw/normalise-schema.mjs` rebases each ref onto the **nearest ancestor** that defines
 it, rather than hoisting to a shared root `$defs`. On 2026.9.1 the two shared names (`secretRef`,
-`secretInput`) are byte-identical between the plugins, so hoisting would work today — and would
+`secretInput`) are byte-identical between the plugins, so hoisting would work today, and would
 silently merge them the first release they diverge, pointing each plugin's refs at the other's
 shape. The script refuses rather than guesses when a ref matches no ancestor.
 
 987 KB minified, compiles in ~0.9 s, idempotent. Drift is a weekly workflow, not a PR check: the
 image is 3.2 GB.
 
-**The schema is necessary, not sufficient — and this is the load-bearing result.** A config with no
+**The schema is necessary, not sufficient, and this is the load-bearing result.** A config with no
 `gateway.mode` passes this schema *and* passes `openclaw config validate`, then exits **78** on
 startup:
 
@@ -216,7 +216,7 @@ startup:
 All three observed on 2026.9.1. So schema validation cannot be promoted into a startup guarantee,
 and a test asserts that so nobody does.
 
-**WO-37 — Rewrite `spec/openclaw-versions.yaml`** *(S)* — ✅ **done, with one deliberate deviation**
+**WO-37. Rewrite `spec/openclaw-versions.yaml`** *(S)*. ✅ **done, with one deliberate deviation**
 Added the `runtime:` block (image, variants, paths, ports, env names, startup contract, per-provider
 plugin facts) as WO-38's machine-readable source, rewrote `incompatible` from measurements, and
 retired the obsolete Bedrock/systemd quirk in favour of the 2.0 plugin-install quirk.
@@ -224,25 +224,25 @@ retired the obsolete Bedrock/systemd quirk in favour of the 2.0 plugin-install q
 **`support.min` was NOT flipped to 2026.9.1, and must not be until WO-40.** The work order as written
 would have inverted the guard. `support.min`/`max`/`recommended` are enforced live by `up`, `plan`,
 `apply` and `doctor`; the runtime code is still 1.x-shaped. Flipping now makes clawops refuse
-`2026.7.1-2` — the only version it can deploy correctly — and accept `2026.9.1+`, which it would
+`2026.7.1-2`. The only version it can deploy correctly, and accept `2026.9.1+`, which it would
 deploy with the 1.x contract and crash-loop. Exactly the failure the guard exists to prevent.
 
 Instead the file carries `line: "1.x"`, and `tests/openclaw/line-interlock.test.ts` gates the flip:
 setting `line: "2.x"` fails CI until the runtime writes `gateway.mode` and stops passing
-`--allow-unconfigured`. Verified by flipping it — the suite fails with *"the 2.x line must not depend
-on --allow-unconfigured"* — and restoring.
+`--allow-unconfigured`. Verified by flipping it. The suite fails with *"the 2.x line must not depend
+on --allow-unconfigured"*, and restoring.
 
-**WO-59 — Privilege-correct remote execution** *(M — new, found by SP-11 tier 3)* — ✅ **done**
+**WO-59. Privilege-correct remote execution** *(M. New, found by SP-11 tier 3)*, ✅ **done**
 Every day-2 command that touches Docker is broken on AWS and has been: clawops connects as `ubuntu`,
 provisioning only adds `clawops` to the docker group, and only `remote-config.ts` uses the sudo
-fallback. Nine other files call Docker directly. A second failure hides behind it — the token env
+fallback. Nine other files call Docker directly. A second failure hides behind it, the token env
 file sits in a `750 clawops` directory, so the `[ -s … ]` env-file test is false for `ubuntu` and the
 gateway starts with no token. GCP and Azure connect as `clawops`, which is why only AWS is affected.
 Promote `execWithFallbackSudo` into the transport layer and route every remote Docker call through it.
 
-### Phase 1 — runtime contract
+### Phase 1, runtime contract
 
-**WO-38 — One runtime contract, one builder** *(L — the critical path)* — ✅ **done**
+**WO-38, One runtime contract, one builder** *(L, the critical path)*, ✅ **done**
 `src/openclaw/runtime.ts` is the only place a gateway container starts: six hand-written `docker run`
 strings collapsed into one builder with six callers. The dead Pulumi `Gateway` component (G7) is
 deleted rather than fixed. `gatewayRunArgs` and `gatewayRunCommand` differ only in supervision, so
@@ -250,12 +250,12 @@ the systemd ExecStart line and the detached path are provably the same command.
 
 Adopted from SP-06's live-cell profile: `--cap-drop=ALL`, `--security-opt no-new-privileges`,
 `--init`, `--pids-limit 512`, and **loopback publishing**. Fleet's `--memory`/`--cpus` are *not*
-adopted by default — those divide one host between tenants, and inheriting a 2 GB cap would shrink a
+adopted by default. Those divide one host between tenants, and inheriting a 2 GB cap would shrink a
 large single-tenant box rather than protect it; they are opt-in via `limits`.
 
 Loopback publishing broke exactly one caller, found by tracing it rather than by testing after:
 local bootstrap polled `http://<host>:18789/health` from the operator's machine. It now probes the
-host's loopback over the SSH session. `clawops tunnel` was already safe — it forwards to
+host's loopback over the SSH session. `clawops tunnel` was already safe, it forwards to
 `localhost` on the remote.
 
 One bug caught in the writing: passing `'"\${VAR}"'` from a plain string literal (rather than the
@@ -264,13 +264,13 @@ expands. It rendered plausibly and would have failed on the host. There is now a
 generated script contains `\${`.
 
 Loopback is a **default**, not a lock: `network.publishGateway: 'loopback' | 'all'` makes exposure
-an explicit choice. It is deliberately **not** derived from `allowedGatewayCidrs` — the plan
+an explicit choice. It is deliberately **not** derived from `allowedGatewayCidrs`, the plan
 originally said WO-41 would couple them, and that was wrong. The wizard filled that field from the
 CIDR given for *SSH*, so coupling would have re-opened a plaintext HTTP dashboard to someone's
 shell-access network, silently, on the default path. The wizard now leaves it empty.
 
 Restart paths preserve the scope by inspecting the running container's port bindings, the same way
-they preserve the image version — the mirror of the v1.7.6 bug, where a restart silently *widened*
+they preserve the image version. The mirror of the v1.7.6 bug, where a restart silently *widened*
 the version.
 
 *Original text follows.*
@@ -281,10 +281,10 @@ Fleet's profile, **validated against a live cell** (SP-06): loopback publishing,
 `--init`, pids/memory/cpu limits, a dedicated bridge network. Roughly 60% of the value for 15% of the
 effort.
 
-**WO-39 — Persist state** *(G2, G3, G25 — M)* — ✅ **done** → [`SP-11`](spikes/SP-11-wo-39-state-audit.md)
+**WO-39. Persist state** *(G2, G3, G25. M)*. ✅ **done** → [`SP-11`](spikes/SP-11-wo-39-state-audit.md)
 
 Audit changes the shape. **One bind mount of `/home/node/.openclaw` covers config, SQLite state
-and installed plugins** — not the three mounts this work order assumed — and `OPENCLAW_CONFIG_PATH`
+and installed plugins**, not the three mounts this work order assumed, and `OPENCLAW_CONFIG_PATH`
 can be deleted rather than re-pointed, because the standard path is already the default. Verified:
 state survives container replacement, and a plugin pre-installed at provisioning loads with
 `--network none`, no refetch, no convergence restart.
@@ -298,35 +298,35 @@ comes up with no configuration.
 G25 is **verified end to end** on real Linux (Docker-in-Docker, so the mount is a native bind
 mount): `useradd clawops` gets uid 1001 on Ubuntu 24.04, the gateway writes as uid 1000, and a
 1001-owned state dir makes it exit 1 with `EACCES … openclaw.sqlite-wal`. Numeric `chown 1000:1000`
-runs clean. The failure is loud rather than silent — but under `--restart unless-stopped` it is a
+runs clean. The failure is loud rather than silent, but under `--restart unless-stopped` it is a
 permanent crash-loop, so provisioning has to get it right first time.
 
 Original text follows.
 
-Mount the **config directory**, not the config file — atomic rename over a bind-mounted file fails
+Mount the **config directory**, not the config file. Atomic rename over a bind-mounted file fails
 `EBUSY`, which blocks `plugins install` outright (SP-10b §4). Pre-installed plugins then persist
 inside that directory, so no separate plugin volume is required (SP-10b §5).
 
-Host `/var/lib/clawops/openclaw` at the **standard** container path `/home/node/.openclaw` — SP-01
+Host `/var/lib/clawops/openclaw` at the **standard** container path `/home/node/.openclaw`. SP-01
 proved identity mapping unnecessary here, and the standard path matches upstream and Fleet. Drop
 `:ro`, drop `--rm`, mount the auth-profile secret dir and a persistent `/home/node`.
 **Ownership must be numeric (uid 1000), never `clawops:clawops`** (G25).
-*Exception:* when sandboxing is enabled the state dir **must** be identity-mapped (SP-04) — see WO-53.
+*Exception:* when sandboxing is enabled the state dir **must** be identity-mapped (SP-04), see WO-53.
 
-**WO-40 — Auth and startup posture** *(G1′, G5, G6, G7, G13 — M)* — ✅ **done. The line is now 2.x.**
+**WO-40. Auth and startup posture** *(G1′, G5, G6, G7, G13. M)*, ✅ **done. The line is now 2.x.**
 `--allow-unconfigured` dropped; `OPENCLAW_SUPERVISOR_MODE=external` set, which disables OpenClaw's
-self-update — verified in the image's own `gateway-supervision` module and confirmed at runtime
+self-update. Verified in the image's own `gateway-supervision` module and confirmed at runtime
 (`openclaw update` reports the external supervisor). Without it a self-update would drift the running
 version away from the pinned one, defeating the version guard from the inside. The registry typo (G7)
 went with the Pulumi component in WO-38.
 
 **A gap WO-39 left, found by auditing before implementing.** A migrated 1.x config has no
-`gateway.mode`, so dropping the flag would have made every upgraded deployment exit 78 — measured.
+`gateway.mode`, so dropping the flag would have made every upgraded deployment exit 78, measured.
 Migration now normalises the config with OpenClaw's own `config set gateway.mode local`, which is
 schema-aware, atomic, and applies OpenClaw's internal migrations at the same time.
 
 `spec/openclaw-versions.yaml` is flipped: `line: "2.x"`, `support.min: 2026.9.2`, no ceiling. The
-interlock test passes, which is the point — it was written so this flip could not be declared before
+interlock test passes, which is the point. It was written so this flip could not be declared before
 the runtime could honour it.
 
 Original text follows.
@@ -334,21 +334,21 @@ Original text follows.
 **Write `gateway.mode: "local"` and stop passing `--allow-unconfigured`.** Measured on 2026.9.1:
 with `mode` present the gateway starts *without* the flag; with the flag it starts regardless of
 what the config says. Today clawops writes no `mode` and passes the flag, so it depends on the
-escape hatch permanently — and that hatch exists to bypass a check upstream describes as detecting
+escape hatch permanently, and that hatch exists to bypass a check upstream describes as detecting
 "suspicious or clobbered config". Keeping it means clawops can never notice a clobbered config.
 
 **The token is the fix, not the bind mode.** Supply it via `OPENCLAW_GATEWAY_TOKEN`, never argv.
 Write `gateway.mode: "local"` into the config the gateway actually reads; drop `--allow-unconfigured`
 from the steady state. **Pin `--port` on argv** so config can never move the listener. Fix the
-registry typo. Set `OPENCLAW_SUPERVISOR_MODE=external`. Publish to `127.0.0.1:<port>` only —
+registry typo. Set `OPENCLAW_SUPERVISOR_MODE=external`. Publish to `127.0.0.1:<port>` only.
 SP-01 confirmed `clawops tunnel` reaches it while the LAN address and internet do not, so the firewall
-need not open 18789 at all. **Breaking change:** anyone hitting `:18789` directly loses that path —
+need not open 18789 at all. **Breaking change:** anyone hitting `:18789` directly loses that path,
 migration-guide entry plus a `spec.network.publish` escape hatch.
 
-**WO-51 — Enforce the version pin both ways** *(G9 — S)* — ✅ **done**
+**WO-51. Enforce the version pin both ways** *(G9. S)*, ✅ **done**
 The range check and resolve-before-check already existed; the gap was **where they were applied**.
-`up`, `plan` and `apply` guarded. `gateway update` — *the only command whose purpose is to change the
-deployed version* — did not, and its default was the moving tag `stable`, handed straight to
+`up`, `plan` and `apply` guarded. `gateway update`. *The only command whose purpose is to change the
+deployed version*. Did not, and its default was the moving tag `stable`, handed straight to
 `docker pull`. Guarding after the pull is guarding after the damage: the image is on the host and the
 container has been replaced with it.
 
@@ -356,25 +356,25 @@ It now resolves and range-checks before pulling, and defaults to the recommended
 moving tag. Two tests assert that nothing reaches the host when the version is refused.
 
 The guard's messages were also written from the 1.x side. **too-old** now points at
-`@clawops/cli@legacy` — the mirror of the 1.x guard pointing here — instead of only saying "upgrade
+`@clawops/cli@legacy`. The mirror of the 1.x guard pointing here, instead of only saying "upgrade
 OpenClaw", which is wrong advice for someone deliberately running a 1.x runtime.
 
 *Original text follows.*
 
 `2.x` refuses `< 2026.9.1`; `1.x` refuses `>= 2026.8.1`. Resolve `latest`/`stable` **before** the
-range check — resolving after is how the unbounded ceiling survived.
+range check. Resolving after is how the unbounded ceiling survived.
 
-### Phase 2 — config, plan, catalogs
+### Phase 2, config, plan, catalogs
 
-**WO-41 — Validate before writing** *(G4-adjacent — M)* — ✅ **done**
+**WO-41. Validate before writing** *(G4-adjacent. M)*, ✅ **done**
 The captured schema (WO-36) finally has a consumer. It replaces a hand-written validator with five
-rules — top-level `version`, `channels` as an array, `meta` shape, `gateway.port` type,
-`gateway.auth.mode` — that knew nothing of `models.providers` and nothing of `gateway.mode`.
+rules. Top-level `version`, `channels` as an array, `meta` shape, `gateway.port` type,
+`gateway.auth.mode`. That knew nothing of `models.providers` and nothing of `gateway.mode`.
 
 **Two things the work order did not anticipate.**
 
 *The schema alone would have made clawops refuse valid configs.* It rejects unknown keys in 36 of its
-43 sections, and this line declares no version ceiling — so a deployment may legitimately run a newer
+43 sections, and this line declares no version ceiling, so a deployment may legitimately run a newer
 OpenClaw with settings the pinned schema has never seen. Unknown keys are therefore errors by
 default but **warnings when the deployed OpenClaw is newer than the release the schema was captured
 from** (`runtime.configSchemaCapturedFrom`). Wrong types and bad enums stay errors at every version:
@@ -382,11 +382,11 @@ a newer runtime explains an unknown key, not a string where an integer belongs.
 
 *The schema does not require `gateway.mode`.* Measured: a config missing it passes both this schema
 and `openclaw config validate`, then exits 78. It is optional upstream only because
-`--allow-unconfigured` can bypass the check — which WO-40 stopped passing. So clawops layers its own
+`--allow-unconfigured` can bypass the check, which WO-40 stopped passing. So clawops layers its own
 deployment-contract rule on top of the schema, and a test proves ajv really does accept what that
 rule rejects.
 
-`cli/commands/config.ts` also had its own hand-rolled base64/mv/chown write — a second copy of
+`cli/commands/config.ts` also had its own hand-rolled base64/mv/chown write, a second copy of
 `atomicWriteConfig` that would have skipped validation entirely, exactly as the MCP restart path once
 skipped the shared run-command builder. It goes through the shared writer now.
 
@@ -398,13 +398,13 @@ untouched; a test asserts no `mv` onto the real path happens.
 ajv against the WO-36 schema before `atomicWriteConfig`; respect the clobber guards; surface
 `<path>.rejected.<timestamp>`; add `clawops config validate`.
 
-**WO-42 — Deploy-plan schema v2** *(G16 — M)* — ✅ **done, and much smaller than written**
+**WO-42. Deploy-plan schema v2** *(G16. M)*. ✅ **done, and much smaller than written**
 
 Audited before implementing, and most of the work order turned out to be unnecessary or harmful:
 
 - **`apiVersion` is NOT bumped to v2.** It is a `const` in the schema, so bumping breaks every saved
   plan file. The additions contemplated here are all optional fields, which are backward compatible
-  by definition. The one genuine incompatibility — a v1 plan pinning a pre-2.0 OpenClaw — is already
+  by definition. The one genuine incompatibility. A v1 plan pinning a pre-2.0 OpenClaw, is already
   caught by the version guard with a better message than "unsupported apiVersion" (it names
   `@clawops/cli@legacy`). Bumping would replace a good error with a worse one.
 - **`spec.openclaw.plugins[]` is not added.** OpenClaw's own config already has a full `plugins`
@@ -414,7 +414,7 @@ Audited before implementing, and most of the work order turned out to be unneces
   instead.
 - **`network.publish` already exists** as `network.publishGateway`, added in WO-38.
 - **`workspace`, `permissionMode`, `image.variant` and extra mounts are not added.** Nothing consumes
-  them; they belong to WO-53, which is 2.1. A schema field is a promise — adding one clawops silently
+  them; they belong to WO-53, which is 2.1. A schema field is a promise, adding one clawops silently
   ignores is worse than not having it.
 
 **What the audit found instead.** `spec.openclaw.config` is free-form, so a plan carrying a config
@@ -425,7 +425,7 @@ catch.
 
 `validatePlanConfig` now checks the overlay against the OpenClaw schema during plan generation. It
 deep-merges onto `{gateway:{mode:'local'}}` first, because the overlay is applied to a provisioned
-config that already carries the mode — a shallow spread would drop it and report an error the
+config that already carries the mode. A shallow spread would drop it and report an error the
 operator never made. (Written as a spread first; the test caught it.)
 
 *Original text follows.*
@@ -433,7 +433,7 @@ operator never made. (Written as a spread first; the test caught it.)
 `spec.openclaw.{workspace,permissionMode,plugins[],image.variant}`, `spec.network.ports[]` and
 `spec.network.publish`, plus extra-mount fields. Migration path for existing `clawops.dev/v1` plans.
 
-**WO-43 — Catalogs, and provider plugins at bootstrap** *(G8, G14, G15, G27, G28 — L, was M)* — ✅ **core done**
+**WO-43. Catalogs, and provider plugins at bootstrap** *(G8, G14, G15, G27, G28. L, was M)*, ✅ **core done**
 
 **Three providers need a plugin, not one.** Derived from `plugins list --json` in a bare container:
 24 provider ids ship bundled, and of the six clawops offers, **deepseek, kimi and bedrock** are not
@@ -441,7 +441,7 @@ among them. The silent-absence problem was never Bedrock-specific.
 
 **G28 is live and worse than "declare a minimum runtime".** All three ClawHub packages moved from
 `2026.9.2` to `2026.9.3` *within hours* on 2026-09-08, and the new builds declare
-`requires plugin API >=2026.9.3` — which the supported floor does not satisfy. Installing `latest`
+`requires plugin API >=2026.9.3`, which the supported floor does not satisfy. Installing `latest`
 would mean a plan that deployed in the morning fails in the afternoon: the same hazard as the moving
 `latest` image tag the version guard exists to prevent.
 
@@ -451,13 +451,13 @@ floor. Advancing them is a coordinated change with the runtime floor;
 install at all. It currently reports all three BLOCKED, which is the pin doing its job.
 
 **Installed at apply, not at boot.** `apply` installs pinned plugins after writing the config and
-before the restart, while the deploy still has egress — then reconciles configured
+before the restart, while the deploy still has egress, then reconciles configured
 `models.providers` against loaded `providerIds` and warns if any did not load. Verified end to end:
 pre-installed then booted with `--network none` → `restarts=0`, nothing refetched, no missing
 providers; and the same config *without* the pre-install → gateway `running exit=0` while the
 reconcile correctly reports `["amazon-bedrock"]`.
 
-**Deferred, and re-homed:** `integrations.yaml` channel work is untouched — it is channel
+**Deferred, and re-homed:** `integrations.yaml` channel work is untouched, it is channel
 configuration rather than the startup-blocking provider path. I first filed it against WO-45, which
 was wrong: WO-45 is upgrade/repair/rollback and would have swallowed it. Nothing covered channel
 catalog work, so it is now **WO-60**. The ClawHub egress
@@ -473,13 +473,13 @@ Bigger than first scoped, because provider plugins are **startup-blocking**:
   `modelPolicy.allow`, Bedrock via `auth.profiles.<id>.mode: "aws-sdk"`.
 - `integrations.yaml`: correct per-channel token fields, required `dmPolicy`/`groupPolicy`, SecretRef
   credentials, per-channel plugin package and port needs.
-- **New egress dependency: ClawHub** — feeds `/audit-egress` and the firewall notes.
+- **New egress dependency: ClawHub**. Feeds `/audit-egress` and the firewall notes.
 - Ollama via `host.docker.internal` + `--add-host` (G23).
 
-### Phase 3 — lifecycle
+### Phase 3, lifecycle
 
-**WO-44 — Real health checks and the observability surface** *(G10 — M)* — ✅ **health checks done;
-the two carried-in observability items remain** — `/startupz` gates apply;
+**WO-44. Real health checks and the observability surface** *(G10. M)*, ✅ **health checks done;
+the two carried-in observability items remain**, `/startupz` gates apply;
 `/readyz` drives status and monitor; `docker inspect` becomes a fallback. Add `doctor --lint --json`
 as post-apply preflight.
 
@@ -488,34 +488,34 @@ as post-apply preflight.
 `{"ok":true,"status":"started"}`, `/readyz` returns `{"ready":true}`.
 
 **The finding that reshaped this.** The gateway serves its Control UI on a catch-all route, so *any*
-unmatched path answers **200 with `text/html`** — `/health-typo` and
+unmatched path answers **200 with `text/html`**, `/health-typo` and
 `/obviously-not-a-real-endpoint` both do. clawops's probe was `curl -fsS … >/dev/null`, which
 **passes on a typo**. It proved something was listening on the port, not that the gateway was
 healthy, and would have gone on passing if the endpoint were renamed upstream. Every probe now
-judges the JSON body, and rejects HTML with a reason that names the cause — otherwise an operator
+judges the JSON body, and rejects HTML with a reason that names the cause, otherwise an operator
 reasonably suspects the gateway when the real problem is the path.
 
 Three probes on two paths (`remote-config.ts` on `/healthz`, `bootstrap.ts` and `monitor.ts` on
 `/health`) became one module. The restart gate moved to `/startupz`: after a restart the process
 listens long before startup finishes, so a liveness probe returns ok while the gateway is still
-converging — and the caller is about to report success.
+converging, and the caller is about to report success.
 
 **Also fixed here, because the audit's record was wrong.** The carried-forward table claimed WO-39
 had moved `monitor.ts` off the pre-2.0 config path. It had not: `monitor.ts` still read
 `/home/clawops/openclaw.json`, and both it and `doctor.ts` reported disk usage for
-`/home/clawops` — while 2.0's SQLite grows in `/var/lib/clawops/openclaw`, so the disk gauge watched
+`/home/clawops`, while 2.0's SQLite grows in `/var/lib/clawops/openclaw`, so the disk gauge watched
 the wrong filesystem.
 
 **Both carried items are now done.** ✅
 
-`src/openclaw/logs.ts` owns the log commands, so the CLI and the MCP tool cannot drift — they
+`src/openclaw/logs.ts` owns the log commands, so the CLI and the MCP tool cannot drift, they
 had hand-rolled the identical `journalctl … || docker logs` chain, and would have drifted the
 moment one was fixed.
 
 Logs come from `openclaw logs`, which reads the gateway's structured log file over RPC. That
 makes the fallback necessary rather than accidental: a gateway that is down cannot serve its
 own logs, and that is when they are wanted. clawops probes first, falls back to container
-output, and **reports which source answered** — the missing half of the original finding. The
+output, and **reports which source answered**. The missing half of the original finding. The
 old chain did not say, so a missing log line was indistinguishable from a source never read.
 
 `--since` selects the container source, because `openclaw logs` has no time window. Serving it
@@ -528,12 +528,12 @@ would be a different thing wearing the old name.
 
 *Original text follows.*
 
-**Still open — carried in from the WO-58 audit.** Both were originally filed against WO-38, which
+**Still open. Carried in from the WO-58 audit.** Both were originally filed against WO-38, which
 closed without them, so they were re-homed here:
 
 - **`logs.ts` and `mcp/tools/cli/logs.ts` assume a systemd unit.** They run
   `journalctl -u openclaw || docker logs openclaw`. Only the local provider creates that unit, so
-  cloud VMs work *by accident* — the first command fails and the fallback produces the right output
+  cloud VMs work *by accident*. The first command fails and the fallback produces the right output
   for the wrong reason, hiding which one ran. 2.0 offers `openclaw logs --follow --json --limit` over
   RPC, which is strictly better and removes the assumption rather than documenting it.
 - **`clawops agents logs <name>` no longer scopes to an agent.** 2.0 removed `agents logs`; the verb
@@ -542,7 +542,7 @@ closed without them, so they were re-homed here:
   `openclaw logs` is gateway-wide and its envelope carries no agent key, so filtering it would mean
   substring-matching `message`/`raw`.
 
-**WO-45 — Upgrade, repair, rollback** *(G12 — M)* — ✅ **done** — verified backup → image swap → `/startupz` gate →
+**WO-45. Upgrade, repair, rollback** *(G12. M)*. ✅ **done**. Verified backup → image swap → `/startupz` gate →
 one-shot `doctor --fix` on failure. Refuse downgrade across the SQLite boundary. SP-07 found the
 startup-safe path handled a real 1.x→2.0 migration with **no** `doctor --fix` needed, so treat the
 fallback as exceptional rather than routine.
@@ -552,7 +552,7 @@ container was created, not that the gateway started, and the container it replac
 by then. It now snapshots the state, asks the **target** release whether it understands the schema,
 and refuses if not.
 
-**The backup is not merely a safety net — it is what makes the check possible.** `database preflight`
+**The backup is not merely a safety net. It is what makes the check possible.** `database preflight`
 refuses a live database:
 
 > `SQLite preflight requires a consolidated snapshot with no sidecars; found -wal, -shm.`
@@ -562,7 +562,7 @@ produces a consolidated snapshot with a `userVersion` in its manifest) has to co
 the sequence in this work order is ordered the way it is, which was not obvious before measuring.
 
 **The downgrade guard is written but NOT demonstrated.** The rule is `foundVersion > targetVersion`
-→ refuse. Every 2.x image checked — `2026.8.1`, `2026.9.1`, `2026.9.2` — reports `userVersion: 15`,
+→ refuse. Every 2.x image checked. `2026.8.1`, `2026.9.1`, `2026.9.2`, reports `userVersion: 15`,
 so **no released pair exercises the rejection**; it is unit-tested against synthetic reports. The
 guard exists before it is needed, which is the point of a guard, but it should not be described as
 proven.
@@ -571,83 +571,83 @@ proven.
 `doctor --fix` in a **throwaway container** (the gateway may be crash-looping, where `docker exec`
 races the restart), re-runs, and re-gates. Still failing, it rolls back to the image that was running
 before the command touched anything. If the rollback will not come up either, the message names the
-snapshot — the only way back.
+snapshot, the only way back.
 
 Repair is deliberately **one shot, not a retry loop**: repeating it would thrash a deployment whose
 problem is something else.
 
 **Correction (2026-09-09).** This work order shipped `repairCommand` as
-`openclaw doctor --fix --json`, which the CLI refuses outright — *"doctor --json runs read-only lint
+`openclaw doctor --fix --json`, which the CLI refuses outright, *"doctor --json runs read-only lint
 checks and cannot be combined with --repair, --fix, or --force"*. The repair step could only ever
 fail. The unit tests drive a fake that returns success for any command, so nothing noticed until the
 WO-52 audit ran it against the real image. Now `--fix --non-interactive --yes`, with the exit code
 ignored (doctor exits 1 on advisories), and a test asserting the two flags are never combined.
 
-The decision — did not start → repair → still did not start → roll back — lives in `resolveUpgrade`
+The decision. Did not start → repair → still did not start → roll back, lives in `resolveUpgrade`
 with the three effects injected. It was first written inline in the CLI and tested through a fake SSH
 session with fake timers, which timed out: the command awaits dynamic imports that fake timers do not
 settle. Extracting it made the branch that matters testable in milliseconds, without a session or a
 30-second gate.
 
-**WO-46 — Delegate backup** *(G11, G22 — M)* — ✅ **done** — `openclaw backup create --verify` over SFTP; restore
-into a staging dir, never in place. Archives carry plaintext OAuth — say so, restrict permissions.
+**WO-46. Delegate backup** *(G11, G22. M)*. ✅ **done**. `openclaw backup create --verify` over SFTP; restore
+into a staging dir, never in place. Archives carry plaintext OAuth, say so, restrict permissions.
 
 **Done.** `clawops backup restore` delegates to `openclaw backup restore --target <staging> --json`.
 clawops uploads the archive and extracts nothing itself: upstream verifies, expands into a **fresh**
 directory, and refuses a non-empty target ("Backup restore target directory must be empty"), so the
 never-in-place requirement is enforced by the tool that owns the data rather than by our care.
 
-The restore emits five warnings — time travel, channel credentials needing relink, rolled-back
+The restore emits five warnings. Time travel, channel credentials needing relink, rolled-back
 approvals, plugin `node_modules` not archived, plugin-skills links not archived. They are printed
 **verbatim**: they describe consequences clawops cannot judge for the operator, and summarising them
-would lose the detail that matters. The plugin one interacts with WO-43 — a restored deployment
+would lose the detail that matters. The plugin one interacts with WO-43, a restored deployment
 starts without its model providers unless `apply` is re-run, and looks healthy doing it.
 
 **G22, verified rather than asserted.** The archive carries the state database, whose tables include
-`mcp_oauth_stores`, `secret_store_entries`, `worker_environment_credentials` and `device_auth_tokens`
-— unencrypted. There is no file named "credentials"; the credentials are *in the database*. OpenClaw
+`mcp_oauth_stores`, `secret_store_entries`, `worker_environment_credentials` and `device_auth_tokens`,
+all unencrypted. There is no file named "credentials"; the credentials are *in the database*. OpenClaw
 writes the archive `0600` on the host, but clawops was writing the local copy with the default
 `0644`. Now `0600`.
 
-**A transport gap this exposed.** `SshSession` had `exec` (collect output) and `stream` (read output)
-— no write path at all, so there was no way to send a file to the host. Base64 through `exec` would
+**A transport gap this exposed.** `SshSession` had `exec` (collect output) and `stream` (read output),
+but no write path at all, so there was no way to send a file to the host. Base64 through `exec` would
 have worked for a 40 KB archive and failed at `ARG_MAX` for a real one. `execWithInput` was added,
 plus `execPrivilegedWithInput`, because the upload runs `docker exec` and needs the same escalation
 as every other Docker call on AWS.
 
-That last point was caught by the WO-59 guard test — but only after widening it: it matched
+That last point was caught by the WO-59 guard test, but only after widening it: it matched
 `session.exec(` and `session.stream(`, and `session.execWithInput(` slipped straight past.
 
 **Both of those were then closed properly, on review.** The first pass left two things unproven:
 
-- **`execWithInput` had no test at all** — it appeared in the suite only inside the guard's regex
+- **`execWithInput` had no test at all**. It appeared in the suite only inside the guard's regex
   string. The real ssh2 write path was entirely unverified, and `execPrivilegedWithInput`'s
   escalation had no coverage either. Now covered by **real-SSH integration tests** against
   `linuxserver/openssh-server`: byte-for-byte fidelity through a channel, a **6 MB** upload (past
   `ARG_MAX`, which is the whole reason the method exists rather than base64-through-`exec`), EOF
-  signalling — without which `cat` blocks forever and the promise never settles, so the test timing
-  out *is* the assertion — and non-zero exit propagation.
+  signalling, without which `cat` blocks forever and the promise never settles, so the test timing
+  out *is* the assertion, and non-zero exit propagation.
 - **The guard was coupled to the variable name.** It matched `session.` literally, so the same call
   on a differently-named receiver would have slipped past. It now matches any receiver, with
   `src/transport/*` excluded because that is the implementation. Verified by renaming a receiver and
   watching it report `backup.ts:96`.
 
-The byte assertion was also weak — it asserted the mocked stream's own payload length, which would
+The byte assertion was also weak. It asserted the mocked stream's own payload length, which would
 pass even if the command opened a different file. It now asserts that **the archive the user named**
 is the file read, verified by pointing the code at a different path and watching it fail.
 
-**WO-52 — `clawops migrate`** *(D2 — L; rewritten after SP-07)* — ✅ **done**
+**WO-52. `clawops migrate`** *(D2. L; rewritten after SP-07)*, ✅ **done**
 The drafted sequence was wrong in two ways:
 1. **There is no 1.x host layout to relocate.** All 1.x state is *inside the container*. Migration must
    extract from the **running** container; stopping it first destroys what it came to save.
 2. **There is no config to carry forward.** 1.x never wrote one, and 2.0 then blocks with
    `Missing config` → exit 78. Migration must **synthesise** a valid 2.0 config from the deploy plan,
-   treating the old ignored `/home/clawops/openclaw.json` as *intent to review* — never applied
+   treating the old ignored `/home/clawops/openclaw.json` as *intent to review*, never applied
    blindly, since it has never been in force and its channel blocks will not validate.
 
 Verified sequence: extract → `chown 1000:1000` → stop/remove → synthesise config → start with state
 volume + `OPENCLAW_CONFIG_PATH` + token → gate on `/startupz` → report. Must refuse without a verified
-backup, and must **verify device-identity continuity** — identity moves into SQLite during migration,
+backup, and must **verify device-identity continuity**. Identity moves into SQLite during migration,
 and if `deviceId` changes, paired devices need re-pairing (SP-07 could not confirm this on an install
 with no pairings).
 
@@ -656,7 +656,7 @@ It should also say plainly when there was nothing to rescue: given G2, any user 
 
 **Done.** `clawops migrate` implements the verified sequence, with two corrections to the text above:
 
-- **`OPENCLAW_CONFIG_PATH` is not used** — WO-39 deleted it. The synthesised config goes *into* the
+- **`OPENCLAW_CONFIG_PATH` is not used**. WO-39 deleted it. The synthesised config goes *into* the
   mounted state directory, which is OpenClaw's own default location.
 - **The gateway needs two starts.** Measured 2026-09-09: the first reports
   `state database schema migration required (audit-events-v2)` and is healthy only after a second.
@@ -664,32 +664,32 @@ It should also say plainly when there was nothing to rescue: given G2, any user 
   report a deployment still converging.
 
 **Device identity continuity is closed**, by measurement rather than inference: `deviceId` is
-preserved and `identity/` is emptied — relocation into SQLite, not loss. The command still compares
+preserved and `identity/` is emptied. Relocation into SQLite, not loss. The command still compares
 before and after and reports `preserved` / `changed` / **`unknown`**, because a value it could not
 read must never be reported as continuity.
 
 The version guard runs against the **target only**. The source is a 1.x release this line refuses by
-design — which is the entire reason to migrate — so guarding it would refuse the deployment the
+design, which is the entire reason to migrate, so guarding it would refuse the deployment the
 command exists to rescue.
 
 **Mutation-checked before closing**, per the practice above. One survived: deleting the numeric
-`chown` left the test green, because `indexOf(a) < indexOf(b)` is satisfied when `a` never ran —
+`chown` left the test green, because `indexOf(a) < indexOf(b)` is satisfied when `a` never ran,
 `indexOf` returns `-1`. Every ordering assertion in that file had the same flaw. 28/28 now caught.
 
-### Phase 4 — surface, hardening, release
+### Phase 4, surface, hardening, release
 
-**WO-47 — MCP tool surface** *(S)* — ✅ **done** — declare in `spec/mcp-tools.yaml` first; add
+**WO-47. MCP tool surface** *(S)*. ✅ **done**. Declare in `spec/mcp-tools.yaml` first; add
 the doctor tool; all four annotation hints; 8 KB trim with the full report as a resource.
 
 **Named `clawops_doctor`, not `clawops_openclaw_doctor`.** The `cli` toolset maps tool names
 to CLI commands (`clawops_config_get` ← `config get`), and there is no `clawops openclaw
 doctor`. The `openclaw_` prefix would also read as OpenClaw's own `doctor`, which is the
-`--fix` repair path — deliberately *not* exposed: WO-45 gates repair on a verified backup,
+`--fix` repair path. Deliberately *not* exposed: WO-45 gates repair on a verified backup,
 and a read-only diagnostic tool that can also mutate the deployment is the wrong shape. The
 description says so, so an agent looking for repair is pointed at `gateway update`.
 
 **The blocker was structural, not missing code.** `doctor` wrote to stdout as it checked, and
-R15 forbids a stdio MCP server from writing to stdout at all — so exposing it would have
+R15 forbids a stdio MCP server from writing to stdout at all, so exposing it would have
 corrupted the protocol on every call. The checks moved to `src/diagnostics`, which returns a
 report; the command renders it and the tool serialises it. Neither owns the logic.
 
@@ -706,44 +706,44 @@ Two things surfaced once the checks were data:
 **Audit of the existing surface, which is where the real defects were:**
 
 - `clawops_config_{get,set,unset,validate}` each hand-rolled `cat` on a hardcoded *Linux*
-  path with an unprivileged exec. `remote-config.ts` was extracted for these callers — its
-  header says "so the MCP config handler and plan layer share one implementation" — and they
+  path with an unprivileged exec. `remote-config.ts` was extracted for these callers, its
+  header says "so the MCP config handler and plan layer share one implementation", and they
   never adopted it. Same defect as G32, same cause.
 - `clawops_agents_list` ran `… || echo "[]"` with `2>&1`, so every failure became an empty
   list. An agent cannot tell "no agents" from "could not ask", and acts on the first. The CLI
   had it too, plus a `catch { agents = [] }`. Both now fail.
 - The catalog was **cast**, not validated: a tool missing `readOnlyHint` generated
-  `readOnlyHint: undefined`, which compiles, ships, and leaves the client on its defaults —
+  `readOnlyHint: undefined`, which compiles, ships, and leaves the client on its defaults.
   R10 defeated silently. `scripts/lib/validate-mcp-spec.ts` now fails generation on that, on
   name-convention breaks, unknown toolsets, a read-only tool outside the `read` toolset (or a
-  writing one inside it — the dangerous direction, since `--read-only` would admit it), and
+  writing one inside it. The dangerous direction, since `--read-only` would admit it), and
   the R1/R2 caps. It is a separate module because gen-schemas generates on import, so a test
   importing it would rewrite the tree.
 - **Documented tables lied.** The README listed `clawops_ssh_exec` and
-  `clawops_agents_restart` — neither exists — and omitted five tools that do. The risk matrix
+  `clawops_agents_restart`. Neither exists, and omitted five tools that do. The risk matrix
   said "All 15 tools" above sixteen rows and marked three tools unavailable in `--read-only`
   that the catalog puts in the `read` toolset. Both fixed, and now asserted against the
   catalog in `tests/mcp/catalog.test.ts`.
-- `output:` blocks in the catalog are **inert** — nothing generates an `outputSchema` and no
+- `output:` blocks in the catalog are **inert**, nothing generates an `outputSchema` and no
   handler is checked against one. `clawops_status` declared `health`, `uptimeSec`,
   `openclawVersion` and `agentCount` for three releases while returning none of them. Its
   entry now matches the handler, and the file says the blocks are descriptive. Making them
-  real means an `outputSchema` per tool plus `structuredContent` from all 18 handlers —
+  real means an `outputSchema` per tool plus `structuredContent` from all 18 handlers,
   carried forward below, not smuggled into an (S).
 
 **Deliberately not exposed: `clawops_migrate` and `clawops_gateway_update`.** Both would need
-their effects extracted from `cli/commands/*.ts` first — the pure sequences live in
+their effects extracted from `cli/commands/*.ts` first, the pure sequences live in
 `openclaw/{migrate,upgrade}.ts`, but the effects that drive them do not. An MCP handler
 written against them today would hand-roll those effects, which is precisely the divergence
 this work order spent its time undoing. Carried forward.
 
 **Mutation-checked before closing.** Three survived, all of them behaviour I changed without
 asserting: the agents masking (CLI and MCP) and the config read path. One assertion of mine
-was also wrong rather than the code — `execPrivileged` tries direct and escalates only on
+was also wrong rather than the code. `execPrivileged` tries direct and escalates only on
 denial, so asserting `sudo` on the first call failed; the real guarantee is that a denied
 read is retried, which is what the test asserts now. 49/49 caught.
 
-**WO-48 — Plan-driven firewall, and the hardcoded port** *(G16 — S)* — ✅ **done, and it was
+**WO-48. Plan-driven firewall, and the hardcoded port** *(G16. S)*, ✅ **done, and it was
 not an (S)**
 
 The port half was the tidy-up. The firewall half turned out to contain three defects, each of
@@ -751,7 +751,7 @@ which made a security control do the opposite of what it says.
 
 **`clawops harden` opened the gateway port on every deployment.** The `ufw` module ran
 `ufw allow 18789/tcp` unconditionally. Since WO-38 the container publishes on `127.0.0.1`, so
-that rule opened a port nothing was listening on — a hardening step *widening* the firewall
+that rule opened a port nothing was listening on. A hardening step *widening* the firewall
 past what the deployment exposes. It now reads `PortBindings` off the running container and
 adds the rule only when the gateway is actually published, on whatever port it is published
 on. The container is the authority here, not the plan: `harden` runs after a deployment
@@ -764,13 +764,13 @@ to the world. It also read only `IpRanges`, so an IPv6 rule admitting `::/0` was
 Both fixed; a wide rule on any port is a finding now, and the named ones say what is exposed.
 
 **The setup wizard defaulted SSH to `0.0.0.0/0`.** The prompt's `default` was the whole
-internet, so the fastest path through the wizard — pressing Enter — produced the exact rule
+internet, so the fastest path through the wizard. Pressing Enter, produced the exact rule
 N10 exists to forbid, on the path most first-time users take. It now offers the operator's own
 egress IP as a `/32`, and when detection fails it offers *no* default and requires an answer.
 An unanswerable prompt is better than a wide one.
 
 **Cloud programs no longer create gateway ingress rules under loopback publishing.** They
-grant no access, and to anyone auditing the security group they read as an exposed gateway —
+grant no access, and to anyone auditing the security group they read as an exposed gateway,
 both readings wrong. `clawops plan` refuses the combination outright rather than silently
 dropping the rules, while the plan is still a file the operator can edit.
 
@@ -781,45 +781,45 @@ to the default and publishing somewhere the operator did not ask for. `tests/ope
 asserts `18789` appears in exactly one file.
 
 **The nine-file count in the work order was wrong: it was eleven,** and the two the audit
-missed were the ones that mattered — `harden/modules/ufw.ts` and `harden/modules/aws-sg-audit.ts`,
+missed were the ones that mattered. `harden/modules/ufw.ts` and `harden/modules/aws-sg-audit.ts`,
 where the hardcoded port was not a maintenance annoyance but a correctness bug.
 
 **Mutation-checked before closing.** One stale anchor surfaced: the WO-40 mutation for
 `gateway.mode` pointed at a literal that this work order parameterised, so it silently stopped
-applying. Re-anchored — a mutation that cannot apply is not a passing mutation.
+applying. Re-anchored. A mutation that cannot apply is not a passing mutation.
 
 *Original text follows.*
 
-**Carried in from the WO-58 audit:** the gateway port `18789` is hardcoded in **9 files** —
+**Carried in from the WO-58 audit:** the gateway port `18789` is hardcoded in **9 files**,
 `providers/{aws,azure,gcp}/program.ts`, `providers/local/bootstrap.{ts,sh.tmpl}`,
 `providers/startup.ts`, `openclaw/runtime.ts`, `cli/commands/monitor.ts` and the (now deleted)
 Pulumi component. Unchanged by 2.0, but it is why a port change is a nine-file edit. This was
-previously filed against "WO-42 / WO-48"; WO-42 closed without it, deliberately — it turned out to
-be plan-validation work — so WO-48 owns it alone now.
+previously filed against "WO-42 / WO-48"; WO-42 closed without it, deliberately, it turned out to
+be plan-validation work, so WO-48 owns it alone now.
 
 Ports from the plan, not module constants. With
 loopback publishing, the default set may be **SSH only**.
 
-**WO-61 — The MCP wiring was never wired** *(new — found while scoping WO-49)* — ✅ **done**
+**WO-61. The MCP wiring was never wired** *(new. Found while scoping WO-49)*, ✅ **done**
 
 Nothing in this plan covered `clawops mcp serve|install|wire`; WO-47 covered the tool
 *catalog*, not the commands that run and wire the server. Checking them found that
 `clawops mcp wire` has never worked, on any version clawops has shipped.
 
 **`gateway.mcpClients` is not a key OpenClaw has.** Verified against the config schema of
-**both** lines — `2026.7.1-2` and `2026.9.2` — neither has `gateway.mcpClients`; both use
+**both** lines. `2026.7.1-2` and `2026.9.2`. Neither has `gateway.mcpClients`; both use
 top-level `mcp.servers.<name>`, with an identical entry shape. WO-28 specified the key in
 `SPEC.md`, the spec was implemented faithfully, and it was marked ✅ in `SPEC.md` and
 `docs/roadmap.md` and shipped in v1.5. On 1.x nothing validated the write, so clawops stored
 a key nothing read, restarted the gateway, and printed *"The gateway's AI can now run clawops
-commands."* On 2.0, WO-41's validator rejects it — which is how it surfaced at all.
+commands."* On 2.0, WO-41's validator rejects it, which is how it surfaced at all.
 
 **And the entry could not have worked either.** It was `command: "clawops"` over stdio, which
 spawns *inside the gateway container*. `clawops` is not on PATH there and nothing installs
-it — checked against the image.
+it, checked against the image.
 
 **The fix is delegation, as in WO-45 and WO-46.** Both lines ship an identical `openclaw mcp`
-CLI — `add`, `probe`, `status`, `doctor`, `reload`, `unset`. `openclaw mcp add` **probes the
+CLI. `add`, `probe`, `status`, `doctor`, `reload`, `unset`. `openclaw mcp add` **probes the
 server before saving**, so clawops cannot write a working-looking entry for a server that is
 not answering: "wired" now means the gateway connected. A failed probe reports the upstream
 error and changes nothing. `add` refuses an existing name, so a rewire is `unset` then `add`,
@@ -827,7 +827,7 @@ behind an explicit `--rewire`.
 
 **The gate is a capability check, not a version comparison.** `2026.4.5` ships `openclaw mcp`
 with only `list` and `serve`; `add`, `unset` and `reload` arrive later in the 1.x range. So
-clawops asks the binary — `openclaw mcp add --help` — rather than inferring from a version
+clawops asks the binary. `openclaw mcp add --help`, rather than inferring from a version
 string. WO-28's `>= 2026.4` gate was invented the same way a version boundary would be, and
 it gated on a capability that never existed at all.
 
@@ -838,26 +838,26 @@ was already in the run command for host-local model runtimes.
 **Two bugs in `clawops mcp serve --http` came out of testing it:**
 
 - **It was single-client.** One `StreamableHTTPServerTransport` for the whole process, so the
-  first client to initialize claimed it and every later one — a second editor, a reconnect,
-  the gateway's own probe — got `"Server already initialized"`. The README advertises HTTP
+  first client to initialize claimed it and every later one, a second editor, a reconnect,
+  the gateway's own probe. Got `"Server already initialized"`. The README advertises HTTP
   mode as "remote / multi-client". Now one transport per session.
 - **It had no authentication at all**, while exposing every tool including `clawops_destroy`.
   It now takes a bearer token, compared in constant time, and **refuses to bind anywhere but
   loopback without one**.
 
 The existing `tests/mcp/http.test.ts` mocks the SDK, the HTTP module and the transport, so it
-could only ever check which transport was selected — which is how a single-client server
+could only ever check which transport was selected, which is how a single-client server
 passed it. `tests/mcp/http-live.test.ts` runs a real server on a real port.
 
 **Not in scope, deliberately:** clawops still does not run on the gateway host, so `mcp wire`
 wires a server the operator runs themselves and says so plainly instead of pretending. That
 is WO-62.
 
-**WO-63 — Install channel plugins, and stop trusting `channels add`'s exit code** *(M)* — ✅
+**WO-63. Install channel plugins, and stop trusting `channels add`'s exit code** *(M)*, ✅
 **done, in the 2.0 release**
 
 `clawops apply` installs channel plugins alongside model providers, before the restart, while
-the deploy still has egress — and verifies afterwards, because the gateway reports healthy
+the deploy still has egress, and verifies afterwards, because the gateway reports healthy
 either way.
 
 **It installs with `openclaw plugins install`, not `channels add`.** That is the whole point:
@@ -865,7 +865,7 @@ either way.
 printing the error and "Returning to selection". `plugins install` exits **1**. Verified.
 
 **Verification asks the gateway, not the exit code**: `channels list --all --json`, asserting
-`installed: true`. An entry that merely omits the field counts as not installed — the
+`installed: true`. An entry that merely omits the field counts as not installed, the
 listing's shape is upstream's to change, and only an explicit `true` means installed.
 
 **The pins are load-bearing, and the same G28 drift caught channels too.** Measured on
@@ -875,7 +875,7 @@ listing's shape is upstream's to change, and only an explicit `true` means insta
 plugin "discord" requires plugin API >=2026.9.3, but this OpenClaw runtime exposes 2026.9.2
 ```
 
-`@openclaw/discord@2026.9.3` — the current `latest` — refuses to install on the supported
+`@openclaw/discord@2026.9.3`. The current `latest`, refuses to install on the supported
 floor, exactly as all three provider plugins did on 2026-09-08. Every channel plugin is pinned
 to the floor, a test asserts the pins track `support.recommended`, and
 `check-plugin-pins.sh` now reports drift for both catalogs.
@@ -890,7 +890,7 @@ for them. The plugin being present is the half clawops can do.
 
 *Original text follows.*
 
-**WO-63 — Install channel plugins, and stop trusting `channels add`'s exit code** *(M)*
+**WO-63. Install channel plugins, and stop trusting `channels add`'s exit code** *(M)*
 
 WO-60 corrected the catalog and left the install to the operator. This does it, and it is a
 work order rather than a carried-forward note because the surface it automates is actively
@@ -898,7 +898,7 @@ misleading.
 
 **`openclaw channels add` exits 0 when the plugin install fails.** Measured on 2026.9.2: with
 npm unreachable it prints `Failed to install @openclaw/discord`, says "Returning to selection",
-and returns **0**. It exits **1** for a missing env var — so the exit code is not simply
+and returns **0**. It exits **1** for a missing env var, so the exit code is not simply
 unreliable, it is unreliable in the one case that matters. Anything driving it must re-read
 `openclaw channels list --all --json` and assert `installed: true`, exactly as WO-43 checks
 `providerIds` after installing a model provider rather than trusting the installer.
@@ -907,20 +907,20 @@ unreliable, it is unreliable in the one case that matters. Anything driving it m
 
 | Channel | Plugin | Non-interactive path |
 |---|---|---|
-| `telegram` | **bundled** — installs under `--network none` | `--use-env`, `TELEGRAM_BOT_TOKEN` |
+| `telegram` | **bundled**: installs under `--network none` | `--use-env`, `TELEGRAM_BOT_TOKEN` |
 | `discord` | `@openclaw/discord` from npm | `--use-env`, `DISCORD_BOT_TOKEN` |
 | `slack` | `@openclaw/slack` from npm | `--use-env`, `SLACK_APP_TOKEN` (Socket Mode) |
-| `whatsapp` | `@openclaw/whatsapp` from npm | **none — `--use-env` is rejected** |
-| `msteams` | `@openclaw/msteams` from npm | **none — `--use-env` is rejected** |
+| `whatsapp` | `@openclaw/whatsapp` from npm | **none: `--use-env` is rejected** |
+| `msteams` | `@openclaw/msteams` from npm | **none: `--use-env` is rejected** |
 
 So WO-63 splits in two. Telegram, Discord and Slack can be installed and configured during
 `apply` the way model providers are, with the same post-install verification. WhatsApp and
-Microsoft Teams have **no non-interactive path in OpenClaw at all** — `channels add` answers
-`OpenClaw does not recognize option "--use-env"` — so clawops cannot configure them without
+Microsoft Teams have **no non-interactive path in OpenClaw at all**, `channels add` answers
+`OpenClaw does not recognize option "--use-env"`, so clawops cannot configure them without
 upstream adding one. They stay documented-only until it does, and the catalog records that
 with `useEnvSupported: false` rather than the wizard discovering it at deploy time.
 
-**Slack was resolved before this was filed** — see WO-60's follow-up. Socket Mode is
+**Slack was resolved before this was filed**, see WO-60's follow-up. Socket Mode is
 OpenClaw's default and what `--use-env` drives, so the catalog now configures that and
 `infraRequired` is false.
 
@@ -928,7 +928,7 @@ OpenClaw's default and what `--use-env` drives, so the catalog now configures th
 `clawhub.ai`. Installing channels during `apply` extends the deploy-time egress requirement to
 npm on the deployed host, which `docs/security/egress.md` already records.
 
-**WO-62 — clawops as a host agent** *(its own release, 2.2 — ships alone, gated)*
+**WO-62. Clawops as a host agent** *(its own release, 2.2, ships alone, gated)*
 
 For the gateway's AI to manage a stack unattended, clawops has to be installed and running on
 the gateway host. It was scoped as a fast follow after 2.0. That was wrong: it is not a feature
@@ -943,33 +943,33 @@ formality the agent performs on itself.
 ### The risks, stated plainly
 
 **Runaway spend.** clawops has no cost estimation, no budget guard, no instance-size ceiling and
-no limit on how many stacks exist — verified, not assumed: nothing in `src/` or the plan schema
+no limit on how many stacks exist. Verified, not assumed: nothing in `src/` or the plan schema
 caps any of it. `--instance-type` accepts any string the cloud recognises, deliberately, so an
 agent can plan a `g4dn.xlarge` (~$395/mo) or a `Standard_NC6s_v3` (~$850/mo) as easily as a
 `t3.small`, and can do it in a loop. Cloud billing alerts lag by hours, so the first signal
-arrives long after the spend. Nothing here requires malice — a retry loop around a failing
+arrives long after the spend. Nothing here requires malice, a retry loop around a failing
 `clawops up` is enough.
 
 **Injection reaching a destructive tool surface.** The gateway is connected to channels, and
 every message on them is untrusted input. WO-28's own design note has the gateway MCP server
 running **without** `--read-only`. That is untrusted text arriving at tools that create and
-destroy infrastructure, with the confirmation step — R19 elicitation — answered by the same agent
+destroy infrastructure, with the confirmation step. R19 elicitation, answered by the same agent
 that was injected. Confirmation is a control over a human's attention; it is not a control over
 an agent's.
 
 **Self-destruction, complete.** The agent runs `clawops destroy` against its own stack. The
 process performing the destroy is running on the instance being destroyed, so it dies partway
 through finalising state. What is left is a state file that disagrees with reality in whichever
-direction the timing produced, and possibly a lock held by a process that no longer exists — so
+direction the timing produced, and possibly a lock held by a process that no longer exists, so
 the next operation refuses to run at all.
 
 **Self-destruction, incomplete.** Worse, and likelier. A partial destroy leaves orphans that keep
-billing — an Elastic IP is ~$3.60/mo detached, disks and NAT more — and the operator who would
+billing. An Elastic IP is ~$3.60/mo detached, disks and NAT more, and the operator who would
 clean them up was the agent, which is now gone. Recovery needs an out-of-band human with
 credentials and a working clawops install elsewhere. In an unattended deployment, that person may
 not exist, and nothing in the current design requires them to.
 
-**Credentials become ambient and permanent.** Every useful tool needs them — even
+**Credentials become ambient and permanent.** Every useful tool needs them, even
 `clawops_status` reads Pulumi state from the state backend. An instance role honours the letter
 of R6, which says clawops never *stores* credentials, while changing the posture completely: the
 credential is now always present, never rotated by a human, and reachable by anything that
@@ -978,13 +978,13 @@ achieves execution on the host.
 **The blast radius is the account, not the host.** And **the token sits in plaintext in the
 gateway config**, alongside channel credentials, so it is in every backup archive (WO-46).
 
-**The evidence dies with the host.** The MCP audit log defaults to `<configDir>/mcp-audit.log` —
+**The evidence dies with the host.** The MCP audit log defaults to `<configDir>/mcp-audit.log`,
 on the machine. A self-destruct takes the record of it along.
 
 **It needs Node on the host**, which clawops does not install; the host runs Docker and nothing
 else of ours.
 
-### Preconditions — none of this starts until these exist
+### Preconditions, none of this starts until these exist
 
 These are not implementation steps for WO-62. They are the things that must be true *before* it
 is reasonable to build, and several are useful on their own:
@@ -994,19 +994,19 @@ is reasonable to build, and several are useful on their own:
    before the host agent can be enabled. A budget *alert* is not a control.
 2. **A self-targeting guard.** clawops must refuse an operation whose target stack is the one it
    is running on, and that refusal must live below the tool layer so it cannot be prompted away.
-3. **A separate, narrow cloud identity** for the host — not the deploying operator's. Denied
+3. **A separate, narrow cloud identity** for the host, not the deploying operator's. Denied
    destroy on its own resources by tag condition, denied instance types above the allowlist.
 4. **State the host cannot delete.** Read and write its own stack's state; no delete on the
    bucket, no access to other stacks' state.
 5. **Audit shipped off-host**, so the record survives the host.
-6. **A documented break-glass operator** — a named human, out of band, with credentials and a
+6. **A documented break-glass operator**. A named human, out of band, with credentials and a
    clawops install elsewhere. If the answer is "there isn't one", the feature is not deployable.
 7. **Default `--read-only`**, with the destructive surface opt-in and per-tool rather than
    all-or-nothing.
 
 ### Before anyone writes code
 
-Start from `docs/security/threat-model.md` and add scenarios for the four above — the existing
+Start from `docs/security/threat-model.md` and add scenarios for the four above, the existing
 T2 covers an agent invoking a destructive tool without consent, but not spend, and not the
 operator-is-the-agent inversion. Then an ADR under `docs/decisions/` per R-meta-3, because this
 changes what R6 means in practice even while complying with its wording.
@@ -1014,15 +1014,15 @@ changes what R6 means in practice even while complying with its wording.
 The honest summary: this is the feature most likely to produce a bad day for a user, and the
 only one where clawops' existing safety model does not apply. It ships alone, or not yet.
 
-**WO-64 — the committed `server.json` drifts from the released version** *(S — was folded into
+**WO-64. The committed `server.json` drifts from the released version** *(S, was folded into
 WO-62; split out 2026-09-18 because it is an hour of work and WO-62 is now a gated release of its
 own)*
 
 Found 2026-09-11 while confirming the MCP registry listing for 2.0.0, and still true at 2.0.2:
-the registry is correct, but the committed `server.json` says `1.7.3` — five releases behind. The
+the registry is correct, but the committed `server.json` says `1.7.3`, five releases behind. The
 release workflow rewrites `version` and `packages[0].version` in CI just before registering, and
 never commits the change.
-It is harmless to the registry and misleading to anyone reading the repo — it misled the check
+It is harmless to the registry and misleading to anyone reading the repo, it misled the check
 that found it.
 
 Two ways to fix it; the first is preferred:
@@ -1034,14 +1034,14 @@ Two ways to fix it; the first is preferred:
   file carries the placeholder, so nobody reads it as a real version.
 
 Either way, add a test asserting `server.json` agrees with `package.json`, so the file cannot
-drift silently again. Publishing to the registry stays restricted to `main` — the 1.x line must
+drift silently again. Publishing to the registry stays restricted to `main`, the 1.x line must
 not register, or a maintenance patch would take `isLatest` back from 2.x.
 
-**WO-60 — Channel catalog for 2.0** *(M — new, carried in from WO-43)* — ✅ **catalog done;
+**WO-60. Channel catalog for 2.0** *(M. New, carried in from WO-43)*, ✅ **catalog done;
 install flow carried forward**
 
 The suspicion was right and larger than scoped. **Every channel in 2.0 is an install-gated
-plugin** — `openclaw channels list --all --json` reports all 31 as `origin: "installable"`, and
+plugin**. `openclaw channels list --all --json` reports all 31 as `origin: "installable"`, and
 not one is bundled. Configuring a channel without installing it yields a gateway that starts,
 reports healthy, and never connects: exactly the model-provider failure from WO-43, on a
 surface nobody had checked.
@@ -1051,23 +1051,23 @@ and none of it was visible without a deployed gateway:
 
 | Entry | Catalog said | Schema says |
 |---|---|---|
-| Microsoft Teams | `channelKey: teams` | `msteams` — `teams` does not exist |
+| Microsoft Teams | `channelKey: teams` | `msteams`: `teams` does not exist |
 | Discord | `botToken` | `token` |
 | WhatsApp | `phoneNumberId`, `accessToken` | neither exists; credentials live under `accounts.<name>` |
 
 **`dmPolicy` and `groupPolicy` are required on every channel**, and Slack requires four more
 (`postAs`, `mode`, `webhookPath`, `userTokenReadOnly`), WhatsApp one (`mediaMaxMb`). A config
-missing them fails validation before it is written — so the wizard needed to know.
+missing them fails validation before it is written, so the wizard needed to know.
 
 **Plugins come from two different registries, which the WO-49 egress doc had wrong.** Model
 providers install from `clawhub.ai`; **channels install from `registry.npmjs.org`** as
-`@openclaw/<channelId>`. Measured from the failure text — `request to
+`@openclaw/<channelId>`. Measured from the failure text, `request to
 https://registry.npmjs.org/@openclaw%2fdiscord failed`. Allowing one host does not allow the
 other. `docs/security/egress.md` was corrected the same day it was written.
 
 **`openclaw channels add` exits 0 when the plugin install fails.** It prints the failure,
 says "Returning to selection", and returns success. Anything automating it must re-read
-`channels list --all --json` and check `installed: true` rather than trust the exit code —
+`channels list --all --json` and check `installed: true` rather than trust the exit code,
 recorded in the egress doc, and the reason the install flow is not being written blind.
 
 **Telegram is left deliberately unresolved.** The gateway lists it as installable, but
@@ -1078,7 +1078,7 @@ at deploy time.
 **The Slack discrepancy resolved into something worse than a mismatch: the wizard's output
 never validated at all.** Slack failed on six missing required properties, every other channel
 on two. `mode` and the rest carry JSON Schema defaults, and ajv does not treat a `default` as
-satisfying `required` — so the wizard's config was rejected before it reached a host, for
+satisfying `required`, so the wizard's config was rejected before it reached a host, for
 every channel, on every run. The catalog carries the values now and the wizard writes them.
 
 Slack itself was the `http` webhook setup described in the catalog while the tooling installed
@@ -1086,7 +1086,7 @@ Socket Mode. Socket Mode dials **out** to Slack, so there is no public URL to re
 inbound rule to open: `infraRequired` is false, `appToken` (xapp-) replaces `signingSecret`,
 and `mode: socket` is written explicitly rather than left to a default that does not count.
 
-`tests/spec/integrations.test.ts` now validates the catalog against the captured schema —
+`tests/spec/integrations.test.ts` now validates the catalog against the captured schema,
 every key, every field, every required policy, a plugin block per entry, and **what the wizard
 actually writes**, built by the wizard's own function rather than re-derived by the test. The
 catalog drove the wizard for five releases with nothing checking it, which is why it drifted
@@ -1099,28 +1099,28 @@ credential collection the wizard has no shape for.
 
 *Original text follows.*
 
-**WO-60 — Channel catalog for 2.0** *(M — new, carried in from WO-43)*
+**WO-60. Channel catalog for 2.0** *(M, new, carried in from WO-43)*
 `spec/integrations.yaml` is read by the setup wizard and has not been checked against the 2.0
 channel surface. WO-43 covered model providers, which are startup-blocking; channels are not, which
 is why they were separated rather than dropped.
 
 Needs verifying against the image, not assumed: correct per-channel token fields, the required
 `dmPolicy`/`groupPolicy` settings, SecretRef credentials, and **which channels need their own plugin
-installed** — the same bundled-vs-ClawHub split that turned out to affect three of six model
+installed**. The same bundled-vs-ClawHub split that turned out to affect three of six model
 providers. `plugins list --json` already reports `channelIds` per plugin, so the bundled set is
 derivable the same way, and `scripts/openclaw/check-plugin-pins.sh` extends to cover it.
 
-**WO-49 — Documentation audit and release** *(L)* — §9 — ✅ **audit done; release pending**
+**WO-49. Documentation audit and release** *(L)*, §9, ✅ **audit done; release pending**
 
 The standing task worked: every flow-changing PR updated the README block as it landed. The
-audit found the gap was not *accuracy* but *coverage* — the changeset had 22 sections and the
+audit found the gap was not *accuracy* but *coverage*, the changeset had 22 sections and the
 README block 16, and the missing ones were not minor. Added: model-provider plugin installs
 and the ClawHub egress they need, config validation before writing, container hardening, and
 where the version pin is enforced.
 
 **ClawHub egress is documented, and measured rather than described.** `docs/security/egress.md`
 is new: every destination, from which machine, when, and what the failure looks like. The
-facts came from running it — `clawhub:` resolves and downloads from `clawhub.ai`, not npm, and
+facts came from running it. `clawhub:` resolves and downloads from `clawhub.ai`, not npm, and
 a blocked host gives `fetch failed | getaddrinfo EAI_AGAIN clawhub.ai` with the install exiting
 **1** while the twenty-four bundled providers stay available. Linked from all three provider
 guides' Firewall Model sections, and `/audit-egress` now requires a new destination to be
@@ -1130,13 +1130,13 @@ recorded there in the same change.
 places: the old config path in four files, a `docker run` line still mounting
 `/app/config.json:ro`, `backup restore` described as unavailable in four places (including the
 README command table and the `limitations.md` deferred list), a routable gateway URL in the
-demo script, and `:stable` image tags the version guard now refuses. Historical records —
-`docs/spikes/*`, the gap audit, this plan — were deliberately left alone: they record what was
+demo script, and `:stable` image tags the version guard now refuses. Historical records,
+`docs/spikes/*`, the gap audit, this plan. Were deliberately left alone: they record what was
 true when written.
 
 **One finding handed back rather than papered over.** `docs/operations.md` described logs as
 "`journalctl -u openclaw`, falling back to `docker logs`" without saying that only the local
-provider creates that unit — so on cloud VMs the fallback always wins, and the two sources
+provider creates that unit, so on cloud VMs the fallback always wins, and the two sources
 carry different records. The docs now say so. The code-side fix is WO-44's carried item.
 
 **Standing task, not a final step:** the README's *What's new in 2.0* block documents each changed
@@ -1150,7 +1150,7 @@ probing, AWS day-two commands, and the `agents restart` removal.
 
 **Carried in from WO-43:** clawops now installs provider plugins from **ClawHub at deploy time**, a
 new outbound dependency that did not exist on the 1.x line. It needs an `/audit-egress` entry and a
-line in the firewall notes: the host requires egress to ClawHub during `apply` (not at boot — that
+line in the firewall notes: the host requires egress to ClawHub during `apply` (not at boot, that
 is the point of installing early), alongside the existing ghcr.io image pull. A deny-all host that
 never gets it produces a **healthy gateway with no model provider**, which is precisely the failure
 WO-43 exists to prevent, so the docs must say where the egress is needed and what it looks like when
@@ -1158,10 +1158,10 @@ it is missing.
 
 ### Deferred to clawops 2.1
 
-**WO-53 — Agent sandboxing** *(D4 — L)*
+**WO-53. Agent sandboxing** *(D4. L)*
 
-**Carried in from WO-42:** the deploy-plan fields that work order contemplated —
-`spec.openclaw.{workspace, permissionMode, image.variant}` and the extra-mount fields — were
+**Carried in from WO-42:** the deploy-plan fields that work order contemplated,
+`spec.openclaw.{workspace, permissionMode, image.variant}` and the extra-mount fields, were
 deliberately **not** added, because nothing consumes them and a schema field is a promise. They
 belong here, with the feature that gives them meaning. `image.variant` is real (`-slim` and
 `-browser` tags exist upstream); add each field in the same change that reads it.
@@ -1171,13 +1171,13 @@ needed** (SP-09). Mount Docker's own statically-linked CLI into the **unmodified
 verified `CLI 28.5.2 -> daemon 25.0.16`, sandbox backend active, sibling containers spawned from
 inside the gateway with `cap-drop=ALL` and `network=none`. The derived image (SP-03, +70 MB) stays
 as the fallback for hosts that cannot reach `download.docker.com`. Plus socket mount and a
-runtime-read docker gid; sandbox image built on the host; **state dir identity-mapped** — without it
+runtime-read docker gid; sandbox image built on the host; **state dir identity-mapped**, without it
 the agent silently gets an empty workspace and root-owned junk accumulates on the host. Wizard
 question states the socket tradeoff in one sentence.
-**WO-54 — Config surface for roles, agents, credential store, telemetry** *(M)*
-**WO-56 — Observability plugins** *(S)*
-**WO-55 — TLS and public origin** *(XL)* — gates Portals, Teams, Slack, Discord Activities.
-**WO-57 — Fleet multi-tenancy** *(L)* — unblocked: SP-05 proved the containerised CLI works.
+**WO-54. Config surface for roles, agents, credential store, telemetry** *(M)*
+**WO-56. Observability plugins** *(S)*
+**WO-55. TLS and public origin** *(XL)*. Gates Portals, Teams, Slack, Discord Activities.
+**WO-57. Fleet multi-tenancy** *(L)*. Unblocked: SP-05 proved the containerised CLI works.
 
 ### ADRs
 
@@ -1187,7 +1187,7 @@ question states the socket tradeoff in one sentence.
 | `0011-dual-release-lines.md` | Two lines, dist-tags, backport scope, EOL date |
 | `0012-writable-config-mount.md` | What replaces read-only config as a safety property |
 | `0013-docker-only-runtime.md` | Docker-only, and how each capability gap is closed inside it |
-| `0014-sandbox-docker-socket.md` | **R-meta-3** — socket mount vs. N10 and the harden posture |
+| `0014-sandbox-docker-socket.md` | **R-meta-3**: socket mount vs. N10 and the harden posture |
 
 ---
 ## 6. Testing
@@ -1197,36 +1197,36 @@ the PR that resolves the work order. A spike whose result is not encoded is a fa
 rediscover.
 
 **They cannot run on the current harness.** `tests/integration/helpers/ssh-container.ts` uses a
-container as a stand-in for a VM; the two assertions that matter most — reachability through a
-published port and state survival — would pass **vacuously**. Either add a VM-backed CI job, or move
+container as a stand-in for a VM; the two assertions that matter most, reachability through a
+published port and state survival. Would pass **vacuously**. Either add a VM-backed CI job, or move
 them to `docs/smoke-testing.md` as manual release gates and say plainly CI does not cover them.
 
-**Unit (no VM)** — rendered `docker run` per provider: state volume mounted, no `:ro` on config,
+**Unit (no VM)**. Rendered `docker run` per provider: state volume mounted, no `:ro` on config,
 ownership numeric, `OPENCLAW_CONFIG_PATH` set, `--port` pinned, `--add-host` present, identity-mapped
 only when sandboxed · config fixtures against the captured schema · catalogs · plan v1→v2 · version
 range with `latest`/`stable` resolution order · Bedrock emits a plugin-install step.
 
-**Pulumi mocks** — exact type tags (`aws:ec2/instance:Instance`).
+**Pulumi mocks**. Exact type tags (`aws:ec2/instance:Instance`).
 
 **VM-backed (graduated)**
 
 | Test | From | Asserts |
 |---|---|---|
 | Reachable through the published port | SP-01 | `/startupz` 200 |
-| State survives replacement | SP-01 | install fingerprint stable — **not** the sqlite file hash, which changes every start |
+| State survives replacement | SP-01 | install fingerprint stable: **not** the sqlite file hash, which changes every start |
 | Config written is config read | SP-01 | G3 regression |
 | Clean apply passes upstream preflight | SP-02 | `doctor --lint --json` ok |
 | 1.x → 2.0 migration | SP-07 | sessions present, `/startupz` started |
 | Bedrock instance-role resolution | SP-08 | AWS-only |
 
-**Provider coverage** — the matrix is four adapters × sandboxed/not × migration and remains unsized.
+**Provider coverage**. The matrix is four adapters × sandboxed/not × migration and remains unsized.
 Minimum honest position for v2.0.0: unit and Pulumi-mock coverage on all four, VM-backed on `local`,
 AWS exercised by hand per `docs/smoke-testing.md` before release. GCP and Azure ride on WO-38's shared
 builder, which is the argument for centralising it.
 
 ---
 
-### Closing a work order — the check that goes with it
+### Closing a work order, the check that goes with it
 
 A passing test proves nothing on its own. It can assert a fixture, grep for a string that has
 moved, take an early-return branch that never runs, or fail for a different reason than the one it
@@ -1235,15 +1235,15 @@ names. Every one of those has happened in this release.
 So before a work order closes, its guards are **mutation-checked**: break the behaviour, confirm the
 test notices. `pnpm test:mutation` does this for every behaviour 2.0 established.
 
-The first run over the whole release caught **18 of 22** — and the four misses were the interesting
+The first run over the whole release caught **18 of 22**, and the four misses were the interesting
 part:
 
 | Mutation | Why it survived |
 |---|---|
-| moving tags no longer refused | the test asserted `ok === false`, and the tag then failed a *version comparison* instead — green for the wrong reason |
-| ownership reverts to `clawops:clawops` | **G25 had no test at the config writer at all** — the bug that makes the gateway exit 1 on its own SQLite WAL |
+| moving tags no longer refused | the test asserted `ok === false`, and the tag then failed a *version comparison* instead, green for the wrong reason |
+| ownership reverts to `clawops:clawops` | **G25 had no test at the config writer at all**, the bug that makes the gateway exit 1 on its own SQLite WAL |
 | archive written world-readable | claimed in the changeset and the docs; nothing asserted it |
-| restart falls back to a moving tag | *harness* error — I pointed it at the wrong suite |
+| restart falls back to a moving tag | *harness* error: I pointed it at the wrong suite |
 
 That last row matters too: the harness had its own bugs, and a mutation "surviving" is a claim that
 needs checking before it is believed.
@@ -1251,7 +1251,7 @@ needs checking before it is believed.
 All 22 are now caught. Two of the three real gaps were behaviours this release **documented as
 fixed** while nothing tested them.
 
-### Carried forward — every deferral, and who owns it
+### Carried forward, every deferral, and who owns it
 
 Deferrals lived only in the prose of whichever work order raised them. Two of them ended up pointing
 at **WO-38 after it closed**, which means they were silently no longer anyone's job. This table is
@@ -1266,9 +1266,9 @@ before marking that owner done.
 | `clawops agents logs` has nothing correct to call; use `audit --agent` | SP-11 §8b | **WO-44** | re-homed from WO-38 |
 | `clawops backup restore` throws; 2.0 has a real restore | v1.7.5 | **WO-46** | open |
 | Port `18789` hardcoded in 9 files | WO-58 audit | **WO-48** | WO-42 closed without it, by design |
-| ClawHub egress at apply — `/audit-egress` + firewall notes | WO-43 | **WO-49** | open |
+| ClawHub egress at apply: `/audit-egress` + firewall notes | WO-43 | **WO-49** | open |
 | `integrations.yaml` unchecked against the 2.0 channel surface | WO-43 | **WO-60** | re-homed from WO-45 (wrong owner) |
-| `output:` blocks in `spec/mcp-tools.yaml` are descriptive only — no `outputSchema`, no `structuredContent` | WO-47 | **open** | needs a change to all 18 handlers; too big for an (S) |
+| `output:` blocks in `spec/mcp-tools.yaml` are descriptive only, no `outputSchema`, no `structuredContent` | WO-47 | **open** | needs a change to all 18 handlers; too big for an (S) |
 | `clawops_migrate` and `clawops_gateway_update` have no MCP tool | WO-47 | **open** | needs their effects extracted from `cli/commands/*.ts` first, or the handler duplicates them |
 | `clawops_workflow_recover` still reports "systemd service status" | WO-47 | WO-44 | same systemd assumption as `logs.ts`; it should call the diagnostics module |
 | `clawops harden` cannot be told which ports to open | WO-48 | **open** | it reads the container instead, which is more honest but means a reverse-proxy port still has to be opened by hand |
@@ -1276,9 +1276,9 @@ before marking that owner done.
 | WhatsApp and Microsoft Teams have no `--use-env` path at all | WO-60 | **WO-63** | the flag is rejected outright, so no non-interactive setup exists |
 | Committed `server.json` shows `1.7.3`; CI rewrites the version before registering but never commits it | release | **WO-62** | registry itself is correct; sync at `changeset version` time and test it against `package.json` |
 | Plan fields `workspace`, `permissionMode`, `image.variant`, mounts | WO-42 | **WO-53** (2.1) | open |
-| README *What's new in 2.0* — update per flow change, audit at the end | user request | **every WO**, audited by WO-49 | standing |
+| README *What's new in 2.0*: update per flow change, audit at the end | user request | **every WO**, audited by WO-49 | standing |
 | Pulumi `Gateway` component (G7) | WO-58 audit | WO-38 | ✅ deleted |
-| `monitor.ts` on the pre-2.0 config path; disk gauge on the wrong filesystem | WO-58 audit | WO-44 | ✅ fixed — the WO-39 claim was wrong |
+| `monitor.ts` on the pre-2.0 config path; disk gauge on the wrong filesystem | WO-58 audit | WO-44 | ✅ fixed: the WO-39 claim was wrong |
 
 ---
 
@@ -1301,14 +1301,14 @@ Phase 4  WO-47 · WO-48                             (parallel with 3)
 2.1      WO-53 · WO-54 · WO-56 · WO-55 · WO-57
 ```
 
-Critical path **WO-38 → WO-39 → WO-40 → WO-51 → WO-41**. Three L work orders carry the release —
-WO-38, WO-43, WO-52 — plus WO-49, which is documentation.
+Critical path **WO-38 → WO-39 → WO-40 → WO-51 → WO-41**. Three L work orders carry the release.
+WO-38, WO-43, WO-52, plus WO-49, which is documentation.
 
 ### Why feature parity is 2.1
 
 v2.0.0 would otherwise rewrite the runtime contract *and* take on a permanently maintained container
 image for a feature that ships off by default. The emergency is: deployments work again, and existing
-users can get across. **Note WO-43 is *not* deferred** — but the reason has changed.
+users can get across. **Note WO-43 is *not* deferred**, but the reason has changed.
 
 **Correction (SP-10).** "Provider plugins are install-gated; a configured but uninstalled provider
 prevents startup entirely" was recorded from 2026.8.1. On 2026.9.1 the behaviour is worse, not
@@ -1317,25 +1317,25 @@ better, because it is quieter:
 | Egress | Result |
 |---|---|
 | available | plugin auto-installed from ClawHub → gateway **exits 1** ("startup convergence") → next boot converges, `restarts=1` |
-| denied | gateway starts **healthy, without the provider** — no error, no failed health check |
+| denied | gateway starts **healthy, without the provider**, no error, no failed health check |
 
 clawops defaults to deny-all egress, so the silent case is the default one. And the install lands in
-the container's writable layer, so **every** `gateway restart`/`update`/`config set` — all of which
-`docker rm` the container — refetches it and pays another convergence restart. Measured.
+the container's writable layer, so **every** `gateway restart`/`update`/`config set`, all of which
+`docker rm` the container. Refetches it and pays another convergence restart. Measured.
 
-WO-43 stays in v2.0.0, and SP-10b settles its design — correcting two things this plan said an
+WO-43 stays in v2.0.0, and SP-10b settles its design, correcting two things this plan said an
 hour earlier:
 
 1. **Pre-install at provisioning**, into the config directory. Plugins installed explicitly land in
    `<configDir>/extensions/`, not `/app/npm/projects`, so they persist with the config directory
-   clawops already keeps as host state. **No extra volume is needed** — the earlier note to persist
+   clawops already keeps as host state. **No extra volume is needed**, the earlier note to persist
    `/app/npm/projects` aimed at the path the *startup auto-install* uses, which is the mechanism we
    are avoiding.
 2. **Verify with `plugins list --json`, reconciling `providerIds`.** Not `plugins doctor`: it never
    names a missing provider and exits 1 on duplicate-id warnings during normal operation, so it
    fails when nothing is wrong and stays quiet when something is.
 
-Measured end to end — pre-installed, then booted with `--network none`: `restarts=0`, bedrock
+Measured end to end. Pre-installed, then booted with `--network none`: `restarts=0`, bedrock
 `status: loaded`, nothing fetched at boot.
 
 **Two constraints fall out of this and bind WO-38/39:**
@@ -1351,14 +1351,14 @@ configure. The docs must name that (§8.3); silence reads as a bug.
 
 ---
 
-## 8. Decisions — resolved
+## 8. Decisions, resolved
 
 | # | Question | Decision |
 |---|---|---|
 | **D1** | Drop 1.x or dual-support? | **Two lines, pinned.** 2.x → `>= 2026.9.1`; 1.x → `<= 2026.7.1-2`. WO-50 + WO-51. |
-| **D2** | Automated migration? | **Yes — `clawops migrate` (WO-52)**, rewritten after SP-07. |
+| **D2** | Automated migration? | **Yes: `clawops migrate` (WO-52)**, rewritten after SP-07. |
 | **D3** | Docker-only, or add the native path? | **Docker-only**, closing each capability gap inside Docker. ADR 0013. |
-| **D4** | Support sandboxing despite the harden tension? | **Yes — opt-in, explicit wizard question.** Feasible per SP-04. WO-53, ADR 0014. |
+| **D4** | Support sandboxing despite the harden tension? | **Yes: opt-in, explicit wizard question.** Feasible per SP-04. WO-53, ADR 0014. |
 
 ### 8.1 What Docker-only costs
 
@@ -1368,18 +1368,18 @@ Sandboxing is WO-53; Claude CLI auth needs the persistent home; host-local model
 image; memory imports need extra mounts; Bonjour is irrelevant on cloud VMs; native service
 management is a *benefit*, since we own the lifecycle.
 
-### 8.2 Fleet — validated
+### 8.2 Fleet, validated
 
 SP-06 confirmed the documented cell profile **matches reality exactly** (cap-drop ALL,
 no-new-privileges, init, pids 512, 2 g, 2 cpu, loopback publishing, per-cell network, standard
-container path). Adopt it for the single-tenant path — that is §5's WO-38, costing nothing.
+container path). Adopt it for the single-tenant path, that is §5's WO-38, costing nothing.
 
 SP-05 resolved WO-57's blocker: `openclaw fleet` **runs containerised** with `--network host`, the
 docker socket, a runtime-read docker gid, and an identity-mapped state dir. No host `npm i -g
 openclaw`; ADR 0013 stands. Two traps: without `--network host` the CLI fails its own health gate
 while the cell is genuinely healthy, and Fleet defaults to the unpinned `:latest` tag.
 
-Fleet and sandboxing remain mutually exclusive per host — a sandboxed cell holding the socket can
+Fleet and sandboxing remain mutually exclusive per host, a sandboxed cell holding the socket can
 reach sibling cells, destroying the tenant boundary. Encode as plan validation, not a doc sentence.
 
 ### 8.3 Feature coverage
@@ -1395,12 +1395,12 @@ cloud workers, paired nodes. **Won't:** Swarm (experimental toggle, no infra sur
 ## 9. Documentation audit
 
 This release changes the runtime contract, the support model and the security posture, so the living-
-documentation table is necessary but not sufficient — a doc can be silently wrong without matching any
+documentation table is necessary but not sufficient. A doc can be silently wrong without matching any
 trigger row. WO-49 is an **audit with a tracked inventory**: 44 documents.
 
-**Fix first — `CLAUDE.md` and `AGENTS.md`.** Their Quirks section states that *"OpenClaw 2026.4.5+
+**Fix first. `CLAUDE.md` and `AGENTS.md`.** Their Quirks section states that *"OpenClaw 2026.4.5+
 requires `AWS_PROFILE` in the systemd EnvironmentFile, not `auth: "aws-sdk"`"*. SP-08 proved the 2.0
-form is `auth.profiles.<id>.mode: "aws-sdk"`, so this is false — and it is loaded into every agent
+form is `auth.profiles.<id>.mode: "aws-sdk"`, so this is false, and it is loaded into every agent
 session on this repo, steering future work wrong.
 
 **Rewrite** (the stated contract changed): `limitations.md` (Docker-only consequences, features gated
@@ -1421,7 +1421,7 @@ policy) · DESIGN_RULES (N10 as plan-driven).
 **Skills:** `openclaw-config` (encodes the old config model) · `release` (two-line publish) ·
 `audit-egress` (**new: ClawHub**, telemetry version check, OTLP) · `add-provider`.
 
-**Make it verifiable** — a 44-doc audit done by reading is done once and never again:
+**Make it verifiable**. A 44-doc audit done by reading is done once and never again:
 - link/anchor check in CI;
 - a test asserting the OpenClaw range agrees across `README.md`, `support-matrix.md`, `SECURITY.md`
   and `spec/openclaw-versions.yaml`. That number living in four places with three values is exactly
@@ -1435,7 +1435,7 @@ policy) · DESIGN_RULES (N10 as plan-driven).
   work-order detail as provisional until its own evidence exists.
 - **Inference failed in the same direction twice.** Both refuted gaps came from assuming a documented
   default applied to our topology. Container-detection overrides and dev-only flags are exactly where
-  docs and runtime diverge — prefer observation for anything load-bearing.
+  docs and runtime diverge. Prefer observation for anything load-bearing.
 - **The floor may move again.** It moved once already (2026.8.1 → 2026.9.1) because a plugin's API
   requirement outran the runtime. Plugin/runtime skew (G28) is a standing source of that.
 - **Migration is the adoption gate.** If WO-52 is unreliable the 1.x line is where everyone stays. It
@@ -1445,9 +1445,9 @@ policy) · DESIGN_RULES (N10 as plan-driven).
   implying a rescue.
 - **Enabling config delivery is itself a breaking change.** Configs that have never been applied will
   apply for the first time. Hence v1.7.2's four guards.
-- **Two lines is a standing tax** — two CI matrices, two release paths, a backport judgement per fix.
+- **Two lines is a standing tax**, two CI matrices, two release paths, a backport judgement per fix.
   The EOL date (2027-03-31) is what keeps that bounded.
 - **We will maintain a container image** (WO-53). Deferring to 2.1 keeps it out of this release but
   does not make it go away; decide who owns it first.
-- **Provider matrix is unsized** — four adapters × sandboxed/not × migration.
+- **Provider matrix is unsized**. Four adapters × sandboxed/not × migration.
 - **Fleet and sandboxing collide** on one host; encode as plan validation.

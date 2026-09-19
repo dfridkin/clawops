@@ -14,7 +14,7 @@ This writes a `clawops` entry to:
 - Linux: `~/.config/Claude/claude_desktop_config.json`
 
 The entry uses
-`["mcp", "serve"]` with no safety flag — all 15 tools are enabled by default.
+`["mcp", "serve"]` with no safety flag, all 15 tools are enabled by default.
 
 **Recommendation:** Add `--read-only` before first use:
 
@@ -64,7 +64,7 @@ Review the generated plan JSON before applying it with `clawops apply <plan.json
 ### Full access (automated deploys)
 
 With all tools enabled, Claude can execute full deploy workflows. Always confirm
-before destructive actions — the server will prompt if `yes: true` is not set.
+before destructive actions. The server will prompt if `yes: true` is not set.
 
 Example prompt:
 > Deploy a new OpenClaw instance on AWS us-east-1, t3.small. Use my default AWS

@@ -1,6 +1,6 @@
 # Local VM Provider
 
-The local provider deploys OpenClaw onto an existing VM you already control — a home server,
+The local provider deploys OpenClaw onto an existing VM you already control, a home server,
 a VPS, a bare-metal box, or any host you can reach via SSH. No cloud account required.
 
 ## Quick Start
@@ -26,12 +26,12 @@ Unlike cloud providers, the local adapter does **not** use Pulumi or provision a
 Instead it:
 
 1. SSHs into the target host using `ssh2` (never `/usr/bin/ssh`)
-2. Transfers and runs `bootstrap.sh` — an idempotent shell script that installs Docker (if absent),
+2. Transfers and runs `bootstrap.sh`. An idempotent shell script that installs Docker (if absent),
    creates the `clawops` system user, writes the default `openclaw.json`, and starts the container
    via systemd
 3. Stores stack state in `~/.clawops/state/` (local filesystem, not a cloud bucket)
 
-Re-running `clawops up` is safe — the bootstrap script is idempotent.
+Re-running `clawops up` is safe, the bootstrap script is idempotent.
 
 ## Credentials
 
@@ -72,11 +72,11 @@ clawops installs Docker automatically if it is not present.
 
 The bootstrap script provisions (all on the target host):
 
-- **`clawops` system user** — unprivileged, added to the `docker` group
-- **Docker** — installed via the official Docker apt repository if not present
-- **OpenClaw container** — `ghcr.io/openclaw/openclaw:<version>`, started by systemd
-- **systemd service unit** — `openclaw.service`, enabled and started on boot
-- **`/home/clawops/openclaw.json`** — default gateway config (written only if absent)
+- **`clawops` system user**. Unprivileged, added to the `docker` group
+- **Docker**. Installed via the official Docker apt repository if not present
+- **OpenClaw container**. `ghcr.io/openclaw/openclaw:<version>`, started by systemd
+- **systemd service unit**. `openclaw.service`, enabled and started on boot
+- **`/home/clawops/openclaw.json`**. Default gateway config (written only if absent)
 
 ## State Backend
 
@@ -86,7 +86,7 @@ The bootstrap script provisions (all on the target host):
 
 ## Instance Type Aliases
 
-The local provider ignores instance type — the alias is accepted for API compatibility but has
+The local provider ignores instance type. The alias is accepted for API compatibility but has
 no effect. Resources are whatever the host has.
 
 ## Region
@@ -98,13 +98,13 @@ no effect. Resources are whatever the host has.
 The local provider does **not** configure any firewall rules. SSH and gateway port access is
 controlled by:
 
-- The OS firewall (`ufw`, `iptables`, `firewalld`) on the host — configure this yourself
+- The OS firewall (`ufw`, `iptables`, `firewalld`) on the host, configure this yourself
 - The OpenClaw gateway's built-in auth (`gateway.auth.mode`)
 
 Recommended minimum:
 
 ```bash
-# On the target host — allow SSH and gateway port from your IP only
+# On the target host: allow SSH and gateway port from your IP only
 ufw allow from <your-ip> to any port 22
 ufw allow from <your-ip> to any port 18789
 ufw enable
@@ -130,16 +130,16 @@ clawops logs --tail 100         # recent gateway logs
 
 ## Known Limitations
 
-- No cloud-managed state — state lives only on the machine running clawops; losing it requires
+- No cloud-managed state. State lives only on the machine running clawops; losing it requires
   manual recovery from `clawops://stacks/<name>/last-run` or re-bootstrapping
-- No automatic firewall configuration — you manage host firewall rules yourself
-- No Elastic/static IP management — if the host's IP changes, update `~/.clawops/config.json`
+- No automatic firewall configuration, you manage host firewall rules yourself
+- No Elastic/static IP management. If the host's IP changes, update `~/.clawops/config.json`
   and re-run `clawops up`
 - GPU support depends entirely on the host hardware and Docker runtime; not validated by clawops
 
 ## See Also
 
-- `src/providers/local/` — adapter + bootstrap template
-- `src/providers/local/bootstrap.sh.tmpl` — the idempotent setup script
-- `docs/providers/matrix.md` — provider capability comparison
-- `docs/backup-restore.md` — state backup procedures
+- `src/providers/local/`, adapter + bootstrap template
+- `src/providers/local/bootstrap.sh.tmpl`, the idempotent setup script
+- `docs/providers/matrix.md`, provider capability comparison
+- `docs/backup-restore.md`, state backup procedures

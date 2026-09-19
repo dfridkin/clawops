@@ -1,4 +1,4 @@
-# SP-11 / WO-39 audit — persisting state
+# SP-11 / WO-39 audit, persisting state
 
 **Image:** `ghcr.io/openclaw/openclaw:2026.9.2` · **Date:** 2026-09-07 · **Cost:** $0 (local Docker)
 
@@ -7,7 +7,7 @@ single step riskier, and it is the one I could not finish verifying on this mach
 
 ## A. Code surface
 
-**The config path has no single source of truth** — the same disease WO-38 just cured for
+**The config path has no single source of truth**, the same disease WO-38 just cured for
 the run command. Three TypeScript definitions and two shell templates:
 
 | Where | Value |
@@ -30,7 +30,7 @@ macOS branch needs its own answer rather than inheriting the Linux one.
 | Question | Answer |
 |---|---|
 | Container user | `User=node`, uid/gid **1000**, `HOME=/home/node` |
-| Root entrypoint that could fix permissions? | **No** — `tini -s --`, already unprivileged |
+| Root entrypoint that could fix permissions? | **No**: `tini -s --`, already unprivileged |
 | Default config path | `/home/node/.openclaw/openclaw.json` |
 | State | `state/openclaw.sqlite` + `-wal` + `-shm` |
 | Also written there | `cache/`, `media/`, `tmp/`, `workspace/`, `plugin-skills/`, `config-journal-fingerprint.key`, `openclaw.json.bak` |
@@ -53,24 +53,24 @@ locked-down host never reaches for ClawHub.
 ### `OPENCLAW_CONFIG_PATH` becomes unnecessary
 
 With the directory mounted at the standard location, `openclaw config file` already resolves
-to `/home/node/.openclaw/openclaw.json`. The env var can go — one less thing to keep in sync.
+to `/home/node/.openclaw/openclaw.json`. The env var can go, one less thing to keep in sync.
 
-## C. G25 (ownership) — verified end to end
+## C. G25 (ownership), verified end to end
 
 1. **Ubuntu 24.04 gives `clawops` uid 1001.** The `ubuntu` user already holds 1000, so
-   `useradd -m clawops` — what `providers/startup.ts` runs — gets **1001**. Measured.
+   `useradd -m clawops`. What `providers/startup.ts` runs, gets **1001**. Measured.
 2. **The container writes as uid 1000**, with no root entrypoint to fix permissions. Measured.
 3. **uid 1000 cannot write a 1001-owned, mode-700 directory.** Measured:
    `touch: /d/probe: Permission denied`.
 
 So `chown clawops:clawops` on the host state dir hands it to 1001 and the gateway cannot
-write its own database. Ownership must be numeric — `chown 1000:1000`.
+write its own database. Ownership must be numeric, `chown 1000:1000`.
 
 4. **Verified end to end on real Linux**, via Docker-in-Docker (`docker:dind`, kernel
    6.12, Docker 29.8) so the mount is a native Linux bind mount rather than a Docker Desktop
    translation.
 
-   A bind mount passes ownership through unchanged — `seen in container: 1001:1001` — and:
+   A bind mount passes ownership through unchanged, `seen in container: 1001:1001`, and:
 
    | State dir owner | Gateway result |
    |---|---|
@@ -81,19 +81,19 @@ write its own database. Ownership must be numeric — `chown 1000:1000`.
    `--pids-limit 512`), so the controls do not interfere.
 
 **The failure mode matters as much as the failure.** It is a hard, immediate exit with a
-legible error, not silent corruption — so a health gate catches it and the message names
+legible error, not silent corruption, so a health gate catches it and the message names
 the cause. But under `--restart unless-stopped` it becomes a permanent crash-loop that
 looks exactly like G30. Provisioning must get the chown right the first time; there is no
 degraded mode to fall back to.
 
 **A false negative worth recording.** My first attempt appeared to *disprove* this: a named
 volume chowned to 1001 came back as 1000 and worked fine. That is Docker re-initializing an
-**empty named volume** from the image path — a behaviour bind mounts do not have. The test
+**empty named volume** from the image path. A behaviour bind mounts do not have. The test
 was invalid, not the hypothesis. A green result from the wrong mount type is exactly how
 this would otherwise get waved through.
 
 **Still worth doing at WO-39 completion:** a real Ubuntu 24.04 VM. Tiers above verify the
-*mechanism*; only a cloud host exercises the provisioning script itself — `useradd` ordering,
+*mechanism*; only a cloud host exercises the provisioning script itself, `useradd` ordering,
 a chown that runs before its mkdir, a missing `-R`.
 
 ## D. Migration is the real work
@@ -105,7 +105,7 @@ An in-place upgrade that skips migration loses the deployment's configuration.
 Provisioning must, idempotently:
 
 1. create `/var/lib/clawops/openclaw`
-2. `chown 1000:1000` — numerically, per §C
+2. `chown 1000:1000`, numerically, per §C
 3. move an existing `/home/clawops/openclaw.json` into it, if present and the target is absent
 4. leave a marker so a re-run does not undo a later edit
 
@@ -126,7 +126,7 @@ harness and a deployment's configuration riding on it.
 
 ---
 
-# Tier 3 — real EC2, and an unrelated defect it exposed
+# Tier 3. Real EC2, and an unrelated defect it exposed
 
 **Ubuntu 24.04 spot `t3.small`, us-east-1, 2026-09-07. Cost: ~$0.01. Torn down; 0 resources remain.**
 
@@ -142,7 +142,7 @@ sqlite     : openclaw.sqlite, -shm, -wal   (on the host)
 health     : 200 on 127.0.0.1
 ```
 
-Loopback publishing confirmed **independently of the firewall** — from the host itself,
+Loopback publishing confirmed **independently of the firewall**, from the host itself,
 against its own NIC:
 
 ```
@@ -168,13 +168,13 @@ docker inspect openclaw            -> permission denied on /var/run/docker.sock
 sudo -n bash -c 'docker inspect …' -> ghcr.io/openclaw/openclaw:2026.9.2
 ```
 
-GCP and Azure connect as `clawops`, which *is* in the group — so only AWS is affected,
+GCP and Azure connect as `clawops`, which *is* in the group, so only AWS is affected,
 which is why this survived.
 
 **A second failure hides behind the first.** The token env file lives at
 `/home/clawops/openclaw.env` inside a `750 clawops:clawops` directory. The restart
 command's `$([ -s … ] && echo --env-file …)` test therefore evaluates **false** for
-`ubuntu` — so even with Docker access, the gateway would start with no token and exit 78:
+`ubuntu`, so even with Docker access, the gateway would start with no token and exit 78:
 
 ```
 Refusing to bind gateway to auto without auth.
@@ -183,14 +183,14 @@ Refusing to bind gateway to auto without auth.
 Under `sudo` both problems vanish: `status=running exit=0 restarts=0`, `health: 200`.
 
 **Why it was missed, including by me.** `remote-config.ts` already has
-`execWithFallbackSudo`, with a comment naming this exact AWS case — so the bug was found
+`execWithFallbackSudo`, with a comment naming this exact AWS case, so the bug was found
 once and fixed *in that one file*. Nine others still call Docker directly:
 `cli/commands/{gateway,config,logs,monitor,backup,agents,doctor}.ts` and
 `mcp/tools/cli/{logs,agents}.ts`.
 
 The same shape as G32: a fix applied where the bug was reported rather than across the
 surface. And my own v1.7.5/v1.7.6 EC2 verification ran every probe under `sudo`, which is
-precisely why it looked healthy — the product does not.
+precisely why it looked healthy, the product does not.
 
 **Recommended fix:** promote `execWithFallbackSudo` into the transport layer and route
 every remote Docker invocation through it. Adding `ubuntu` to the docker group would be a

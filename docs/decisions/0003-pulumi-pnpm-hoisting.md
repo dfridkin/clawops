@@ -1,4 +1,4 @@
-# ADR 0003 — Pulumi + pnpm Hoisting Configuration
+# ADR 0003. Pulumi + pnpm Hoisting Configuration
 
 **Status:** Accepted
 **Date:** 2026-05-04

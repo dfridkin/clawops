@@ -8,21 +8,21 @@ most agent integrations you should restrict the tool set.
 
 ### `--read-only` (recommended for most setups)
 
-Enables the **11 tools** in the curated `read` toolset — no writes, no infrastructure
+Enables the **11 tools** in the curated `read` toolset, no writes, no infrastructure
 changes:
 
 - `clawops_status`
 - `clawops_logs_tail`
 - `clawops_stacks_list`
 - `clawops_config_get`
-- `clawops_config_validate` — validate the remote openclaw.json (read-only check)
+- `clawops_config_validate`. Validate the remote openclaw.json (read-only check)
 - `clawops_agents_list`
-- `clawops_plan` — generate a deploy plan (no infra changes)
-- `clawops_task_status` — poll an in-progress task
-- `clawops_workflow_recover` — investigate a stuck deployment (reads logs + status)
+- `clawops_plan`. Generate a deploy plan (no infra changes)
+- `clawops_task_status`, poll an in-progress task
+- `clawops_workflow_recover`. Investigate a stuck deployment (reads logs + status)
 
 Use this when you want an AI assistant that can answer questions, generate plans for
-human review, and run recovery diagnostics — but cannot apply any changes.
+human review, and run recovery diagnostics, but cannot apply any changes.
 
 ### `--no-destructive`
 
@@ -40,7 +40,7 @@ Enables all **18 tools**, including the 7 destructive ones: `clawops_up`,
 `clawops_destroy`, `clawops_apply`, `clawops_config_set`, `clawops_config_unset`,
 `clawops_gateway_restart`, `clawops_workflow_deploy_app`.
 
-Destructive tools still require `yes: true` in the tool call — without it, the
+Destructive tools still require `yes: true` in the tool call, without it, the
 server issues a confirmation prompt. This is a safeguard against accidental
 execution, not a security boundary.
 
@@ -81,10 +81,10 @@ See [read-only.md](../mcp/read-only.md) for client-specific configuration steps 
 
 - An agent reading config values that happen to contain sensitive data (the config
   is fetched and returned; `clawops_config_get` is a read-only tool). Do not store
-  raw secrets in `openclaw.json` — use environment variable references instead.
+  raw secrets in `openclaw.json`. Use environment variable references instead.
 - An agent that has other tools available (e.g., a `bash` tool in the same session)
   running `clawops up` via the CLI directly.
-- Network-level access to the gateway — `--read-only` restricts the MCP tools only.
+- Network-level access to the gateway. `--read-only` restricts the MCP tools only.
 
 ## Audit logging
 
