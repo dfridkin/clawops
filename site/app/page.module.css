@@ -1,90 +1,179 @@
-.page {
-  max-width: 74rem;
-  margin: 0 auto;
-  padding: 0 1.5rem 6rem;
-}
+/*
+ * clawops.fyi in its period treatment: Win95 chrome, bevelled panels, a bitmap headline and a
+ * pixelated atmosphere, over the cool-slate palette globals.css already establishes.
+ *
+ * Two rules hold the page together, and most of what follows is a consequence of one of them:
+ *
+ *  1. Teal is the only emphasis fill, at every scale: the announcement bar, the one primary
+ *     button, and every chip. Ink is type and hairlines, and fills nothing. Where a mark lands
+ *     on a teal surface it inverts rather than picking up a second accent.
+ *  2. Section breaks are gaps, not rules. The corner ticks belong to the hero alone.
+ */
 
-/* ── nav ──────────────────────────────────────────────── */
-.nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1.5rem 0;
-  flex-wrap: wrap;
-}
-.wordmark {
-  font-family: var(--font-mono), monospace;
-  font-weight: 700;
-  font-size: 1.05rem;
-  letter-spacing: -0.01em;
+/* ── the pinned chrome window ───────────────────────────
+   The top of the page is a Win95 window face in BOTH themes. Wiring it to the themed --face
+   does not work: --face sits 1.19:1 from --ground in either theme, so there is no break at all.
+   Pinning the light chrome gives 14.4:1 against a dark page, and on a light page the material
+   and the bevels carry the reading instead of the value step.
+
+   Redefining the tokens on the wrapper means every descendant follows without per-element
+   overrides, and that includes the WebGL shell: its palette() reads --ground, --ink and
+   --accent off the canvas's own computed style, so it renders in the chrome's palette rather
+   than the page's without a line of renderer code changing. */
+.chromeTop {
+  --ground: #f4f6f7;
+  --surface: #ffffff;
+  --surface-sub: #eaeef0;
+  --well: #ffffff;
+  --face: #dde4e8;
+  --ink: #141d24;
+  --ink-mid: #465562;
+  --ink-soft: #6b7a87;
+  --rule: #d3dbdf;
+  --accent: #0d6b6b;
+  --code-bg: #edf1f3;
+  --chrome-ink: #141d24;
+  --chrome-soft: #54626d;
+  --bev-hi: #ffffff;
+  --bev-lt: #f4f6f7;
+  --bev-sh: #aab5bc;
+  --bev-dk: #8a969d;
+  --tick: #a9b4bb;
+  --edge-face: #7d8990;
+  --fx: 13, 107, 107;
   color: var(--ink);
-  text-decoration: none;
 }
-.wordmark span { color: var(--accent); }
-.navLinks {
-  display: flex;
-  gap: 1.5rem;
-  font-size: 0.92rem;
-  align-items: center;
-}
-.navLinks a { color: var(--ink-mid); text-decoration: none; }
-.navLinks a:hover { color: var(--accent); }
 
-/* ── compatibility strip ──────────────────────────────
-   The OpenClaw 2.0 question is the first thing a visitor has, but it is a
-   footnote to the pitch, not the pitch. One quiet line above the nav answers it
-   without an amber block competing with the headline. */
-.strip {
-  border-bottom: 1px solid var(--rule);
-  background: var(--surface-sub);
+/* ── primitives ─────────────────────────────────────────
+   Raised sits proud of its ground, sunken cuts into it. Both are one border plus two insets,
+   which is how the original drew them and why they cost nothing. */
+.raised {
+  border: 1px solid;
+  border-color: var(--bev-lt) var(--bev-dk) var(--bev-dk) var(--bev-lt);
+  box-shadow: inset 1px 1px 0 var(--bev-hi), inset -1px -1px 0 var(--bev-sh);
 }
+.sunken {
+  border: 1px solid;
+  border-color: var(--bev-sh) var(--bev-lt) var(--bev-lt) var(--bev-sh);
+  box-shadow: inset 1px 1px 0 var(--bev-dk), inset -1px -1px 0 var(--bev-hi);
+}
+
+/* Teal, not ink. An ink chip inverts to a near-white block in dark mode, and a page carrying a
+   dozen of them reads as speckled with white rather than marked with the accent. */
+.chip {
+  display: inline-block;
+  flex: none;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  background: var(--accent);
+  color: var(--ground);
+  padding: 0.15em 0.55em;
+}
+
+/* ── announcement strip ─────────────────────────────── */
+.strip { background: var(--accent); color: var(--ground); }
 .stripInner {
   max-width: 74rem;
   margin: 0 auto;
-  padding: 0.6rem 1.5rem;
-  font-size: 0.83rem;
-  color: var(--ink-mid);
+  padding: 0.45rem 1.5rem;
   display: flex;
-  gap: 0.5rem;
-  align-items: baseline;
+  gap: 0.75rem;
+  align-items: center;
   flex-wrap: wrap;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.76rem;
 }
-.stripBadge {
-  /* Reads as an announcement without an amber block competing with the headline — the strip
-     keeps its quiet ground and the badge carries the emphasis. */
-  flex: none;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--surface);
-  background: var(--accent);
-  padding: 0.12em 0.45em;
-  border-radius: 3px;
-}
-.stripInner strong { color: var(--ink); font-weight: 600; }
-.stripInner code {
-  background: var(--code-bg);
-  padding: 0.08em 0.34em;
-  border-radius: 2px;
-  font-size: 0.94em;
-}
-.stripInner a { color: var(--accent); text-decoration: none; font-weight: 500; }
-.stripInner a:hover { text-decoration: underline; }
+.stripInner strong { font-weight: 600; }
+.stripInner code { background: rgba(0, 0, 0, 0.18); padding: 0.08em 0.34em; }
+.stripInner a { color: var(--ground); text-underline-offset: 3px; }
 
-/* ── hero ─────────────────────────────────────────────
-   Deliberately sparse: a headline, one sentence, the install line, two text
-   links. A CLI's landing page has one job — say what it is and get out of the
-   way of the install command. */
+/* ── the hero band ──────────────────────────────────────
+   Full bleed, so the break belongs to the page rather than to a panel, and it carries the nav
+   so the boundary lands under the hero rather than between the nav and the hero. */
+.heroBand {
+  position: relative;
+  background: var(--face);
+  overflow: hidden;
+  box-shadow: inset 0 -1px 0 var(--bev-dk);
+}
+.heroInner {
+  /*
+   * position without a z-index on purpose. The smoke below is z-index 0 and this is later in
+   * the DOM, so it already paints above without one. Giving it a z-index would open a stacking
+   * context here, and the intro's full-screen scrim and art live inside this subtree: they are
+   * fixed at z-index 40 and 50 expecting the root context, and a local one would confine them
+   * to whatever this element resolves to.
+   */
+  position: relative;
+  max-width: 74rem;
+  margin: 0 auto;
+  /* The hero's bottom tick is the last thing in the band; without this it lands exactly on the
+     band's edge and reads as a corner of the container rather than as a mark on it. */
+  padding: 0 1.5rem 2.5rem;
+}
+/* Under the content, so nothing readable is ever veiled by it. */
+.smoke {
+  position: absolute;
+  inset: 0 0 auto 0;
+  width: 100%;
+  height: 12rem;
+  z-index: 0;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+/* ── nav: boxed and butted together ─────────────────── */
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  padding-top: 1.4rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.78rem;
+}
+.nav a {
+  padding: 0.45rem 0.8rem;
+  text-decoration: none;
+  color: var(--ink);
+  /* --rule and the bevel greys are both chosen against --ground; on the chrome face --rule
+     measures about 1.1:1 and vanishes, and in dark mode the bevel shadows are darker than the
+     face, so stepping down makes it worse. --edge-face is pitched against the face itself. */
+  border: 1px solid var(--edge-face);
+  margin-left: -1px;
+  background: var(--surface);
+}
+.wordmark { margin-left: 0; font-weight: 600; }
+.wordmark span { color: var(--accent); }
+/* Outlined, not filled: GitHub is a destination, not the page's primary action. */
+.navOn { color: var(--accent); border-color: var(--accent); font-weight: 500; }
+.navSpacer { flex: 1; border-bottom: 1px solid var(--edge-face); min-width: 0.5rem; }
+
+/* ── hero ─────────────────────────────────────────────── */
 .hero {
-  padding: 7rem 0 6rem;
+  position: relative;
+  margin-top: 2.875rem;
+  padding: 3.5rem 0 3.25rem;
   display: grid;
   /* The copy keeps its measure; the art takes what is left and never drives the row. */
   grid-template-columns: minmax(0, 42rem) minmax(0, 24rem);
   gap: clamp(2rem, 5vw, 5rem);
   align-items: center;
 }
+/* Corner ticks, the hero's alone. Every other break on the page is a gap. */
+.hero::before,
+.hero::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: var(--edge-face);
+  border-style: solid;
+  pointer-events: none;
+}
+.hero::before { top: 0; left: -6px; border-width: 1px 0 0 1px; }
+.hero::after { bottom: 0; right: -6px; border-width: 0 1px 1px 0; }
+
 .heroCopy { min-width: 0; }
 .heroArt {
   min-width: 0;
@@ -93,13 +182,13 @@
   max-width: 384px;
   justify-self: end;
   width: 100%;
+  /* The shell paints scene.background from --ground. Inside the band the surface behind it is
+     the chrome face, so --ground is pointed at it here rather than leaving a square of a
+     slightly different grey sitting on the band. */
+  --ground: var(--face);
 }
-/* One column before the art is squeezed below its 2x scale. */
 @media (max-width: 62rem) {
-  .hero {
-    grid-template-columns: minmax(0, 1fr);
-    max-width: 42rem;
-  }
+  .hero { grid-template-columns: minmax(0, 1fr); max-width: 42rem; }
   .heroArt {
     justify-self: center;
     /*
@@ -112,66 +201,79 @@
     margin-inline: calc(50% - 50vw);
   }
 }
+
+/* Silkscreen sets small for its point size, so the hero needs a big step, not a nudge. */
 .headline {
-  font-family: var(--font-display), Georgia, serif;
-  font-weight: 400;
-  font-size: clamp(2.6rem, 6vw, 3.9rem);
-  line-height: 1.05;
-  letter-spacing: -0.03em;
+  font-family: var(--font-pixel), var(--font-mono), monospace;
+  font-weight: 700;
+  font-size: clamp(1.6rem, 4.6vw, 2.9rem);
+  line-height: 1.34;
+  letter-spacing: 0;
   margin: 0 0 1.5rem;
   text-wrap: balance;
 }
 .sub {
-  font-size: 1.12rem;
+  font-size: 1.05rem;
   line-height: 1.6;
   color: var(--ink-mid);
   max-width: 34rem;
-  margin: 0 0 2.75rem;
+  margin: 0 0 1.6rem;
 }
-.install {
-  border-bottom: 1px solid var(--rule);
-  padding-bottom: 0.9rem;
-  margin-bottom: 1.75rem;
-  max-width: 26rem;
-}
+.install { max-width: 26rem; }
 .installCmd {
   font-family: var(--font-mono), monospace;
-  font-size: 0.98rem;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow-x: auto;
+  font-size: 0.86rem;
+  background: var(--well);
+  color: var(--chrome-ink);
+  padding: 0.7rem 0.8rem;
   display: block;
+  overflow-x: auto;
+  white-space: nowrap;
 }
 .installCmd::before { content: '$ '; color: var(--ink-soft); }
 
-.heroLinks { display: flex; gap: 2rem; flex-wrap: wrap; }
-.heroLink {
-  color: var(--ink);
-  text-decoration: none;
-  font-size: 0.95rem;
-  font-weight: 600;
-  border-bottom: 1px solid var(--accent);
-  padding-bottom: 2px;
-}
-.heroLink:hover { color: var(--accent); }
-
-/* ── sections ─────────────────────────────────────────── */
-.section { padding-top: 4.5rem; }
-.sectionHead {
-  border-bottom: 1px solid var(--rule);
-  padding-bottom: 0.6rem;
-  margin-bottom: 2rem;
+.heroLinks {
   display: flex;
-  align-items: baseline;
-  gap: 0.85rem;
-}
-.sectionNum {
+  margin-top: 1.4rem;
   font-family: var(--font-mono), monospace;
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: 0.06em;
+  font-size: 0.82rem;
+  flex-wrap: wrap;
 }
+.heroLink {
+  padding: 0.55rem 1rem;
+  text-decoration: none;
+  color: var(--ink);
+  border: 1px solid var(--edge-face);
+  margin-left: -1px;
+  background: var(--surface);
+}
+/* The one primary action on the page, and the only filled control. */
+.heroLinkPrimary {
+  margin-left: 0;
+  background: var(--accent);
+  color: var(--ground);
+  border-color: var(--accent);
+  font-weight: 500;
+}
+
+/* ── sections ───────────────────────────────────────────
+   The gap is the break, so it has to be big enough to read as one. */
+.page { max-width: 74rem; margin: 0 auto; padding: 0 1.5rem 2rem; }
+.sections { display: grid; gap: 6rem; margin: 4rem 0 4.4rem; }
+/* z-index 0 makes each section a stacking context, so the edge canvas can sit at -1: behind the
+   section's own content but still above the page ground. */
+.section { position: relative; z-index: 0; }
+.edge {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  image-rendering: pixelated;
+  pointer-events: none;
+  opacity: 0.6;
+}
+.sectionHead { display: flex; align-items: center; gap: 0.65rem; margin: 0 0 0.9rem; }
 .sectionTitle {
   font-family: var(--font-display), Georgia, serif;
   font-weight: 500;
@@ -179,7 +281,29 @@
   letter-spacing: -0.015em;
   margin: 0;
 }
-.lede { max-width: var(--measure); color: var(--ink-mid); margin: 0 0 2rem; }
+.lede { max-width: var(--measure); color: var(--ink-mid); margin: 0 0 1.9rem; }
+
+/* ── the saturated panel ────────────────────────────────
+   The page's one saturated block, spent on what clawops does rather than on a version note.
+   The cards stay surface-filled, so body copy keeps normal ink on a normal surface and the teal
+   reads as the frame around the feature set instead of a colour the text has to survive. */
+.field {
+  background: var(--accent);
+  color: var(--ground);
+  padding: 2.125rem 1.875rem;
+  border: 1px solid;
+  border-color: var(--bev-acc-lt) var(--bev-acc-dk) var(--bev-acc-dk) var(--bev-acc-lt);
+  box-shadow: inset 1px 1px 0 var(--bev-acc-hi), inset -1px -1px 0 var(--bev-acc-sh);
+}
+.field .lede { color: var(--ground); opacity: 0.9; max-width: 64ch; }
+.field .sectionTitle { color: var(--ground); }
+/* A chip on the accent flips; one inside a surface-filled card does not. */
+.field .chip { background: var(--ground); color: var(--accent); }
+.field .card .chip { background: var(--accent); color: var(--ground); }
+/* Hairlines are invisible against a fill, so the grid trades them for real gaps. */
+.field .grid { background: transparent; border: 0; gap: 0.75rem; }
+/* A card is its own surface: it resets the inherited pale text back to ink. */
+.field .card { color: var(--ink); }
 
 /* ── feature grid ─────────────────────────────────────── */
 .grid {
@@ -189,91 +313,71 @@
   background: var(--rule);
   border: 1px solid var(--rule);
 }
-.card { background: var(--surface); padding: 1.5rem 1.6rem; }
-.cardTitle {
-  font-size: 1.02rem;
-  font-weight: 700;
-  margin: 0 0 0.6rem;
-  line-height: 1.35;
-}
-.cardBody { margin: 0; font-size: 0.93rem; color: var(--ink-mid); }
-.cardBody code {
-  background: var(--code-bg);
-  padding: 0.1em 0.34em;
-  border-radius: 2px;
-  font-size: 0.9em;
-}
+.card { background: var(--surface); padding: 1.25rem 1.35rem; }
+.cardTitle { font-size: 1rem; font-weight: 700; margin: 0.6rem 0 0.5rem; line-height: 1.35; }
+.cardBody { margin: 0; font-size: 0.92rem; color: var(--ink-mid); }
+.cardBody code { background: var(--code-bg); padding: 0.1em 0.34em; font-size: 0.9em; }
 
 /* ── flow ─────────────────────────────────────────────── */
 .flow { display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
 .step {
   background: var(--surface);
   display: grid;
-  grid-template-columns: 2.6rem minmax(0, 1fr);
-  gap: 0 1.25rem;
-  padding: 1.35rem 1.6rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 1rem;
+  padding: 1.25rem 1.4rem;
   align-items: start;
 }
-.stepNum {
-  font-family: var(--font-mono), monospace;
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: var(--accent);
-  padding-top: 0.1rem;
-}
 .stepBody h3 { margin: 0 0 0.35rem; font-size: 1rem; font-weight: 700; }
-.stepBody p { margin: 0; font-size: 0.93rem; color: var(--ink-mid); max-width: 60ch; }
+.stepBody p { margin: 0; font-size: 0.92rem; color: var(--ink-mid); max-width: 60ch; }
 .stepBody pre {
   margin: 0.7rem 0 0;
-  background: var(--code-bg);
-  padding: 0.8rem 1rem;
+  background: var(--well);
+  color: var(--chrome-ink);
+  padding: 0.7rem 0.85rem;
   overflow-x: auto;
-  font-size: 0.86rem;
+  font-size: 0.84rem;
   line-height: 1.6;
 }
+@media (max-width: 34rem) { .step { grid-template-columns: minmax(0, 1fr); gap: 0.6rem; } }
 
-/* ── provider table ───────────────────────────────────── */
-.tableWrap { overflow-x: auto; border: 1px solid var(--rule); }
-.table { border-collapse: collapse; width: 100%; font-size: 0.93rem; background: var(--surface); }
+/* ── provider table, on the chrome face ───────────────── */
+.tableWrap { overflow-x: auto; background: var(--face); padding: 0.85rem; }
+.table { border-collapse: collapse; width: 100%; font-size: 0.86rem; min-width: 34rem; }
+.table th,
+.table td { padding: 0.45rem 0.65rem; text-align: left; color: var(--chrome-ink); }
 .table th {
-  text-align: left;
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--ink-soft);
-  font-weight: 700;
-  padding: 0.75rem 1.1rem;
-  border-bottom: 1px solid var(--rule);
-  background: var(--surface-sub);
+  color: var(--chrome-soft);
+  border-bottom: 1px solid var(--bev-sh);
   white-space: nowrap;
 }
-.table td {
-  padding: 0.75rem 1.1rem;
-  border-bottom: 1px solid var(--rule-soft);
-  vertical-align: top;
-}
-.table tr:last-child td { border-bottom: none; }
+.table tbody tr + tr td { border-top: 1px solid var(--bev-sh); }
 .yes { color: var(--accent); font-weight: 700; }
-.no { color: var(--ink-soft); }
+.no { color: var(--chrome-soft); }
 
-/* ── honest limits ────────────────────────────────────── */
-.limits { display: grid; gap: 0.9rem; max-width: var(--measure); }
-.limit { padding-bottom: 0.9rem; border-bottom: 1px solid var(--rule-soft); }
-.limit:last-child { border-bottom: none; padding-bottom: 0; }
-.limit h3 { margin: 0 0 0.25rem; font-size: 0.97rem; font-weight: 700; }
-.limit p { margin: 0; font-size: 0.93rem; color: var(--ink-mid); }
+/* ── honest limits, and the compatibility footnote ────── */
+.limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1.4rem; }
+.limit h3 { margin: 0 0 0.4rem; font-size: 0.95rem; font-weight: 600; }
+.limit p { margin: 0; font-size: 0.9rem; color: var(--ink-mid); }
+.limit code { background: var(--code-bg); padding: 0.1em 0.34em; font-size: 0.9em; }
 
-/* ── footer ───────────────────────────────────────────── */
-.footer {
-  margin-top: 5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--rule);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 2rem;
-  justify-content: space-between;
-  font-size: var(--step--1);
-  color: var(--ink-soft);
+/* ── footer: one status bar ─────────────────────────────
+   Everything the old two-column footer said, in the chrome the rest of the page is built from.
+   MPL-2.0 appears once, in its own cell, and the links are cells too, pushed right by the grow
+   spacer the way a Win95 status bar puts its own right-hand affordance. */
+.footer { padding-bottom: 2.5rem; }
+.status { display: flex; gap: 3px; padding: 3px; background: var(--face); flex-wrap: wrap; }
+.cell {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.72rem;
+  font-family: var(--font-mono), monospace;
+  color: var(--chrome-ink);
+  white-space: nowrap;
+  text-decoration: none;
 }
-.footer a { color: var(--ink-mid); text-decoration: none; }
-.footer a:hover { color: var(--accent); }
+.cellGrow { flex: 1; min-width: 2.5rem; }
+.cell:hover { color: var(--accent); }

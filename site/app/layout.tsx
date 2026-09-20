@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
-import { Newsreader, Public_Sans, JetBrains_Mono } from 'next/font/google'
+import { Newsreader, Public_Sans, JetBrains_Mono, Silkscreen } from 'next/font/google'
 import './globals.css'
 
 const display = Newsreader({
@@ -15,6 +15,18 @@ const body = Public_Sans({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
   variable: '--font-body',
+  display: 'swap',
+})
+
+/*
+ * The hero headline only. A bitmap face carries the period register where it is doing the
+ * shouting; everywhere else the page stays on a readable grotesque, which is the call made
+ * when the treatment was reviewed.
+ */
+const pixel = Silkscreen({
+  subsets: ['latin'],
+  weight: ['400', '700'],
+  variable: '--font-pixel',
   display: 'swap',
 })
 
@@ -52,7 +64,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={`${display.variable} ${body.variable} ${mono.variable}`}
+      className={`${display.variable} ${body.variable} ${mono.variable} ${pixel.variable}`}
       // Fumadocs' RootProvider (next-themes) writes `class` and `color-scheme` onto
       // <html> before React hydrates, so the server markup cannot match by design.
       // This is the documented fix, and it suppresses only this element's attributes

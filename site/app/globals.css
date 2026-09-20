@@ -20,6 +20,31 @@
   --warn-soft: #f8eeda;
   --code-bg: #edf1f3;
 
+  /* Win95 chrome: a window face, a sunken well, and the four bevel tones that read as
+     raised or inset against them. Separate from --surface, which is a document colour. */
+  --face: #dde4e8;
+  --well: #ffffff;
+  --bev-hi: #ffffff;
+  --bev-lt: #f4f6f7;
+  --bev-sh: #aab5bc;
+  --bev-dk: #8a969d;
+  --chrome-ink: #141d24;
+  --chrome-soft: #54626d;
+  /* Bevel tones derived from the accent. The greys above are tuned for the face and read as
+     dirt over a saturated fill, so the accent panel carries a highlight and shadow in its
+     own hue. */
+  --bev-acc-hi: #73a9a9;
+  --bev-acc-lt: #428c8c;
+  --bev-acc-sh: #094b4b;
+  --bev-acc-dk: #063030;
+  /* Corner-tick hairline, pitched between --rule and --ink-soft so it marks without bracketing. */
+  --tick: #a9b4bb;
+  /* A hairline chosen against --face rather than against --ground: --rule measures about
+     1.1:1 on the chrome and disappears there. */
+  --edge-face: #7d8990;
+  /* Atmosphere colour, as an rgb triple the canvas can read off the token. */
+  --fx: 13, 107, 107;
+
   --measure: 68ch;
   --step--1: 0.82rem;
   --step-0: 1rem;
@@ -44,6 +69,22 @@
     --warn: #dfae55;
     --warn-soft: #2c2312;
     --code-bg: #1b252e;
+
+    --face: #1a242c;
+    --well: #0a0f14;
+    --bev-hi: #2f3e49;
+    --bev-lt: #243039;
+    --bev-sh: #0b1116;
+    --bev-dk: #05080b;
+    --chrome-ink: #e4eaee;
+    --chrome-soft: #93a2ad;
+    --bev-acc-hi: #99d4d0;
+    --bev-acc-lt: #76c5c0;
+    --bev-acc-sh: #377f7a;
+    --bev-acc-dk: #24514e;
+    --tick: #4e5c68;
+    --edge-face: #5d7079;
+    --fx: 79, 181, 174;
   }
 }
 
