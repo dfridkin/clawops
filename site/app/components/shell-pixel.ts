@@ -13,9 +13,9 @@ const ease = (v: number) => v * v * (3 - 2 * v)
 const surface = (lat: number, lon: number, radius = R) => new THREE.Vector3(radius * Math.cos(lat) * Math.sin(lon), radius * Math.cos(lat) * Math.cos(lon), radius * Math.sin(lat))
 
 /** Real surfaces, physical rims, centered decals and restrained emissive light. */
-export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement, pause: HTMLButtonElement) {
+export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement) {
   const context = canvas.getContext('webgl2', { antialias: false, alpha: false })
-  if (!context) return mountFallback(canvas, trigger, pause)
+  if (!context) return mountFallback(canvas, trigger)
   const renderer = new THREE.WebGLRenderer({ canvas, context, antialias: false, alpha: false, powerPreference: 'low-power' })
   renderer.setPixelRatio(1)
   renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -285,7 +285,7 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
   beamGeometry.setAttribute('position',new THREE.Float32BufferAttribute([-28,-87,-2,28,-87,-2,66,28,-2,-28,-87,-2,66,28,-2,-66,28,-2],3))
   core.add(new THREE.Mesh(beamGeometry,beamMaterial))
 
-  let angle=-.45, opening=0, hovered=false, focused=false, pinned=false, paused=false, visible=true, disposed=false, raf=0, previous=0
+  let angle=-.45, opening=0, hovered=false, focused=false, pinned=false, visible=true, disposed=false, raf=0, previous=0
   let reveal = 0, idleSpeed = 0, motionTime = 0, lastDraw = -Infinity
   const pointer = new THREE.Vector2(), parallax = new THREE.Vector2()
   const active=()=>hovered||focused||pinned
@@ -334,7 +334,6 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
   trigger.addEventListener('blur',()=>{focused=false;pinned=false;update()},events)
   trigger.addEventListener('click',e=>{if(e.detail===0||!matchMedia('(hover:hover)').matches){pinned=!active();focused=false;update()}},events)
   trigger.addEventListener('keydown',e=>{if(e.key==='Escape'){hovered=false;focused=false;pinned=false;update()}},events)
-  pause.addEventListener('click',()=>{paused=!paused;pause.setAttribute('aria-pressed',String(paused));pause.textContent=paused?'Resume animation':'Pause animation';schedule()},events)
   reduced.addEventListener('change',schedule,events);dark.addEventListener('change',refresh,events)
   window.addEventListener('clawops-themechange',refresh,events)
   document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelAnimationFrame(raf);raf=0;previous=0}else schedule()},events)
@@ -351,8 +350,8 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
     if(reduced.matches){angle=0;opening=engaged?1:0}
     else {
       if(engaged){angle=Math.atan2(Math.sin(angle),Math.cos(angle));angle*=Math.exp(-dt*5.4)}
-      else if(opening===0&&!paused){idleSpeed+=(.16-idleSpeed)*(1-Math.exp(-dt*2.8));angle+=dt*idleSpeed}
-      if(engaged||opening>0||paused)idleSpeed=0
+      else if(opening===0){idleSpeed+=(.16-idleSpeed)*(1-Math.exp(-dt*2.8));angle+=dt*idleSpeed}
+      if(engaged||opening>0)idleSpeed=0
       const desired=engaged&&Math.abs(angle)<.08?1:0
       opening+=(desired-opening)*(1-Math.exp(-dt*4.3))
       if(Math.abs(desired-opening)<.0008)opening=desired
@@ -381,7 +380,7 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
     const scanTarget=engaged&&open>.68?1:0
     if(reduced.matches)reveal=engaged?1:0
     else reveal=THREE.MathUtils.clamp(reveal+dt*(scanTarget? .95:-2.6),0,1)
-    if(!paused&&!reduced.matches)motionTime+=dt
+    if(!reduced.matches)motionTime+=dt
     hologram.reveal.value=reveal
     hologram.time.value=motionTime
     projectionMaterial.opacity=.32*projection
@@ -396,7 +395,7 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
     composer.render()
     const pointerMoving=Math.abs(targetX-parallax.x)+Math.abs(targetY-parallax.y)>.0001
     const transitioning=opening>0&&opening<1||engaged&&angle!==0||reveal!==scanTarget||pointerMoving
-    if(!reduced.matches&&(transitioning||!paused&&(engaged||opening===0)))schedule();else previous=0
+    if(!reduced.matches&&(transitioning||engaged||opening===0))schedule();else previous=0
   }
   resize()
   return ()=>{disposed=true;cancelAnimationFrame(raf);controller.abort();observer.disconnect();resizeObserver.disconnect();geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());output.dispose();pixelPass.dispose();composer.dispose();renderer.dispose()}

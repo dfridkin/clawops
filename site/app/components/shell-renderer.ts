@@ -14,7 +14,7 @@ const sphere = (lat: number, lon: number, radius = RADIUS): Vec => [
 const yaw = ([x, y, z]: Vec, angle: number): Vec => [x * Math.cos(angle) + z * Math.sin(angle), y, z * Math.cos(angle) - x * Math.sin(angle)]
 const pitch = ([x, y, z]: Vec, angle: number): Vec => [x, y * Math.cos(angle) - z * Math.sin(angle), y * Math.sin(angle) + z * Math.cos(angle)]
 
-export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement, pause: HTMLButtonElement) {
+export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement) {
   const context = canvas.getContext('2d')
   if (!context) return () => {}
   const ctx = context
@@ -23,7 +23,7 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
   const abort = new AbortController()
   const options = { signal: abort.signal }
   let angle = -0.45, opening = 0, hovered = false, focused = false, pinned = false
-  let paused = false, visible = true, disposed = false, frame = 0, previous = 0
+  let visible = true, disposed = false, frame = 0, previous = 0
   let size = 500, pixelRatio = 1, ink = '', ground = '', accent = ''
   let wasActive = false
   const active = () => hovered || focused || pinned
@@ -63,12 +63,6 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
   }, options)
   trigger.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { hovered = false; focused = false; pinned = false; updateInteraction() }
-  }, options)
-  pause.addEventListener('click', () => {
-    paused = !paused
-    pause.setAttribute('aria-pressed', String(paused))
-    pause.textContent = paused ? 'Resume animation' : 'Pause animation'
-    refresh()
   }, options)
   reduced.addEventListener('change', refresh, options)
   dark.addEventListener('change', refresh, options)
@@ -278,7 +272,7 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
       angle = 0; opening = engaged ? 1 : 0
     } else {
       if (engaged) angle += -angle * (1 - Math.exp(-dt * 6))
-      else if (opening < 0.025 && !paused) angle = wrap(angle + dt * 0.19)
+      else if (opening < 0.025) angle = wrap(angle + dt * 0.19)
       const target = engaged && Math.abs(angle) < 0.075 ? 1 : 0
       opening += (target - opening) * (1 - Math.exp(-dt * 4.6))
       if (Math.abs(opening - target) < 0.0008) opening = target
@@ -287,7 +281,7 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
     trigger.dataset.state = engaged ? (opening === 1 ? 'open' : 'opening') : (opening > 0 ? 'closing' : 'rotating')
     render()
     const transitioning = engaged ? opening < 1 || angle !== 0 : opening > 0
-    if (!reduced.matches && (transitioning || (!engaged && !paused))) frame = requestAnimationFrame(tick)
+    if (!reduced.matches && (transitioning || !engaged)) frame = requestAnimationFrame(tick)
     else previous = 0
   }
   resize()
