@@ -154,7 +154,7 @@ export default function HeroIntro() {
       )}
       <div ref={slot} className={styles.slot} aria-hidden={phase === 'done' ? undefined : 'true'} />
       <div ref={art} className={styles.art} data-phase={phase}>
-        <ShellHero caption={phase === 'done'} />
+        <ShellHero />
         {phase === 'intro' && (
           <button type="button" className={styles.enter} onClick={beginReveal}>
             Tap to enter
