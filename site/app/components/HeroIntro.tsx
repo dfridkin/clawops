@@ -53,14 +53,18 @@ export default function HeroIntro() {
      * Land at the top of the page, not at the shell.
      *
      * The control that was tapped keeps focus, and on a phone the art it belongs to ends up in
-     * the hero column below the nav and the headline. Releasing the scroll lock with focus
-     * down there let the browser bring it into view, so entering the page skipped past the
-     * masthead and the first thing anyone is meant to read. Blur first, then reset, while the
-     * scrim is still covering the move.
+     * the hero column below the nav and the headline, so releasing the scroll lock let the
+     * browser bring it into view and skip the masthead.
+     *
+     * Blurring to prevent that is what closed the hologram: the renderer clears `pinned` on the
+     * trigger's blur, so dropping focus told it the shell was no longer held open and the claw
+     * faded a second after the reveal finished. Resetting the scroll after layout has settled
+     * does the same job and leaves the shell held.
      */
-    const focused = document.activeElement
-    if (focused instanceof HTMLElement) focused.blur()
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior })
+    const frame = requestAnimationFrame(() =>
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior }),
+    )
+    return () => cancelAnimationFrame(frame)
   }, [phase])
 
   /**

@@ -224,7 +224,12 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
       // A slow vertical breathe, so the field is alive without anything repeating across it.
       density+=.07*sin(time*.55-p.y*.021);
       float lit=step(bayer(gl_FragCoord.xy),density);
-      gl_FragColor=vec4(teal,(.028+.30*lit+.32*sweep)*cut*reveal);}`,
+      // A lit pixel has to be teal, not a bit teal. Blended at .30 the fill landed nearer the
+      // grey entries than the teal ones and the palette snapped it to grey: the claw read as
+      // teal only where the sweep passed over it and went slate everywhere else. .86 puts it
+      // on palette[8] with room for the dither to move it without falling out of teal. The
+      // unlit pixels stay almost transparent, which is what makes the stipple visible at all.
+      gl_FragColor=vec4(teal,(.02+.86*lit+.28*sweep)*cut*reveal);}`,
   }))
   core.add(new THREE.Mesh(keepGeometry(new THREE.ShapeGeometry(outline, 48)), holoFill))
   const holoHalo = keepMaterial(new THREE.ShaderMaterial({
