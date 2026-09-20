@@ -72,7 +72,7 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className={styles.heroArt}>
+              <div className={`${styles.heroArt} ${styles.sunken}`}>
                 <HeroIntro />
               </div>
             </header>

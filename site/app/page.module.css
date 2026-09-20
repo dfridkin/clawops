@@ -182,10 +182,27 @@
   max-width: 384px;
   justify-self: end;
   width: 100%;
-  /* The shell paints scene.background from --ground. Inside the band the surface behind it is
-     the chrome face, so --ground is pointed at it here rather than leaving a square of a
-     slightly different grey sitting on the band. */
-  --ground: var(--face);
+  /*
+   * The shell is a screen, not a panel, and it is dark in both themes.
+   *
+   * Its quantiser picks the nearest of ten fixed colours, seven of which are greys on the
+   * achromatic line, and the hologram fill is tuned to land on the dark teal when composited
+   * over a dark ground. Over the chrome it does not: at the alphas the fill actually uses it
+   * resolves grey, teal, grey, teal as the sweep passes, so the piece reads monochrome with
+   * occasional colour rather than teal throughout. Pinning the dark palette here restores the
+   * range it was built against, and a dark screen inset into a chrome case is what the period
+   * would have done anyway.
+   *
+   * palette() reads --ground, --ink and --accent off the canvas. The other two are for the
+   * pause control and the intro's enter label, which live in this subtree and would otherwise
+   * inherit the chrome's dark-on-light text onto a dark ground.
+   */
+  --ground: #0e141a;
+  --ink: #e4eaee;
+  --ink-mid: #a6b4bf;
+  --ink-soft: #7e8e9b;
+  --accent: #4fb5ae;
+  background: var(--ground);
 }
 @media (max-width: 62rem) {
   .hero { grid-template-columns: minmax(0, 1fr); max-width: 42rem; }
