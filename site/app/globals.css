@@ -46,12 +46,7 @@
   --fx: 13, 107, 107;
 
   --measure: 68ch;
-  --step--1: 0.82rem;
   --step-0: 1rem;
-  --step-1: 1.2rem;
-  --step-2: 1.5rem;
-  --step-3: 2rem;
-  --step-4: 3.1rem;
 }
 
 @media (prefers-color-scheme: dark) {

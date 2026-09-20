@@ -1,17 +1,10 @@
 import type { Metadata } from 'next'
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
-import { Newsreader, Public_Sans, JetBrains_Mono, Silkscreen } from 'next/font/google'
+import { IBM_Plex_Sans, IBM_Plex_Mono, Silkscreen } from 'next/font/google'
 import './globals.css'
 
-const display = Newsreader({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  variable: '--font-display',
-  display: 'swap',
-})
-
-const body = Public_Sans({
+const body = IBM_Plex_Sans({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
   variable: '--font-body',
@@ -30,9 +23,9 @@ const pixel = Silkscreen({
   display: 'swap',
 })
 
-const mono = JetBrains_Mono({
+const mono = IBM_Plex_Mono({
   subsets: ['latin'],
-  weight: ['400', '500', '700'],
+  weight: ['400', '500', '600', '700'],
   variable: '--font-mono',
   display: 'swap',
 })
@@ -64,7 +57,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={`${display.variable} ${body.variable} ${mono.variable} ${pixel.variable}`}
+      className={`${body.variable} ${mono.variable} ${pixel.variable}`}
       // Fumadocs' RootProvider (next-themes) writes `class` and `color-scheme` onto
       // <html> before React hydrates, so the server markup cannot match by design.
       // This is the documented fix, and it suppresses only this element's attributes
