@@ -1,4 +1,5 @@
 import styles from './page.module.css'
+import HeroIntro from './components/HeroIntro'
 
 const GITHUB = 'https://github.com/dfridkin/clawops'
 const NPM = 'https://www.npmjs.com/package/@clawops/cli'
@@ -41,6 +42,7 @@ export default function Home() {
       </nav>
 
       <header className={styles.hero}>
+        <div className={styles.heroCopy}>
         <h1 className={styles.headline}>Your agent, on your own infrastructure.</h1>
         <p className={styles.sub}>
           Provision and operate self-hosted OpenClaw on AWS, GCP, Azure or any Linux box — with
@@ -58,6 +60,11 @@ export default function Home() {
           <a className={styles.heroLink} href={GITHUB}>
             GitHub
           </a>
+        </div>
+        </div>
+
+        <div className={styles.heroArt}>
+          <HeroIntro />
         </div>
       </header>
 
