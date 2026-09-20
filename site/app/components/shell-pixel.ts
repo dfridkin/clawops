@@ -238,7 +238,12 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
       // the way past 1.6. That range is the point: the fill composites over the halo, the
       // contour and the beam rather than over the ground alone, so whatever those add has room
       // to land in without changing the answer.
-      gl_FragColor=vec4(vec3(teal.r*.25,teal.g,teal.b),(.02+.55*lit+.24*sweep)*cut*reveal);}`,
+      // .34 rather than .55 so the fill settles on palette[7], the darkest teal the palette
+      // has, instead of drifting up to palette[8] wherever the halo and the beam add light
+      // underneath it. Below about .28 it stops being teal at all and falls to the dark greys,
+      // so this is near the bottom of the range rather than merely lower than before. The
+      // contour is drawn on top at full strength and reads against a darker fill.
+      gl_FragColor=vec4(vec3(teal.r*.25,teal.g,teal.b),(.02+.34*lit+.24*sweep)*cut*reveal);}`,
   }))
   core.add(new THREE.Mesh(keepGeometry(new THREE.ShapeGeometry(outline, 48)), holoFill))
   const holoHalo = keepMaterial(new THREE.ShaderMaterial({
