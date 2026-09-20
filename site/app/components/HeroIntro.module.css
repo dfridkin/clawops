@@ -16,7 +16,7 @@
 
 .art { width: 100%; }
 
-/* 576px is 3x the 192px framebuffer, so the pixels stay square during the intro too. */
+/* The intro's own scale. Blocks stay square at any size now that the framebuffer follows. */
 .art[data-phase='intro'],
 .art[data-phase='revealing'],
 .art[data-phase='leaving'] {
@@ -25,10 +25,10 @@
   margin: auto;
   z-index: 50;
   /*
-   * Integer multiples of the 192px framebuffer only. 576 was 3x; 50% more would be 4.5x, which
-   * makes some display pixels four across and others five, on a piece whose whole idea is that
-   * they are all the same. 768 is 4x. The viewport clamps fall back to 3x and 2x rather than to
-   * an arbitrary fraction.
+   * These were once required to be integer multiples of a fixed 192-pixel framebuffer: 4.5x
+   * would have made some display pixels four across and others five, on a piece whose whole
+   * idea is that they are all the same. The framebuffer tracks the element now, so any size
+   * holds square blocks and these three are simply the scale the intro was judged at.
    */
   width: 768px;
   height: 768px;

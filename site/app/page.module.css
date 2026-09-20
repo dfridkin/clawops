@@ -178,7 +178,8 @@
 .heroArt {
   min-width: 0;
   position: relative;
-  /* Integer scaling keeps the 192px framebuffer crisp: 384 is exactly 2x. */
+  /* The framebuffer tracks this box one texel per CSS pixel, so any width keeps the blocks
+     square. 384 is a chosen scale for the art, not a constraint any more. */
   max-width: 384px;
   justify-self: end;
   width: 100%;
@@ -209,9 +210,9 @@
   .heroArt {
     justify-self: center;
     /*
-     * Edge to edge on a phone. 384 is 2x the 192px framebuffer and nine points short of an
-     * iPhone 16's 393, so it fills the width while every display pixel stays square. Sizing to
-     * 100vw instead would put it at 2.05x and make some pixels wider than others.
+     * Edge to edge on a phone, nine points short of an iPhone 16's 393. This used to be a
+     * hard constraint, since a fixed 192 framebuffer only stayed square at integer multiples;
+     * the framebuffer follows the element now, so the cap is only holding the art's scale.
      */
     max-width: 384px;
     width: 100vw;
