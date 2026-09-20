@@ -158,6 +158,17 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
     tube(inner, 1.5, light, parent)
     tube(inner, 2.1, glyphHalo, parent)
   }
+  /*
+   * The stamps are drawn in a space where they span about +/-18, and then laid on a sphere of
+   * radius 137 and viewed through a 192-pixel framebuffer. That put the whole chip inside nine
+   * pixels with strokes 0.78 of a pixel wide: thinner than the grid they are drawn on, so they
+   * dithered into faint marks instead of drawing lines.
+   *
+   * A 120-degree lune is about 143 units of arc wide at its middle, where the artwork sits, so
+   * there is room to spare. 1.9 puts the chip at sixteen pixels across with strokes just over
+   * one wide, which is the smallest either can be and still read.
+   */
+  const GLYPH_SCALE = 1.9
   const rect = (x: number, y: number, w: number, h: number): Point[] => [[x,y],[x+w,y],[x+w,y+h],[x,y+h],[x,y]]
   const chip: Point[][] = [rect(-11,-11,22,22)]
   for (const t of [-7,0,7]) chip.push([[t,-17],[t,-11]],[[t,11],[t,17]],[[-17,t],[-11,t]],[[11,t],[17,t]])
@@ -181,10 +192,12 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
       const points: THREE.Vector3[] = []
       for (let i=1;i<stroke.length;i++) for(let n=0;n<=8;n++) {
         const u=THREE.MathUtils.lerp(stroke[i-1][0],stroke[i][0],n/8), v=THREE.MathUtils.lerp(stroke[i-1][1],stroke[i][1],n/8)
-        points.push(center.clone().multiplyScalar(R).addScaledVector(east,u).addScaledVector(north,-v).normalize().multiplyScalar(R+1.4))
+        points.push(center.clone().multiplyScalar(R)
+          .addScaledVector(east,u*GLYPH_SCALE).addScaledVector(north,-v*GLYPH_SCALE)
+          .normalize().multiplyScalar(R+1.4))
       }
-      tube(points, 2.05, glyphHalo, shell)
-      tube(points, 1.65, glyph, shell)
+      tube(points, 3.8, glyphHalo, shell)
+      tube(points, 3.0, glyph, shell)
     }
   })
 
