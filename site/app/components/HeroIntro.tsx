@@ -152,7 +152,12 @@ export default function HeroIntro() {
           aria-hidden="true"
         />
       )}
-      <div ref={slot} className={styles.slot} aria-hidden={phase === 'done' ? undefined : 'true'} />
+      {/*
+        * Holds the art's place in the column while the art itself is fixed and centred, and
+        * only while that is true. Left mounted afterwards it is an empty 384px square sitting
+        * above the shell, which is what pushed the hero art out of line with the copy beside it.
+        */}
+      {phase !== 'done' && <div ref={slot} className={styles.slot} aria-hidden="true" />}
       <div ref={art} className={styles.art} data-phase={phase}>
         <ShellHero />
         {phase === 'intro' && (
