@@ -39,11 +39,7 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
   }
   const resize = () => {
     size = Math.max(1, canvas.getBoundingClientRect().width)
-    // One backing pixel per CSS pixel, matching the WebGL path and the page's 1px atmosphere.
-    // This was 192/size, which pinned the backing store to a 192px grid and drew every block
-    // two CSS pixels wide. Apparent size is unchanged: scale is size/viewSize, so pixelRatio
-    // only ever converted CSS pixels to backing pixels.
-    pixelRatio = 1
+    pixelRatio = 192 / size
     canvas.width = Math.round(size * pixelRatio)
     canvas.height = canvas.width
     refresh()

@@ -33,7 +33,7 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
   composer.addPass(new RenderPass(scene, camera))
   const output = new OutputPass()
   composer.addPass(output)
-  // Fixed retro palette with ordered dithering, on a framebuffer sized one texel per CSS pixel.
+  // Fixed retro palette with ordered dithering. Runs on the 192px framebuffer.
   const pixelPass = new ShaderPass({
     uniforms: { tDiffuse: { value: null } },
     vertexShader: `varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
@@ -160,14 +160,13 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
   }
   /*
    * The stamps are drawn in a space where they span about +/-18, and then laid on a sphere of
-   * radius 137. Against the old fixed 192-pixel framebuffer that put the whole chip inside nine
+   * radius 137 and viewed through a 192-pixel framebuffer. That put the whole chip inside nine
    * pixels with strokes 0.78 of a pixel wide: thinner than the grid they are drawn on, so they
-   * dithered into faint marks instead of drawing lines, and 1.9 was the smallest scale that
-   * still read.
+   * dithered into faint marks instead of drawing lines.
    *
-   * The framebuffer now tracks the CSS size, so that floor no longer binds. 1.9 stays because
-   * it is also the size the icons were judged legible at, which is a separate question from
-   * whether the grid can resolve them.
+   * A 120-degree lune is about 143 units of arc wide at its middle, where the artwork sits, so
+   * there is room to spare. 1.9 puts the chip at sixteen pixels across with strokes just over
+   * one wide, which is the smallest either can be and still read.
    */
   const GLYPH_SCALE = 1.9
   const rect = (x: number, y: number, w: number, h: number): Point[] => [[x,y],[x+w,y],[x+w,y+h],[x,y+h],[x,y]]
@@ -309,19 +308,7 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
   }
   function schedule(){if(!disposed&&!raf&&visible&&!document.hidden)raf=requestAnimationFrame(tick)}
   function refresh(){palette();schedule()}
-  /*
-   * One framebuffer texel per CSS pixel, so the shell's blocks are 1px like the page's smoke
-   * and section fields. It was a fixed 192 against a 384px hero, which put every block at 2px
-   * and made the shell the only thing on the page at a coarser grain.
-   *
-   * The observer fires on every size change, so the intro's step up to 576 and 768 keeps the
-   * same 1:1. The cap is a guard: nothing in the layout asks for more than 768, and a
-   * pathological one should not be able to request an enormous framebuffer.
-   */
-  function resize(){
-    const n=Math.min(1024,Math.max(1,Math.round(canvas.getBoundingClientRect().width)))
-    renderer.setSize(n,n,false);composer.setSize(n,n);refresh()
-  }
+  function resize(){renderer.setSize(192,192,false);composer.setSize(192,192);refresh()}
   function update(){trigger.setAttribute('aria-expanded',String(active()));schedule()}
   trigger.addEventListener('pointerenter',e=>{if(e.pointerType==='mouse'){hovered=true;update()}},events)
   trigger.addEventListener('pointerleave',()=>{hovered=false;pointer.set(0,0);update()},events)
