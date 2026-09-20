@@ -220,9 +220,12 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
       // rendered as coverage rather than as brightness: every lit pixel is the same teal, and
       // what changes up the claw is how many of them there are.
       float height=clamp((p.y+64.)/143.,0.,1.);
-      float density=mix(.92,.14,height*height);
+      // Nine of every sixteen pixels lit at the base, thinning to one or two at the tip. It was
+      // fourteen, which is dense enough to read as a filled shape with holes in it rather than
+      // as a projection.
+      float density=mix(.58,.07,height*height);
       // A slow vertical breathe, so the field is alive without anything repeating across it.
-      density+=.07*sin(time*.55-p.y*.021);
+      density+=.05*sin(time*.55-p.y*.021);
       float lit=step(bayer(gl_FragCoord.xy),density);
       // Every grey in the palette sits on the achromatic line, so the quantiser keeps a teal
       // only while the pixel holds a wide gap between its red and its green. Brightness is not
