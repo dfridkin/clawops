@@ -23,7 +23,15 @@
   text-underline-offset: 3px;
   cursor: pointer;
 }
-.pause:focus-visible {
+/*
+ * Revealed by hovering the shell, or by focusing it.
+ *
+ * Focus alone was not enough: a mouse user cannot focus a control without clicking it, and
+ * cannot click a one-pixel target, so the only way to the pause button was the keyboard. It was
+ * not that pausing was broken, it was that nothing could reach it.
+ */
+.shell:hover .pause,
+.pause:focus {
   position: static;
   width: auto;
   height: auto;
@@ -32,7 +40,11 @@
   overflow: visible;
   clip-path: none;
 }
-@media (pointer: coarse) { .pause:focus-visible { min-height: 44px; } }
+/*
+ * No hover on a touch screen, so the control stays out of the layout there and reachable only
+ * by assistive technology. Drawing it permanently is the text this hero was asked to lose.
+ */
+@media (pointer: coarse) { .pause:focus { min-height: 44px; } }
 /* Nothing is moving, so there is nothing to pause. */
 @media (prefers-reduced-motion: reduce) { .pause { display: none; } }
 
