@@ -53,15 +53,21 @@ function fbm(x: number, y: number): number {
  * runs on a coarse lattice and is bilinearly interpolated while the Bayer threshold still runs
  * at full resolution. The grain is identical; only the noise gets cheaper, by STRIDE squared.
  */
-const STRIDE = 3
+const STRIDE_FINE = 3
+/*
+ * The page field's base octave is 0.006 per pixel, a third of the smoke's, so its finest octave
+ * still spans about 21 pixels and a coarser lattice samples it several times over. Halving the
+ * lattice quarters the noise evaluations, which is what pays for running it at the shell's rate.
+ */
+const STRIDE_COARSE = 6
 
 type Grid = { gw: number; gh: number; buf: Float32Array }
 const grids = new Map<number, Grid>()
 
-function gridFor(w: number, h: number): Grid {
-  const gw = Math.ceil(w / STRIDE) + 2
-  const gh = Math.ceil(h / STRIDE) + 2
-  const key = gw * 65536 + gh
+function gridFor(w: number, h: number, stride: number): Grid {
+  const gw = Math.ceil(w / stride) + 2
+  const gh = Math.ceil(h / stride) + 2
+  const key = (gw * 65536 + gh) * 16 + stride
   let g = grids.get(key)
   if (!g) {
     g = { gw, gh, buf: new Float32Array(gw * gh) }
@@ -72,41 +78,50 @@ function gridFor(w: number, h: number): Grid {
 
 type Rgb = readonly [number, number, number]
 
+/**
+ * Fills the colour channels. The per-frame pass then writes only alpha, which is three of every
+ * four byte writes saved on a full-viewport layer, and the colour is a token that changes about
+ * as often as the theme does.
+ */
+export function primeRgb(data: Uint8ClampedArray, rgb: Rgb): void {
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = rgb[0]
+    data[i + 1] = rgb[1]
+    data[i + 2] = rgb[2]
+  }
+}
+
 /** `steps` of 1 gives a one-bit stipple; above that the alpha terraces into that many levels. */
 function stipple(
   data: Uint8ClampedArray,
   w: number,
   h: number,
-  rgb: Rgb,
   alpha: number,
   steps: number,
+  stride: number,
   densityAt: (x: number, y: number) => number,
 ): void {
-  const g = gridFor(w, h)
+  const g = gridFor(w, h, stride)
   const gw = g.gw
   const buf = g.buf
   for (let gy = 0; gy < g.gh; gy++) {
-    for (let gx = 0; gx < gw; gx++) buf[gy * gw + gx] = densityAt(gx * STRIDE, gy * STRIDE)
+    for (let gx = 0; gx < gw; gx++) buf[gy * gw + gx] = densityAt(gx * stride, gy * stride)
   }
 
   for (let y = 0; y < h; y++) {
-    const fy = y / STRIDE
+    const fy = y / stride
     const iy = fy | 0
     const ty = fy - iy
     const row = iy * gw
     for (let x = 0; x < w; x++) {
-      const fx = x / STRIDE
+      const fx = x / stride
       const ix = fx | 0
       const tx = fx - ix
       const top = buf[row + ix] + (buf[row + ix + 1] - buf[row + ix]) * tx
       const bot = buf[row + gw + ix] + (buf[row + gw + ix + 1] - buf[row + gw + ix]) * tx
       const dens = top + (bot - top) * ty
       const bay = dither(x, y)
-      const i = (y * w + x) * 4
-      data[i] = rgb[0]
-      data[i + 1] = rgb[1]
-      data[i + 2] = rgb[2]
-      data[i + 3] =
+      data[(y * w + x) * 4 + 3] =
         steps === 1
           ? bay < dens
             ? alpha
@@ -120,8 +135,8 @@ function stipple(
  * Smoke banks at the top of the hero and thins downward, terraced into four alpha steps so the
  * falloff breaks into visible bands rather than resolving into a smooth gradient.
  */
-export function drawSmoke(data: Uint8ClampedArray, w: number, h: number, t: number, rgb: Rgb): void {
-  stipple(data, w, h, rgb, 235, 4, (x, y) => {
+export function drawSmoke(data: Uint8ClampedArray, w: number, h: number, t: number): void {
+  stipple(data, w, h, 235, 4, STRIDE_FINE, (x, y) => {
     const fall = Math.pow(Math.max(0, 1 - y / h), 1.9)
     const n = fbm(x * 0.01375, y * 0.01875 - t * 0.5)
     return Math.max(0, Math.min(1, (n * 1.5 - 0.56) * fall * 2.5))
@@ -139,8 +154,8 @@ export function drawSmoke(data: Uint8ClampedArray, w: number, h: number, t: numb
  *
  * Thinnest through the middle, where the column of copy sits, so it never competes with text.
  */
-export function drawField(data: Uint8ClampedArray, w: number, h: number, t: number, rgb: Rgb): void {
-  stipple(data, w, h, rgb, 190, 1, (x, y) => {
+export function drawField(data: Uint8ClampedArray, w: number, h: number, t: number): void {
+  stipple(data, w, h, 190, 1, STRIDE_COARSE, (x, y) => {
     const nx = (x / w - 0.5) * 2
     const ny = (y / h - 0.5) * 2
     const vignette = Math.min(1, nx * nx * 0.62 + ny * ny * 0.3)
@@ -159,18 +174,15 @@ type Layer = {
   fx: Rgb
   visible: boolean
   last: number
+  primed: boolean
 }
 
 /*
- * Per-layer cadence, because the two layers are doing different jobs.
- *
- * The smoke is motion you are meant to notice and covers a band; 12fps is the period-correct
- * rate and it is cheap at that size. The page field is ambient, drifts slowly enough that
- * about four percent of it changes per second, and covers the whole viewport, which is 16ms a
- * frame on a desktop and 28ms on a large one. Redrawing that twelve times a second spends most
- * of the budget to produce a difference nobody can see.
+ * 1000/12, the rate the WebGL shell draws its own aura at, so every moving thing on the page
+ * steps together. The field covers the whole viewport and is the expensive one; it affords this
+ * rate by sampling its noise on a coarser lattice, not by drawing less often.
  */
-const INTERVAL: Record<AtmosphereKind, number> = { smoke: 83, field: 250 }
+const INTERVAL: Record<AtmosphereKind, number> = { smoke: 83, field: 83 }
 
 const layers = new Set<Layer>()
 let frame = 0
@@ -197,6 +209,7 @@ function fit(layer: Layer): boolean {
     layer.el.width = w
     layer.el.height = h
     layer.img = layer.ctx.createImageData(w, h)
+    layer.primed = false
   }
   return true
 }
@@ -205,8 +218,12 @@ function paint(layer: Layer, t: number): void {
   if (!fit(layer) || !layer.img) return
   const { data } = layer.img
   const { width: w, height: h } = layer.el
-  if (layer.kind === 'smoke') drawSmoke(data, w, h, t, layer.fx)
-  else drawField(data, w, h, t, layer.fx)
+  if (!layer.primed) {
+    primeRgb(data, layer.fx)
+    layer.primed = true
+  }
+  if (layer.kind === 'smoke') drawSmoke(data, w, h, t)
+  else drawField(data, w, h, t)
   layer.ctx.putImageData(layer.img, 0, 0)
 }
 
@@ -234,7 +251,7 @@ export function mountAtmosphere(el: HTMLCanvasElement, kind: AtmosphereKind): ()
   const ctx = el.getContext('2d')
   if (!ctx) return () => {}
 
-  const layer: Layer = { el, ctx, kind, img: null, fx: FALLBACK_FX, visible: true, last: -Infinity }
+  const layer: Layer = { el, ctx, kind, img: null, fx: FALLBACK_FX, visible: true, last: -Infinity, primed: false }
   readFx(layer)
   layers.add(layer)
   // A frame immediately, so the layer is never blank at rest or under reduced motion.
