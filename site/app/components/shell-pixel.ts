@@ -94,12 +94,22 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
     vertexShader:hologramVertex,fragmentShader:hologramFragment,
   }))
 
+  /*
+   * The aura reaches the container's corners.
+   *
+   * p is measured across the backdrop plane, which is 1400 across while the camera sees only
+   * the middle 640, so the visible square runs out to p=0.46 at its edge midpoints and p=0.65
+   * at its corners. A falloff of 5 had the stipple down to 25% coverage at the edges and 19%
+   * at the corners, which read as an aura around the claw sitting inside a dark square rather
+   * than as the whole screen being lit. 1.6 measures 56/44/31 across centre, edge and corner:
+   * the same centre as before, so only the reach changes and not the intensity.
+   */
   const atmosphere = keepMaterial(new THREE.ShaderMaterial({
     depthWrite: false,
     uniforms: { base: { value: new THREE.Color() }, teal: { value: new THREE.Color() }, strength: { value: 0.1 } },
     vertexShader: `varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
     fragmentShader: `varying vec2 vUv; uniform vec3 base; uniform vec3 teal; uniform float strength;
-      void main(){vec2 p=(vUv-.5)*2.; float a=exp(-5.*dot(p,p)); gl_FragColor=vec4(mix(base,teal,a*strength),1.);
+      void main(){vec2 p=(vUv-.5)*2.; float a=exp(-1.6*dot(p,p)); gl_FragColor=vec4(mix(base,teal,a*strength),1.);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       }`,
