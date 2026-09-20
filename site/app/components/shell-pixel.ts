@@ -207,17 +207,20 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
     uniforms: hologram,
     vertexShader: `varying vec2 p; void main(){p=position.xy;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
     fragmentShader: `varying vec2 p; uniform vec3 teal; uniform float reveal; uniform float time;
-      // The claw is about 39 framebuffer pixels tall, so the scan has very little room. At
-      // p.y*1.6 the period was 1.08 pixels, under the two a line and a gap need, and the
-      // pattern beat against the pixel grid instead of resolving. A two-pixel period fixed
-      // that and cost the motion: two phase states cannot scroll, they can only alternate, so
-      // the lines sat still and flipped every few seconds.
+      // The claw is about 39 framebuffer pixels tall, and the frame steps at 12fps, so the scan
+      // has very little room in either dimension.
       //
-      // Three pixels is the compromise. Thirteen lines across the claw, each one resolved, and
-      // enough phase positions that the stripe travels rather than toggles. The time
-      // coefficient was 0.35, which moved one period every eighteen seconds; 3.4 moves one
-      // every two, which is a scan rather than a drift.
-      void main(){float scan=pow(.5+.5*cos(p.y*.574-time*3.4),13.);float cut=smoothstep(p.y-4.,p.y+4.,-80.+reveal*174.);
+      // A period is only as smooth as the number of pixels in it: three pixels give the lit
+      // band three places to be, and it flashes between them. Five give it five, and at one
+      // period every 0.85 seconds it advances about half a pixel per rendered frame, which is
+      // the fastest it can move and still read as travelling rather than jumping. Eight lines
+      // across the claw instead of thirteen is the price, and the alternative was thirteen
+      // lines that strobe.
+      //
+      // For the record of what was tried: 1.6 put the period under two pixels, where it beat
+      // against the grid instead of resolving; 0.862 put it at exactly two, which resolved and
+      // could only alternate.
+      void main(){float scan=pow(.5+.5*cos(p.y*.345-time*7.4),11.);float cut=smoothstep(p.y-4.,p.y+4.,-80.+reveal*174.);
       float sweep=exp(-pow((p.y-(-80.+reveal*174.))/3.,2.))*(1.-step(.999,reveal));
       gl_FragColor=vec4(teal,(.030+.19*scan+.32*sweep)*cut*reveal);}`,
   }))
