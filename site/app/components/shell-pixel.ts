@@ -224,16 +224,18 @@ export function mountShell(canvas: HTMLCanvasElement, trigger: HTMLButtonElement
       // A slow vertical breathe, so the field is alive without anything repeating across it.
       density+=.07*sin(time*.55-p.y*.021);
       float lit=step(bayer(gl_FragCoord.xy),density);
-      // Every grey in the palette sits on the achromatic line, so the quantiser picks a teal
-      // only while the blended pixel keeps a wide gap between its red and its green. Blending
-      // the accent straight over a dark ground does not keep enough of one: the result lands
-      // between palette[2] and palette[7] and gets rounded to slate.
+      // Every grey in the palette sits on the achromatic line, so the quantiser keeps a teal
+      // only while the pixel holds a wide gap between its red and its green. Brightness is not
+      // that gap: scaling the accent up widened it and raised the luminance with it, and the
+      // pixel climbed the grey ramp until it came out white.
       //
-      // Boosting the colour before it blends widens that gap instead of just brightening the
-      // pixel, which is what pushes it clear of the greys rather than up into them. 1.5 sits
-      // seven times nearer the teal entries than the nearest grey; 2.4 overshoots into the
-      // light greys at the top of the ramp.
-      gl_FragColor=vec4(teal*1.5,(.02+.90*lit+.28*sweep)*cut*reveal);}`,
+      // Cutting the red instead widens the gap without adding light. The accent's red is the
+      // channel that drags it toward the achromatic line, and at a quarter of it the result
+      // lands on palette[7], the dark teal, and stays there from an effective alpha of .40 all
+      // the way past 1.6. That range is the point: the fill composites over the halo, the
+      // contour and the beam rather than over the ground alone, so whatever those add has room
+      // to land in without changing the answer.
+      gl_FragColor=vec4(vec3(teal.r*.25,teal.g,teal.b),(.02+.55*lit+.24*sweep)*cut*reveal);}`,
   }))
   core.add(new THREE.Mesh(keepGeometry(new THREE.ShapeGeometry(outline, 48)), holoFill))
   const holoHalo = keepMaterial(new THREE.ShaderMaterial({
