@@ -9,17 +9,15 @@ import { mountAtmosphere, type AtmosphereKind } from './atmosphere-fx'
  */
 export default function Atmosphere({
   kind,
-  flip = false,
   className,
 }: {
   kind: AtmosphereKind
-  flip?: boolean
   className?: string
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     if (!ref.current) return
-    return mountAtmosphere(ref.current, kind, flip)
-  }, [kind, flip])
+    return mountAtmosphere(ref.current, kind)
+  }, [kind])
   return <canvas ref={ref} className={className} aria-hidden="true" />
 }

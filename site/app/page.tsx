@@ -81,6 +81,7 @@ export default function Home() {
       </div>
 
       <div className={styles.page}>
+        <Atmosphere kind="field" className={styles.pageField} />
         <div className={styles.sections}>
           {/* ── what it does: the page's one saturated block ── */}
           <section className={`${styles.section} ${styles.field}`} id="how">
@@ -156,7 +157,6 @@ export default function Home() {
 
           {/* ── quickstart ───────────────────────────────────── */}
           <section className={styles.section} id="quickstart">
-            <Atmosphere kind="edge" className={styles.edge} />
             <div className={styles.sectionHead}>
               <span className={styles.chip}>02</span>
               <h2 className={styles.sectionTitle}>Quickstart</h2>
@@ -279,7 +279,6 @@ clawops doctor`}</pre>
 
           {/* ── what it doesn't do ───────────────────────────── */}
           <section className={styles.section}>
-            <Atmosphere kind="edge" flip className={styles.edge} />
             <div className={styles.sectionHead}>
               <span className={styles.chip}>04</span>
               <h2 className={styles.sectionTitle}>What it does not do</h2>

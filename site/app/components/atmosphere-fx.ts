@@ -129,41 +129,51 @@ export function drawSmoke(data: Uint8ClampedArray, w: number, h: number, t: numb
 }
 
 /**
- * The same stipple falling off from one side rather than from a centre, so it bleeds in under
- * the copy without framing it. `flip` runs it from the right edge instead.
+ * The page's ambient field: one broad wash behind the whole dark part of the page rather than a
+ * band per section.
+ *
+ * It is viewport-fixed, which is what makes it affordable. Sized to the document it would be
+ * several million pixels to redraw every frame; sized to the viewport it is bounded by the
+ * screen no matter how long the page grows, and an ambient field has no anchor in the content
+ * that scrolling away would break.
+ *
+ * Thinnest through the middle, where the column of copy sits, so it never competes with text.
  */
-export function drawEdge(
-  data: Uint8ClampedArray,
-  w: number,
-  h: number,
-  t: number,
-  rgb: Rgb,
-  flip: boolean,
-): void {
-  stipple(data, w, h, rgb, 200, 1, (x, y) => {
-    const ex = flip ? w - 1 - x : x
-    const vfall = Math.sin(Math.PI * Math.min(1, Math.max(0, y / h)))
-    const fall = Math.max(0, 1 - ex / (w * 0.46)) * vfall
-    const n = fbm(ex * 0.015 + t * 0.8, y * 0.015 - t * 1.25)
-    return fall * (0.18 + 1.35 * n)
+export function drawField(data: Uint8ClampedArray, w: number, h: number, t: number, rgb: Rgb): void {
+  stipple(data, w, h, rgb, 190, 1, (x, y) => {
+    const nx = (x / w - 0.5) * 2
+    const ny = (y / h - 0.5) * 2
+    const vignette = Math.min(1, nx * nx * 0.62 + ny * ny * 0.3)
+    const n = fbm(x * 0.006 + t * 0.3, y * 0.006 - t * 0.45)
+    return (0.02 + 0.5 * n) * (0.18 + 0.95 * vignette)
   })
 }
 
-export type AtmosphereKind = 'smoke' | 'edge'
+export type AtmosphereKind = 'smoke' | 'field'
 
 type Layer = {
   el: HTMLCanvasElement
   ctx: CanvasRenderingContext2D
   kind: AtmosphereKind
-  flip: boolean
   img: ImageData | null
   fx: Rgb
   visible: boolean
+  last: number
 }
+
+/*
+ * Per-layer cadence, because the two layers are doing different jobs.
+ *
+ * The smoke is motion you are meant to notice and covers a band; 12fps is the period-correct
+ * rate and it is cheap at that size. The page field is ambient, drifts slowly enough that
+ * about four percent of it changes per second, and covers the whole viewport, which is 16ms a
+ * frame on a desktop and 28ms on a large one. Redrawing that twelve times a second spends most
+ * of the budget to produce a difference nobody can see.
+ */
+const INTERVAL: Record<AtmosphereKind, number> = { smoke: 83, field: 250 }
 
 const layers = new Set<Layer>()
 let frame = 0
-let last = -Infinity
 
 const FALLBACK_FX: Rgb = [13, 107, 107]
 
@@ -196,22 +206,19 @@ function paint(layer: Layer, t: number): void {
   const { data } = layer.img
   const { width: w, height: h } = layer.el
   if (layer.kind === 'smoke') drawSmoke(data, w, h, t, layer.fx)
-  else drawEdge(data, w, h, t, layer.fx, layer.flip)
+  else drawField(data, w, h, t, layer.fx)
   layer.ctx.putImageData(layer.img, 0, 0)
-}
-
-function renderAll(t: number, force = false): void {
-  for (const layer of layers) if (force || layer.visible) paint(layer, t)
 }
 
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 
 function tick(ts: number): void {
   frame = requestAnimationFrame(tick)
-  // 12fps: period-correct, and it leaves the rest of the budget to the WebGL shell.
-  if (ts - last < 83) return
-  last = ts
-  renderAll(ts / 1000)
+  for (const layer of layers) {
+    if (!layer.visible || ts - layer.last < INTERVAL[layer.kind]) continue
+    layer.last = ts
+    paint(layer, ts / 1000)
+  }
 }
 
 function ensureLoop(): void {
@@ -220,18 +227,14 @@ function ensureLoop(): void {
 
 /**
  * Mounts one atmosphere layer. Layers share a single animation frame rather than each holding
- * their own, and a layer scrolled out of view stops being painted: the section fields sit well
- * below the fold and would otherwise cost a full redraw a frame for nothing.
+ * their own, and a layer scrolled out of view stops being painted: the smoke leaves the screen
+ * as soon as the hero does, and would otherwise cost a full redraw a frame for nothing.
  */
-export function mountAtmosphere(
-  el: HTMLCanvasElement,
-  kind: AtmosphereKind,
-  flip: boolean,
-): () => void {
+export function mountAtmosphere(el: HTMLCanvasElement, kind: AtmosphereKind): () => void {
   const ctx = el.getContext('2d')
   if (!ctx) return () => {}
 
-  const layer: Layer = { el, ctx, kind, flip, img: null, fx: FALLBACK_FX, visible: true }
+  const layer: Layer = { el, ctx, kind, img: null, fx: FALLBACK_FX, visible: true, last: -Infinity }
   readFx(layer)
   layers.add(layer)
   // A frame immediately, so the layer is never blank at rest or under reduced motion.
@@ -263,7 +266,6 @@ export function mountAtmosphere(
     if (!layers.size && frame) {
       cancelAnimationFrame(frame)
       frame = 0
-      last = -Infinity
     }
   }
 }

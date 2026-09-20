@@ -277,18 +277,24 @@
    The gap is the break, so it has to be big enough to read as one. */
 .page { max-width: 74rem; margin: 0 auto; padding: 0 1.5rem 2rem; }
 .sections { display: grid; gap: 6rem; margin: 4rem 0 4.4rem; }
-/* z-index 0 makes each section a stacking context, so the edge canvas can sit at -1: behind the
-   section's own content but still above the page ground. */
-.section { position: relative; z-index: 0; }
-.edge {
-  position: absolute;
+/*
+ * One ambient field behind the whole dark part of the page, rather than a band per section.
+ *
+ * Fixed and viewport-sized: sized to the document instead it would be several million pixels to
+ * redraw, and it grows with the page. At z-index -1 it paints above the body's background and
+ * below everything in flow, so the chrome band, the accent panel and every card cover it and it
+ * shows only where the page's own dark ground does. Nothing in flow needs a z-index for that,
+ * which is why the sections no longer carry one.
+ */
+.pageField {
+  position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
   z-index: -1;
   image-rendering: pixelated;
   pointer-events: none;
-  opacity: 0.6;
+  opacity: 0.75;
 }
 .sectionHead { display: flex; align-items: center; gap: 0.65rem; margin: 0 0 0.9rem; }
 .sectionTitle {
