@@ -1,18 +1,11 @@
 import styles from './page.module.css'
 import HeroIntro from './components/HeroIntro'
 import Atmosphere from './components/Atmosphere'
+import { OPENCLAW_SUPPORTED } from './constants'
 
 const GITHUB = 'https://github.com/dfridkin/clawops'
 const NPM = 'https://www.npmjs.com/package/@clawops/cli'
 
-/**
- * OpenClaw compatibility, stated on the landing page rather than buried in docs.
- *
- * "Does this work with 2.0?" is the first question a visitor has. Answering it above the
- * fold costs one line and saves a support round-trip. This line requires 2.0; the previous
- * one is maintained under the `legacy` dist-tag.
- */
-const OPENCLAW_SUPPORTED = '2026.9.2'
 
 export default function Home() {
   return (
