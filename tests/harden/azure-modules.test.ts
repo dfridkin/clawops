@@ -11,7 +11,7 @@ import {
 import { posture, describe as describeGaps } from '../../src/harden/modules/azure-disk-encryption.js'
 import { unprotectedPlans } from '../../src/harden/modules/azure-defender.js'
 import { coversClawopsVm, resourceName } from '../../src/harden/modules/azure-jit.js'
-import { isClawopsResource } from '../../src/harden/azure-api.js'
+import { isClawopsResource, explainFailure, armGet } from '../../src/harden/azure-api.js'
 
 const noopExec: RemoteExec = async () => ({ stdout: '', stderr: '', code: 0 })
 const CTX = { subscriptionId: 'sub-1', token: 't' }
@@ -20,7 +20,7 @@ beforeEach(() => vi.resetModules())
 
 /** Load a module with ARM stubbed to the given responses. */
 async function withArm<T>(
-  stub: { ctx?: unknown; get?: unknown; vm?: unknown; byId?: unknown },
+  stub: { ctx?: unknown; get?: unknown; vm?: unknown; byId?: unknown; registered?: boolean },
   load: () => Promise<T>,
 ): Promise<T> {
   vi.doMock('../../src/harden/azure-api.js', async () => {
@@ -31,6 +31,7 @@ async function withArm<T>(
       ...real,
       azureContext: async () => stub.ctx,
       armGet: async () => stub.get,
+      providerRegistered: async () => stub.registered,
       armGetById: async () => stub.byId,
       findClawopsVm: async () => stub.vm,
     }
@@ -200,7 +201,7 @@ describe('check() paths: what each module says when it cannot read', () => {
 
   it('NSG audit reports drift when a clawops rule is open', async () => {
     const r = await withArm(
-      { ctx: CTX, get: { value: [{ name: 'clawops-nsg-a', properties: { securityRules: [rule({ sourceAddressPrefix: '*', destinationPortRange: '22' })] } }] } },
+      { ctx: CTX, get: { ok: true, body: { value: [{ name: 'clawops-nsg-a', properties: { securityRules: [rule({ sourceAddressPrefix: '*', destinationPortRange: '22' })] } }] } } },
       async () => {
         const { azureNsgAuditModule } = await import('../../src/harden/modules/azure-nsg-audit.js')
         return azureNsgAuditModule.check(noopExec)
@@ -219,12 +220,101 @@ describe('check() paths: what each module says when it cannot read', () => {
   })
 
   it('JIT explains that the read may fail because the paid plan is absent', async () => {
-    const r = await withArm({ ctx: CTX, vm: { name: 'clawops-vm-a' }, get: undefined }, async () => {
+    const r = await withArm({ ctx: CTX, vm: { name: 'clawops-vm-a' }, registered: true, get: { ok: false, reason: 'forbidden' } }, async () => {
       const { azureJitModule } = await import('../../src/harden/modules/azure-jit.js')
       return azureJitModule.check(noopExec)
     })
     expect(r.status).toBe('skipped')
     expect(r.detail).toContain('Defender for Servers Plan 2')
+  })
+})
+
+/*
+ * Both of these come from running the checks against a live subscription. Microsoft.Security was
+ * unregistered there, and neither failure mode was reachable from a hand-written fixture.
+ */
+describe('armGet classifies the failure, which is where the distinction is made', () => {
+  const withFetch = async <T>(status: number, body: string, run: () => Promise<T>): Promise<T> => {
+    const original = globalThis.fetch
+    globalThis.fetch = (async () =>
+      ({ ok: status >= 200 && status < 300, status, text: async () => body, json: async () => ({}) }) as unknown as Response) as typeof fetch
+    try {
+      return await run()
+    } finally {
+      globalThis.fetch = original
+    }
+  }
+
+  // ARM answers an unregistered namespace with 404 and this body. Live, Microsoft.Security was
+  // unregistered and `pricings` returned exactly this.
+  it('reads a 404 naming registration as unregistered, and takes the namespace from the path', async () => {
+    const r = await withFetch(404, '{"error":{"code":"Subscription Not Registered","message":"Please register to Microsoft.Security in order to view your security status"}}',
+      () => armGet(CTX, '/providers/Microsoft.Security/pricings?api-version=2023-01-01'))
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.reason).toBe('unregistered')
+      if (r.reason === 'unregistered') expect(r.namespace).toBe('Microsoft.Security')
+    }
+  })
+
+  it('a 404 that is merely absent stays a plain error, not advice to register something', async () => {
+    const r = await withFetch(404, '{"error":{"code":"ResourceNotFound","message":"not found"}}',
+      () => armGet(CTX, '/providers/Microsoft.Compute/virtualMachines/x?api-version=2023-09-01'))
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.reason).toBe('error')
+  })
+
+  it('a 403 is forbidden, which is the case that really is a permission', async () => {
+    const r = await withFetch(403, '{}', () => armGet(CTX, '/providers/Microsoft.Security/pricings?api-version=2023-01-01'))
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.reason).toBe('forbidden')
+  })
+})
+
+describe('a failed read says why, because the fixes are different', () => {
+  it('names the provider to register rather than blaming permissions', () => {
+    const d = explainFailure({ reason: 'unregistered', namespace: 'Microsoft.Security' }, 'Defender pricing', 'x/read')
+    expect(d).toContain('az provider register --namespace Microsoft.Security')
+    expect(d).not.toContain('not allowed')
+  })
+
+  it('says registering costs nothing, so the advice is safe to follow', () => {
+    expect(explainFailure({ reason: 'unregistered', namespace: 'Microsoft.Security' }, 's', 'p'))
+      .toContain('costs nothing')
+  })
+
+  it('blames permissions only when ARM actually said 403', () => {
+    const d = explainFailure({ reason: 'forbidden' }, 'Defender pricing', 'Microsoft.Security/pricings/read')
+    expect(d).toContain('Microsoft.Security/pricings/read')
+    expect(d).not.toContain('az provider register')
+  })
+})
+
+describe('JIT does not read an empty list as a definite negative', () => {
+  // With Microsoft.Security unregistered, jitNetworkAccessPolicies answers 200 with an empty
+  // list while pricings answers 404. "No policy covers the VM" would be a fact about a
+  // subscription that cannot have JIT at all.
+  it('skips when the namespace is unregistered, even though the list read succeeds', async () => {
+    const r = await withArm(
+      { ctx: CTX, vm: { name: 'clawops-vm-a' }, registered: false, get: { ok: true, body: { value: [] } } },
+      async () => {
+        const { azureJitModule } = await import('../../src/harden/modules/azure-jit.js')
+        return azureJitModule.check(noopExec)
+      },
+    )
+    expect(r.status).toBe('skipped')
+    expect(r.detail).toContain('az provider register')
+  })
+
+  it('still reports a real absence when the provider is registered', async () => {
+    const r = await withArm(
+      { ctx: CTX, vm: { name: 'clawops-vm-a' }, registered: true, get: { ok: true, body: { value: [] } } },
+      async () => {
+        const { azureJitModule } = await import('../../src/harden/modules/azure-jit.js')
+        return azureJitModule.check(noopExec)
+      },
+    )
+    expect(r.status).toBe('missing')
   })
 })
 

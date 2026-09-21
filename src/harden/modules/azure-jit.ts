@@ -10,7 +10,15 @@
 // disagreeing about what the firewall says. It reports, and the decision stays with the operator.
 
 import type { HardeningModule, RemoteExec, CheckResult, ApplyResult } from '../types.js'
-import { azureContext, armGet, isClawopsResource, findClawopsVm, type ArmList } from '../azure-api.js'
+import {
+  azureContext,
+  armGet,
+  explainFailure,
+  isClawopsResource,
+  findClawopsVm,
+  providerRegistered,
+  type ArmList,
+} from '../azure-api.js'
 
 export interface JitPolicy {
   name?: string
@@ -56,20 +64,38 @@ export const azureJitModule: HardeningModule = {
           'policy to cover.',
       }
     }
-    const body = await armGet<ArmList<JitPolicy>>(
-      ctx,
-      '/providers/Microsoft.Security/jitNetworkAccessPolicies?api-version=2020-01-01',
-    )
-    if (!body) {
+    /*
+     * The registration check comes first, and is not belt and braces.
+     *
+     * With Microsoft.Security unregistered, this endpoint answers 200 with an empty list while
+     * `pricings` under the same namespace answers 404. Reading that empty list as "no policy
+     * covers the VM" reports a definite negative about a subscription that cannot have JIT at
+     * all, and sends the operator looking for a policy to create rather than a provider to
+     * register. Measured against a live subscription; both endpoints were checked.
+     */
+    const registered = await providerRegistered(ctx, 'Microsoft.Security')
+    if (registered === false) {
       return {
         status: 'skipped',
         detail:
-          'Could not read JIT policies. Either the identity lacks ' +
-          'Microsoft.Security/jitNetworkAccessPolicies/read, or Defender for Servers Plan 2 is ' +
-          'not on this subscription, which is what JIT requires.',
+          'The Microsoft.Security resource provider is not registered on this subscription, so ' +
+          'it has no Defender and therefore no JIT. Register it with `az provider register ' +
+          '--namespace Microsoft.Security` if you want these checks to report.',
       }
     }
-    return coversClawopsVm(body.value ?? [])
+    const r = await armGet<ArmList<JitPolicy>>(
+      ctx,
+      '/providers/Microsoft.Security/jitNetworkAccessPolicies?api-version=2020-01-01',
+    )
+    if (!r.ok) {
+      return {
+        status: 'skipped',
+        detail:
+          explainFailure(r, 'JIT policies', 'Microsoft.Security/jitNetworkAccessPolicies/read') +
+          ' JIT also requires Defender for Servers Plan 2, which this subscription may not have.',
+      }
+    }
+    return coversClawopsVm(r.body.value ?? [])
       ? { status: 'applied', detail: 'A JIT policy covers the clawops VM.' }
       : {
           status: 'missing',

@@ -11,7 +11,7 @@
 
 import type { HardeningModule, RemoteExec, CheckResult, ApplyResult } from '../types.js'
 import { GATEWAY_PORT } from '../../openclaw/run-flags.js'
-import { azureContext, armGet, isClawopsResource, type ArmList } from '../azure-api.js'
+import { azureContext, armGet, explainFailure, isClawopsResource, type ArmList } from '../azure-api.js'
 
 /** Every spelling of "anywhere" Azure accepts in a source address. */
 const WORLD = new Set(['*', 'internet', 'any', '0.0.0.0/0', '::/0'])
@@ -100,19 +100,19 @@ export const azureNsgAuditModule: HardeningModule = {
           'not be read. This says nothing about the rules themselves.',
       }
     }
-    const body = await armGet<ArmList<Nsg>>(
+    const r = await armGet<ArmList<Nsg>>(
       ctx,
       '/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-05-01',
     )
-    if (!body) {
+    if (!r.ok) {
       return {
         status: 'skipped',
         detail:
-          `Could not list network security groups in ${ctx.subscriptionId}. The identity needs ` +
-          'Microsoft.Network/networkSecurityGroups/read; nothing else clawops does requires it.',
+          explainFailure(r, 'the network security groups', 'Microsoft.Network/networkSecurityGroups/read') +
+          ' This says nothing about the rules themselves.',
       }
     }
-    const findings = openFindings(body.value ?? [])
+    const findings = openFindings(r.body.value ?? [])
     return findings.length === 0
       ? { status: 'applied', detail: 'No clawops NSG rule admits the internet in this subscription.' }
       : { status: 'drifted', detail: `Open to the internet: ${findings.join('; ')}.` }

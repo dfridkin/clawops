@@ -6,7 +6,7 @@
 // operator. It reports the tier and names what enabling it would cost them.
 
 import type { HardeningModule, RemoteExec, CheckResult, ApplyResult } from '../types.js'
-import { azureContext, armGet, type ArmList } from '../azure-api.js'
+import { azureContext, armGet, explainFailure, type ArmList } from '../azure-api.js'
 
 /** The plans that cover what clawops deploys: a VM, its disks, and the Key Vault it may use. */
 export const RELEVANT_PLANS = ['VirtualMachines', 'KeyVaults'] as const
@@ -39,19 +39,17 @@ export const azureDefenderModule: HardeningModule = {
         detail: 'No Azure credentials or subscription resolved, so Defender could not be read.',
       }
     }
-    const body = await armGet<ArmList<Pricing>>(
+    const r = await armGet<ArmList<Pricing>>(
       ctx,
       '/providers/Microsoft.Security/pricings?api-version=2023-01-01',
     )
-    if (!body) {
+    if (!r.ok) {
       return {
         status: 'skipped',
-        detail:
-          `Could not read Defender pricing in ${ctx.subscriptionId}. The identity needs ` +
-          'Microsoft.Security/pricings/read; nothing else clawops does requires it.',
+        detail: explainFailure(r, 'Defender pricing', 'Microsoft.Security/pricings/read'),
       }
     }
-    const off = unprotectedPlans(body.value ?? [])
+    const off = unprotectedPlans(r.body.value ?? [])
     return off.length === 0
       ? { status: 'applied', detail: 'Defender covers virtual machines and Key Vault on this subscription.' }
       : {

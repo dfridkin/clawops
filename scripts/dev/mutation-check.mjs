@@ -758,6 +758,12 @@ const MUTATIONS = [
     file: 'src/harden/modules/azure-defender.ts', from: "(p.properties?.pricingTier ?? 'Free')", to: "(p.properties?.pricingTier ?? 'Standard')", test: 'tests/harden/azure-modules.test.ts' },
   { name: 'JIT matches the VM on its id, which carries the resource group',
     file: 'src/harden/modules/azure-jit.ts', from: "      isClawopsResource(resourceName(vm.id), 'clawops-vm'),", to: "      isClawopsResource(vm.id, 'clawops-vm'),", test: 'tests/harden/azure-modules.test.ts' },
+  { name: 'an unregistered provider is reported as a missing permission again',
+    file: 'src/harden/azure-api.ts', from: "  if (f.reason === 'unregistered') {", to: '  if (false) {', test: 'tests/harden/azure-modules.test.ts' },
+  { name: 'a 404 for an unregistered namespace is read as a plain error',
+    file: 'src/harden/azure-api.ts', from: "    if (/not registered/i.test(body)) {", to: '    if (false) {', test: 'tests/harden/azure-modules.test.ts' },
+  { name: 'JIT reads an empty list from an unregistered namespace as a real absence',
+    file: 'src/harden/modules/azure-jit.ts', from: '    if (registered === false) {', to: '    if (false) {', test: 'tests/harden/azure-modules.test.ts' },
 
 ]
 
