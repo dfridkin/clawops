@@ -370,15 +370,18 @@ clawops doctor`}</pre>
             </div>
             <div className={`${styles.cell} ${styles.sunken}`}>MPL-2.0</div>
             <div className={`${styles.cell} ${styles.sunken} ${styles.cellGrow}`}>&nbsp;</div>
-            <a className={`${styles.cell} ${styles.sunken}`} href="/docs">
-              Docs
-            </a>
-            <a className={`${styles.cell} ${styles.sunken}`} href={GITHUB}>
-              GitHub
-            </a>
-            <a className={`${styles.cell} ${styles.sunken}`} href={NPM}>
-              npm
-            </a>
+            {/* Grouped so they wrap as a unit rather than breaking up across rows. */}
+            <div className={styles.statusLinks}>
+              <a className={`${styles.cell} ${styles.sunken}`} href="/docs">
+                Docs
+              </a>
+              <a className={`${styles.cell} ${styles.sunken}`} href={GITHUB}>
+                GitHub
+              </a>
+              <a className={`${styles.cell} ${styles.sunken}`} href={NPM}>
+                npm
+              </a>
+            </div>
           </div>
         </footer>
       </div>

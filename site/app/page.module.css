@@ -421,3 +421,18 @@
 }
 .cellGrow { flex: 1; min-width: 2.5rem; }
 .cell:hover { color: var(--accent); }
+.statusLinks { display: flex; gap: 3px; }
+
+/*
+ * Below the width where the whole bar fits on one line, the three links take a row of their own.
+ *
+ * As loose flex items behind a flex:1 spacer they broke wherever the wrap happened to fall,
+ * which on a phone left Docs at the end of one row and npm at the start of the next. Grouping
+ * them makes them wrap as a unit, flex-basis 100% puts that unit on its own line, and the
+ * spacer goes: stretched across a row of its own it is not the right-hand affordance it stands
+ * in for on a wide bar, just an empty panel.
+ */
+@media (max-width: 46rem) {
+  .cellGrow { display: none; }
+  .statusLinks { flex: 0 0 100%; }
+}
