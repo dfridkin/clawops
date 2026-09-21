@@ -2,6 +2,37 @@
   "name": "@clawops/cli",
   "version": "2.0.2",
   "description": "Deploy and manage self-hosted OpenClaw instances across clouds",
+  "keywords": [
+    "openclaw",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "pulumi",
+    "pulumi-automation-api",
+    "infrastructure-as-code",
+    "iac",
+    "devops",
+    "deployment",
+    "self-hosted",
+    "cli",
+    "aws",
+    "gcp",
+    "azure",
+    "ai-agent",
+    "agent-ops",
+    "claude-code",
+    "typescript",
+    "nodejs"
+  ],
+  "homepage": "https://clawops.fyi",
+  "bugs": {
+    "url": "https://github.com/dfridkin/clawops/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dfridkin/clawops.git"
+  },
+  "license": "MPL-2.0",
   "type": "module",
   "bin": {
     "clawops": "./dist/cli.js"
@@ -13,11 +44,6 @@
     "dist",
     "spec"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/dfridkin/clawops.git"
-  },
-  "homepage": "https://clawops.fyi",
   "mcpName": "io.github.dfridkin/clawops",
   "publishConfig": {
     "access": "public",
