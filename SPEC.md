@@ -1,7 +1,7 @@
 # clawops. Technical Specification
 
 **Version:** 0.9
-**Status:** 2.0.2 published. M8 complete (1708 unit+e2e tests); Waves 1–13 complete. WO-01–WO-31, WO-33, WO-35 done; WO-32, WO-34 open (Azure hardening, Tailscale). WO-53–WO-57 deferred to 2.1; WO-62 (host agent) ships alone as 2.2 behind preconditions
+**Status:** 2.0.2 published. M8 complete (1756 unit+e2e tests); Waves 1–13 complete. WO-01–WO-33, WO-35 done; WO-34 open (Tailscale). WO-53–WO-57 deferred to 2.1; WO-62 (host agent) ships alone as 2.2 behind preconditions
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -1298,7 +1298,7 @@ Implementation notes:
 - Firewall audit and Cloud Audit Logs are describe-only (no GCP mutations).
 
 Status:
-- [ ] WO-31: GCP hardening options (firewall audit, Shielded VM, OS Login, audit logs check)
+- [x] WO-31: GCP hardening options (firewall audit, Shielded VM, OS Login)
 
 ---
 
@@ -1319,7 +1319,7 @@ Implementation notes:
 - JIT VM Access, when applied, updates the NSG (via Pulumi state update) to add a deny-all rule for port 22 with higher priority than existing allow rules, with a corresponding JIT policy resource.
 
 Status:
-- [ ] WO-32: Azure hardening options (NSG audit, disk encryption check, Defender opt-in, JIT access)
+- [x] WO-32: Azure hardening options (NSG audit, disk encryption check, Defender check, JIT check)
 
 ---
 
@@ -1505,7 +1505,7 @@ Implementation notes:
 - Firewall audit and Cloud Audit Logs are describe-only (no GCP mutations).
 
 Status:
-- [ ] WO-31: GCP hardening options (firewall audit, Shielded VM, OS Login, audit logs check)
+- [x] WO-31: GCP hardening options (firewall audit, Shielded VM, OS Login)
 
 ---
 
@@ -1526,7 +1526,7 @@ Implementation notes:
 - JIT VM Access, when applied, updates the NSG (via Pulumi state update) to add a deny-all rule for port 22 with higher priority than existing allow rules, with a corresponding JIT policy resource.
 
 Status:
-- [ ] WO-32: Azure hardening options (NSG audit, disk encryption check, Defender opt-in, JIT access)
+- [x] WO-32: Azure hardening options (NSG audit, disk encryption check, Defender check, JIT check)
 
 ---
 

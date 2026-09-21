@@ -20,6 +20,17 @@ export { awsSsmCheckModule } from './modules/aws-ssm-check.js'
 export { awsFlowLogsModule } from './modules/aws-flow-logs.js'
 export { awsGuardDutyModule } from './modules/aws-guardduty.js'
 
+// GCP-specific modules
+export { gcpFirewallAuditModule } from './modules/gcp-firewall-audit.js'
+export { gcpShieldedVmModule } from './modules/gcp-shielded-vm.js'
+export { gcpOsLoginModule } from './modules/gcp-os-login.js'
+
+// Azure-specific modules
+export { azureNsgAuditModule } from './modules/azure-nsg-audit.js'
+export { azureDiskEncryptionModule } from './modules/azure-disk-encryption.js'
+export { azureDefenderModule } from './modules/azure-defender.js'
+export { azureJitModule } from './modules/azure-jit.js'
+
 import type { HardeningModule } from './types.js'
 import { sshModule } from './modules/ssh.js'
 import { ufwModule } from './modules/ufw.js'
@@ -36,6 +47,10 @@ import { awsGuardDutyModule } from './modules/aws-guardduty.js'
 import { gcpFirewallAuditModule } from './modules/gcp-firewall-audit.js'
 import { gcpShieldedVmModule } from './modules/gcp-shielded-vm.js'
 import { gcpOsLoginModule } from './modules/gcp-os-login.js'
+import { azureNsgAuditModule } from './modules/azure-nsg-audit.js'
+import { azureDiskEncryptionModule } from './modules/azure-disk-encryption.js'
+import { azureDefenderModule } from './modules/azure-defender.js'
+import { azureJitModule } from './modules/azure-jit.js'
 
 /** Full catalog of all hardening modules, ordered as they appear in the wizard. */
 export const MODULE_CATALOG: HardeningModule[] = [
@@ -58,4 +73,9 @@ export const MODULE_CATALOG: HardeningModule[] = [
   gcpFirewallAuditModule,
   gcpShieldedVmModule,
   gcpOsLoginModule,
+  // Azure-specific
+  azureNsgAuditModule,
+  azureDiskEncryptionModule,
+  azureDefenderModule,
+  azureJitModule,
 ]

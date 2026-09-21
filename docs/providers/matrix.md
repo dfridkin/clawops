@@ -90,16 +90,30 @@ auditd, lynis and sysctl. These are the cloud-specific additions.
 
 | Check | AWS | GCP | Azure | Local VM |
 |---|---|---|---|---|
-| Firewall / security group audit | ✓ (SG, incl. IPv6) | ✓ (VPC firewall) | Planned | — (manage on host) |
-| Remote-access agent readiness | ✓ (SSM) | — | Planned | — |
+| Firewall / security group audit | ✓ (SG, incl. IPv6) | ✓ (VPC firewall) | ✓ (NSG, check-only) | — (manage on host) |
+| Remote-access agent readiness | ✓ (SSM) | — | ✓ (JIT, check-only) | — |
 | Flow logs | ✓ (VPC flow logs) | Planned | Planned | — |
-| Threat detection opt-in | ✓ (GuardDuty) | Planned | Planned | — |
-| Boot integrity | — | ✓ (Shielded VM, check-only) | Planned | — |
-| Identity-based SSH posture | — | ✓ (OS Login, check-only) | Planned | — |
+| Threat detection opt-in | ✓ (GuardDuty) | Planned | ✓ (Defender, check-only) | — |
+| Boot integrity | — | ✓ (Shielded VM, check-only) | — | — |
+| Identity-based SSH posture | — | ✓ (OS Login, check-only) | — | — |
+| Disk encryption posture | — | — | ✓ (check-only) | — |
 
-A check-only module reports and does not change anything. Two of the GCP checks are check-only
-for specific reasons: Shielded VM settings cannot be changed while the instance runs, and
-enabling OS Login would stop the instance accepting the metadata key clawops connects with.
+A check-only module reports and does not change anything. Each one is check-only for a stated
+reason rather than because it was easier:
+
+- **GCP Shielded VM** settings cannot be changed while the instance runs.
+- **GCP OS Login**, once enabled, stops the instance accepting the metadata key clawops connects
+  with.
+- **Azure NSG** rules are written from the plan, so narrowing one here would be undone by the
+  next apply.
+- **Azure disk encryption** reports the gap beyond Azure's default rather than the default
+  itself: every managed disk is encrypted at rest with a platform key and cannot be otherwise.
+  Encryption at host needs the VM deallocated, and a customer-managed key needs a disk encryption
+  set that outlives the stack.
+- **Azure Defender** is billed per resource per month, so clawops will not put a recurring charge
+  on a subscription to satisfy a checkbox.
+- **Azure JIT** needs Defender for Servers Plan 2, and it takes the NSG rules over from the plan
+  that wrote them.
 
 ## Observability
 

@@ -744,6 +744,20 @@ const MUTATIONS = [
     file: 'src/cli/commands/plan.ts', from: '  if (diff.update.length > 0) {', to: '  if (false) {', test: 'tests/plan/disruption.test.ts' },
   { name: 'secure boot is left to the GCP default again',
     file: 'src/providers/gcp/program.ts', from: '      enableSecureBoot: true,', to: '      enableSecureBoot: false,', test: 'tests/providers/gcp' },
+  { name: "the NSG audit stops reading Azure's `*` as the internet",
+    file: 'src/harden/modules/azure-nsg-audit.ts', from: "const WORLD = new Set(['*', 'internet', 'any', '0.0.0.0/0', '::/0'])", to: "const WORLD = new Set(['0.0.0.0/0', '::/0'])", test: 'tests/harden/azure-modules.test.ts' },
+  { name: 'the NSG audit stops telling clawops groups from every other one',
+    file: 'src/harden/modules/azure-nsg-audit.ts', from: "    if (!isClawopsResource(nsg.name, 'clawops-nsg')) continue", to: '    if (false) continue', test: 'tests/harden/azure-modules.test.ts' },
+  { name: 'the NSG audit starts reporting outbound rules as findings',
+    file: 'src/harden/modules/azure-nsg-audit.ts', from: "      if ((p.direction ?? '').toLowerCase() !== 'inbound') continue", to: '      if (false) continue', test: 'tests/harden/azure-modules.test.ts' },
+  { name: 'the NSG audit prints a bare star instead of naming every port',
+    file: 'src/harden/modules/azure-nsg-audit.ts', from: "    if (r === '*') return `every port on ${proto}`", to: "    if (false) return `every port on ${proto}`", test: 'tests/harden/azure-modules.test.ts' },
+  { name: 'the disk module claims a managed disk is not encrypted at rest',
+    file: 'src/harden/modules/azure-disk-encryption.ts', from: '    atRest: true,', to: '    atRest: false,', test: 'tests/harden/azure-modules.test.ts' },
+  { name: 'Defender treats a plan with no tier as protected',
+    file: 'src/harden/modules/azure-defender.ts', from: "(p.properties?.pricingTier ?? 'Free')", to: "(p.properties?.pricingTier ?? 'Standard')", test: 'tests/harden/azure-modules.test.ts' },
+  { name: 'JIT matches the VM on its id, which carries the resource group',
+    file: 'src/harden/modules/azure-jit.ts', from: "      isClawopsResource(resourceName(vm.id), 'clawops-vm'),", to: "      isClawopsResource(vm.id, 'clawops-vm'),", test: 'tests/harden/azure-modules.test.ts' },
 
 ]
 
