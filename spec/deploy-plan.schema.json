@@ -162,7 +162,7 @@
                 "type": "string",
                 "format": "cidr"
               },
-              "description": "CIDRs allowed to reach the gateway port. Only meaningful with publishGateway \"all\" — under \"loopback\" nothing listens on a routable interface, so these rules would admit traffic to a closed port. clawops refuses that combination rather than creating rules that do nothing."
+              "description": "CIDRs allowed to reach the gateway port. Only meaningful with publishGateway \"all\" \u2014 under \"loopback\" nothing listens on a routable interface, so these rules would admit traffic to a closed port. clawops refuses that combination rather than creating rules that do nothing."
             },
             "gatewayPort": {
               "type": "integer",
@@ -253,6 +253,13 @@
         },
         "totalChanges": {
           "type": "integer"
+        },
+        "replace": {
+          "type": "array",
+          "description": "Resources Pulumi will destroy and recreate. A replaced instance loses its boot disk, and with it every byte of OpenClaw state on the host.",
+          "items": {
+            "$ref": "#/$defs/ResourceRef"
+          }
         }
       }
     }

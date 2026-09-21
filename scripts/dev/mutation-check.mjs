@@ -734,6 +734,16 @@ const MUTATIONS = [
     file: 'src/harden/modules/gcp-firewall-audit.ts', from: "    if (!networkName(fw.network ?? '').startsWith('clawops-')) continue", to: "    if (!(fw.network ?? '').includes('clawops')) continue", test: 'tests/harden/gcp-modules.test.ts' },
   { name: 'the instance lookup demands an exact name Pulumi never uses',
     file: 'src/harden/gcp-api.ts', from: "  return typeof name === 'string' && name.startsWith('clawops-instance')", to: "  return name === 'clawops-instance'", test: 'tests/harden/gcp-modules.test.ts' },
+  { name: 'the preview parser goes back to dropping replacements',
+    file: 'src/plan/generate.ts', from: "const PREVIEW_LINE_RE = /^(\\+-|-\\+|[+~-])", to: "const PREVIEW_LINE_RE = /^([+~-])", test: 'tests/plan/disruption.test.ts' },
+  { name: 'a replacement is counted as a create',
+    file: 'src/plan/generate.ts', from: "    if (op === '+-' || op === '-+') replace.push(ref)", to: "    if (false) replace.push(ref)", test: 'tests/plan/disruption.test.ts' },
+  { name: 'the plan stops warning that a replacement destroys the disk',
+    file: 'src/cli/commands/plan.ts', from: '  if (replaced.length > 0) {', to: '  if (false) {', test: 'tests/plan/disruption.test.ts' },
+  { name: 'the plan stops warning that an update stops the machine',
+    file: 'src/cli/commands/plan.ts', from: '  if (diff.update.length > 0) {', to: '  if (false) {', test: 'tests/plan/disruption.test.ts' },
+  { name: 'secure boot is left to the GCP default again',
+    file: 'src/providers/gcp/program.ts', from: '      enableSecureBoot: true,', to: '      enableSecureBoot: false,', test: 'tests/providers/gcp' },
 
 ]
 
@@ -751,8 +761,45 @@ let caught = 0
 // touched, and the next run restores from it. The handlers stay for the ordinary Ctrl-C case.
 const SENTINEL = new URL('./.mutation-inflight.json', import.meta.url)
 
+/** A lock beside the sentinel, so a second run cannot start on top of a live one. */
+const LOCK = new URL('./.mutation-lock.json', import.meta.url)
+
 function beginMutation(file, original) {
   writeFileSync(SENTINEL, JSON.stringify({ file, original }), 'utf8')
+}
+
+/**
+ * Refuse to start while another run holds the lock.
+ *
+ * Two runs mutating the same files at once restore each other's originals in the wrong order
+ * and leave live mutations in the working tree. That happened: a run left `parseKey(...)`
+ * replaced with a stub and a `'fail'` status flipped to `'pass'` in src/diagnostics/index.ts,
+ * and reported a result computed against a corrupted tree. The vitest guard catches a test run
+ * started during a mutation; nothing caught a second mutation run.
+ *
+ * A lock whose owning process is gone is stale and gets cleared, so a killed run does not need
+ * manual cleanup.
+ */
+function acquireLock() {
+  if (existsSync(LOCK)) {
+    const { pid, started } = JSON.parse(readFileSync(LOCK, 'utf8'))
+    let alive = false
+    try { process.kill(pid, 0); alive = true } catch { alive = false }
+    if (alive) {
+      console.error(
+        `A mutation check is already running (pid ${pid}, started ${started}).\n` +
+        'Two runs mutate the same files and leave residue in the working tree. Wait for it, ' +
+        `or kill it and delete ${LOCK.pathname}.`,
+      )
+      process.exit(1)
+    }
+    console.log('  cleared a stale lock from a run that is no longer alive\n')
+    rmSync(LOCK)
+  }
+  writeFileSync(LOCK, JSON.stringify({ pid: process.pid, started: new Date().toISOString() }), 'utf8')
+  const release = () => { if (existsSync(LOCK)) rmSync(LOCK) }
+  process.on('exit', release)
+  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { release(); process.exit(130) })
 }
 
 function endMutation() {
@@ -789,6 +836,7 @@ process.on('uncaughtException', (err) => {
   throw err
 })
 
+acquireLock()
 restoreFromSentinel()
 
 for (const m of MUTATIONS) {

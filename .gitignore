@@ -152,3 +152,6 @@ vite.config.ts.timestamp-*
 
 # Graphify local analysis (scripts/dev/graph.mjs)
 graphify-out/
+
+# mutation-check lock (see scripts/dev/mutation-check.mjs)
+.mutation-lock.json

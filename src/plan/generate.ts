@@ -50,6 +50,8 @@ export interface DeployPlan {
     create: Array<{ urn: string; type: string; name?: string }>
     update: Array<{ resource: { urn: string; type: string; name?: string }; before: unknown; after: unknown }>
     delete: Array<{ urn: string; type: string; name?: string }>
+    /** Destroyed and recreated. The boot disk goes with the instance, and so does its state. */
+    replace: Array<{ urn: string; type: string; name?: string }>
     totalChanges: number
   }
 }
@@ -73,7 +75,13 @@ export interface GeneratePlanIntent {
 //   +  aws:ec2/instance:Instance  name  create
 //   ~  aws:ec2/eip:Eip            name  update
 //   -  aws:iam/role:Role          name  delete
-const PREVIEW_LINE_RE = /^([+~-])\s+(\S+)\s+(\S+)?/
+//   +- gcp:compute:Instance      name  replace
+//
+// The replace marker is two characters, and matching only single-character ops dropped those
+// lines entirely: a preview that would destroy the instance and its boot disk summarised as
+// "0 to create, 0 to update, 0 to delete". The most destructive operation Pulumi has was the
+// one the plan did not mention.
+const PREVIEW_LINE_RE = /^(\+-|-\+|[+~-])\s+(\S+)\s+(\S+)?/
 
 type ResourceRef = { urn: string; type: string; name?: string }
 
@@ -81,6 +89,7 @@ function parseDiff(lines: string[]): DeployPlan['diff'] {
   const create: ResourceRef[] = []
   const update: Array<{ resource: ResourceRef; before: unknown; after: unknown }> = []
   const del: ResourceRef[] = []
+  const replace: ResourceRef[] = []
 
   // Pulumi prints the stack resource in more than one section of a preview, so the same line
   // arrives repeatedly. Counting it each time inflated "7 to create" for a stack that creates
@@ -99,7 +108,8 @@ function parseDiff(lines: string[]): DeployPlan['diff'] {
       type: resourceType,
       ...(name ? { name } : {}),
     }
-    if (op === '+') create.push(ref)
+    if (op === '+-' || op === '-+') replace.push(ref)
+    else if (op === '+') create.push(ref)
     else if (op === '~') update.push({ resource: ref, before: null, after: null })
     else if (op === '-') del.push(ref)
   }
@@ -108,7 +118,8 @@ function parseDiff(lines: string[]): DeployPlan['diff'] {
     create,
     update,
     delete: del,
-    totalChanges: create.length + update.length + del.length,
+    replace,
+    totalChanges: create.length + update.length + del.length + replace.length,
   }
 }
 
