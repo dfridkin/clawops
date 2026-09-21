@@ -58,7 +58,18 @@ export interface HardeningModule {
  */
 export type RemoteExec = (
   command: string,
-  opts?: { signal?: AbortSignal },
+  opts?: {
+    signal?: AbortSignal
+    /**
+     * Fed to the command's stdin over the SSH data channel.
+     *
+     * For anything secret this is the only safe route. sshd runs the command string as
+     * `$SHELL -c '<string>'`, so every byte of it lands in the remote process's argv and is
+     * readable from /proc by any other user on that host. A value sent here never appears
+     * there.
+     */
+    stdin?: string
+  },
 ) => Promise<{ stdout: string; stderr: string; code: number }>
 
 /** Summary entry produced after running a module. */

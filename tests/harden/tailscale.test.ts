@@ -8,7 +8,6 @@ import {
   isTailscaleIpv4,
   tailnetHostname,
   redactKey,
-  shellQuote,
   makeTailscaleModule,
   AUTH_KEY_SECRET,
 } from '../../src/harden/modules/tailscale.js'
@@ -16,14 +15,19 @@ import {
 beforeEach(() => vi.resetModules())
 
 /** An exec that answers by pattern, and records everything it was asked to run. */
-function fakeExec(answers: Array<[RegExp, string]>): RemoteExec & { calls: string[] } {
+function fakeExec(
+  answers: Array<[RegExp, string]>,
+): RemoteExec & { calls: string[]; stdins: Array<string | undefined> } {
   const calls: string[] = []
-  const exec = (async (cmd: string) => {
+  const stdins: Array<string | undefined> = []
+  const exec = (async (cmd: string, opts?: { stdin?: string }) => {
     calls.push(cmd)
+    stdins.push(opts?.stdin)
     const hit = answers.find(([re]) => re.test(cmd))
     return { stdout: hit ? hit[1] : '', stderr: '', code: 0 }
-  }) as RemoteExec & { calls: string[] }
+  }) as RemoteExec & { calls: string[]; stdins: Array<string | undefined> }
   exec.calls = calls
+  exec.stdins = stdins
   return exec
 }
 
@@ -97,9 +101,6 @@ describe('the auth key never reaches output', () => {
   it('leaves text alone when there is no key', () => {
     expect(redactKey('nothing to hide', '')).toBe('nothing to hide')
   })
-  it('quotes for sh -c without letting a quote escape', () => {
-    expect(shellQuote("it's")).toBe(`'it'\\''s'`)
-  })
 })
 
 describe('check()', () => {
@@ -140,15 +141,20 @@ describe('apply()', () => {
     expect(r.detail).toContain(AUTH_KEY_SECRET)
   })
 
-  it('never puts the key in a command argument', async () => {
+  it('puts the key in no command string at all, only on stdin', async () => {
+    /*
+     * Both exposures. The key must not be a `tailscale up` argument, and it must not be
+     * anywhere in the command string either: sshd runs that string as `$SHELL -c '<string>'`,
+     * so a key embedded in it — in a heredoc, say — lands in the outer shell's argv. A process
+     * snapshot taken while an earlier version ran showed exactly that.
+     */
     vi.doMock('../../src/config/secrets.js', () => ({ resolveSecretRef: () => 'tskey-SECRET' }))
     const { makeTailscaleModule: make } = await import('../../src/harden/modules/tailscale.js')
     const exec = fakeExec([[/command -v tailscale/, 'yes'], [/tailscale status/, RUNNING]])
     await make('prod').apply(exec)
-    const argOccurrences = exec.calls.filter((c) => c.includes('--auth-key=tskey-SECRET'))
-    expect(argOccurrences).toEqual([])
-    // It is passed on stdin to a file instead.
+    expect(exec.calls.some((c) => c.includes('tskey-SECRET'))).toBe(false)
     expect(exec.calls.some((c) => c.includes('--auth-key=file:'))).toBe(true)
+    expect(exec.stdins).toContain('tskey-SECRET')
   })
 
   it('reports the address it joined on, and that nothing has been repointed', async () => {

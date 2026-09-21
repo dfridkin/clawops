@@ -10,10 +10,18 @@ reachable, and joining a network the operator has to own an account on is not so
 as part of a `clawops harden` with no arguments.
 
 The auth key comes from `clawops secret set TAILSCALE_AUTH_KEY` and nowhere else, so a key never
-reaches a terminal scrollback or a CI log. On the host it is passed to `tailscale up` through a
-file rather than an argument, so it never appears in the process list, the file is created under
-`umask 077` rather than chmod-ed afterwards, and a trap removes it even if the command is
-interrupted. Anything shown after a failure has the key stripped from it.
+reaches a terminal scrollback or a CI log. Getting it to the host without exposing it takes two
+separate measures, because there are two separate exposures. It is passed to `tailscale up`
+through a file rather than an argument, so it is not in that process's argv; and it travels to
+the host over the SSH data channel as stdin rather than inside the command string, because sshd
+runs whatever string it is given as `$SHELL -c '<string>'` and every byte of that lands in the
+outer shell's argv. The staged file is created under `umask 077` rather than chmod-ed afterwards,
+and a trap removes it even if the command is interrupted. Anything shown after a failure has the
+key stripped from it.
+
+`RemoteExec` gains an optional `stdin`, routed to the transport's existing `execWithInput`, so
+any hardening module that needs to hand a secret to a host has a way that does not put it in a
+command line.
 
 What this does not do yet, and deliberately: it does not rewrite clawops config to use the
 Tailscale address, and it does not remove public access. Those are the steps of WO-34 that can

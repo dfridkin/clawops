@@ -1,5 +1,6 @@
 // Hardening runner — executes HardeningModules via SSH and renders results.
 
+import { Readable } from 'node:stream'
 import { acquireSession, drainPool } from '../transport/pool.js'
 import type { ConnectionInfo } from '../providers/types.js'
 import type {
@@ -88,7 +89,11 @@ export async function withRemoteExec<T>(
     signal,
   })
   try {
-    return await fn((cmd, opts) => session.exec(cmd, opts?.signal ?? signal))
+    return await fn((cmd, opts) =>
+      opts?.stdin === undefined
+        ? session.exec(cmd, opts?.signal ?? signal)
+        : session.execWithInput(cmd, Readable.from([opts.stdin]), opts.signal ?? signal),
+    )
   } finally {
     release()
   }

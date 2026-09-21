@@ -16,11 +16,14 @@ import { resolveSecretRef } from '../../config/secrets.js'
 export const AUTH_KEY_SECRET = 'TAILSCALE_AUTH_KEY'
 
 /**
- * Where the key is staged on the host so it never appears in a command line.
+ * Where the key is staged on the host.
  *
- * `tailscale up --auth-key=<value>` puts the key in the host's process list for as long as the
- * command runs, and into any shell history the exec channel keeps. `--auth-key=file:<path>`
- * reads it from a file instead, so the value never becomes an argument.
+ * Two separate exposures, and both have to be closed. `tailscale up --auth-key=<value>` puts the
+ * key in argv, so it is read from a file instead. But sshd runs whatever command string it is
+ * given as `$SHELL -c '<string>'`, so a key embedded in that string — in a heredoc, say — lands
+ * in the outer shell's argv just the same. Measured: a process snapshot taken while the command
+ * ran showed the key in `sh -c …`. It travels over the SSH data channel to the command's stdin
+ * instead, which never becomes an argument to anything.
  */
 const KEY_PATH = '/run/clawops-tailscale.key'
 
@@ -158,7 +161,8 @@ export function makeTailscaleModule(stack?: string): HardeningModule {
       `cat > ${KEY_PATH}`,
       `tailscale up --auth-key=file:${KEY_PATH} --hostname=${hostname} --accept-routes 2>&1`,
     ].join('\n')
-    const r = await exec(`sh -c ${shellQuote(join)} <<'CLAWOPS_KEY_EOF'\n${key}\nCLAWOPS_KEY_EOF`)
+    // The command carries no secret; the key arrives on stdin.
+    const r = await exec(join, { stdin: key })
 
     const s = await status(exec)
     if (s.state === 'Running' && s.ipv4) {
@@ -183,10 +187,6 @@ export function makeTailscaleModule(stack?: string): HardeningModule {
 
 export const tailscaleModule: HardeningModule = makeTailscaleModule()
 
-/** Single-quote for `sh -c`, the only quoting this module needs. */
-export function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`
-}
 
 /**
  * Remove the key from anything about to be shown.
