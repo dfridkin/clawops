@@ -764,6 +764,18 @@ const MUTATIONS = [
     file: 'src/harden/azure-api.ts', from: "    if (/not registered/i.test(body)) {", to: '    if (false) {', test: 'tests/harden/azure-modules.test.ts' },
   { name: 'JIT reads an empty list from an unregistered namespace as a real absence',
     file: 'src/harden/modules/azure-jit.ts', from: '    if (registered === false) {', to: '    if (false) {', test: 'tests/harden/azure-modules.test.ts' },
+  { name: 'a Tailscale address is accepted without checking the CGNAT range',
+    file: 'src/harden/modules/tailscale.ts', from: '  return octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127', to: '  return true', test: 'tests/harden/tailscale.test.ts' },
+  { name: 'unparseable tailscale status is read as "not joined" rather than unknown',
+    file: 'src/harden/modules/tailscale.ts', from: "    return { state: 'unknown' }", to: "    return { state: 'Stopped' }", test: 'tests/harden/tailscale.test.ts' },
+  { name: 'the auth key goes back on the command line',
+    file: 'src/harden/modules/tailscale.ts', from: '--auth-key=file:${KEY_PATH}', to: '--auth-key=${key}', test: 'tests/harden/tailscale.test.ts' },
+  { name: 'the staged key file is left behind on an interrupt',
+    file: 'src/harden/modules/tailscale.ts', from: "      `trap 'rm -f ${KEY_PATH}' EXIT INT TERM`,", to: '', test: 'tests/harden/tailscale.test.ts' },
+  { name: 'the key file is created world-readable before it is narrowed',
+    file: 'src/harden/modules/tailscale.ts', from: '      `umask 077`,', to: '', test: 'tests/harden/tailscale.test.ts' },
+  { name: 'the key is interpolated into a failure message',
+    file: 'src/harden/modules/tailscale.ts', from: '        redactKey(r.stdout || r.stderr, key).slice(0, 300),', to: '        (r.stdout || r.stderr).slice(0, 300),', test: 'tests/harden/tailscale.test.ts' },
 
 ]
 

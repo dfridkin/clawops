@@ -31,6 +31,9 @@ export { azureDiskEncryptionModule } from './modules/azure-disk-encryption.js'
 export { azureDefenderModule } from './modules/azure-defender.js'
 export { azureJitModule } from './modules/azure-jit.js'
 
+// Tailscale (all providers, off by default)
+export { tailscaleModule, makeTailscaleModule } from './modules/tailscale.js'
+
 import type { HardeningModule } from './types.js'
 import { sshModule } from './modules/ssh.js'
 import { ufwModule } from './modules/ufw.js'
@@ -51,6 +54,7 @@ import { azureNsgAuditModule } from './modules/azure-nsg-audit.js'
 import { azureDiskEncryptionModule } from './modules/azure-disk-encryption.js'
 import { azureDefenderModule } from './modules/azure-defender.js'
 import { azureJitModule } from './modules/azure-jit.js'
+import { tailscaleModule } from './modules/tailscale.js'
 
 /** Full catalog of all hardening modules, ordered as they appear in the wizard. */
 export const MODULE_CATALOG: HardeningModule[] = [
@@ -78,4 +82,6 @@ export const MODULE_CATALOG: HardeningModule[] = [
   azureDiskEncryptionModule,
   azureDefenderModule,
   azureJitModule,
+  // Every provider, off by default
+  tailscaleModule,
 ]
