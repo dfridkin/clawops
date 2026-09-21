@@ -435,4 +435,16 @@
 @media (max-width: 46rem) {
   .cellGrow { display: none; }
   .statusLinks { flex: 0 0 100%; }
+  /*
+   * And the cells fill the row they land on.
+   *
+   * Sized to their text they leave a ragged end on every wrapped row, which is what makes the
+   * bar read as a table that has come apart rather than as a status bar. Panels in a real one
+   * divide the width between them, so these do too once there is more than one row of them.
+   */
+  .status > .cell,
+  .statusLinks .cell {
+    flex: 1 1 auto;
+    text-align: center;
+  }
 }
