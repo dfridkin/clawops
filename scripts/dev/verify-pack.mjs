@@ -11,6 +11,12 @@
  * This packs the tarball, installs it somewhere else, and runs the commands whose whole job is
  * to reach the code the bundler treats as external. Anything that only imports our own modules
  * proves nothing here — `--version` passed on 2.0.1.
+ *
+ * 2.0.2 then shipped the same bug in the other half of the product. `ajv/dist/2020` resolves
+ * under CommonJS and not under ESM, so `clawops mcp serve` died on import before emitting a byte
+ * of protocol, and every check above passed because none of them is the MCP server. A command
+ * that exits and a server that does not are different shapes, so the server is checked
+ * separately, by speaking protocol to it.
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, readdirSync } from 'node:fs'
@@ -60,6 +66,50 @@ try {
       failed += 1
       console.log(`      ${(unresolved?.[0] ? out.slice(out.indexOf(unresolved[0])) : out).trim().split('\n').slice(0, 4).join('\n      ')}`)
     }
+  }
+
+  /*
+   * The MCP server, checked by handshake rather than by output matching.
+   *
+   * It is half of what this package is, it is long-running rather than exit-and-print, and it
+   * is the half that shipped broken in 2.0.2. stdin is closed once the request is written, so
+   * the server sees EOF and stops; the timeout is the backstop if it does not.
+   */
+  const initialize = JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {
+      protocolVersion: '2024-11-05',
+      capabilities: {},
+      clientInfo: { name: 'verify-pack', version: '0' },
+    },
+  })
+  const mcp = spawnSync(bin, ['mcp', 'serve'], {
+    cwd: work,
+    encoding: 'utf8',
+    input: `${initialize}\n`,
+    timeout: 30_000,
+    env: { ...process.env, CLAWOPS_HOME: home },
+  })
+  const mcpOut = mcp.stdout ?? ''
+  const mcpErr = mcp.stderr ?? ''
+  let handshake
+  for (const line of mcpOut.split('\n')) {
+    try {
+      const parsed = JSON.parse(line)
+      if (parsed?.result?.serverInfo) handshake = parsed.result
+    } catch {
+      // Not every line is a frame; the protocol channel is what matters, not the noise.
+    }
+  }
+  const mcpOk = Boolean(handshake)
+  console.log(`  ${mcpOk ? '✓' : '✗'} clawops mcp serve — the MCP server completes a handshake`)
+  if (mcpOk) {
+    console.log(`      ${handshake.serverInfo.name} ${handshake.serverInfo.version}, protocol ${handshake.protocolVersion}`)
+  } else {
+    failed += 1
+    console.log(`      ${(mcpErr || mcpOut || '(no output at all)').trim().split('\n').slice(0, 4).join('\n      ')}`)
   }
 } finally {
   rmSync(work, { recursive: true, force: true })
