@@ -277,6 +277,9 @@
    The gap is the break, so it has to be big enough to read as one. */
 .page { max-width: 74rem; margin: 0 auto; padding: 0 1.5rem 2rem; }
 .sections { display: grid; gap: 6rem; margin: 4rem 0 4.4rem; }
+/* Grid items floor at min-width:auto, so a section could push the single column past the page
+   whatever the page's own width said. Nothing in a section needs that floor. */
+.section { min-width: 0; }
 /*
  * One ambient field behind the whole dark part of the page, rather than a band per section.
  *
@@ -328,9 +331,18 @@
 .field .card { color: var(--ink); }
 
 /* ── feature grid ─────────────────────────────────────── */
+/*
+ * min() on the track floor, not a bare 17rem.
+ *
+ * minmax(17rem, 1fr) cannot go below 272px however narrow the viewport is. The track forces
+ * the grid wider than its container, the container wider than the page, and the document gains
+ * horizontal scroll. The hero does not show it, because its band clips; every section below it
+ * does. min(17rem, 100%) keeps the same floor while there is room for it and lets the track
+ * collapse to the container when there is not.
+ */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(17rem, 100%), 1fr));
   gap: 1px;
   background: var(--rule);
   border: 1px solid var(--rule);
@@ -363,8 +375,14 @@
 }
 @media (max-width: 34rem) { .step { grid-template-columns: minmax(0, 1fr); gap: 0.6rem; } }
 
+/* 1.875rem each side is 60px of a 360px screen, so the accent panel gives some back. */
+@media (max-width: 30rem) {
+  .field { padding: 1.6rem 1.1rem; }
+  .card { padding: 1.1rem 1.15rem; }
+}
+
 /* ── provider table, on the chrome face ───────────────── */
-.tableWrap { overflow-x: auto; background: var(--face); padding: 0.85rem; }
+.tableWrap { overflow-x: auto; min-width: 0; background: var(--face); padding: 0.85rem; }
 .table { border-collapse: collapse; width: 100%; font-size: 0.86rem; min-width: 34rem; }
 .table th,
 .table td { padding: 0.45rem 0.65rem; text-align: left; color: var(--chrome-ink); }
@@ -382,7 +400,7 @@
 .no { color: var(--chrome-soft); }
 
 /* ── honest limits, and the compatibility footnote ────── */
-.limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1.4rem; }
+.limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr)); gap: 1.4rem; }
 .limit h3 { margin: 0 0 0.4rem; font-size: 0.94rem; font-weight: 600; }
 .limit p { margin: 0; font-size: 0.875rem; color: var(--ink-mid); }
 .limit code { background: var(--code-bg); padding: 0.1em 0.34em; font-size: 0.9em; }
