@@ -42,7 +42,7 @@ not create or store (R6).
 | SSH port CIDR restriction | ✓ | ✓ | ✓ | — |
 | Gateway port CIDR restriction | ✓ | ✓ | ✓ | — |
 | TLS termination | Planned | Planned | Planned | Planned |
-| Tailscale integration | Planned | Planned | Planned | Planned |
+| Tailscale integration | ✓ | ✓ | ✓ | Partial (join and repoint; no private-only) |
 
 ## Day-to-day operations
 
@@ -86,7 +86,7 @@ back up `~/.clawops/state/` alongside your stack backups.
 ## Host hardening
 
 Eight modules run on every provider: SSH, UFW, fail2ban, unattended upgrades, Docker socket,
-auditd, lynis and sysctl. These are the cloud-specific additions.
+auditd, lynis and sysctl. Tailscale is a ninth, off by default. These are the additions.
 
 | Check | AWS | GCP | Azure | Local VM |
 |---|---|---|---|---|
@@ -97,6 +97,7 @@ auditd, lynis and sysctl. These are the cloud-specific additions.
 | Boot integrity | — | ✓ (Shielded VM, check-only) | — | — |
 | Identity-based SSH posture | — | ✓ (OS Login, check-only) | — | — |
 | Disk encryption posture | — | — | ✓ (check-only) | — |
+| Tailscale membership | ✓ | ✓ | ✓ | ✓ |
 
 A check-only module reports and does not change anything. Each one is check-only for a stated
 reason rather than because it was easier:

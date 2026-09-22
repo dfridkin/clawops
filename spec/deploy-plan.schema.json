@@ -181,6 +181,14 @@
                 "authKeyRef": {
                   "type": "string",
                   "description": "Reference to a secret containing the Tailscale auth key"
+                },
+                "privateOnly": {
+                  "type": "boolean",
+                  "description": "The plan closes public SSH and gateway ingress because the stack is reached over its tailnet (WO-34 step 6; ADR 0013). Apply refuses it unless the stack has a verified tailnet address, equal to `ip`, that answers SSH at apply time. Both CIDR lists must be empty."
+                },
+                "ip": {
+                  "type": "string",
+                  "description": "The tailnet address the plan relies on once public ingress is closed. Recorded so the reviewer sees which address remains, and so apply can refuse a plan made for an address the stack no longer has."
                 }
               }
             },

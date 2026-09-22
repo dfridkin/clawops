@@ -17,8 +17,10 @@ multiple stacks and route between them yourself.
 **No TLS or domain automation.** The gateway runs on port 18789 without TLS termination. Reach it
 over `clawops tunnel`, or bring your own reverse proxy. Certificate and DNS automation is planned.
 
-**No Tailscale integration yet.** The deploy-plan schema reserves a field for it; it is not
-implemented.
+**Tailscale: no private-only mode on local stacks, and no `doctor` check yet.** `clawops harden
+--tailscale` joins any stack to a tailnet and moves clawops onto that address. Closing the public
+ports goes through `clawops plan --private-only`, which local stacks don't have. `clawops doctor`
+doesn't yet report tailnet status.
 
 ## Scope
 

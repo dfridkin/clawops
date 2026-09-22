@@ -13,7 +13,7 @@ Remaining work falls into three groups:
 
 | Group | Items | Notes |
 |---|---|---|
-| **Carried from the 1.x waves** | WO-34 (Tailscale) | Azure hardening landed in WO-32, so all three clouds now report. Tailscale is still only a reserved schema field |
+| **Carried from the 1.x waves** | WO-34 (Tailscale), partly | Azure hardening landed in WO-32. Tailscale joins, repoints, goes private-only and reverts; the doctor check is still open |
 | **clawops 2.1** | WO-53 sandboxing, WO-54 config surface, WO-55 TLS and public origin, WO-56 observability, WO-57 fleet multi-tenancy | WO-55 gates Portals, Teams, Slack and Discord Activities |
 | **clawops 2.2: alone** | WO-62 host agent | Ships by itself, behind preconditions. See below |
 | **Housekeeping** | WO-64 `server.json` drift | ✅ shipped. Bumped at version time, with a test that it agrees with `package.json` |
@@ -88,7 +88,7 @@ Remaining WOs are batched into three releases to avoid a changeset per PR.
 |---|---|---|
 | **v1.6** | WO-35, WO-18, M8 stubs | ✅ shipped |
 | **v1.7** | WO-29, WO-33, WO-30 | ✅ shipped: hardening MVP, core + local/VPS + AWS |
-| **v1.8** | WO-31, WO-32, WO-34 | open: Tailscale VPN. GCP and Azure hardening shipped |
+| **v1.8** | WO-31, WO-32, WO-34 | GCP and Azure hardening shipped. Tailscale joins, repoints, goes private-only and reverts; doctor check remains |
 
 ### R1. First-Run Experience
 
@@ -206,7 +206,7 @@ Goal: reduce attack surface and optionally route all traffic through a private T
 | WO-31: GCP hardening | ✅ | VPC firewall audit, Shielded VM check, OS Login check. All check-only: see the changeset for why the last two do not apply |
 | WO-32: Azure hardening | ✅ | NSG audit, disk encryption, Defender for Cloud, JIT VM Access. All check-only: see the matrix for why each one is |
 | WO-33: Local/VPS hardening | ✅ | SSH hardening, UFW, fail2ban, unattended-upgrades, CIS Level 1 report |
-| WO-34: Tailscale VPN integration | ⏳ | Install Tailscale, join network, update SSH/gateway config, optional private-only mode |
+| WO-34: Tailscale VPN integration | ◐ | Shipped: install, join, report the address (off-by-default module); `harden --tailscale` repoints clawops at the verified tailnet address; `plan --private-only` closes public ingress (ADR 0013); `harden --tailscale-revert`. Not yet: doctor check |
 
 ### R13. Integrated Bug Reporting
 

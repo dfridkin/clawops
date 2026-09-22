@@ -36,6 +36,7 @@ into stack config. Three flags fill it:
 | `--ssh-cidr <list\|auto>` | CIDRs allowed to reach SSH. `auto` resolves this machine's public IP to a `/32` **while the plan is generated**, so the plan records the address rather than deferring it to apply time. |
 | `--gateway-cidr <list\|auto>` | CIDRs allowed to reach the gateway port. Requires `--publish-gateway all`. |
 | `--publish-gateway loopback\|all` | Which interface the gateway binds. `loopback` (default) keeps it off the network; reach it with `clawops tunnel`. |
+| `--private-only` | No public SSH or gateway ingress at all; the stack is reached over its tailnet. See [Private-only stacks](#private-only-stacks). |
 
 Omitting `--ssh-cidr` is a valid plan and produces **no ingress rules at all**, deny-all is
 the default N10 requires. `clawops plan` warns when it happens, because a host nothing can
@@ -241,4 +242,43 @@ clawops plan --provider aws --ssh-cidr auto --publish-gateway all \
 clawops apply /tmp/plan.json             # interactive confirm
 clawops apply /tmp/plan.json --dry-run   # validate + show diff, no apply
 clawops apply /tmp/plan.json --yes       # skip confirm (CI)
+```
+
+## Private-only stacks
+
+Once `clawops harden --tailscale` has moved a stack onto its tailnet address, the public SSH and
+gateway rules can be closed through a plan like any other change (ADR 0013):
+
+```bash
+clawops plan --stack prod --private-only --out /tmp/private.json
+clawops apply /tmp/private.json
+```
+
+The plan has empty `allowedSshCidrs` and `allowedGatewayCidrs`, and records the address that
+remains in `network.tailscale`:
+
+```json
+"network": {
+  "allowedSshCidrs": [],
+  "allowedGatewayCidrs": [],
+  "tailscale": { "enabled": true, "privateOnly": true, "ip": "100.96.109.52" }
+}
+```
+
+`plan` and `apply` both refuse unless this machine can open an SSH session to that address at
+that moment. `apply` checks again because the tailnet can drop between review and apply, and
+`apply` is the step that closes the ports. `apply` also refuses in these cases:
+
+- The plan is marked private-only but lists a CIDR.
+- The plan names a tailnet address the stack no longer has.
+
+`--private-only` can't be combined with `--ssh-cidr` or `--gateway-cidr`.
+
+To reopen, apply an ordinary plan that has an SSH rule. Then, if you're leaving the tailnet
+altogether, run `clawops harden --tailscale-revert`:
+
+```bash
+clawops plan --stack prod --ssh-cidr auto --out /tmp/public.json
+clawops apply /tmp/public.json
+clawops harden --stack prod --tailscale-revert
 ```

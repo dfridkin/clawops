@@ -41,7 +41,13 @@ export interface DeployPlan {
       publishGateway?: 'loopback' | 'all'
       /** Host port the gateway is published on. Defaults to GATEWAY_PORT. */
       gatewayPort?: number
-      tailscale?: { enabled: boolean; authKeyRef?: string }
+      tailscale?: {
+        enabled: boolean
+        authKeyRef?: string
+        /** Public ingress is closed; the stack is reached at `ip` over its tailnet. See ./private-only.ts. */
+        privateOnly?: boolean
+        ip?: string
+      }
     }
     ssh?: { publicKey?: string; user?: string }
     tags?: Record<string, string>
@@ -67,6 +73,7 @@ export interface GeneratePlanIntent {
     allowedGatewayCidrs: string[]
     publishGateway?: 'loopback' | 'all'
     gatewayPort?: number
+    tailscale?: DeployPlan['spec']['network']['tailscale']
   }
   tags?: Record<string, string>
 }

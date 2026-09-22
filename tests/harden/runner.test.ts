@@ -115,3 +115,80 @@ describe('formatHardenSummary()', () => {
     expect(output).toContain('1 errors')
   })
 })
+
+/*
+ * runHardening had no test at all, which is how it came to build its own RemoteExec that dropped
+ * `stdin`. When stdin was added so a secret could reach a host without entering a command line,
+ * only withRemoteExec learned to honour it; the Tailscale join then ran through runHardening in
+ * the real `clawops harden`, read an empty stdin, and wrote an empty key file.
+ */
+describe('remoteExecFor()', () => {
+  function fakeSession() {
+    return {
+      exec: vi.fn().mockResolvedValue({ stdout: 'exec', stderr: '', code: 0 }),
+      execWithInput: vi.fn().mockImplementation(async (_cmd: string, input: NodeJS.ReadableStream) => {
+        let body = ''
+        for await (const chunk of input) body += String(chunk)
+        return { stdout: `stdin:${body}`, stderr: '', code: 0 }
+      }),
+      stream: vi.fn(),
+      forwardOut: vi.fn(),
+      close: vi.fn(),
+    }
+  }
+
+  it('feeds stdin through the data channel when one is given', async () => {
+    const { remoteExecFor } = await import('../../src/harden/runner.js')
+    const session = fakeSession()
+    const r = await remoteExecFor(session as never, undefined)('cat', { stdin: 'secret' })
+    expect(session.execWithInput).toHaveBeenCalledOnce()
+    expect(session.exec).not.toHaveBeenCalled()
+    expect(r.stdout).toBe('stdin:secret')
+  })
+
+  it('uses a plain exec when there is no stdin', async () => {
+    const { remoteExecFor } = await import('../../src/harden/runner.js')
+    const session = fakeSession()
+    await remoteExecFor(session as never, undefined)('true')
+    expect(session.exec).toHaveBeenCalledOnce()
+    expect(session.execWithInput).not.toHaveBeenCalled()
+  })
+})
+
+describe('runHardening()', () => {
+  it('gives modules an exec that delivers stdin, the path `clawops harden` actually takes', async () => {
+    vi.resetModules()
+    let received = ''
+    const session = {
+      exec: vi.fn().mockResolvedValue({ stdout: '', stderr: '', code: 0 }),
+      execWithInput: vi.fn().mockImplementation(async (_c: string, input: NodeJS.ReadableStream) => {
+        for await (const chunk of input) received += String(chunk)
+        return { stdout: '', stderr: '', code: 0 }
+      }),
+      stream: vi.fn(),
+      forwardOut: vi.fn(),
+      close: vi.fn(),
+    }
+    vi.doMock('../../src/transport/pool.js', () => ({
+      acquireSession: vi.fn().mockResolvedValue({ session, release: vi.fn() }),
+      drainPool: vi.fn(),
+    }))
+    const { runHardening } = await import('../../src/harden/runner.js')
+    const mod: HardeningModule = {
+      id: 'needs-stdin',
+      label: 'needs stdin',
+      defaultOn: true,
+      providers: 'all',
+      check: async () => ({ status: 'missing', detail: '' }),
+      apply: async (exec) => {
+        await exec('cat > /run/x', { stdin: 'the-secret' })
+        return { changed: true, detail: '' }
+      },
+    }
+    await runHardening(
+      { host: 'h', port: 22, user: 'u', privateKeyPath: '/k', knownHostsPath: '/kh' },
+      { modules: [mod] },
+    )
+    expect(received).toBe('the-secret')
+  })
+})

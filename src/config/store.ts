@@ -23,13 +23,37 @@ const LocalOptsSchema = z.object({
   sshKeyPath: z.string(),
 })
 
+/**
+ * Where clawops reaches a stack once it is on a tailnet.
+ *
+ * An override rather than a rewrite. The SSH host is never stored: every command derives it from
+ * the Pulumi output `sshHost`, so there is no field for Tailscale to replace and nothing that has
+ * to be backed up first. Setting this points clawops at the tailnet address; deleting it points
+ * clawops back at the public one, with nothing to restore. WO-34 specified a `_preTailscale`
+ * backup of `sshHost`, written against a config shape this project does not have.
+ *
+ * Only written after an SSH session over the address has succeeded against a host key pinned
+ * through the public connection, so its presence means the address was verified, not assumed.
+ */
+const TailscaleOverrideSchema = z.object({
+  ip: z.string(),
+  hostname: z.string().optional(),
+  /** When the address was verified, ISO 8601. */
+  verifiedAt: z.string(),
+  /** Set once --private-only has closed the public ports, so revert knows to reopen them. */
+  privateOnly: z.boolean().optional(),
+})
+
 const StackConfigSchema = z.object({
   provider: z.string(),
   stateUrl: z.string(),
   region: z.string().optional(),
   credentialsRef: CredentialsRefSchema,
   localOpts: LocalOptsSchema.optional(),
+  tailscale: TailscaleOverrideSchema.optional(),
 })
+
+export type TailscaleOverride = z.infer<typeof TailscaleOverrideSchema>
 
 const ClawopsConfigSchema = z.object({
   version: z.literal(1),

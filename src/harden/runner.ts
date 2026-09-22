@@ -1,7 +1,9 @@
 // Hardening runner — executes HardeningModules via SSH and renders results.
 
+import { Readable } from 'node:stream'
 import { acquireSession, drainPool } from '../transport/pool.js'
 import type { ConnectionInfo } from '../providers/types.js'
+import type { SshSession } from '../transport/ssh.js'
 import type {
   HardeningModule,
   HardenOpts,
@@ -13,6 +15,25 @@ import type {
  * Run a set of hardening modules against a remote host.
  * Returns one ModuleRunResult per module in the same order as opts.modules.
  */
+/**
+ * The one way a RemoteExec is built from a session.
+ *
+ * There were two. runHardening built its own, and when `stdin` was added to RemoteExec so a
+ * secret could reach a host without entering a command line, only withRemoteExec learned to
+ * honour it. runHardening is what `clawops harden` actually runs modules through, so there the
+ * option was silently dropped: the Tailscale join read an empty stdin and wrote an empty key
+ * file, and the key never reached the host at all. The live test that passed had called
+ * withRemoteExec directly, which is to say it tested the other implementation.
+ *
+ * A single constructor means an option added to RemoteExec reaches every module or none.
+ */
+export function remoteExecFor(session: SshSession, signal: AbortSignal | undefined): RemoteExec {
+  return (command, execOpts) =>
+    execOpts?.stdin === undefined
+      ? session.exec(command, execOpts?.signal ?? signal)
+      : session.execWithInput(command, Readable.from([execOpts.stdin]), execOpts.signal ?? signal)
+}
+
 export async function runHardening(
   conn: ConnectionInfo,
   opts: HardenOpts,
@@ -26,8 +47,7 @@ export async function runHardening(
     signal: opts.signal,
   })
 
-  const exec: RemoteExec = (command, execOpts) =>
-    session.exec(command, execOpts?.signal ?? opts.signal)
+  const exec = remoteExecFor(session, opts.signal)
 
   const results: ModuleRunResult[] = []
 
@@ -88,7 +108,7 @@ export async function withRemoteExec<T>(
     signal,
   })
   try {
-    return await fn((cmd, opts) => session.exec(cmd, opts?.signal ?? signal))
+    return await fn(remoteExecFor(session, signal))
   } finally {
     release()
   }

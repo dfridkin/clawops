@@ -226,7 +226,7 @@ clawops down --yes          # Destroy local-provider stack
 | `down` | Destroy local-provider stack (requires `--yes`; `--dry-run` shows current outputs) |
 | `destroy` | Destroy cloud-provider stack with confirmation prompt (`--dry-run` shows current outputs) |
 | `status` | Show stack outputs: IP, gateway URL, region, provisioned time |
-| `plan` | Generate a deploy-plan JSON artifact (dry-run safe). `--ssh-cidr <list\|auto>` and `--gateway-cidr` decide who may connect; `--publish-gateway loopback\|all` decides what is listening |
+| `plan` | Generate a deploy-plan JSON artifact (dry-run safe). `--ssh-cidr <list\|auto>` and `--gateway-cidr` decide who may connect; `--publish-gateway loopback\|all` decides what is listening; `--private-only` closes public access on a stack reached over its tailnet |
 | `apply` | Apply a previously reviewed plan file (`--dry-run` validates and shows diff without applying) |
 | `ssh` | Interactive SSH session or run a remote command |
 | `logs` | Stream OpenClaw logs (`-f`, `--tail N`, `--since 5m`) |
@@ -243,7 +243,7 @@ clawops down --yes          # Destroy local-provider stack
 | `mcp install` | Interactively wire clawops into AI editors |
 | `mcp wire` | Wire the gateway's AI as an MCP client of clawops (verifies the connection before saving) |
 | `help` | List all commands and global flags |
-| `harden` | Apply security hardening to a deployed stack (SSH, UFW, fail2ban, unattended-upgrades, Docker socket; AWS: SG audit, SSM check, Flow Logs, GuardDuty) |
+| `harden` | Apply security hardening to a deployed stack (SSH, UFW, fail2ban, unattended-upgrades, Docker socket; AWS: SG audit, SSM check, Flow Logs, GuardDuty). `--tailscale` joins the stack to your tailnet and moves clawops onto that address once it answers; `--tailscale-revert` undoes it |
 | `bug` | Open a pre-filled GitHub issue with system context from `doctor` |
 
 Full flag reference: `clawops <command> --help`
@@ -522,7 +522,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (1764 tests, ~13s)
+pnpm test                  # vitest (1855 tests, ~13s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm typecheck             # tsc --noEmit

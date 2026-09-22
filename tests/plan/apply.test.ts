@@ -28,6 +28,7 @@ vi.mock('../../src/config/store.js', () => ({
     mcp: {},
   })),
   getConfigDir: vi.fn(() => '/tmp/clawops-test'),
+  setConfig: vi.fn(),
 }))
 
 /**
@@ -532,5 +533,71 @@ describe('the session the readiness waits share', () => {
     const { applyPlan } = await import('../../src/plan/apply.js')
     await expect(applyPlan(basePlan)).rejects.toThrow()
     expect(proven.close).toHaveBeenCalled()
+  })
+})
+
+describe('a private-only plan', () => {
+  const TAILNET = { ip: '100.96.109.52', verifiedAt: '2026-09-22T00:00:00.000Z' }
+  const PRIVATE_PLAN = {
+    ...basePlan,
+    spec: {
+      ...basePlan.spec,
+      network: { allowedSshCidrs: [], allowedGatewayCidrs: [], tailscale: { enabled: true, privateOnly: true, ip: TAILNET.ip } },
+    },
+  }
+
+  async function onTailnet(privateOnly?: boolean) {
+    const store = await import('../../src/config/store.js')
+    const stacks = { default: { provider: 'aws', stateUrl: 's3://b', tailscale: { ...TAILNET, ...(privateOnly ? { privateOnly } : {}) } } }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(store.getConfig).mockReturnValue({ defaults: { stack: 'default', provider: 'aws' }, stacks, ssh: { keyPath: '/k', knownHostsPath: '/kh' } } as any)
+    const { buildContext } = await import('../../src/cli/context.js')
+    const base = vi.mocked(buildContext)({})
+    mockGetStack.mockResolvedValue({ up: mockUp, setConfig: mockSetConfig, info: mockInfo, outputs: async () => REALISTIC_OUTPUTS })
+    vi.mocked(buildContext).mockReturnValue({
+      ...base,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      config: { ...base.config, stacks } as any,
+      getStack: mockGetStack,
+    })
+    return store
+  }
+
+  it('closes nothing when the tailnet does not answer', async () => {
+    await onTailnet()
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await expect(applyPlan(PRIVATE_PLAN, { probeTailnet: async () => false })).rejects.toThrow(/cannot reach/)
+    // Not even stack config: a refused apply leaves the stack as it found it.
+    expect(mockSetConfig).not.toHaveBeenCalled()
+    expect(mockUp).not.toHaveBeenCalled()
+  })
+
+  it('closes nothing on a stack with no tailnet address', async () => {
+    const { buildContext } = await import('../../src/cli/context.js')
+    const base = vi.mocked(buildContext)({})
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(buildContext).mockReturnValue({ ...base, config: { ...base.config, stacks: { default: { provider: 'aws' } } } as any })
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await expect(applyPlan(PRIVATE_PLAN, { probeTailnet: async () => true })).rejects.toThrow(/harden --tailscale/)
+    expect(mockUp).not.toHaveBeenCalled()
+  })
+
+  it('records that the public ports are closed, so revert knows to reopen them', async () => {
+    const store = await onTailnet()
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan(PRIVATE_PLAN, { probeTailnet: async () => true })
+    expect(mockUp).toHaveBeenCalledOnce()
+    expect(store.setConfig).toHaveBeenCalledWith(expect.objectContaining({
+      stacks: { default: expect.objectContaining({ tailscale: { ...TAILNET, privateOnly: true } }) },
+    }))
+  })
+
+  it('an ordinary plan on a private stack records it as public again', async () => {
+    const store = await onTailnet(true)
+    const { applyPlan } = await import('../../src/plan/apply.js')
+    await applyPlan({ ...basePlan, spec: { ...basePlan.spec, network: { allowedSshCidrs: ['203.0.113.4/32'], allowedGatewayCidrs: [] } } })
+    expect(store.setConfig).toHaveBeenCalledWith(expect.objectContaining({
+      stacks: { default: expect.objectContaining({ tailscale: TAILNET }) },
+    }))
   })
 })
