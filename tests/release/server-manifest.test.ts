@@ -22,6 +22,15 @@ describe('the committed MCP server manifest', () => {
     expect(server.packages[0].version).toBe(pkg.version)
   })
 
+  /*
+   * The registry entry and the npm listing are two shop windows onto one product, and they had
+   * drifted into saying different things — neither of them mentioning MCP, which is half of what
+   * this is and the word someone searching the registry would type.
+   */
+  it('describes the package the same way npm does', () => {
+    expect(read('server.json').description).toBe(read('package.json').description)
+  })
+
   it('names the package that is actually published', () => {
     expect(read('server.json').packages[0].identifier).toBe(read('package.json').name)
   })

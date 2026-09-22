@@ -1,7 +1,7 @@
 {
   "name": "@clawops/cli",
   "version": "2.0.2",
-  "description": "Deploy and manage self-hosted OpenClaw instances across clouds",
+  "description": "Deploy and operate self-hosted OpenClaw across AWS, GCP, Azure and local VMs — a CLI and an MCP server in one.",
   "keywords": [
     "openclaw",
     "mcp",
