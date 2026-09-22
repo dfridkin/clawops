@@ -15,6 +15,7 @@ export default defineCommand({
     'dry-run':{ type: 'boolean', description: 'Check current state without applying changes' },
     yes:      { type: 'boolean', description: 'Skip confirmation prompt' },
     json:     { type: 'boolean', description: 'Emit structured JSON output' },
+    tailscale:{ type: 'boolean', description: 'Join the tailnet, verify this machine can reach the host there, then use that address' },
   },
   async run({ args }) {
     const { MODULE_CATALOG, resolveModules, runHardening, formatHardenSummary } = await import('../../harden/index.js')
@@ -45,7 +46,12 @@ export default defineCommand({
     const ctx = buildContext({ stack: args.stack })
     const provider = ctx.adapter.name
 
-    const modules = resolveModules(MODULE_CATALOG, args.options, provider)
+    const resolved = resolveModules(MODULE_CATALOG, args.options, provider)
+    const tailscaleModule = MODULE_CATALOG.find((m) => m.id === 'tailscale')
+    const modules =
+      args.tailscale && tailscaleModule && !resolved.some((m) => m.id === 'tailscale')
+        ? [...resolved, tailscaleModule]
+        : resolved
 
     if (modules.length === 0) {
       warn('No modules selected for this provider. Use --options to specify modules or --list to see all.')
@@ -134,5 +140,84 @@ export default defineCommand({
     if (!args['dry-run']) {
       success('Hardening complete.')
     }
+
+    // ── --tailscale: steps 4 and 5 of WO-34 ─────────────────────────────────
+    if (args.tailscale && !args['dry-run']) {
+      await cutOverToTailnet(ctx, conn, config)
+    }
   },
 })
+
+/**
+ * Point this stack at its tailnet address, but only once that address is proven.
+ *
+ * The public connection used here is the one clawops already trusts; the override is written to
+ * config only if a fresh session over the tailnet address succeeds against keys pinned through
+ * it. On any failure nothing is written and clawops keeps using the public address, which is the
+ * property that has to hold before anything is allowed to close it.
+ */
+async function cutOverToTailnet(
+  ctx: import('../context.js').ClawopsContext,
+  conn: import('../../providers/types.js').ConnectionInfo,
+  config: import('../../config/store.js').ClawopsConfig,
+): Promise<void> {
+  const { withRemoteExec } = await import('../../harden/index.js')
+  const { verifyTailnetAddress } = await import('../../harden/tailscale-cutover.js')
+  const { acquireSession } = await import('../../transport/pool.js')
+  const { setConfig } = await import('../../config/store.js')
+
+  process.stdout.write('\nVerifying the tailnet address before using it...\n')
+  const result = await withRemoteExec(conn, undefined, (exec) =>
+    verifyTailnetAddress(conn, {
+      exec,
+      probe: async (target) => {
+        try {
+          const { session, release } = await acquireSession({
+            host: target.host,
+            port: target.port,
+            user: target.user,
+            privateKeyPath: target.privateKeyPath,
+            knownHostsPath: target.knownHostsPath,
+          })
+          try {
+            return (await session.exec('true')).code === 0
+          } finally {
+            release()
+          }
+        } catch {
+          return false
+        }
+      },
+    }),
+  )
+
+  if (!result.ok) {
+    failure(result.reason)
+    process.exit(1)
+  }
+
+  const stack = config.stacks[ctx.stackName]
+  if (!stack) {
+    failure(`Stack "${ctx.stackName}" is not in config, so the tailnet address could not be recorded.`)
+    process.exit(1)
+  }
+  setConfig({
+    ...config,
+    stacks: {
+      ...config.stacks,
+      [ctx.stackName]: {
+        ...stack,
+        tailscale: {
+          ip: result.ip,
+          ...(result.hostname ? { hostname: result.hostname } : {}),
+          verifiedAt: new Date().toISOString(),
+        },
+      },
+    },
+  })
+  success(
+    `clawops now reaches "${ctx.stackName}" at ${result.ip} over the tailnet ` +
+      `(${result.pinned} host key${result.pinned === 1 ? '' : 's'} pinned through the public connection). ` +
+      'The public address is still open; nothing has been closed.',
+  )
+}

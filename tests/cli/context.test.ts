@@ -235,3 +235,84 @@ describe('the adapter is usable the moment the context exists', () => {
     })
   })
 })
+
+/*
+ * The seam every connection goes through once a stack is on its tailnet. Nineteen call sites
+ * use ctx.adapter.getConnectionInfo and six more read ctx.localState.sshHost; if the override
+ * does not reach all of them, --private-only closes the public port on an operator who is still
+ * being routed to it. These assert the override lands in both places, and changes only the host.
+ */
+describe('buildContext() with a verified tailnet address', () => {
+  const TS = { ip: '100.109.106.2', hostname: 'clawops-prod', verifiedAt: '2026-09-21T00:00:00.000Z' }
+  const OUTPUTS = {
+    sshHost: '203.0.113.10',
+    sshPort: 22,
+    sshUser: 'ubuntu',
+    privateKeyPath: '/k/id',
+    knownHostsPath: '/k/known_hosts',
+  }
+
+  beforeEach(() => {
+    vi.resetModules()
+    mockReadLocalState.mockReset()
+  })
+
+  it('routes a cloud stack’s connections to the tailnet address', async () => {
+    const { buildContext } = await import('../../src/cli/context.js')
+    await withTempConfig(
+      { stacks: { default: { ...MINIMAL_CONFIG.stacks['default']!, tailscale: TS } } },
+      () => {
+        const conn = buildContext({}).adapter.getConnectionInfo(OUTPUTS)
+        expect(conn.host).toBe('100.109.106.2')
+      },
+    )
+  })
+
+  it('moves only the host: user, port and keys belong to the machine, not the network', async () => {
+    const { buildContext } = await import('../../src/cli/context.js')
+    await withTempConfig(
+      { stacks: { default: { ...MINIMAL_CONFIG.stacks['default']!, tailscale: TS } } },
+      () => {
+        const conn = buildContext({}).adapter.getConnectionInfo(OUTPUTS)
+        expect(conn).toMatchObject({ port: 22, user: 'ubuntu', privateKeyPath: '/k/id', knownHostsPath: '/k/known_hosts' })
+      },
+    )
+  })
+
+  it('leaves the public address in place when there is no override', async () => {
+    const { buildContext } = await import('../../src/cli/context.js')
+    await withTempConfig(() => {
+      expect(buildContext({}).adapter.getConnectionInfo(OUTPUTS).host).toBe('203.0.113.10')
+    })
+  })
+
+  it('keeps the rest of the adapter working through the wrapper', async () => {
+    const { buildContext } = await import('../../src/cli/context.js')
+    await withTempConfig(
+      { stacks: { default: { ...MINIMAL_CONFIG.stacks['default']!, tailscale: TS } } },
+      () => {
+        const ctx = buildContext({})
+        expect(ctx.adapter.name).toBe('gcp')
+        expect(typeof ctx.adapter.program).toBe('function')
+      },
+    )
+  })
+
+  // Local stacks never reach getConnectionInfo; without this they ignored the override entirely.
+  it('routes a local stack’s connections to the tailnet address too', async () => {
+    const { buildContext } = await import('../../src/cli/context.js')
+    mockReadLocalState.mockReturnValue(MOCK_LOCAL_STATE)
+    await withTempConfig(
+      {
+        ...LOCAL_CONFIG,
+        stacks: { 'local-stack': { ...LOCAL_CONFIG.stacks['local-stack']!, tailscale: TS } },
+      },
+      () => {
+        const ctx = buildContext({})
+        expect(ctx.localState?.sshHost).toBe('100.109.106.2')
+        expect(ctx.localState?.sshUser).toBe('root')
+      },
+    )
+  })
+})
+

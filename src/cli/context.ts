@@ -44,12 +44,25 @@ export function buildContext(args: ContextArgs): ClawopsContext {
       ? args.provider
       : (config.stacks[stackName]?.provider ?? config.defaults.provider)
 
-  const adapter = loadProvider(providerName as ProviderName)
+  /** Set once a tailnet address has been verified for this stack; see TailscaleOverride. */
+  const tailscale = config.stacks[stackName]?.tailscale
+
+  const adapter = tailscale
+    ? viaTailscale(loadProvider(providerName as ProviderName), tailscale.ip)
+    : loadProvider(providerName as ProviderName)
 
   // For local stacks, load persisted connection state from disk (synchronous).
   // Returns null when the host has not been bootstrapped yet.
-  const localState: LocalState | null | undefined =
+  const persisted: LocalState | null | undefined =
     providerName === 'local' ? readLocalState(stackName) : undefined
+  /*
+   * The same override for local stacks, which never reach getConnectionInfo: they build their
+   * connections from `ctx.localState.sshHost` directly, in six places. Rewriting it here is what
+   * makes the tailnet address apply to a local box at all; without it an override was ignored and
+   * `--private-only` on a local stack would have locked the operator out.
+   */
+  const localState: LocalState | null | undefined =
+    persisted && tailscale ? { ...persisted, sshHost: tailscale.ip } : persisted
 
   let stackCache: Stack | null = null
 
@@ -87,6 +100,21 @@ export function buildContext(args: ContextArgs): ClawopsContext {
       return stackCache
     },
   }
+}
+
+/**
+ * The adapter, reaching the host over its tailnet address instead of the public one.
+ *
+ * Nineteen call sites build a connection with `ctx.adapter.getConnectionInfo`, and every one of
+ * them has to follow the stack onto the tailnet or `--private-only` locks the operator out of
+ * logs, ssh, tunnel, harden and apply at once. Wrapping the adapter here means none of them
+ * change and none of them can be missed. Only the host moves: user, port and the key paths are
+ * the machine's, not the network's.
+ */
+function viaTailscale(adapter: ProviderAdapter, ip: string): ProviderAdapter {
+  const wrapped = Object.create(adapter) as ProviderAdapter
+  wrapped.getConnectionInfo = (outputs) => ({ ...adapter.getConnectionInfo(outputs), host: ip })
+  return wrapped
 }
 
 /**

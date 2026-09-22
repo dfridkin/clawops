@@ -782,6 +782,20 @@ const MUTATIONS = [
     file: 'src/harden/modules/tailscale.ts', from: '  if (DAEMON_DOWN.test(r.stdout)) return { state: \'unknown\', daemonDown: true }', to: '', test: 'tests/harden/tailscale.test.ts' },
   { name: 'the join is attempted against a daemon that could not be started',
     file: 'src/harden/modules/tailscale.ts', from: '    if ((await status(exec)).daemonDown && !(await ensureDaemon(exec))) {', to: '    if (false) {', test: 'tests/harden/tailscale.test.ts' },
+  { name: 'the cutover probes the public address instead of the tailnet one',
+    file: 'src/harden/tailscale-cutover.ts', from: '  const reached = await deps.probe({ ...publicConn, host: ip })', to: '  const reached = await deps.probe(publicConn)', test: 'tests/harden/tailscale-cutover.test.ts' },
+  { name: 'the cutover succeeds when this machine cannot reach the tailnet',
+    file: 'src/harden/tailscale-cutover.ts', from: '  if (!reached) {', to: '  if (false) {', test: 'tests/harden/tailscale-cutover.test.ts' },
+  { name: 'only one host key type is pinned, so a negotiated other type is refused',
+    file: 'src/harden/tailscale-cutover.ts', from: '    out.push({ type: actual, blob })', to: "    if (actual === 'ssh-ed25519') out.push({ type: actual, blob })", test: 'tests/harden/tailscale-cutover.test.ts' },
+  { name: 'a mislabelled host key is pinned under the label it lies about',
+    file: 'src/harden/tailscale-cutover.ts', from: '    if (!actual || actual !== declared) continue', to: '    if (!actual) continue', test: 'tests/harden/tailscale-cutover.test.ts' },
+  { name: 'the host is probed before its keys are pinned, so the probe trusts on first use',
+    file: 'src/harden/tailscale-cutover.ts', from: '  const pinned = pinKeys(publicConn.knownHostsPath, ip, publicConn.port, keys)\n', to: '  const pinned = 0\n', test: 'tests/harden/tailscale-cutover.test.ts' },
+  { name: 'a cloud stack keeps using the public address after the tailnet is verified',
+    file: 'src/cli/context.ts', from: "  wrapped.getConnectionInfo = (outputs) => ({ ...adapter.getConnectionInfo(outputs), host: ip })", to: '  wrapped.getConnectionInfo = (outputs) => adapter.getConnectionInfo(outputs)', test: 'tests/cli/context.test.ts' },
+  { name: 'a local stack ignores its tailnet override',
+    file: 'src/cli/context.ts', from: '    persisted && tailscale ? { ...persisted, sshHost: tailscale.ip } : persisted', to: '    persisted', test: 'tests/cli/context.test.ts' },
 
 ]
 
