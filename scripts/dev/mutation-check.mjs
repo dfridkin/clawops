@@ -847,6 +847,8 @@ const MUTATIONS = [
     file: 'src/mcp/tools/cli/plan.ts', from: '    if (input.privateOnly) {', to: '    if (false) {', test: 'tests/mcp/plan.test.ts' },
   { name: 'the plan tool drops the network flags it was given',
     file: 'src/mcp/tools/cli/plan.ts', from: '      network,\n', to: '      network: { allowedSshCidrs: [], allowedGatewayCidrs: [] },\n', test: 'tests/mcp/plan.test.ts' },
+  { name: 'the audit log records a refused tool call as a success (R21)',
+    file: 'src/mcp/audit.ts', from: "        result: result.isError === true ? 'error' : 'ok',", to: "        result: 'ok',", test: 'tests/mcp/audit.test.ts' },
 ]
 
 let survived = []

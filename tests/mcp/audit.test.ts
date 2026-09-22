@@ -182,6 +182,31 @@ describe('withAudit', () => {
     vi.restoreAllMocks()
   })
 
+  /*
+   * Handlers refuse by returning errText (isError), not by throwing: across the tool directory
+   * there are five throws and dozens of errText returns. Classifying on the throw alone logged
+   * every refusal as a success — a declined destroy and a completed one read the same.
+   */
+  it('records a returned error as an error, not a success', async () => {
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const { withAudit } = await import('../../src/mcp/audit.js')
+    const handler = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'refused' }], isError: true })
+    await withAudit('clawops_harden', handler)({ stackName: 'prod' })
+    const entry = JSON.parse(String(stderrSpy.mock.calls.at(-1)?.[0]))
+    expect(entry.result).toBe('error')
+    vi.restoreAllMocks()
+  })
+
+  it('still records a plain result as a success', async () => {
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const { withAudit } = await import('../../src/mcp/audit.js')
+    const handler = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'done' }] })
+    await withAudit('clawops_harden', handler)({ stackName: 'prod' })
+    const entry = JSON.parse(String(stderrSpy.mock.calls.at(-1)?.[0]))
+    expect(entry.result).toBe('ok')
+    vi.restoreAllMocks()
+  })
+
   it('records durationMs >= 0', async () => {
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
     const { withAudit } = await import('../../src/mcp/audit.js')

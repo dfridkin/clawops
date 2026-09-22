@@ -30,6 +30,7 @@ can drive deployments deterministically.
 - `pnpm lint`           eslint --max-warnings=0
 - `pnpm gen:schemas`    emit `src/providers/types.ts` and `src/mcp/tools/_generated.ts` from `spec/`
 - `pnpm gen:schemas --check`   CI check that committed generated files match spec
+- `pnpm verify:mcp`     drive the built MCP server over stdio: tool list, annotations, elicitation, stdout purity
 - `pnpm changeset`      record a release note (see `/release` skill)
 
 ## Invariants — YOU MUST follow these

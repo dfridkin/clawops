@@ -48,6 +48,12 @@ jobs:
       - name: Verify the packed tarball runs
         run: pnpm verify:pack
 
+      # The other half of the product, over its own protocol: the tool list a client receives,
+      # the annotations on it, the confirmation a destructive tool raises, and stdout purity.
+      # A handler can be right while the server serves nothing.
+      - name: Verify the MCP server over the protocol
+        run: pnpm build && pnpm verify:mcp
+
       - name: Upload coverage
         uses: codecov/codecov-action@v6
         with:
