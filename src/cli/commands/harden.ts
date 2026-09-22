@@ -46,12 +46,19 @@ export default defineCommand({
     const ctx = buildContext({ stack: args.stack })
     const provider = ctx.adapter.name
 
-    const resolved = resolveModules(MODULE_CATALOG, args.options, provider)
-    const tailscaleModule = MODULE_CATALOG.find((m) => m.id === 'tailscale')
+    const { makeTailscaleModule } = await import('../../harden/index.js')
+    /*
+     * The catalog's Tailscale module has no stack name, because the module contract hands a
+     * module an exec and nothing else. Left as it is, the machine joins under the host's own
+     * name: on AWS that was `clawops-ip-10-0-1-179`, which tells an operator looking at their
+     * tailnet nothing. Here the stack is known, so the module is built with it.
+     */
+    const forStack = makeTailscaleModule(ctx.stackName)
+    const resolved = resolveModules(MODULE_CATALOG, args.options, provider).map((m) =>
+      m.id === 'tailscale' ? forStack : m,
+    )
     const modules =
-      args.tailscale && tailscaleModule && !resolved.some((m) => m.id === 'tailscale')
-        ? [...resolved, tailscaleModule]
-        : resolved
+      args.tailscale && !resolved.some((m) => m.id === 'tailscale') ? [...resolved, forStack] : resolved
 
     if (modules.length === 0) {
       warn('No modules selected for this provider. Use --options to specify modules or --list to see all.')
