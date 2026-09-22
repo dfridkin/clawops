@@ -72,8 +72,16 @@ export async function handleHarden(input: HardenInput, server: McpServer): Promi
   try {
     conn = await connectionFor(ctx, config)
   } catch (err) {
+    /*
+     * A Pulumi automation failure arrives as a multi-line subprocess dump whose first line is
+     * `code: -2`. Passed through, an agent is told nothing it can act on, so the actionable
+     * part is said plainly and the dump is trimmed to a tail the user can search for.
+     */
+    const detail = (err instanceof Error ? err.message : String(err)).replace(/\s+/g, ' ').trim()
     return errText(
-      `Stack "${ctx.stackName}" has no deployment to harden: ${err instanceof Error ? err.message : String(err)}`,
+      `Stack "${ctx.stackName}" has no deployment to harden, or clawops could not read its ` +
+        'state. Deploy it first, and check the credentials for its state backend. ' +
+        `(${detail.slice(0, 200)})`,
     )
   }
 

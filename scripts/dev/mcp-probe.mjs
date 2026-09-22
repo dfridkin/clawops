@@ -14,13 +14,43 @@
  * served. Both are invisible from inside the unit suite.
  *
  * No cloud credentials, no network, nothing created: every call here is refused by design.
+ *
+ * It runs against a CLAWOPS_HOME of its own, holding one stack that was never deployed. A probe
+ * that read the developer's real config would assert different things on every machine — and on
+ * a machine with no config at all (CI) the tool refuses before it reaches the confirmation this
+ * is here to check, which is exactly how the first version of this passed locally and failed in
+ * CI.
  */
 
 import { spawn } from 'node:child_process'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+
+const home = mkdtempSync(path.join(tmpdir(), 'clawops-mcp-probe-'))
+writeFileSync(
+  path.join(home, 'config.json'),
+  JSON.stringify({
+    version: 1,
+    defaults: { stack: 'probe', provider: 'aws' },
+    stacks: {
+      probe: {
+        provider: 'aws',
+        stateUrl: 's3://clawops-probe/clawops',
+        region: 'us-east-1',
+        credentialsRef: { source: 'cli-profile', profileName: 'probe' },
+      },
+    },
+    ssh: { keyPath: path.join(home, 'id_ed25519'), knownHostsPath: path.join(home, 'known_hosts') },
+  }),
+)
 
 const [, , cmd = 'node', ...rest] = process.argv
 const args = rest.length > 0 ? rest : ['dist/cli.js', 'mcp', 'serve']
-const proc = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] })
+const proc = spawn(cmd, args, {
+  stdio: ['pipe', 'pipe', 'pipe'],
+  env: { ...process.env, CLAWOPS_HOME: home },
+})
 
 let stdoutBuf = ''
 let stderrBuf = ''
@@ -110,29 +140,31 @@ try {
   }
 
   // The guard added in this PR, over the wire rather than in a unit test.
-  const both = await send('tools/call', { name: 'clawops_harden', arguments: { stackName: 'nope', tailscale: true, tailscaleRevert: true, yes: true } })
+  const both = await send('tools/call', { name: 'clawops_harden', arguments: { stackName: 'probe', tailscale: true, tailscaleRevert: true, yes: true } })
   const bothText = both.result?.content?.[0]?.text ?? JSON.stringify(both).slice(0, 200)
   check('refuses join and leave in one call', /opposite/.test(bothText), bothText.slice(0, 120))
 
   // A stack that does not exist must be a clean refusal, not a crash.
-  const missing = await send('tools/call', { name: 'clawops_harden', arguments: { stackName: 'definitely-not-a-stack', dryRun: true } })
+  const missing = await send('tools/call', { name: 'clawops_harden', arguments: { stackName: 'probe', dryRun: true } })
   const missingText = missing.result?.content?.[0]?.text ?? missing.error?.message ?? ''
-  check('a missing stack is a clean error', missing.error === undefined && missingText.length > 0, missingText.slice(0, 140))
+  check('an undeployed stack is a clean refusal, not a crash',
+    missing.error === undefined && missing.result?.isError === true && /no deployment to harden/i.test(missingText) && !/\n/.test(missingText),
+    missingText.slice(0, 120))
 
   // R19: anything that changes a live host asks first, over the protocol.
   elicitations.length = 0
   elicitAnswer = 'decline'
-  const declined = await send('tools/call', { name: 'clawops_harden', arguments: { stackName: 'definitely-not-a-stack' } })
+  const declined = await send('tools/call', { name: 'clawops_harden', arguments: { stackName: 'probe' } })
   const declinedText = declined.result?.content?.[0]?.text ?? ''
   check('a host-changing call elicits confirmation (R19)', elicitations.length === 1, JSON.stringify(elicitations[0] ?? {}).slice(0, 120))
   check('declining stops it before anything runs', /cancelled/i.test(declinedText), declinedText.slice(0, 100))
 
   elicitations.length = 0
-  await send('tools/call', { name: 'clawops_harden', arguments: { stackName: 'definitely-not-a-stack', dryRun: true } })
+  await send('tools/call', { name: 'clawops_harden', arguments: { stackName: 'probe', dryRun: true } })
   check('a dry run asks nothing', elicitations.length === 0)
 
   elicitations.length = 0
-  await send('tools/call', { name: 'clawops_harden', arguments: { stackName: 'definitely-not-a-stack', yes: true } })
+  await send('tools/call', { name: 'clawops_harden', arguments: { stackName: 'probe', yes: true } })
   check('yes:true skips the prompt', elicitations.length === 0)
 
   out.push(...stdoutLines)
