@@ -1,0 +1,14 @@
+# Keep the build context to what the build actually needs. node_modules is reinstalled from the
+# lockfile inside the image, and dist is rebuilt, so shipping either would only risk the image
+# disagreeing with the source it was built from.
+node_modules
+dist
+coverage
+.git
+.github
+.changeset
+site
+docs
+tests
+*.tgz
+.DS_Store
