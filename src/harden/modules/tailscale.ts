@@ -109,11 +109,28 @@ async function status(exec: RemoteExec): Promise<TailscaleStatus> {
  * reports rather than insists: a box with no systemd cannot be fixed from here, and saying so
  * beats a confusing failure from `tailscale up` three lines later.
  */
-async function ensureDaemon(exec: RemoteExec): Promise<boolean> {
+async function ensureDaemon(exec: RemoteExec, sudo: string): Promise<boolean> {
   const r = await exec(
-    'command -v systemctl >/dev/null 2>&1 && systemctl start tailscaled >/dev/null 2>&1 && echo started || echo no',
+    `command -v systemctl >/dev/null 2>&1 && ${sudo}systemctl start tailscaled >/dev/null 2>&1 && echo started || echo no`,
   )
   return r.stdout.trim() === 'started'
+}
+
+/**
+ * `sudo -n ` unless the session is already root, and `-n` rather than plain `sudo`.
+ *
+ * The AWS image logs in as `ubuntu`, and `tailscale up` refuses anyone but root: "Access denied:
+ * checkprefs access denied". Every earlier test ran as root and never saw it. `-n` because the
+ * key is on stdin: a sudo that wanted a password would read it from there, and the auth key
+ * would be spent as a failed sudo password. With -n it fails at once instead.
+ */
+async function rootPrefix(exec: RemoteExec): Promise<string> {
+  return (await exec('id -u')).stdout.trim() === '0' ? '' : 'sudo -n '
+}
+
+/** Single-quote for `sh -c`. The script it quotes carries a path, never the key. */
+export function shellQuote(text: string): string {
+  return `'${text.replace(/'/g, `'\\''`)}'`
 }
 
 /**
@@ -161,40 +178,33 @@ export function makeTailscaleModule(stack?: string): HardeningModule {
   async apply(exec: RemoteExec): Promise<ApplyResult> {
     const key = resolveSecretRef(AUTH_KEY_SECRET)
     if (!key) {
-      return {
-        changed: false,
-        detail:
-          `No auth key. Create one in the Tailscale admin console and store it with ` +
+      throw new Error(
+        `No auth key. Create one in the Tailscale admin console and store it with ` +
           `\`clawops secret set ${AUTH_KEY_SECRET}\`. clawops does not prompt for it here, so a ` +
           'key never reaches a terminal scrollback or a CI log.',
-      }
+      )
     }
 
-    let changed = false
     if (!(await installed(exec))) {
       // Tailscale's own install script, over HTTPS from their domain, which is the method they
       // document and support. Pinning a package version here would mean tracking their repo
       // layout across five distributions.
       const r = await exec('curl -fsSL https://tailscale.com/install.sh | sh')
       if (!(await installed(exec))) {
-        return {
-          changed: false,
-          detail: `Tailscale install failed: ${(r.stderr || r.stdout).slice(0, 300)}`,
-        }
+        throw new Error(`Tailscale install failed: ${(r.stderr || r.stdout).slice(0, 300)}`)
       }
-      changed = true
     }
+
+    const sudo = await rootPrefix(exec)
 
     // Bring the daemon up first: `tailscale up` against a dead one fails with an error about
     // sockets rather than about the network, which is not what the operator needs to read.
-    if ((await status(exec)).daemonDown && !(await ensureDaemon(exec))) {
-      return {
-        changed,
-        detail:
-          'Tailscale is installed but tailscaled is not running and could not be started. On a ' +
+    if ((await status(exec)).daemonDown && !(await ensureDaemon(exec, sudo))) {
+      throw new Error(
+        'Tailscale is installed but tailscaled is not running and could not be started. On a ' +
           'systemd host, `systemctl status tailscaled` says why; on a host without an init ' +
           'manager, tailscaled has to be supervised by whatever does run there.',
-      }
+      )
     }
 
     const hostname = tailnetHostname(stack ?? (await exec('hostname')).stdout)
@@ -210,8 +220,13 @@ export function makeTailscaleModule(stack?: string): HardeningModule {
       `cat > ${KEY_PATH}`,
       `tailscale up --auth-key=file:${KEY_PATH} --hostname=${hostname} --accept-routes 2>&1`,
     ].join('\n')
-    // The command carries no secret; the key arrives on stdin.
-    const r = await exec(join, { stdin: key })
+    /*
+     * The whole script runs as root, not each command in it: umask is set inside the root shell,
+     * so the key file is created 0600 by the process that creates it. `sudo tee` would have run
+     * tee under sudo's own default umask and could have left it 0644. The script names only the
+     * key's path; the key itself still arrives on stdin, which sudo passes through.
+     */
+    const r = await exec(`${sudo}sh -c ${shellQuote(join)}`, { stdin: key })
 
     const s = await status(exec)
     if (s.state === 'Running' && s.ipv4) {
@@ -222,14 +237,20 @@ export function makeTailscaleModule(stack?: string): HardeningModule {
           'this host on its public address; nothing has been pointed at the new one yet.',
       }
     }
-    return {
-      changed,
-      detail:
-        `tailscale up did not bring the host onto the network (state: ${s.state}). ` +
+    /*
+     * A join that did not join is a failure, whatever else this call managed.
+     *
+     * It used to return `changed: true` here whenever the install had run, and the runner reads
+     * `changed` as success: on a real AWS host a join that failed on permissions printed a green
+     * tick, "0 errors" and "Hardening complete". An operator would have believed the host was on
+     * the tailnet.
+     */
+    throw new Error(
+      `tailscale up did not bring the host onto the network (state: ${s.state}). ` +
         // The key is never interpolated into a message. An expired or single-use key is the
         // usual cause and Tailscale says so in output that does not contain the key itself.
         redactKey(r.stdout || r.stderr, key).slice(0, 300),
-    }
+    )
   },
   }
 }

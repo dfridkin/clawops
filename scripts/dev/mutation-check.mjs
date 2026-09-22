@@ -777,11 +777,11 @@ const MUTATIONS = [
   { name: 'the key is interpolated into a failure message',
     file: 'src/harden/modules/tailscale.ts', from: '        redactKey(r.stdout || r.stderr, key).slice(0, 300),', to: '        (r.stdout || r.stderr).slice(0, 300),', test: 'tests/harden/tailscale.test.ts' },
   { name: 'the key goes back into the command string, where sshd puts it in argv',
-    file: 'src/harden/modules/tailscale.ts', from: "    const r = await exec(join, { stdin: key })", to: "    const r = await exec(join + '\\n' + key)", test: 'tests/harden/tailscale.test.ts' },
+    file: 'src/harden/modules/tailscale.ts', from: "    const r = await exec(`${sudo}sh -c ${shellQuote(join)}`, { stdin: key })", to: "    const r = await exec(`${sudo}sh -c ${shellQuote(join + '\\n' + key)}`)", test: 'tests/harden/tailscale.test.ts' },
   { name: 'a stopped tailscaled is reported as unparseable output again',
     file: 'src/harden/modules/tailscale.ts', from: '  if (DAEMON_DOWN.test(r.stdout)) return { state: \'unknown\', daemonDown: true }', to: '', test: 'tests/harden/tailscale.test.ts' },
   { name: 'the join is attempted against a daemon that could not be started',
-    file: 'src/harden/modules/tailscale.ts', from: '    if ((await status(exec)).daemonDown && !(await ensureDaemon(exec))) {', to: '    if (false) {', test: 'tests/harden/tailscale.test.ts' },
+    file: 'src/harden/modules/tailscale.ts', from: '    if ((await status(exec)).daemonDown && !(await ensureDaemon(exec, sudo))) {', to: '    if (false) {', test: 'tests/harden/tailscale.test.ts' },
   { name: 'the cutover probes the public address instead of the tailnet one',
     file: 'src/harden/tailscale-cutover.ts', from: '  const reached = await deps.probe({ ...publicConn, host: ip })', to: '  const reached = await deps.probe(publicConn)', test: 'tests/harden/tailscale-cutover.test.ts' },
   { name: 'the cutover succeeds when this machine cannot reach the tailnet',
@@ -796,6 +796,14 @@ const MUTATIONS = [
     file: 'src/cli/context.ts', from: "  wrapped.getConnectionInfo = (outputs) => ({ ...adapter.getConnectionInfo(outputs), host: ip })", to: '  wrapped.getConnectionInfo = (outputs) => adapter.getConnectionInfo(outputs)', test: 'tests/cli/context.test.ts' },
   { name: 'a local stack ignores its tailnet override',
     file: 'src/cli/context.ts', from: '    persisted && tailscale ? { ...persisted, sshHost: tailscale.ip } : persisted', to: '    persisted', test: 'tests/cli/context.test.ts' },
+  { name: 'runHardening builds its own exec again, and drops stdin',
+    file: 'src/harden/runner.ts', from: '  const exec = remoteExecFor(session, opts.signal)\n', to: '  const exec: RemoteExec = (command, execOpts) =>\n    session.exec(command, execOpts?.signal ?? opts.signal)\n', test: 'tests/harden/runner.test.ts' },
+  { name: 'Tailscale runs unescalated as a non-root user',
+    file: 'src/harden/modules/tailscale.ts', from: "  return (await exec('id -u')).stdout.trim() === '0' ? '' : 'sudo -n '", to: "  return ''", test: 'tests/harden/tailscale.test.ts' },
+  { name: 'escalation uses plain sudo, which could spend the key as a password',
+    file: 'src/harden/modules/tailscale.ts', from: "  return (await exec('id -u')).stdout.trim() === '0' ? '' : 'sudo -n '", to: "  return (await exec('id -u')).stdout.trim() === '0' ? '' : 'sudo '", test: 'tests/harden/tailscale.test.ts' },
+  { name: 'a join that did not join is reported as success again',
+    file: 'src/harden/modules/tailscale.ts', from: "    throw new Error(\n      `tailscale up did not bring the host onto the network (state: ${s.state}). ` +", to: "    return { changed: true, detail:\n      `tailscale up did not bring the host onto the network (state: ${s.state}). ` +", test: 'tests/harden/tailscale.test.ts' },
 
 ]
 

@@ -151,9 +151,7 @@ describe('apply()', () => {
   it('does nothing without a key, and says where to put one', async () => {
     vi.doMock('../../src/config/secrets.js', () => ({ resolveSecretRef: () => null }))
     const { makeTailscaleModule: make } = await import('../../src/harden/modules/tailscale.js')
-    const r = await make('prod').apply(fakeExec([]))
-    expect(r.changed).toBe(false)
-    expect(r.detail).toContain(AUTH_KEY_SECRET)
+    await expect(make('prod').apply(fakeExec([]))).rejects.toThrow(AUTH_KEY_SECRET)
   })
 
   it('puts the key in no command string at all, only on stdin', async () => {
@@ -185,15 +183,16 @@ describe('apply()', () => {
     // a leaked auth key is a machine someone else can add to the tailnet.
     vi.doMock('../../src/config/secrets.js', () => ({ resolveSecretRef: () => 'tskey-SECRET' }))
     const { makeTailscaleModule: make } = await import('../../src/harden/modules/tailscale.js')
-    const r = await make('prod').apply(
+    const failing = make('prod').apply(
       fakeExec([
         [/command -v tailscale/, 'yes'],
         [/--auth-key=file:/, 'invalid key tskey-SECRET rejected'],
         [/tailscale status/, JSON.stringify({ BackendState: 'NeedsLogin' })],
       ]),
     )
-    expect(r.detail).not.toContain('tskey-SECRET')
-    expect(r.detail).toContain('[redacted]')
+    const err = await failing.then(() => null, (e: Error) => e)
+    expect(err?.message).not.toContain('tskey-SECRET')
+    expect(err?.message).toContain('[redacted]')
   })
 
   it('starts a stopped daemon before trying to join', async () => {
@@ -220,10 +219,50 @@ describe('apply()', () => {
       [/systemctl start tailscaled/, 'no'],
       [/tailscale status/, 'failed to connect to local tailscaled'],
     ])
-    const r = await make('prod').apply(exec)
-    expect(r.detail).toContain('could not be started')
+    await expect(make('prod').apply(exec)).rejects.toThrow('could not be started')
     // It never reached the join, so the key was never sent anywhere.
     expect(exec.calls.some((c) => c.includes('--auth-key'))).toBe(false)
+  })
+
+  // Measured on a real AWS host, which logs in as `ubuntu`: `tailscale up` refused with
+  // "Access denied: checkprefs access denied". Every earlier run had been root.
+  it('escalates with sudo -n when the session is not root', async () => {
+    vi.doMock('../../src/config/secrets.js', () => ({ resolveSecretRef: () => 'tskey-SECRET' }))
+    const { makeTailscaleModule: make } = await import('../../src/harden/modules/tailscale.js')
+    const exec = fakeExec([[/id -u/, '1000'], [/command -v tailscale/, 'yes'], [/tailscale status/, RUNNING]])
+    await make('prod').apply(exec)
+    const join = exec.calls.find((c) => c.includes('--auth-key=file:')) ?? ''
+    // -n, not plain sudo: with the key on stdin, a sudo that prompted would spend it as a password.
+    expect(join.startsWith('sudo -n sh -c ')).toBe(true)
+  })
+
+  it('does not reach for sudo when the session is already root', async () => {
+    vi.doMock('../../src/config/secrets.js', () => ({ resolveSecretRef: () => 'tskey-SECRET' }))
+    const { makeTailscaleModule: make } = await import('../../src/harden/modules/tailscale.js')
+    const exec = fakeExec([[/id -u/, '0'], [/command -v tailscale/, 'yes'], [/tailscale status/, RUNNING]])
+    await make('prod').apply(exec)
+    const join = exec.calls.find((c) => c.includes('--auth-key=file:')) ?? ''
+    expect(join.startsWith('sh -c ')).toBe(true)
+  })
+
+  it('still keeps the key off the command line when escalating', async () => {
+    vi.doMock('../../src/config/secrets.js', () => ({ resolveSecretRef: () => 'tskey-SECRET' }))
+    const { makeTailscaleModule: make } = await import('../../src/harden/modules/tailscale.js')
+    const exec = fakeExec([[/id -u/, '1000'], [/command -v tailscale/, 'yes'], [/tailscale status/, RUNNING]])
+    await make('prod').apply(exec)
+    expect(exec.calls.some((c) => c.includes('tskey-SECRET'))).toBe(false)
+    expect(exec.stdins).toContain('tskey-SECRET')
+  })
+
+  // The AWS run printed a green tick, "0 errors" and "Hardening complete" for a join that failed.
+  it('throws when the join does not join, so the runner counts it as a failure', async () => {
+    vi.doMock('../../src/config/secrets.js', () => ({ resolveSecretRef: () => 'tskey-SECRET' }))
+    const { makeTailscaleModule: make } = await import('../../src/harden/modules/tailscale.js')
+    const exec = fakeExec([
+      [/command -v tailscale/, 'yes'],
+      [/tailscale status/, JSON.stringify({ BackendState: 'NeedsLogin' })],
+    ])
+    await expect(make('prod').apply(exec)).rejects.toThrow('did not bring the host onto the network')
   })
 
   it('removes the staged key file even if the command is interrupted', async () => {
