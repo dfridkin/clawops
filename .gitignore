@@ -155,3 +155,6 @@ graphify-out/
 
 # mutation-check lock (see scripts/dev/mutation-check.mjs)
 .mutation-lock.json
+
+# macOS
+.DS_Store
