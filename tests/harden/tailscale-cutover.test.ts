@@ -1,12 +1,19 @@
 // Steps 4 and 5 of WO-34: moving clawops onto a stack's tailnet address, and only once proven.
 // Real key blobs throughout, because keyTypeFromBlob decodes them rather than trusting labels.
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+
+const { mockConnect, mockAcquireSession } = vi.hoisted(() => ({
+  mockConnect: vi.fn(),
+  mockAcquireSession: vi.fn(),
+}))
+vi.mock('../../src/transport/ssh.js', () => ({ connect: mockConnect }))
+vi.mock('../../src/transport/pool.js', () => ({ acquireSession: mockAcquireSession }))
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import type { RemoteExec } from '../../src/harden/types.js'
-import { parseHostKeys, pinKeys, verifyTailnetAddress, leaveTailnet } from '../../src/harden/tailscale-cutover.js'
+import { parseHostKeys, pinKeys, verifyTailnetAddress, leaveTailnet, probeSsh } from '../../src/harden/tailscale-cutover.js'
 import { verifyAgainstKnownHosts } from '../../src/transport/known-hosts.js'
 
 const ED = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKHon6esf+cbdgZSiEVPGG+4GBu+Vr5KjXE3FqbgHIhm host'
@@ -180,5 +187,50 @@ describe('leaveTailnet', () => {
     const r = await leaveTailnet(exec)
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.reason).toContain('a password is required')
+  })
+})
+
+describe('probeSsh', () => {
+  const target = { host: '100.109.106.2', port: 22, user: 'ubuntu', privateKeyPath: '/k', knownHostsPath: '/kh' }
+
+  beforeEach(() => { mockConnect.mockReset(); mockAcquireSession.mockReset() })
+
+  function session(code: number) {
+    return { exec: vi.fn().mockResolvedValue({ stdout: '', stderr: '', code }), close: vi.fn() }
+  }
+
+  it('reports a host that answers', async () => {
+    mockConnect.mockResolvedValue(session(0))
+    expect(await probeSsh(target)).toBe(true)
+  })
+
+  it('reports a host that refuses the handshake', async () => {
+    mockConnect.mockRejectedValue(new Error('host key mismatch'))
+    expect(await probeSsh(target)).toBe(false)
+  })
+
+  it('reports a command that failed on a host that did answer', async () => {
+    mockConnect.mockResolvedValue(session(1))
+    expect(await probeSsh(target)).toBe(false)
+  })
+
+  /*
+   * The pool holds a session for five minutes. `plan --private-only` printed its plan and then
+   * sat there until the idle sweep closed the socket — 5m10s, measured on GCP.
+   */
+  it('closes the connection it opened, and never pools one', async () => {
+    const s = session(0)
+    mockConnect.mockResolvedValue(s)
+    await probeSsh(target)
+    expect(s.close).toHaveBeenCalledOnce()
+    expect(mockAcquireSession).not.toHaveBeenCalled()
+  })
+
+  it('closes it even when the probe throws', async () => {
+    const s = session(0)
+    s.exec.mockRejectedValue(new Error('channel closed'))
+    mockConnect.mockResolvedValue(s)
+    expect(await probeSsh(target)).toBe(false)
+    expect(s.close).toHaveBeenCalledOnce()
   })
 })

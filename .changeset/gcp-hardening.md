@@ -1,5 +1,5 @@
 ---
-'@clawops/cli': patch
+'@clawops/cli': minor
 ---
 
 `clawops harden` gains three GCP checks, so the hardening report is no longer AWS-only on the
