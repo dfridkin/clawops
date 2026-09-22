@@ -1,15 +1,16 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import ShellHero from './ShellHero'
 import styles from './HeroIntro.module.css'
 
 /**
  * intro     waiting, shell idle, one line of text
  * revealing tapped: the shell opens and draws the claw, and we let it finish
- * leaving   the sweep is complete; the art flies to its column and the page comes up
+ * leaving   the sweep is complete; note where the art is and hand it back to the page
+ * landing   the art is where the page puts it, animating in from where it was
  */
-type Phase = 'intro' | 'revealing' | 'leaving' | 'done'
+type Phase = 'intro' | 'revealing' | 'leaving' | 'landing' | 'done'
 
 /** Long enough for a slow device to finish the sweep, short enough not to strand anyone. */
 const SWEEP_TIMEOUT = 6000
@@ -47,24 +48,6 @@ export default function HeroIntro() {
       return
     }
     delete document.body.dataset['introActive']
-    if (phase !== 'leaving') return
-
-    /*
-     * Land at the top of the page, not at the shell.
-     *
-     * The control that was tapped keeps focus, and on a phone the art it belongs to ends up in
-     * the hero column below the nav and the headline, so releasing the scroll lock let the
-     * browser bring it into view and skip the masthead.
-     *
-     * Blurring to prevent that is what closed the hologram: the renderer clears `pinned` on the
-     * trigger's blur, so dropping focus told it the shell was no longer held open and the claw
-     * faded a second after the reveal finished. Resetting the scroll after layout has settled
-     * does the same job and leaves the shell held.
-     */
-    const frame = requestAnimationFrame(() =>
-      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior }),
-    )
-    return () => cancelAnimationFrame(frame)
   }, [phase])
 
   /**
@@ -119,19 +102,60 @@ export default function HeroIntro() {
     return () => { observer.disconnect(); clearTimeout(bail) }
   }, [phase])
 
-  /* The art flies from the middle of the screen to the place it occupies in the hero. */
-  useEffect(() => {
+  /*
+   * Where the art was when the sweep finished, in viewport coordinates. Read before the art is
+   * handed back to the page, and spent one frame later by the landing animation.
+   */
+  const liftedFrom = useRef<DOMRect | null>(null)
+
+  /* The sweep is over: note where the art sits, then let the page have it back. */
+  useLayoutEffect(() => {
     if (phase !== 'leaving') return
-    const node = art.current, target = slot.current
-    if (!node || !target) { setPhase('done'); return }
+    const node = art.current
+    if (!node) { setPhase('done'); return }
+    liftedFrom.current = node.getBoundingClientRect()
+    setPhase('landing')
+  }, [phase])
 
-    const from = node.getBoundingClientRect()
-    const to = target.getBoundingClientRect()
-    node.style.transform =
-      `translate(${to.left - from.left + (to.width - from.width) / 2}px, ` +
-      `${to.top - from.top + (to.height - from.height) / 2}px) scale(${to.width / from.width})`
+  /*
+   * The art animates from where it was to where the page puts it — measured there, not guessed.
+   *
+   * It used to work the other way round: the art stayed fixed and centred, and flew to a
+   * measured stand-in for its place in the hero column. Two things then had to agree for the
+   * landing to be invisible, and they did not. The scroll was reset a frame after the flight was
+   * aimed, so the target had moved by the time the art arrived — it flew to one side. And the
+   * flight ended by dropping the art back into normal flow, so any remaining difference between
+   * the stand-in's box and the art's own showed up as a jump at the very end.
+   *
+   * So: put the art where it belongs first, measure that, and animate in from the old position.
+   * The animation ends on the page's own layout rather than next to it, which is what makes the
+   * last frame land silently. The scroll is reset here, before the measurement, because the
+   * control that was tapped keeps focus and releasing the scroll lock otherwise lets the browser
+   * bring it into view and skip the masthead. (Blurring it instead closes the hologram: the
+   * renderer clears `pinned` on blur.)
+   */
+  useLayoutEffect(() => {
+    if (phase !== 'landing') return
+    const node = art.current
+    const from = liftedFrom.current
+    liftedFrom.current = null
+    if (!node || !from) { setPhase('done'); return }
 
-    const finish = () => { node.style.transform = ''; setPhase('done') }
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior })
+    const to = node.getBoundingClientRect()
+    if (!to.width || !from.width) { setPhase('done'); return }
+
+    // Centres, not corners: the art is scaled about its middle.
+    const dx = from.left - to.left + (from.width - to.width) / 2
+    const dy = from.top - to.top + (from.height - to.height) / 2
+    node.style.transition = 'none'
+    node.style.transform = `translate(${dx}px, ${dy}px) scale(${from.width / to.width})`
+    // Read back, so the browser has the starting transform to animate away from.
+    void node.offsetHeight
+    node.style.transition = ''
+    node.style.transform = ''
+
+    const finish = () => { node.style.transition = ''; node.style.transform = ''; setPhase('done') }
     const timer = setTimeout(finish, 900)
     node.addEventListener('transitionend', finish, { once: true })
     return () => { clearTimeout(timer); node.removeEventListener('transitionend', finish) }
@@ -151,7 +175,7 @@ export default function HeroIntro() {
         // scratch instead of transitioning it.
         <div
           className={styles.scrim}
-          data-leaving={phase === 'leaving' ? 'true' : undefined}
+          data-leaving={phase === 'leaving' || phase === 'landing' ? 'true' : undefined}
           onClick={beginReveal}
           aria-hidden="true"
         />
@@ -161,7 +185,9 @@ export default function HeroIntro() {
         * only while that is true. Left mounted afterwards it is an empty 384px square sitting
         * above the shell, which is what pushed the hero art out of line with the copy beside it.
         */}
-      {phase !== 'done' && <div ref={slot} className={styles.slot} aria-hidden="true" />}
+      {(phase === 'intro' || phase === 'revealing') && (
+        <div ref={slot} className={styles.slot} aria-hidden="true" />
+      )}
       <div ref={art} className={styles.art} data-phase={phase}>
         <ShellHero />
         {phase === 'intro' && (

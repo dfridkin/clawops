@@ -44,7 +44,17 @@
   .art[data-phase='revealing'],
   .art[data-phase='leaving'] { width: 384px; height: 384px; }
 }
-.art[data-phase='leaving'] {
+.art[data-phase='leaving'] { pointer-events: none; }
+
+/*
+ * Landing: the art is back in the page's own layout, animating in from where the intro left it.
+ * Raised only so it stays above the scrim for the moment that is still fading, and lowered again
+ * at 'done' — a change of stacking, not of position, so the last frame moves nothing.
+ */
+.art[data-phase='landing'] {
+  position: relative;
+  z-index: 50;
+  transform-origin: center;
   transition: transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
 }
@@ -71,7 +81,7 @@
 @keyframes pulse { 0%, 100% { opacity: 0.55 } 50% { opacity: 1 } }
 
 @media (prefers-reduced-motion: reduce) {
-  .scrim, .art[data-phase='leaving'] { transition: none; }
+  .scrim, .art[data-phase='leaving'], .art[data-phase='landing'] { transition: none; }
   .enter { animation: none; }
 }
 
