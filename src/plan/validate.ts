@@ -1,6 +1,15 @@
 // Maker plan validation via ajv against spec/deploy-plan.schema.json.
 
-import Ajv from 'ajv/dist/2020'
+/*
+ * The .js is load-bearing. ajv ships no `exports` map, so under real ESM Node resolves this
+ * path literally and `ajv/dist/2020` names a file that does not exist; only `2020.js` does.
+ * Vitest resolves it either way, so the suite passed while the published binary could not
+ * start: `clawops mcp serve` died on import before emitting a single byte of protocol.
+ *
+ * Same shape as the @pulumi/pulumi/automation/index.js fix. Deep imports into dependencies are
+ * where this bites, and a test now runs the built artifact so it cannot recur silently.
+ */
+import Ajv from 'ajv/dist/2020.js'
 import addFormats from 'ajv-formats'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
