@@ -3,6 +3,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { withTempConfig, MINIMAL_CONFIG } from '../helpers/config.js'
 import type { ClawopsConfig } from '../../src/config/store.js'
+import type { StackOutputs } from '../../src/providers/types.js'
 
 const MOCK_LOCAL_STATE = {
   instanceId: 'local:10.0.0.1',
@@ -244,10 +245,15 @@ describe('the adapter is usable the moment the context exists', () => {
  */
 describe('buildContext() with a verified tailnet address', () => {
   const TS = { ip: '100.109.106.2', hostname: 'clawops-prod', verifiedAt: '2026-09-21T00:00:00.000Z' }
-  const OUTPUTS = {
+  const OUTPUTS: StackOutputs = {
+    instanceId: 'i-0abc',
+    publicIp: '203.0.113.10',
+    gatewayUrl: 'http://203.0.113.10:18789',
     sshHost: '203.0.113.10',
     sshPort: 22,
     sshUser: 'ubuntu',
+    region: 'us-east-1',
+    provisionedAt: '2026-09-21T00:00:00.000Z',
     privateKeyPath: '/k/id',
     knownHostsPath: '/k/known_hosts',
   }
