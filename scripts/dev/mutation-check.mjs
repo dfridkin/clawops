@@ -498,7 +498,7 @@ const MUTATIONS = [
   { name: 'destroy leaves a stale host key behind',
     file: 'src/cli/commands/destroy.ts', from: '      const removed = forgetHost(', to: '      const removed = false && forgetHost(', test: 'tests/cli/destroy.test.ts' },
   { name: 'the host is read after the instance is gone',
-    file: 'src/cli/commands/destroy.ts', from: '    const doomedHost = await hostOf(stack, ctx)\n', to: '', test: 'tests/cli/destroy.test.ts' },
+    file: 'src/cli/commands/destroy.ts', from: '    const doomedHosts = await hostsOf(stack, ctx)\n', to: '', test: 'tests/cli/destroy.test.ts' },
   { name: 'a ~ in the known_hosts path is passed through',
     file: 'src/cli/commands/destroy.ts', from: "  return p.replace(/^~/, process.env['HOME'] ?? '~')", to: '  return p', test: 'tests/cli/destroy.test.ts' },
   { name: 'forgetting a host takes every other host with it',
@@ -805,6 +805,10 @@ const MUTATIONS = [
   { name: 'a join that did not join is reported as success again',
     file: 'src/harden/modules/tailscale.ts', from: "    throw new Error(\n      `tailscale up did not bring the host onto the network (state: ${s.state}). ` +", to: "    return { changed: true, detail:\n      `tailscale up did not bring the host onto the network (state: ${s.state}). ` +", test: 'tests/harden/tailscale.test.ts' },
 
+  { name: 'destroy asks the tailnet-redirected adapter for the host again, leaving the public key pinned',
+    file: 'src/cli/commands/destroy.ts', from: '    if (base.sshHost) hosts.push({ host: base.sshHost, port: base.sshPort })', to: '    if (base.sshHost) hosts.push({ host: ctx.adapter.getConnectionInfo({ ...base, privateKeyPath: \'\', knownHostsPath: \'\' }).host, port: base.sshPort })', test: 'tests/cli/destroy.test.ts' },
+  { name: 'destroy forgets only the public address of a stack on its tailnet',
+    file: 'src/cli/commands/destroy.ts', from: '  if (tailnet?.ip) {', to: '  if (false) {', test: 'tests/cli/destroy.test.ts' },
 ]
 
 let survived = []

@@ -179,6 +179,48 @@ describe('the host key of a destroyed instance', () => {
     expect(mockForgetHost).not.toHaveBeenCalled()
   })
 
+  describe('of a stack on its tailnet', () => {
+    // What buildContext hands back once `harden --tailscale` has written the override: an
+    // adapter that answers with the tailnet address, whatever the outputs say.
+    function onTailnet() {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const base = mockBuildContext({} as any)
+      mockBuildContext.mockReturnValue({
+        ...base,
+        config: {
+          ...base.config,
+          stacks: { default: { tailscale: { ip: '100.96.109.52', verifiedAt: '2026-09-22T00:00:00.000Z' } } },
+        },
+        adapter: {
+          ...base.adapter,
+          getConnectionInfo: () => ({ host: '100.96.109.52', port: 22 }),
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+    }
+
+    it('forgets the public address too, which the override hides from the adapter', async () => {
+      // Measured on AWS: destroy forgot 100.96.109.52 and left 34.200.67.239 pinned, on an
+      // address the cloud hands straight back out.
+      onTailnet()
+      await (cmd.run as AnyRunFn)({ args: { yes: true } })
+      expect(mockForgetHost).toHaveBeenCalledWith(expect.stringContaining('known_hosts'), '1.2.3.4', 22)
+    })
+
+    it('forgets the tailnet address, pinned by the cutover', async () => {
+      onTailnet()
+      await (cmd.run as AnyRunFn)({ args: { yes: true } })
+      expect(mockForgetHost).toHaveBeenCalledWith(expect.stringContaining('known_hosts'), '100.96.109.52', 22)
+    })
+
+    it('still forgets the tailnet address when the stack has no outputs left', async () => {
+      onTailnet()
+      mockOutputs.mockRejectedValue(new Error('no outputs'))
+      await (cmd.run as AnyRunFn)({ args: { yes: true } })
+      expect(mockForgetHost.mock.calls.map((c) => c[1])).toEqual(['100.96.109.52'])
+    })
+  })
+
   it('is not touched on a dry run', async () => {
     await (cmd.run as AnyRunFn)({ args: { 'dry-run': true } })
     expect(mockForgetHost).not.toHaveBeenCalled()

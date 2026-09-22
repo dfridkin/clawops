@@ -63,7 +63,7 @@ export default defineCommand({
     process.on('SIGTERM', () => abortController.abort())
 
     // Read the host before it is gone: a destroyed stack has no outputs to ask afterwards.
-    const doomedHost = await hostOf(stack, ctx)
+    const doomedHosts = await hostsOf(stack, ctx)
 
     const spin = spinner(`Destroying stack "${ctx.stackName}"…`)
     try {
@@ -81,37 +81,46 @@ export default defineCommand({
     // the address this one just released, with a different host key — and trust-on-first-use
     // then refuses to connect, correctly, over a machine that no longer exists. The pinned key
     // is stale the moment the instance it belongs to is destroyed, so this is where it goes.
-    if (doomedHost) {
-      const { forgetHost } = await import('../../transport/known-hosts-file.js')
-      const removed = forgetHost(
-        expandHome(ctx.config.ssh.knownHostsPath),
-        doomedHost.host,
-        doomedHost.port,
-      )
-      if (removed) info(`Forgot the host key for ${doomedHost.host} — its instance is gone.`)
+    const { forgetHost } = await import('../../transport/known-hosts-file.js')
+    for (const doomed of doomedHosts) {
+      const removed = forgetHost(expandHome(ctx.config.ssh.knownHostsPath), doomed.host, doomed.port)
+      if (removed) info(`Forgot the host key for ${doomed.host} — its instance is gone.`)
     }
   },
 })
 
-/** Where the stack's instance was, while its outputs still exist. */
-async function hostOf(
+/**
+ * Every address the stack's instance was reachable at, while its outputs still exist.
+ *
+ * One, until a stack has a tailnet override; then two, and both keys go stale together. This used
+ * to ask the adapter where the host was, and once the override redirects the adapter to the
+ * tailnet address that is the only one it answers with. Destroying a stack on its tailnet then
+ * forgot the tailnet key and left the public address pinned, for an instance that no longer
+ * exists, on an address the cloud hands straight back out. Measured on AWS: 34.200.67.239 stayed
+ * pinned after its instance was gone.
+ *
+ * The public address is read from the outputs themselves, which the override does not touch.
+ */
+async function hostsOf(
   stack: { outputs(): Promise<Record<string, { value: unknown }>> },
   ctx: ClawopsContext,
-): Promise<{ host: string; port: number } | undefined> {
+): Promise<Array<{ host: string; port: number }>> {
+  const hosts: Array<{ host: string; port: number }> = []
   try {
     const outputMap = await stack.outputs()
     const raw = Object.fromEntries(Object.entries(outputMap).map(([k, v]) => [k, v.value]))
     const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
-    const conn = ctx.adapter.getConnectionInfo({
-      ...extractBaseOutputs(raw),
-      privateKeyPath: ctx.config.ssh.keyPath,
-      knownHostsPath: ctx.config.ssh.knownHostsPath,
-    })
-    return conn.host ? { host: conn.host, port: conn.port } : undefined
+    const base = extractBaseOutputs(raw)
+    if (base.sshHost) hosts.push({ host: base.sshHost, port: base.sshPort })
   } catch {
-    // A stack with no outputs was never deployed, or is already gone. Nothing to forget.
-    return undefined
+    // A stack with no outputs was never deployed, or is already gone. Nothing public to forget.
   }
+  const tailnet = ctx.config.stacks?.[ctx.stackName]?.tailscale
+  if (tailnet?.ip) {
+    const port = hosts[0]?.port ?? 22
+    if (!hosts.some((h) => h.host === tailnet.ip)) hosts.push({ host: tailnet.ip, port })
+  }
+  return hosts
 }
 
 /** `~` in a configured path is the operator's home, not a directory called "~". */
