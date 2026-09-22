@@ -21,7 +21,12 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN pnpm build && npm pack --pack-destination /out
+# mkdir first: `npm pack --pack-destination` does not create the directory, it fails with ENOENT
+# on the tarball it is about to write. This Dockerfile shipped without ever being built, so the
+# build broke here on its first real run — Glama could not build it, fell back to inferring a
+# spec of its own, and that spec ran `clawops` with no subcommand: the CLI printed its help and
+# exited 1, and the listing was withheld. See scripts/dev/verify-docker.mjs.
+RUN mkdir -p /out && pnpm build && npm pack --pack-destination /out
 
 # ── runtime ───────────────────────────────────────────────────────────────────
 FROM node:22-slim

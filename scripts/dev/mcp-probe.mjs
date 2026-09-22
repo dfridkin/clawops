@@ -27,7 +27,13 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-const home = mkdtempSync(path.join(tmpdir(), 'clawops-mcp-probe-'))
+/*
+ * Where the probe's throwaway config goes. A caller that cannot share a filesystem with the
+ * server — the Docker check, where the config has to be mounted and CLAWOPS_HOME set on the
+ * container rather than on the child process — passes the directory in and wires it up itself.
+ */
+const externalHome = process.env['CLAWOPS_PROBE_HOME']
+const home = externalHome ?? mkdtempSync(path.join(tmpdir(), 'clawops-mcp-probe-'))
 writeFileSync(
   path.join(home, 'config.json'),
   JSON.stringify({
@@ -49,7 +55,7 @@ const [, , cmd = 'node', ...rest] = process.argv
 const args = rest.length > 0 ? rest : ['dist/cli.js', 'mcp', 'serve']
 const proc = spawn(cmd, args, {
   stdio: ['pipe', 'pipe', 'pipe'],
-  env: { ...process.env, CLAWOPS_HOME: home },
+  env: externalHome ? process.env : { ...process.env, CLAWOPS_HOME: home },
 })
 
 let stdoutBuf = ''
