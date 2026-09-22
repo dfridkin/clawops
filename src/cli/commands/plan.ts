@@ -68,6 +68,7 @@ export default defineCommand({
     'gateway-cidr':    { type: 'string', description: "CIDR(s) allowed to reach the gateway port, comma-separated, or 'auto'. Requires --publish-gateway all" },
     'publish-gateway': { type: 'string', description: 'loopback (default) or all. "all" serves plaintext HTTP — put TLS in front of it' },
     out:               { type: 'string', description: 'Write plan JSON to this absolute path (default: stdout)' },
+    'private-only':    { type: 'boolean', description: 'Close public SSH and gateway access; reach the stack over its tailnet. Needs `clawops harden --tailscale` first, and checks the tailnet answers before planning' },
   },
   async run({ args }) {
     const { buildContext } = await import('../context.js')
@@ -92,14 +93,24 @@ export default defineCommand({
 
     // Before the spinner: a bad CIDR should be an immediate usage error, not something that
     // surfaces after a preview has run against the cloud.
-    const network = await resolveNetworkFlags(
-      {
-        sshCidr: strArg(args['ssh-cidr']),
-        gatewayCidr: strArg(args['gateway-cidr']),
-        publishGateway: strArg(args['publish-gateway']),
-      },
-      { detectEgressIp: () => detectEgressIp('https://ifconfig.me/ip') },
-    )
+    const flags = {
+      sshCidr: strArg(args['ssh-cidr']),
+      gatewayCidr: strArg(args['gateway-cidr']),
+      publishGateway: strArg(args['publish-gateway']),
+    }
+    const resolved = await resolveNetworkFlags(flags, {
+      detectEgressIp: () => detectEgressIp('https://ifconfig.me/ip'),
+    })
+
+    // WO-34 step 6. Checked here as well as at apply, so nobody reviews a plan that would lock
+    // them out; apply checks again because the tailnet can go away in between.
+    let network: DeployPlan['spec']['network'] = resolved
+    if (args['private-only']) {
+      const { privateOnlyNetwork, assertTailnetReachable } = await import('../../plan/private-only.js')
+      const { probeSsh } = await import('../../harden/tailscale-cutover.js')
+      network = privateOnlyNetwork(flags, resolved, ctx.config.stacks[ctx.stackName]?.tailscale, ctx.stackName)
+      await assertTailnetReachable(ctx, (conn) => probeSsh(conn))
+    }
 
     const abortController = new AbortController()
     process.on('SIGINT', () => abortController.abort())
@@ -136,7 +147,10 @@ export default defineCommand({
 
     // Plan summary — always to stderr so it doesn't pollute stdout JSON
     const { spec, metadata } = plan
-    const sshCidrs = spec.network.allowedSshCidrs.join(', ') || '(none)'
+    const tailnetIp = spec.network.tailscale?.privateOnly ? spec.network.tailscale.ip : undefined
+    const sshCidrs =
+      spec.network.allowedSshCidrs.join(', ') ||
+      (tailnetIp ? `(none) — tailnet only, at ${tailnetIp}` : '(none)')
     const gatewayCidrs = spec.network.allowedGatewayCidrs.join(', ') || '(none)'
     const publish = spec.network.publishGateway ?? 'loopback'
     process.stderr.write(

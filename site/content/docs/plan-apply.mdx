@@ -35,6 +35,20 @@ the OpenClaw version, and any config overlay. Secrets appear as **references**, 
 The plan records the stack version at generation time and compares it at apply time, so drift is
 detected and surfaced rather than silently applied.
 
+## Private-only stacks
+
+Once `clawops harden --tailscale` has moved a stack onto its tailnet address, you can close its
+public SSH and gateway rules with a plan:
+
+```bash
+clawops plan --stack prod --private-only --out /tmp/private.json
+clawops apply /tmp/private.json
+```
+
+`plan` and `apply` both refuse unless this machine can reach the stack over the tailnet at that
+moment. To reopen, apply an ordinary plan with `--ssh-cidr`. Then `clawops harden
+--tailscale-revert` takes the host off the tailnet.
+
 ## Local provider
 
 `plan` and `apply` are cloud-only. The local provider bootstraps over SSH with no state backend,

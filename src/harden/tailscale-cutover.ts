@@ -18,7 +18,7 @@ import path from 'node:path'
 import type { RemoteExec } from './types.js'
 import type { ConnectionInfo } from '../providers/types.js'
 import { formatKnownHostsLine, keyTypeFromBlob, verifyAgainstKnownHosts } from '../transport/known-hosts.js'
-import { parseStatus, isTailscaleIpv4 } from './modules/tailscale.js'
+import { parseStatus, isTailscaleIpv4, rootPrefix } from './modules/tailscale.js'
 
 export interface HostKey {
   type: string
@@ -124,4 +124,50 @@ export async function verifyTailnetAddress(
     }
   }
   return { ok: true, ip, ...(status.hostname ? { hostname: status.hostname } : {}), pinned }
+}
+
+/**
+ * Open a fresh session and run a no-op. True only if the whole handshake, host-key check
+ * included, succeeded — which is the thing every step that closes a door has to know first.
+ */
+export async function probeSsh(conn: ConnectionInfo, signal?: AbortSignal): Promise<boolean> {
+  const { acquireSession } = await import('../transport/pool.js')
+  try {
+    const { session, release } = await acquireSession({
+      host: conn.host,
+      port: conn.port,
+      user: conn.user,
+      privateKeyPath: conn.privateKeyPath,
+      knownHostsPath: conn.knownHostsPath,
+    })
+    try {
+      return (await session.exec('true', signal)).code === 0
+    } finally {
+      release()
+    }
+  } catch {
+    return false
+  }
+}
+
+export type LeaveResult = { ok: true } | { ok: false; reason: string }
+
+/**
+ * Take the host off its tailnet: `tailscale logout`, not `down`.
+ *
+ * `down` only disconnects, and the node stays in the operator's admin console holding its name,
+ * so a later `harden --tailscale` would join as `clawops-<stack>-1`. `logout` removes it.
+ *
+ * `exec` must run over the public address. Run over the tailnet, this cuts its own connection
+ * mid-command — seen on AWS, where it hung for eight minutes before anything noticed.
+ */
+export async function leaveTailnet(exec: RemoteExec): Promise<LeaveResult> {
+  const sudo = await rootPrefix(exec)
+  const r = await exec(`${sudo}tailscale logout 2>&1`)
+  if (r.code === 0) return { ok: true }
+  if (/not logged in|NeedsLogin/i.test(r.stdout)) return { ok: true }
+  return {
+    ok: false,
+    reason: `tailscale logout failed on the host: ${r.stdout.trim().split('\n').slice(-1)[0] || `exit ${r.code}`}`,
+  }
 }

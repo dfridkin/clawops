@@ -42,7 +42,7 @@ not create or store (R6).
 | SSH port CIDR restriction | ✓ | ✓ | ✓ | — |
 | Gateway port CIDR restriction | ✓ | ✓ | ✓ | — |
 | TLS termination | Planned | Planned | Planned | Planned |
-| Tailscale integration | Planned | Planned | Planned | Planned |
+| Tailscale integration | ✓ | ✓ | ✓ | Partial (join and repoint; no private-only) |
 
 ## Day-to-day operations
 

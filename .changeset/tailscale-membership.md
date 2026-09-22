@@ -23,10 +23,9 @@ key stripped from it.
 any hardening module that needs to hand a secret to a host has a way that does not put it in a
 command line.
 
-What this does not do yet, and deliberately: it does not rewrite clawops config to use the
-Tailscale address, and it does not remove public access. Those are the steps of WO-34 that can
-leave an operator unable to reach their own machine, and they need the verification this
-module's output makes possible.
+The module only joins. Moving clawops onto the tailnet address, closing public access and undoing
+both are separate, explicit steps, because they are the ones that can lock an operator out of
+their own machine; see the `tailscale-cutover` note.
 
 The address is checked against 100.64.0.0/10 rather than taken on trust, because `tailscale ip
 -4` prints nothing on a host that is not up, and an empty string arriving at a config rewrite as

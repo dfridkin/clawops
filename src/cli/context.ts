@@ -26,6 +26,8 @@ export interface ClawopsContext {
 export interface ContextArgs {
   stack?: string | boolean
   provider?: string | boolean
+  /** Resolve the stack's public address even when it has a tailnet override. */
+  ignoreTailnet?: boolean
   [key: string]: unknown
 }
 
@@ -44,8 +46,12 @@ export function buildContext(args: ContextArgs): ClawopsContext {
       ? args.provider
       : (config.stacks[stackName]?.provider ?? config.defaults.provider)
 
-  /** Set once a tailnet address has been verified for this stack; see TailscaleOverride. */
-  const tailscale = config.stacks[stackName]?.tailscale
+  /**
+   * Set once a tailnet address has been verified for this stack; see TailscaleOverride.
+   * `ignoreTailnet` asks for the public address regardless — the one thing that needs it is
+   * leaving the tailnet, which has to happen over a connection that survives it.
+   */
+  const tailscale = args.ignoreTailnet === true ? undefined : config.stacks[stackName]?.tailscale
 
   const adapter = tailscale
     ? viaTailscale(loadProvider(providerName as ProviderName), tailscale.ip)

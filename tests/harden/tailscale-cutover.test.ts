@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import type { RemoteExec } from '../../src/harden/types.js'
-import { parseHostKeys, pinKeys, verifyTailnetAddress } from '../../src/harden/tailscale-cutover.js'
+import { parseHostKeys, pinKeys, verifyTailnetAddress, leaveTailnet } from '../../src/harden/tailscale-cutover.js'
 import { verifyAgainstKnownHosts } from '../../src/transport/known-hosts.js'
 
 const ED = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKHon6esf+cbdgZSiEVPGG+4GBu+Vr5KjXE3FqbgHIhm host'
@@ -141,5 +141,44 @@ describe('verifyTailnetAddress', () => {
   it('succeeds with the address, hostname and pin count', async () => {
     const r = await verifyTailnetAddress(conn(), { exec: execWith(RUNNING, [ED, EC].join('\n')), probe: async () => true })
     expect(r).toEqual({ ok: true, ip: '100.109.106.2', hostname: 'clawops-prod', pinned: 2 })
+  })
+})
+
+describe('leaveTailnet', () => {
+  function recorder(uid: string, logout: { stdout: string; code: number }) {
+    const ran: string[] = []
+    const exec = (async (cmd: string) => {
+      ran.push(cmd)
+      if (cmd === 'id -u') return { stdout: `${uid}\n`, stderr: '', code: 0 }
+      if (cmd.includes('tailscale logout')) return { ...logout, stderr: '' }
+      return { stdout: '', stderr: '', code: 0 }
+    }) as RemoteExec
+    return { exec, ran }
+  }
+
+  // `down` leaves the node in the admin console holding its name; the next join gets `-1`.
+  it('logs out rather than going down', async () => {
+    const { exec, ran } = recorder('0', { stdout: '', code: 0 })
+    expect(await leaveTailnet(exec)).toEqual({ ok: true })
+    expect(ran).toContain('tailscale logout 2>&1')
+    expect(ran.some((c) => /tailscale down/.test(c))).toBe(false)
+  })
+
+  it('escalates without a prompt as a non-root user', async () => {
+    const { exec, ran } = recorder('1000', { stdout: '', code: 0 })
+    await leaveTailnet(exec)
+    expect(ran).toContain('sudo -n tailscale logout 2>&1')
+  })
+
+  it('treats a host already off the tailnet as done', async () => {
+    const { exec } = recorder('0', { stdout: 'not logged in', code: 1 })
+    expect(await leaveTailnet(exec)).toEqual({ ok: true })
+  })
+
+  it('reports a logout that failed, with the host\'s last word on why', async () => {
+    const { exec } = recorder('1000', { stdout: 'sudo: a password is required', code: 1 })
+    const r = await leaveTailnet(exec)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.reason).toContain('a password is required')
   })
 })

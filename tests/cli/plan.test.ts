@@ -15,6 +15,9 @@ vi.mock('node:fs', async (importOriginal) => {
   return { ...actual, writeFileSync: mockWriteFileSync }
 })
 
+const { mockProbeSsh } = vi.hoisted(() => ({ mockProbeSsh: vi.fn() }))
+vi.mock('../../src/harden/tailscale-cutover.js', () => ({ probeSsh: mockProbeSsh }))
+
 import { buildContext } from '../../src/cli/context.js'
 
 const mockBuildContext = vi.mocked(buildContext)
@@ -246,5 +249,62 @@ describe('plan network flags', () => {
   it('does not reach the network when no flag asks it to', async () => {
     await (cmd.run as AnyRunFn)({ args: { 'ssh-cidr': '10.0.0.0/8' } })
     expect(mockDetectEgressIp).not.toHaveBeenCalled()
+  })
+})
+
+describe('plan --private-only', () => {
+  const TAILNET = { ip: '100.96.109.52', verifiedAt: '2026-09-22T00:00:00.000Z' }
+
+  function onTailnet(tailscale: typeof TAILNET | null = TAILNET) {
+    mockBuildContext.mockReturnValue({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      config: { ssh: { keyPath: '/k', knownHostsPath: '/kh' }, stacks: { default: { provider: 'aws', ...(tailscale ? { tailscale } : {}) } } } as any,
+      adapter: {
+        name: 'aws',
+        getConnectionInfo: () => ({ host: TAILNET.ip, port: 22, user: 'ubuntu', privateKeyPath: '/k', knownHostsPath: '/kh' }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+      stackName: 'default',
+      getStack: vi.fn().mockResolvedValue({ outputs: async () => ({
+        instanceId: { value: 'i-0abc' }, publicIp: { value: '34.200.67.239' }, gatewayUrl: { value: 'http://gw' },
+        region: { value: 'us-east-1' }, provisionedAt: { value: '2026-09-22T00:00:00.000Z' },
+        sshHost: { value: '34.200.67.239' }, sshPort: { value: 22 }, sshUser: { value: 'ubuntu' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }) }) as any,
+    })
+  }
+
+  it('plans no public ingress, and names the address that remains', async () => {
+    onTailnet()
+    mockProbeSsh.mockResolvedValue(true)
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    await (cmd.run as AnyRunFn)({ args: { 'private-only': true } })
+    expect(mockGeneratePlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        network: { allowedSshCidrs: [], allowedGatewayCidrs: [], tailscale: { enabled: true, privateOnly: true, ip: TAILNET.ip } },
+      }),
+      expect.anything(),
+    )
+  })
+
+  it('does not plan when this machine cannot reach the tailnet address', async () => {
+    onTailnet()
+    mockProbeSsh.mockResolvedValue(false)
+    await expect((cmd.run as AnyRunFn)({ args: { 'private-only': true } })).rejects.toThrow(/cannot reach/)
+    expect(mockGeneratePlan).not.toHaveBeenCalled()
+  })
+
+  it('does not plan for a stack that has never been moved onto its tailnet', async () => {
+    onTailnet(null)
+    await expect((cmd.run as AnyRunFn)({ args: { 'private-only': true } })).rejects.toThrow(/harden --tailscale/)
+    expect(mockProbeSsh).not.toHaveBeenCalled()
+    expect(mockGeneratePlan).not.toHaveBeenCalled()
+  })
+
+  it('refuses a public SSH rule alongside it', async () => {
+    onTailnet()
+    await expect((cmd.run as AnyRunFn)({ args: { 'private-only': true, 'ssh-cidr': 'auto' } })).rejects.toThrow(/cannot be combined/)
+    expect(mockGeneratePlan).not.toHaveBeenCalled()
   })
 })

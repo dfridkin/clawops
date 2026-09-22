@@ -10,6 +10,7 @@ import { readRemoteConfig, atomicWriteConfig, restartGateway, deepMerge } from '
 import type { DeployPlan } from './generate.js'
 import { writeStackConfig } from './stack-config.js'
 import { GATEWAY_PORT } from '../openclaw/run-flags.js'
+import { getConfig, setConfig } from '../config/store.js'
 
 export interface ApplyPlanOpts {
   onOutput?: (line: string) => void
@@ -29,6 +30,11 @@ export interface ApplyPlanOpts {
    * not yet usable, which is a reasonable thing to want and a terrible default.
    */
   skipReadiness?: boolean
+  /**
+   * How a private-only plan proves the tailnet address answers before it closes the public one.
+   * Defaults to a real SSH handshake; tests pass their own.
+   */
+  probeTailnet?: import('./private-only.js').Probe
 }
 
 export interface ApplyPlanResult {
@@ -66,6 +72,12 @@ export async function applyPlan(
 
   const stack = await ctx.getStack()
 
+  // Before anything reaches the cloud: a private-only plan closes the public ports, and is only
+  // allowed to if the tailnet address answers now. See ./private-only.ts.
+  const { guardPrivateOnlyApply } = await import('./private-only.js')
+  const { probeSsh } = await import('../harden/tailscale-cutover.js')
+  await guardPrivateOnlyApply(plan, ctx, opts?.probeTailnet ?? ((conn) => probeSsh(conn, opts?.signal)))
+
   await writeStackConfig(stack, plan)
 
   // Drift detection (ADR 0008): warn if stack was updated after the plan was generated.
@@ -85,6 +97,7 @@ export async function applyPlan(
 
   const start = Date.now()
   const result = await stack.up({ onOutput: opts?.onOutput, signal: opts?.signal })
+  recordPublicExposure(ctx.stackName, plan)
 
   const outputs: Record<string, unknown> = Object.fromEntries(
     Object.entries(result.outputs).map(([k, v]) => [k, v.value]),
@@ -390,4 +403,21 @@ async function verifyChannels(
         `apply.\n`,
     )
   }
+}
+
+/**
+ * Keep the stack's tailnet override in step with what was just applied, so revert knows whether
+ * the public ports are closed. Every applied plan answers that question, not only private-only
+ * ones: applying an ordinary plan with SSH CIDRs is how a private stack is reopened.
+ */
+function recordPublicExposure(stackName: string, plan: DeployPlan): void {
+  const config = getConfig()
+  const stackConfig = config?.stacks[stackName]
+  if (!config || !stackConfig?.tailscale) return
+  const privateOnly = plan.spec.network.tailscale?.privateOnly === true
+  if ((stackConfig.tailscale.privateOnly ?? false) === privateOnly) return
+  const tailscale = { ...stackConfig.tailscale }
+  if (privateOnly) tailscale.privateOnly = true
+  else delete tailscale.privateOnly
+  setConfig({ ...config, stacks: { ...config.stacks, [stackName]: { ...stackConfig, tailscale } } })
 }

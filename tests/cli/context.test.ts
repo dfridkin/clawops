@@ -304,6 +304,27 @@ describe('buildContext() with a verified tailnet address', () => {
     )
   })
 
+  // Revert leaves the tailnet over this. Over the tailnet it cuts its own connection.
+  it('answers with the public address when asked to ignore the tailnet', async () => {
+    const { buildContext } = await import('../../src/cli/context.js')
+    mockReadLocalState.mockReturnValue(MOCK_LOCAL_STATE)
+    await withTempConfig(
+      { stacks: { default: { ...MINIMAL_CONFIG.stacks['default']!, tailscale: TS } } },
+      () => {
+        expect(buildContext({ ignoreTailnet: true }).adapter.getConnectionInfo(OUTPUTS).host).toBe('203.0.113.10')
+      },
+    )
+    await withTempConfig(
+      {
+        ...LOCAL_CONFIG,
+        stacks: { 'local-stack': { ...LOCAL_CONFIG.stacks['local-stack']!, tailscale: TS } },
+      },
+      () => {
+        expect(buildContext({ ignoreTailnet: true }).localState?.sshHost).toBe(MOCK_LOCAL_STATE.sshHost)
+      },
+    )
+  })
+
   // Local stacks never reach getConnectionInfo; without this they ignored the override entirely.
   it('routes a local stack’s connections to the tailnet address too', async () => {
     const { buildContext } = await import('../../src/cli/context.js')

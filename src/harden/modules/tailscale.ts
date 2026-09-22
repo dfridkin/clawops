@@ -124,7 +124,7 @@ async function ensureDaemon(exec: RemoteExec, sudo: string): Promise<boolean> {
  * key is on stdin: a sudo that wanted a password would read it from there, and the auth key
  * would be spent as a failed sudo password. With -n it fails at once instead.
  */
-async function rootPrefix(exec: RemoteExec): Promise<string> {
+export async function rootPrefix(exec: RemoteExec): Promise<string> {
   return (await exec('id -u')).stdout.trim() === '0' ? '' : 'sudo -n '
 }
 

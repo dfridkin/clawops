@@ -93,8 +93,11 @@ know the proxy is there.
 TLS termination. Bring your own reverse proxy (nginx, Caddy, Cloudflare Tunnel) for HTTPS. TLS
 automation is tracked in the roadmap.
 
-**No Tailscale or VPN integration in v1.** The deploy-plan schema includes a `tailscale` field
-(reserved for future use) but it is not yet implemented.
+**Tailscale: no private-only mode on local stacks, and no `doctor` check yet.** `clawops harden
+--tailscale` joins any stack to a tailnet and moves clawops onto that address. Closing the public
+ports goes through `clawops plan --private-only`, and local stacks have no plan/apply path, so on
+a local host the public SSH port stays open unless you close it yourself. `clawops doctor` doesn't
+yet report tailnet status or key expiry.
 
 ## Credentials and secrets
 
