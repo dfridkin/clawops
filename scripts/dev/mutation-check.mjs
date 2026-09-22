@@ -833,6 +833,8 @@ const MUTATIONS = [
     file: 'src/cli/commands/harden.ts', from: '  forgetHost(expandHome(config.ssh.knownHostsPath), override.ip, publicConn.port)\n', to: '', test: 'tests/cli/harden-revert.test.ts' },
   { name: 'leaving the tailnet goes down instead of logging out',
     file: 'src/harden/tailscale-cutover.ts', from: '`${sudo}tailscale logout 2>&1`', to: '`${sudo}tailscale down 2>&1`', test: 'tests/harden/tailscale-cutover.test.ts' },
+  { name: 'the reachability probe leaves its connection in the pool',
+    file: 'src/harden/tailscale-cutover.ts', from: '    session?.close()\n', to: '', test: 'tests/harden/tailscale-cutover.test.ts' },
 ]
 
 let survived = []

@@ -1,5 +1,5 @@
 ---
-'@clawops/cli': patch
+'@clawops/cli': minor
 ---
 
 **GCP instances boot with Secure Boot on.** `debian-12` supports it; left unset, GCP enables vTPM

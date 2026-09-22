@@ -1,5 +1,5 @@
 ---
-'@clawops/cli': patch
+'@clawops/cli': minor
 ---
 
 **A stack can move onto its tailnet, close its public ports, and move back (WO-34, steps 4–6 and
@@ -26,5 +26,7 @@ revert).**
   It used to forget only the tailnet key, leaving the public address pinned for an instance
   that no longer existed, on an address the cloud reassigns.
 
-`clawops doctor` doesn't yet report tailnet status. Local stacks can join and repoint but have
+The reachability probe opens its own connection and closes it. Left in the connection pool it
+kept the process alive for the pool's five-minute idle sweep, so `plan --private-only` printed
+its plan and then appeared to hang. `clawops doctor` doesn't yet report tailnet status. Local stacks can join and repoint but have
 no private-only mode, because they have no plan/apply path.

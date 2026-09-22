@@ -580,6 +580,53 @@ Use `pnpm changeset` to record a release note before merging a `feat` or `fix`.
 
 ---
 
+## What's new in 2.1
+
+Private networking, hardening on every cloud, and two fixes to commands that could not start.
+
+### Reach a stack over your tailnet
+
+- `clawops harden --tailscale` installs Tailscale on a stack, joins it to your tailnet as
+  `clawops-<stack>`, and reports the address it was given.
+- The same command then moves clawops onto that address, but only after opening an SSH session
+  to it — against host keys pinned over the public connection it already trusts.
+- The Tailscale auth key comes from `clawops secret set TAILSCALE_AUTH_KEY`, and reaches the host
+  over the SSH data channel. It never appears in a command line, a process list or a log.
+- `clawops plan --private-only` → `clawops apply` closes public SSH and gateway access on a stack
+  reached over its tailnet. Both refuse unless that address answers SSH at that moment
+  ([ADR 0013](docs/decisions/0013-private-only-through-the-plan.md)).
+- `clawops harden --tailscale-revert` takes a host off the tailnet and returns clawops to its
+  public address. On a private-only stack it refuses, and prints the commands that reopen SSH.
+- `clawops destroy` forgets the host keys for both addresses of a stack on its tailnet, instead
+  of leaving the public one pinned for an instance that no longer exists.
+
+### Hardening covers all three clouds
+
+- **Azure**: NSG audit, disk encryption, Defender for Cloud and JIT VM access, all check-only.
+- **GCP**: VPC firewall audit, Shielded VM and OS Login, all check-only.
+- GCP instances boot with Secure Boot on. Existing stacks get it as an update that keeps the boot
+  disk and all OpenClaw state.
+- A check that could not run reports as skipped, naming what was missing, rather than as a pass.
+
+### Plans say what they will disturb
+
+- `clawops plan` counts and lists resources that would be **replaced**. It used to summarise a
+  preview that would destroy the instance and its boot disk as "0 to create, 0 to update".
+- A plan that changes a live deployment warns before you apply it: a replacement names what goes
+  with it and points at `clawops backup create`; an update says the gateway goes down.
+
+### Fixes
+
+- `clawops mcp serve` could not start at all when installed from npm — it died on import before
+  emitting any protocol, so every MCP client got nothing. `pnpm verify:pack` now speaks MCP to
+  the packed tarball, so this class of failure cannot ship again.
+- `server.json`, the MCP registry manifest, is versioned with the package rather than rewritten
+  at publish time. The committed file had read `1.7.3` against a published `2.0.2`.
+- The published package carries its license, keywords and issue tracker, so it is findable on npm
+  and its listing is complete.
+
+---
+
 ## What's new in 2.0.1
 
 A patch release, and a large one: in 2.0.0 no cloud deploy succeeded by any path. Every item

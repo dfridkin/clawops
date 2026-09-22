@@ -127,26 +127,33 @@ export async function verifyTailnetAddress(
 }
 
 /**
- * Open a fresh session and run a no-op. True only if the whole handshake, host-key check
+ * Open a session of its own and run a no-op. True only if the whole handshake, host-key check
  * included, succeeded — which is the thing every step that closes a door has to know first.
+ *
+ * Its own connection, not a pooled one, for two reasons. A probe asks whether this address can
+ * be reached now, and a pooled session is by definition one that was already reachable. And the
+ * pool holds what it is given for five minutes: `clawops plan --private-only` printed its plan
+ * and then sat there, apparently hung, until the idle sweep closed the socket the probe had left
+ * behind. Measured on GCP at 5m10s. This closes what it opens, so the command ends when its work
+ * does.
  */
 export async function probeSsh(conn: ConnectionInfo, signal?: AbortSignal): Promise<boolean> {
-  const { acquireSession } = await import('../transport/pool.js')
+  const { connect } = await import('../transport/ssh.js')
+  let session: Awaited<ReturnType<typeof connect>> | undefined
   try {
-    const { session, release } = await acquireSession({
+    session = await connect({
       host: conn.host,
       port: conn.port,
       user: conn.user,
       privateKeyPath: conn.privateKeyPath,
       knownHostsPath: conn.knownHostsPath,
+      signal,
     })
-    try {
-      return (await session.exec('true', signal)).code === 0
-    } finally {
-      release()
-    }
+    return (await session.exec('true', signal)).code === 0
   } catch {
     return false
+  } finally {
+    session?.close()
   }
 }
 

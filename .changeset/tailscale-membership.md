@@ -1,5 +1,5 @@
 ---
-'@clawops/cli': patch
+'@clawops/cli': minor
 ---
 
 **`clawops harden` can put a host on your tailnet (WO-34, first part).**

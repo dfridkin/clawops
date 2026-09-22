@@ -1,5 +1,5 @@
 ---
-'@clawops/cli': patch
+'@clawops/cli': minor
 ---
 
 **`clawops harden` gains four Azure checks (WO-32), so the hardening report covers all three
