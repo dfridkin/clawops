@@ -102,7 +102,7 @@ it is the one to combine with `--toolsets`.
 
 ## Upgrading to full access
 
-Remove the flag entirely to enable all 18 tools. Destructive tools will still
+Remove the flag entirely to enable all 19 tools. Destructive tools will still
 require `yes: true` in the call. The agent sees a confirmation prompt without it.
 
 See [mcp-safety.md](../security/mcp-safety.md) for a full description of each mode

@@ -195,7 +195,12 @@ export const clawops_planSchema = z.object({
   stackName: z.string().optional(),
   provider: z.enum(['aws', 'gcp', 'azure', 'local']).optional(),
   region: z.string().optional(),
-  instanceType: z.enum(['micro', 'small', 'medium', 'large', 'gpu']).optional(),
+  instanceType: z.string().optional(),
+  openclawVersion: z.string().optional(),
+  sshCidr: z.string().optional(),
+  gatewayCidr: z.string().optional(),
+  publishGateway: z.enum(['loopback', 'all']).optional(),
+  privateOnly: z.boolean().optional(),
   outPath: z.string().optional(),
 })
 
@@ -283,6 +288,28 @@ export const clawops_gateway_restartAnnotations = {
 
 export type GatewayRestartInput = z.infer<typeof clawops_gateway_restartSchema>
 
+// ── clawops_harden ──────────────────────────────────────────────────────────
+
+export const clawops_hardenSchema = z.object({
+  stackName: z.string().optional(),
+  options: z.string().optional(),
+  dryRun: z.boolean().optional().default(false),
+  tailscale: z.boolean().optional().default(false),
+  tailscaleRevert: z.boolean().optional().default(false),
+  yes: z.boolean().optional().default(false),
+})
+
+export const clawops_hardenAnnotations = {
+  title: "Harden Stack",
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: true,
+  openWorldHint: true,
+  toolsets: ["cli"] as const,
+} as const
+
+export type HardenInput = z.infer<typeof clawops_hardenSchema>
+
 // ── clawops_workflow_deploy_app ─────────────────────────────────────────────
 
 export const clawops_workflow_deploy_appSchema = z.object({
@@ -355,6 +382,7 @@ export const TOOLSETS: Record<Toolset, string[]> = {
     'clawops_config_unset',
     'clawops_config_validate',
     'clawops_gateway_restart',
+    'clawops_harden',
     'clawops_task_status',
   ],
   workflow: [

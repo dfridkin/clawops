@@ -23,13 +23,40 @@ export async function handlePlan(input: PlanInput, _server: McpServer): Promise<
   const provider = (input.provider ?? ctx.adapter.name) as 'aws' | 'gcp' | 'azure'
   const stackName = ctx.stackName
 
+  /*
+   * The flags that decide who can reach the deployment. Without them every plan an agent made
+   * described a host nothing could connect to — deny-all is the right default (N10), but a plan
+   * that cannot say otherwise is not a plan.
+   */
+  const { resolveNetworkFlags } = await import('../../../plan/network-args.js')
+  const { detectEgressIp } = await import('../../../providers/firewall.js')
+  const flags = {
+    sshCidr: input.sshCidr,
+    gatewayCidr: input.gatewayCidr,
+    publishGateway: input.publishGateway,
+  }
+
   let plan: import('../../../plan/generate.js').DeployPlan
   try {
+    const resolved = await resolveNetworkFlags(flags, {
+      detectEgressIp: () => detectEgressIp('https://ifconfig.me/ip'),
+    })
+
+    let network: import('../../../plan/generate.js').DeployPlan['spec']['network'] = resolved
+    if (input.privateOnly) {
+      const { privateOnlyNetwork, assertTailnetReachable } = await import('../../../plan/private-only.js')
+      const { probeSsh } = await import('../../../harden/tailscale-cutover.js')
+      network = privateOnlyNetwork(flags, resolved, ctx.config.stacks[stackName]?.tailscale, stackName)
+      await assertTailnetReachable(ctx, (conn) => probeSsh(conn))
+    }
+
     plan = await generatePlan({
       stackName,
       provider,
       region: input.region,
       instanceType: input.instanceType,
+      openclawVersion: input.openclawVersion,
+      network,
     })
   } catch (err) {
     return errText(`Plan generation failed: ${err instanceof Error ? err.message : String(err)}`)

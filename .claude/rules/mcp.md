@@ -6,6 +6,8 @@ globs:
 
 # MCP rules
 
+**Parity with the CLI is the default.** Any capability added to the CLI is exposed here in the same change — a new command as a tool, a new flag as an input. Shared logic lives in a module both surfaces call (see `src/harden/flows.ts`), so they cannot drift in what they refuse. Where a command deliberately has no tool, say why in `NO_TOOL` in `tests/mcp/parity.test.ts`; that test fails on anything unaccounted for.
+
 1. **spec/mcp-tools.yaml first (R-meta-1):** Every tool must be declared in `spec/mcp-tools.yaml` before its handler is written. The Zod schemas in `_generated.ts` are generated — do not hand-edit them.
 
 2. **clawops_ prefix + toolset (R1):** Every tool name is `clawops_<verb>` or `clawops_<noun>_<verb>`. Assign to exactly one primary toolset.

@@ -18,6 +18,7 @@ import {
   clawops_destroySchema,         clawops_destroyAnnotations,
   clawops_applySchema,           clawops_applyAnnotations,
   clawops_planSchema,            clawops_planAnnotations,
+  clawops_hardenSchema,          clawops_hardenAnnotations,
   clawops_config_setSchema,      clawops_config_setAnnotations,
   clawops_config_unsetSchema,    clawops_config_unsetAnnotations,
   clawops_config_validateSchema, clawops_config_validateAnnotations,
@@ -27,7 +28,7 @@ import {
   clawops_task_statusSchema,     clawops_task_statusAnnotations,
   type StatusInput, type LogsTailInput, type StacksListInput,
   type DoctorInput, type ConfigGetInput, type AgentsListInput, type UpInput,
-  type DestroyInput, type ApplyInput, type PlanInput,
+  type DestroyInput, type ApplyInput, type PlanInput, type HardenInput,
   type ConfigSetInput, type ConfigUnsetInput, type ConfigValidateInput,
   type GatewayRestartInput,
   type WorkflowDeployAppInput, type WorkflowRecoverInput, type TaskStatusInput,
@@ -47,6 +48,7 @@ import { handleGatewayRestart } from './cli/gateway.js'
 import { handleUp } from './cli/up.js'
 import { handleDestroy } from './cli/destroy.js'
 import { handlePlan } from './cli/plan.js'
+import { handleHarden } from './cli/harden.js'
 import { handleApply } from './cli/apply.js'
 import { handleTaskStatus } from './cli/task.js'
 import { handleMonitor } from './cli/monitor.js'
@@ -88,6 +90,7 @@ const TOOL_REGISTRY: Record<string, ToolEntry> = {
   clawops_destroy:          makeEntry<DestroyInput>(clawops_destroySchema, clawops_destroyAnnotations, handleDestroy),
   clawops_apply:            makeEntry<ApplyInput>(clawops_applySchema, clawops_applyAnnotations, handleApply),
   clawops_plan:             makeEntry<PlanInput>(clawops_planSchema, clawops_planAnnotations, handlePlan),
+  clawops_harden:           makeEntry<HardenInput>(clawops_hardenSchema, clawops_hardenAnnotations, handleHarden),
   clawops_config_set:       makeEntry<ConfigSetInput>(clawops_config_setSchema, clawops_config_setAnnotations, handleConfigSet),
   clawops_config_unset:     makeEntry<ConfigUnsetInput>(clawops_config_unsetSchema, clawops_config_unsetAnnotations, handleConfigUnset),
   clawops_config_validate:  makeEntry<ConfigValidateInput>(clawops_config_validateSchema, clawops_config_validateAnnotations, handleConfigValidate),
@@ -109,7 +112,7 @@ export function resolveEnabledTools(opts: McpServeOpts): string[] {
   } else if (opts.toolsets && opts.toolsets.length > 0) {
     names = opts.toolsets.flatMap((ts) => TOOLSETS[ts as Toolset] ?? [])
   } else {
-    // Default: cli + workflow + admin (all 15 tools)
+    // Default: cli + workflow + admin (all cli + workflow + admin tools)
     names = [
       ...TOOLSETS.cli,
       ...TOOLSETS.workflow,

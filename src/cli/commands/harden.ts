@@ -48,7 +48,21 @@ export default defineCommand({
     const provider = ctx.adapter.name
 
     if (args['tailscale-revert']) {
-      await revertTailnet(ctx, config, { yes: args.yes === true })
+      const { revertTailnet } = await import('../../harden/flows.js')
+      const override = config.stacks[ctx.stackName]?.tailscale
+      if (override && args.yes !== true) {
+        const { createInterface } = await import('node:readline/promises')
+        const rl = createInterface({ input: process.stdin, output: process.stdout })
+        const answer = await rl.question(
+          `Take "${ctx.stackName}" off the tailnet (${override.ip}) and use its public address again? [y/N] `,
+        )
+        rl.close()
+        if (!answer.toLowerCase().startsWith('y')) { info('Aborted.'); return }
+      }
+      const outcome = await revertTailnet(ctx, config)
+      if (!outcome.ok) { failure(outcome.reason); process.exit(1) }
+      if ('noop' in outcome) info(outcome.message)
+      else success(outcome.message)
       return
     }
 
@@ -156,152 +170,11 @@ export default defineCommand({
 
     // ── --tailscale: steps 4 and 5 of WO-34 ─────────────────────────────────
     if (args.tailscale && !args['dry-run']) {
-      await cutOverToTailnet(ctx, conn, config)
+      const { cutOverToTailnet } = await import('../../harden/flows.js')
+      process.stdout.write('\nVerifying the tailnet address before using it...\n')
+      const outcome = await cutOverToTailnet(ctx, conn, config)
+      if (!outcome.ok) { failure(outcome.reason); process.exit(1) }
+      success(outcome.message)
     }
   },
 })
-
-/**
- * Point this stack at its tailnet address, but only once that address is proven.
- *
- * The public connection used here is the one clawops already trusts; the override is written to
- * config only if a fresh session over the tailnet address succeeds against keys pinned through
- * it. On any failure nothing is written and clawops keeps using the public address, which is the
- * property that has to hold before anything is allowed to close it.
- */
-async function cutOverToTailnet(
-  ctx: import('../context.js').ClawopsContext,
-  conn: import('../../providers/types.js').ConnectionInfo,
-  config: import('../../config/store.js').ClawopsConfig,
-): Promise<void> {
-  const { withRemoteExec } = await import('../../harden/index.js')
-  const { verifyTailnetAddress, probeSsh } = await import('../../harden/tailscale-cutover.js')
-  const { setConfig } = await import('../../config/store.js')
-
-  process.stdout.write('\nVerifying the tailnet address before using it...\n')
-  const result = await withRemoteExec(conn, undefined, (exec) =>
-    verifyTailnetAddress(conn, {
-      exec,
-      probe: (target) => probeSsh(target),
-    }),
-  )
-
-  if (!result.ok) {
-    failure(result.reason)
-    process.exit(1)
-  }
-
-  const stack = config.stacks[ctx.stackName]
-  if (!stack) {
-    failure(`Stack "${ctx.stackName}" is not in config, so the tailnet address could not be recorded.`)
-    process.exit(1)
-  }
-  setConfig({
-    ...config,
-    stacks: {
-      ...config.stacks,
-      [ctx.stackName]: {
-        ...stack,
-        tailscale: {
-          ip: result.ip,
-          ...(result.hostname ? { hostname: result.hostname } : {}),
-          verifiedAt: new Date().toISOString(),
-        },
-      },
-    },
-  })
-  success(
-    `clawops now reaches "${ctx.stackName}" at ${result.ip} over the tailnet ` +
-      `(${result.pinned} host key${result.pinned === 1 ? '' : 's'} pinned through the public connection). ` +
-      'The public address is still open; nothing has been closed.',
-  )
-}
-
-/**
- * Undo `--tailscale`: leave the tailnet, and point clawops back at the public address.
- *
- * Everything here runs over the public address, found by building a context that ignores the
- * override. Leaving the tailnet over the tailnet cuts the connection doing it, and on AWS that
- * hung for eight minutes. So the public address has to answer first, and on a private-only
- * stack it does not: the ports are closed, and reopening them is an infrastructure change, which
- * goes through a plan. Revert says so and changes nothing, rather than stranding the stack.
- */
-async function revertTailnet(
-  ctx: import('../context.js').ClawopsContext,
-  config: import('../../config/store.js').ClawopsConfig,
-  opts: { yes: boolean },
-): Promise<void> {
-  const override = config.stacks[ctx.stackName]?.tailscale
-  if (!override) {
-    info(`Stack "${ctx.stackName}" is not using a tailnet address; nothing to revert.`)
-    return
-  }
-
-  const { buildContext } = await import('../context.js')
-  const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
-  const { probeSsh, leaveTailnet } = await import('../../harden/tailscale-cutover.js')
-  const { withRemoteExec } = await import('../../harden/index.js')
-  const { getConfig, setConfig } = await import('../../config/store.js')
-  const { forgetHost } = await import('../../transport/known-hosts-file.js')
-
-  const direct = buildContext({ stack: ctx.stackName, ignoreTailnet: true })
-  const outputMap = await (await direct.getStack()).outputs()
-  const raw = Object.fromEntries(Object.entries(outputMap).map(([k, v]) => [k, v.value]))
-  const publicConn = direct.adapter.getConnectionInfo({
-    ...extractBaseOutputs(raw),
-    privateKeyPath: config.ssh.keyPath,
-    knownHostsPath: config.ssh.knownHostsPath,
-  })
-
-  if (!(await probeSsh(publicConn))) {
-    failure(
-      override.privateOnly
-        ? `"${ctx.stackName}" is private-only: its public ports are closed, so there is no way to ` +
-            'leave the tailnet without losing the host. Reopen SSH first, then run this again:\n' +
-            `  clawops plan --stack ${ctx.stackName} --ssh-cidr auto --out <abs-path>/plan.json\n` +
-            '  clawops apply <abs-path>/plan.json\n' +
-            'Nothing was changed.'
-        : `This machine cannot reach "${ctx.stackName}" at its public address ${publicConn.host}, ` +
-            'and leaving the tailnet would leave no way in. Nothing was changed.',
-    )
-    process.exit(1)
-  }
-
-  if (!opts.yes) {
-    const { createInterface } = await import('node:readline/promises')
-    const rl = createInterface({ input: process.stdin, output: process.stdout })
-    const answer = await rl.question(
-      `Take "${ctx.stackName}" off the tailnet (${override.ip}) and use ${publicConn.host} again? [y/N] `,
-    )
-    rl.close()
-    if (!answer.toLowerCase().startsWith('y')) {
-      info('Aborted.')
-      return
-    }
-  }
-
-  const left = await withRemoteExec(publicConn, undefined, (exec) => leaveTailnet(exec))
-  if (!left.ok) {
-    failure(`${left.reason}. clawops still uses the tailnet address; nothing else was changed.`)
-    process.exit(1)
-  }
-
-  // Re-read: the probe and the logout took seconds, and config is the operator's file.
-  const fresh = getConfig() ?? config
-  const stack = fresh.stacks[ctx.stackName]
-  if (stack) {
-    const { tailscale: _dropped, ...rest } = stack
-    void _dropped
-    setConfig({ ...fresh, stacks: { ...fresh.stacks, [ctx.stackName]: rest } })
-  }
-  forgetHost(expandHome(config.ssh.knownHostsPath), override.ip, publicConn.port)
-
-  success(
-    `"${ctx.stackName}" has left the tailnet; clawops reaches it at ${publicConn.host} again ` +
-      `(the pinned key for ${override.ip} was forgotten).`,
-  )
-}
-
-function expandHome(p: string): string {
-  return p.startsWith('~') ? p.replace(/^~/, process.env['HOME'] ?? '~') : p
-}

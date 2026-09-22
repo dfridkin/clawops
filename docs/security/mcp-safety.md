@@ -1,7 +1,7 @@
 # MCP Safety Modes
 
 clawops exposes its operations as an MCP server. By default the server enables all
-18 tools, including destructive ones like `clawops_destroy` and `clawops_up`. For
+19 tools, including destructive ones like `clawops_destroy` and `clawops_up`. For
 most agent integrations you should restrict the tool set.
 
 ## Three safety modes
@@ -36,9 +36,9 @@ block.
 
 ### Default (all tools)
 
-Enables all **18 tools**, including the 7 destructive ones: `clawops_up`,
+Enables all **19 tools**, including the 8 destructive ones: `clawops_up`,
 `clawops_destroy`, `clawops_apply`, `clawops_config_set`, `clawops_config_unset`,
-`clawops_gateway_restart`, `clawops_workflow_deploy_app`.
+`clawops_gateway_restart`, `clawops_harden`, `clawops_workflow_deploy_app`.
 
 Destructive tools still require `yes: true` in the tool call, without it, the
 server issues a confirmation prompt. This is a safeguard against accidental
