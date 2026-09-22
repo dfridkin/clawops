@@ -778,6 +778,10 @@ const MUTATIONS = [
     file: 'src/harden/modules/tailscale.ts', from: '        redactKey(r.stdout || r.stderr, key).slice(0, 300),', to: '        (r.stdout || r.stderr).slice(0, 300),', test: 'tests/harden/tailscale.test.ts' },
   { name: 'the key goes back into the command string, where sshd puts it in argv',
     file: 'src/harden/modules/tailscale.ts', from: "    const r = await exec(join, { stdin: key })", to: "    const r = await exec(join + '\\n' + key)", test: 'tests/harden/tailscale.test.ts' },
+  { name: 'a stopped tailscaled is reported as unparseable output again',
+    file: 'src/harden/modules/tailscale.ts', from: '  if (DAEMON_DOWN.test(r.stdout)) return { state: \'unknown\', daemonDown: true }', to: '', test: 'tests/harden/tailscale.test.ts' },
+  { name: 'the join is attempted against a daemon that could not be started',
+    file: 'src/harden/modules/tailscale.ts', from: '    if ((await status(exec)).daemonDown && !(await ensureDaemon(exec))) {', to: '    if (false) {', test: 'tests/harden/tailscale.test.ts' },
 
 ]
 

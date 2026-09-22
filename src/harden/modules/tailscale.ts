@@ -34,6 +34,16 @@ export interface TailscaleStatus {
   /** The 100.x address Tailscale assigned, when it has one. */
   ipv4?: string
   hostname?: string
+  /**
+   * The daemon is not running, which is a different problem from not being joined.
+   *
+   * `tailscale status --json` against a dead daemon prints nothing parseable, so without this
+   * the module reported "did not report a status that could be parsed" — true, useless, and it
+   * sends the operator looking at output when the answer is a stopped service. Measured against
+   * a real host: the installer leaves tailscaled enabled under systemd, so this shows up when
+   * the service is masked, crashed, or there is no init to start it.
+   */
+  daemonDown?: boolean
 }
 
 /**
@@ -83,9 +93,27 @@ async function installed(exec: RemoteExec): Promise<boolean> {
   return r.stdout.trim() === 'yes'
 }
 
+/** Tailscale's own words for a daemon that is not up; it says this on stderr and exits non-zero. */
+const DAEMON_DOWN = /failed to connect to local tailscaled|is tailscaled running|connection refused/i
+
 async function status(exec: RemoteExec): Promise<TailscaleStatus> {
-  const r = await exec('tailscale status --json 2>/dev/null || true')
+  const r = await exec('tailscale status --json 2>&1 || true')
+  if (DAEMON_DOWN.test(r.stdout)) return { state: 'unknown', daemonDown: true }
   return parseStatus(r.stdout)
+}
+
+/**
+ * Start the daemon if it is not already up.
+ *
+ * The installer enables it under systemd, so this is for the host where that did not take. It
+ * reports rather than insists: a box with no systemd cannot be fixed from here, and saying so
+ * beats a confusing failure from `tailscale up` three lines later.
+ */
+async function ensureDaemon(exec: RemoteExec): Promise<boolean> {
+  const r = await exec(
+    'command -v systemctl >/dev/null 2>&1 && systemctl start tailscaled >/dev/null 2>&1 && echo started || echo no',
+  )
+  return r.stdout.trim() === 'started'
 }
 
 /**
@@ -108,6 +136,15 @@ export function makeTailscaleModule(stack?: string): HardeningModule {
     const s = await status(exec)
     if (s.state === 'Running' && s.ipv4) {
       return { status: 'applied', detail: `Joined as ${s.hostname ?? 'this host'} on ${s.ipv4}.` }
+    }
+    if (s.daemonDown) {
+      return {
+        status: 'drifted',
+        detail:
+          'Tailscale is installed but the tailscaled daemon is not running, so this host is on ' +
+          'no tailnet whatever it was joined to before. Start it with `systemctl start ' +
+          'tailscaled`, or check `systemctl status tailscaled` for why it stopped.',
+      }
     }
     if (s.state === 'unknown') {
       return {
@@ -146,6 +183,18 @@ export function makeTailscaleModule(stack?: string): HardeningModule {
         }
       }
       changed = true
+    }
+
+    // Bring the daemon up first: `tailscale up` against a dead one fails with an error about
+    // sockets rather than about the network, which is not what the operator needs to read.
+    if ((await status(exec)).daemonDown && !(await ensureDaemon(exec))) {
+      return {
+        changed,
+        detail:
+          'Tailscale is installed but tailscaled is not running and could not be started. On a ' +
+          'systemd host, `systemctl status tailscaled` says why; on a host without an init ' +
+          'manager, tailscaled has to be supervised by whatever does run there.',
+      }
     }
 
     const hostname = tailnetHostname(stack ?? (await exec('hostname')).stdout)

@@ -126,6 +126,21 @@ describe('check()', () => {
     expect(r.detail).toContain('NeedsLogin')
   })
 
+  // Measured against a real Debian host: with no daemon, `tailscale status --json` prints
+  // Tailscale's own complaint rather than JSON, and the module used to call that "a status that
+  // could not be parsed". The operator's next step is a stopped service, not the output.
+  it('names a stopped daemon rather than calling the output unparseable', async () => {
+    const r = await mod.check(
+      fakeExec([
+        [/command -v tailscale/, 'yes'],
+        [/tailscale status/, "failed to connect to local tailscaled; it doesn't appear to be running (sudo systemctl start tailscaled ?)"],
+      ]),
+    )
+    expect(r.status).toBe('drifted')
+    expect(r.detail).toContain('tailscaled daemon is not running')
+    expect(r.detail).not.toContain('could be parsed')
+  })
+
   it('unparseable status is drift, not absence', async () => {
     const r = await mod.check(fakeExec([[/command -v tailscale/, 'yes'], [/tailscale status/, 'garbage']]))
     expect(r.status).toBe('drifted')
@@ -179,6 +194,36 @@ describe('apply()', () => {
     )
     expect(r.detail).not.toContain('tskey-SECRET')
     expect(r.detail).toContain('[redacted]')
+  })
+
+  it('starts a stopped daemon before trying to join', async () => {
+    vi.doMock('../../src/config/secrets.js', () => ({ resolveSecretRef: () => 'tskey-SECRET' }))
+    const { makeTailscaleModule: make } = await import('../../src/harden/modules/tailscale.js')
+    let started = false
+    const exec = (async (cmd: string) => {
+      if (/command -v tailscale/.test(cmd)) return { stdout: 'yes', stderr: '', code: 0 }
+      if (/systemctl start tailscaled/.test(cmd)) { started = true; return { stdout: 'started', stderr: '', code: 0 } }
+      if (/tailscale status/.test(cmd))
+        return { stdout: started ? RUNNING : 'failed to connect to local tailscaled', stderr: '', code: 0 }
+      return { stdout: '', stderr: '', code: 0 }
+    }) as RemoteExec
+    const r = await make('prod').apply(exec)
+    expect(started).toBe(true)
+    expect(r.detail).toContain('100.101.102.103')
+  })
+
+  it('stops before joining when the daemon cannot be started, and says why', async () => {
+    vi.doMock('../../src/config/secrets.js', () => ({ resolveSecretRef: () => 'tskey-SECRET' }))
+    const { makeTailscaleModule: make } = await import('../../src/harden/modules/tailscale.js')
+    const exec = fakeExec([
+      [/command -v tailscale/, 'yes'],
+      [/systemctl start tailscaled/, 'no'],
+      [/tailscale status/, 'failed to connect to local tailscaled'],
+    ])
+    const r = await make('prod').apply(exec)
+    expect(r.detail).toContain('could not be started')
+    // It never reached the join, so the key was never sent anywhere.
+    expect(exec.calls.some((c) => c.includes('--auth-key'))).toBe(false)
   })
 
   it('removes the staged key file even if the command is interrupted', async () => {
