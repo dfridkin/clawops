@@ -342,6 +342,7 @@ Do not bind to a non-loopback address without additional authentication controls
 | `clawops_config_unset` | cli | Remove a remote config key |
 | `clawops_config_validate` | cli | Validate the deployed config against the OpenClaw schema |
 | `clawops_gateway_restart` | cli | Restart the gateway (elicits confirmation) |
+| `clawops_harden` | cli | Apply hardening modules; join or leave a tailnet (elicits confirmation) |
 | `clawops_workflow_deploy_app` | workflow | End-to-end deploy: plan → confirm → apply → status |
 | `clawops_workflow_recover` | workflow | Diagnostic workflow for an unhealthy stack |
 | `clawops_task_status` | cli | Poll a long-running task |

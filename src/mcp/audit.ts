@@ -86,13 +86,19 @@ export function withAudit<T>(
     const start = Date.now()
     try {
       const result = await handler(input)
+      /*
+       * A tool that failed reports it by returning `isError`, not by throwing — errText is how
+       * nearly every handler here refuses, and only a handful ever throw. Reading only the throw
+       * path, this log recorded `ok` for every refusal and every failure in the product: a
+       * destroy that was declined and a destroy that ran looked identical in the audit trail.
+       */
       auditLog({
         ts: new Date().toISOString(),
         sessionId: getSessionId(),
         tool: toolName,
         args: sanitize(input as Record<string, unknown>),
         durationMs: Date.now() - start,
-        result: 'ok',
+        result: result.isError === true ? 'error' : 'ok',
       })
       return result
     } catch (err) {

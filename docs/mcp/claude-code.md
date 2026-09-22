@@ -14,7 +14,7 @@ This writes a `clawops` entry to:
 - Linux: `~/.config/Claude/claude_desktop_config.json`
 
 The entry uses
-`["mcp", "serve"]` with no safety flag, all 15 tools are enabled by default.
+`["mcp", "serve"]` with no safety flag, all 19 tools are enabled by default.
 
 **Recommendation:** Add `--read-only` before first use:
 

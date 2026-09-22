@@ -93,6 +93,12 @@ know the proxy is there.
 TLS termination. Bring your own reverse proxy (nginx, Caddy, Cloudflare Tunnel) for HTTPS. TLS
 automation is tracked in the roadmap.
 
+**Not every CLI command has an MCP tool.** 13 of 24 commands are exposed. `init`, `ssh`,
+`secret`, `backup` and `migrate` have no tool; `gateway` has restart but not status or update,
+`agents` has list but not per-agent logs, and `stacks` has list but not delete. An agent driving
+clawops hits these as missing capabilities and has to ask the user to run a command themselves.
+`tests/mcp/parity.test.ts` holds the full list with a reason for each. Tracked for 2.2.
+
 **Tailscale: no private-only mode on local stacks, and no `doctor` check yet.** `clawops harden
 --tailscale` joins any stack to a tailnet and moves clawops onto that address. Closing the public
 ports goes through `clawops plan --private-only`, and local stacks have no plan/apply path, so on

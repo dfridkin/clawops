@@ -86,8 +86,9 @@ tools:
       actually running.
 
       Do NOT use when: you already know the problem and want to fix it. This tool only
-      reports — it changes nothing, and never runs `openclaw doctor --fix`. Repair is
-      part of clawops_gateway_update, where it is gated on a verified backup.
+      reports — it changes nothing, and never runs `openclaw doctor --fix`. No tool
+      repairs a gateway: `clawops gateway update` is CLI-only, so tell the user to run
+      it themselves, after `clawops backup create`.
 
       Every check carries a status: fail (something is wrong that clawops can name),
       warn (worth knowing, not broken), info (did not apply). `ok` is false only when
@@ -125,8 +126,9 @@ tools:
 
       Do NOT use when: the user wants real-time streaming logs (those are not
       well-suited to tool calls; suggest the user run `clawops logs -f` directly
-      in their terminal). Do NOT use for instance-level system logs (use
-      clawops_ssh with `journalctl`).
+      in their terminal). Do NOT use for instance-level system logs: no tool runs
+      arbitrary remote commands, so tell the user to run `clawops ssh --command
+      'journalctl ...'` themselves.
     annotations:
       title: Tail Gateway Logs
       readOnlyHint: true
@@ -238,7 +240,8 @@ tools:
       Use when: the user wants to see which agents are running, debug agent
       routing, or count active workspaces.
 
-      Do NOT use when: the user wants agent logs (use clawops_agents_logs).
+      Do NOT use when: the user wants one agent's logs — no tool exposes those; tell
+      the user to run `clawops agents logs <name>`.
     annotations:
       title: List OpenClaw Agents
       readOnlyHint: true
@@ -332,9 +335,10 @@ tools:
       Use when: the user explicitly asks to destroy, tear down, delete, or
       remove a stack. Always confirm the stack name.
 
-      Do NOT use when: the user wants to stop the gateway temporarily — use
-      clawops_gateway_stop instead. Do NOT use when in doubt about which stack;
-      list first with clawops_stacks_list.
+      Do NOT use when: the user wants to stop the gateway temporarily — that is not
+      a destroy, and no tool stops a gateway; clawops_gateway_restart is the only
+      gateway tool. Do NOT use when in doubt about which stack; list first with
+      clawops_stacks_list.
     annotations:
       title: Destroy Stack (DESTRUCTIVE)
       readOnlyHint: false
@@ -393,7 +397,12 @@ tools:
       stackName: { type: string, optional: true }
       provider: { type: enum, values: [aws, gcp, azure, local], optional: true }
       region: { type: string, optional: true }
-      instanceType: { type: enum, values: [micro, small, medium, large, gpu], optional: true }
+      instanceType: { type: string, optional: true, description: "A clawops alias (micro|small|medium|large|gpu) or a machine type the cloud names itself, e.g. t3.small" }
+      openclawVersion: { type: string, optional: true, description: "semver, or 'stable'/'dev'" }
+      sshCidr: { type: string, optional: true, description: "CIDR(s) allowed to reach SSH, comma-separated, or 'auto' for this machine. Omitted = none, and nothing will be able to connect" }
+      gatewayCidr: { type: string, optional: true, description: "CIDR(s) allowed to reach the gateway port, or 'auto'. Requires publishGateway=all" }
+      publishGateway: { type: enum, values: [loopback, all], optional: true, description: "Which interface the gateway binds. loopback (default) keeps it off the network" }
+      privateOnly: { type: boolean, optional: true, description: "Close public SSH and gateway access; reach the stack over its tailnet. Requires a verified tailnet address (clawops_harden with tailscale), and refuses unless that address answers SSH now" }
       outPath: { type: string, optional: true, description: "Absolute path to write plan; if omitted, plan returned inline" }
     output:
       planPath: { type: string, description: "Absolute path; only set if outPath provided" }
@@ -498,6 +507,55 @@ tools:
 # ────────────────────────────────────────────────────────────────────────────
 # COMPOSITE WORKFLOW TOOLS (R2: encode user intent, not API sequences)
 # ────────────────────────────────────────────────────────────────────────────
+
+  - name: clawops_harden
+    toolset: [cli]
+    description: |
+      Apply security hardening to a deployed stack: SSH, UFW, fail2ban,
+      unattended-upgrades, the Docker socket, and per-cloud checks. Optionally join
+      the stack to a Tailscale network and reach it there instead of over the public
+      internet.
+
+      Use when: the user asks to harden, secure, or lock down a stack; asks what the
+      hardening report says (with dryRun: true, which changes nothing); or asks to put
+      a stack on their tailnet.
+
+      tailscale: true installs Tailscale, joins the tailnet as clawops-<stack>, and
+      then moves clawops onto that address — but only after opening an SSH session to
+      it, against host keys pinned over the connection already trusted. If that fails,
+      nothing is recorded and the public address stays in use. The auth key comes from
+      `clawops secret set TAILSCALE_AUTH_KEY` and is never passed through this tool
+      (R6).
+
+      tailscaleRevert: true takes the host back off the tailnet, over its public
+      address. On a private-only stack it refuses and names the plan/apply commands
+      that reopen SSH first — relay them rather than trying to work around it.
+
+      To close the public ports afterwards, plan with privateOnly: true and apply that
+      plan; this tool does not change firewall rules.
+
+      Do NOT use when: the user wants to know whether a stack is healthy — that is
+      clawops_doctor. Do NOT pass tailscale and tailscaleRevert together.
+    annotations:
+      title: Harden Stack
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true }
+      options: { type: string, optional: true, description: "Comma-separated module IDs; default is every defaultOn module for the provider" }
+      dryRun: { type: boolean, optional: true, default: false, description: "Report the current state, change nothing" }
+      tailscale: { type: boolean, optional: true, default: false, description: "Join the tailnet, verify this machine reaches the host there, then use that address" }
+      tailscaleRevert: { type: boolean, optional: true, default: false, description: "Leave the tailnet and go back to the public address" }
+      yes: { type: boolean, optional: true, default: false, description: "Skip elicitation; CI/scripted use only" }
+    output:
+      modules:
+        type: array
+        description: "Per module: id, status, whether it changed anything, and detail"
+      tailnet:
+        type: object
+        description: "Set when tailscale or tailscaleRevert ran: the address now in use, or why it was refused"
 
   - name: clawops_workflow_deploy_app
     toolset: [workflow]

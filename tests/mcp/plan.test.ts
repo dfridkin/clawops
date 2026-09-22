@@ -20,6 +20,12 @@ vi.mock('../../src/plan/generate.js', () => ({ generatePlan: mockGeneratePlan })
 const mockTrimForMcp = vi.fn()
 vi.mock('../../src/mcp/tools/_trim.js', () => ({ trimForMcp: mockTrimForMcp }))
 
+// ── the network layer plan gained: egress detection and the tailnet probe ─────
+const mockDetectEgressIp = vi.fn()
+vi.mock('../../src/providers/firewall.js', () => ({ detectEgressIp: mockDetectEgressIp }))
+const mockProbeSsh = vi.fn()
+vi.mock('../../src/harden/tailscale-cutover.js', () => ({ probeSsh: mockProbeSsh }))
+
 // ── test fixtures ─────────────────────────────────────────────────────────────
 const basePlan = {
   apiVersion: 'clawops.dev/v1' as const,
@@ -54,6 +60,8 @@ beforeEach(() => {
   })
   mockGeneratePlan.mockResolvedValue(basePlan)
   mockTrimForMcp.mockImplementation((content: string) => ({ content, truncated: false }))
+  mockDetectEgressIp.mockResolvedValue({ ok: true, ip: '203.0.113.4' })
+  mockProbeSsh.mockResolvedValue(true)
 })
 
 describe('handlePlan()', () => {
@@ -137,5 +145,98 @@ describe('handlePlan()', () => {
     const result = await handlePlan({ stackName: 'default' }, noopServer)
     const text = (result.content[0] as { type: 'text'; text: string }).text
     expect(text).toContain('"apiVersion"')
+  })
+})
+
+describe('the flags that decide who can reach the deployment', () => {
+  const TAILNET = { ip: '100.96.109.52', verifiedAt: '2026-09-22T00:00:00.000Z' }
+
+  function ctx(tailscale?: typeof TAILNET) {
+    mockBuildContext.mockReturnValue({
+      config: {
+        ssh: { keyPath: '/k', knownHostsPath: '/kh' },
+        stacks: { default: { provider: 'aws', ...(tailscale ? { tailscale } : {}) } },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+      adapter: {
+        name: 'aws',
+        getConnectionInfo: () => ({ host: TAILNET.ip, port: 22, user: 'ubuntu', privateKeyPath: '/k', knownHostsPath: '/kh' }),
+      },
+      stackName: 'default',
+      getStack: vi.fn().mockResolvedValue({
+        outputs: async () => ({
+          instanceId: { value: 'i-0abc' }, publicIp: { value: '34.200.67.239' }, gatewayUrl: { value: 'http://gw' },
+          region: { value: 'us-east-1' }, provisionedAt: { value: '2026-09-22T00:00:00.000Z' },
+          sshHost: { value: '34.200.67.239' }, sshPort: { value: 22 }, sshUser: { value: 'ubuntu' },
+        }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }) as any,
+    })
+  }
+
+  // Without these an agent could only ever plan a host nothing can connect to.
+  it('passes the SSH rule through to the plan', async () => {
+    const { handlePlan } = await import('../../src/mcp/tools/cli/plan.js')
+    await handlePlan({ stackName: 'default', sshCidr: '203.0.113.4/32' }, noopServer)
+    expect(mockGeneratePlan).toHaveBeenCalledWith(
+      expect.objectContaining({ network: expect.objectContaining({ allowedSshCidrs: ['203.0.113.4/32'] }) }),
+    )
+  })
+
+  it("resolves 'auto' to this machine, at plan time", async () => {
+    const { handlePlan } = await import('../../src/mcp/tools/cli/plan.js')
+    await handlePlan({ stackName: 'default', sshCidr: 'auto' }, noopServer)
+    expect(mockGeneratePlan).toHaveBeenCalledWith(
+      expect.objectContaining({ network: expect.objectContaining({ allowedSshCidrs: ['203.0.113.4/32'] }) }),
+    )
+  })
+
+  it('carries the gateway publish choice and the OpenClaw version', async () => {
+    const { handlePlan } = await import('../../src/mcp/tools/cli/plan.js')
+    await handlePlan({ stackName: 'default', publishGateway: 'all', gatewayCidr: '203.0.113.4/32', openclawVersion: '2026.9.2' }, noopServer)
+    expect(mockGeneratePlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        openclawVersion: '2026.9.2',
+        network: expect.objectContaining({ publishGateway: 'all', allowedGatewayCidrs: ['203.0.113.4/32'] }),
+      }),
+    )
+  })
+
+  it('refuses a bad CIDR rather than planning a rule nobody meant', async () => {
+    const { handlePlan } = await import('../../src/mcp/tools/cli/plan.js')
+    const r = await handlePlan({ stackName: 'default', sshCidr: '203.0.113.4' }, noopServer)
+    expect(r.isError).toBe(true)
+    expect(mockGeneratePlan).not.toHaveBeenCalled()
+  })
+
+  describe('privateOnly', () => {
+    it('plans no public ingress, and names the tailnet address that remains', async () => {
+      ctx(TAILNET)
+      const { handlePlan } = await import('../../src/mcp/tools/cli/plan.js')
+      await handlePlan({ stackName: 'default', privateOnly: true }, noopServer)
+      expect(mockGeneratePlan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          network: { allowedSshCidrs: [], allowedGatewayCidrs: [], tailscale: { enabled: true, privateOnly: true, ip: TAILNET.ip } },
+        }),
+      )
+    })
+
+    it('refuses when this machine cannot reach the tailnet address', async () => {
+      ctx(TAILNET)
+      mockProbeSsh.mockResolvedValue(false)
+      const { handlePlan } = await import('../../src/mcp/tools/cli/plan.js')
+      const r = await handlePlan({ stackName: 'default', privateOnly: true }, noopServer)
+      expect(r.isError).toBe(true)
+      expect(mockGeneratePlan).not.toHaveBeenCalled()
+    })
+
+    it('refuses on a stack that was never moved onto a tailnet', async () => {
+      ctx()
+      const { handlePlan } = await import('../../src/mcp/tools/cli/plan.js')
+      const r = await handlePlan({ stackName: 'default', privateOnly: true }, noopServer)
+      expect(r.isError).toBe(true)
+      expect(String((r.content?.[0] as { text?: unknown } | undefined)?.text)).toMatch(/tailnet/)
+      expect(mockGeneratePlan).not.toHaveBeenCalled()
+    })
   })
 })

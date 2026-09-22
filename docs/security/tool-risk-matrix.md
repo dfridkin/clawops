@@ -1,6 +1,6 @@
 # MCP Tool Risk Matrix
 
-All 18 clawops MCP tools, their risk classification, and which safety mode includes them.
+All 19 clawops MCP tools, their risk classification, and which safety mode includes them.
 
 The `--read-only` column is the `read` toolset, and the `--no-destructive` column is
 `destructiveHint: false`. Both come from `spec/mcp-tools.yaml`, and a test asserts this table
@@ -35,11 +35,12 @@ unavailable in `--read-only` that the catalog put in the `read` toolset.
 | `clawops_config_unset` | cli | Medium | ❌ | ❌ | ✅ |
 | `clawops_config_validate` | cli | Read-only | ✅ | ✅ | ✅ |
 | `clawops_gateway_restart` | cli | Medium | ❌ | ❌ | ✅ |
+| `clawops_harden` | cli | Medium | ❌ | ❌ | ✅ |
 | `clawops_workflow_deploy_app` | workflow | High | ❌ | ❌ | ✅ |
 | `clawops_workflow_recover` | workflow | Low | ✅ | ✅ | ✅ |
 | `clawops_task_status` | cli | Read-only | ✅ | ✅ | ✅ |
 
-`--read-only` enables 11 tools (TOOLSETS.read). `--no-destructive` enables 11 tools (filters `destructiveHint: true` from any active toolset). Default enables all 18.
+`--read-only` enables 11 tools (TOOLSETS.read). `--no-destructive` enables 11 tools (filters `destructiveHint: true` from any active toolset). Default enables all 19.
 
 ## Annotations
 

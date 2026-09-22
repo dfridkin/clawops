@@ -30,6 +30,7 @@ can drive deployments deterministically.
 - `pnpm lint`           eslint --max-warnings=0
 - `pnpm gen:schemas`    emit `src/providers/types.ts` and `src/mcp/tools/_generated.ts` from `spec/`
 - `pnpm gen:schemas --check`   CI check that committed generated files match spec
+- `pnpm verify:mcp`     drive the built MCP server over stdio: tool list, annotations, elicitation, stdout purity
 - `pnpm changeset`      record a release note (see `/release` skill)
 
 ## Invariants — YOU MUST follow these
@@ -45,6 +46,13 @@ can drive deployments deterministically.
   If the schema says a field is required, add it; do not relax the schema. (R-meta-1)
 - **All MCP tools are declared in `spec/mcp-tools.yaml` first.** The Zod schemas in
   `src/mcp/tools/_generated.ts` are GENERATED from that file; do not hand-edit them. (R-meta-1)
+- **New CLI functionality is exposed through MCP in the same change.** A new command gets a
+  tool; a new flag on an existing command gets an input on its tool. clawops is one
+  implementation behind two surfaces, and the MCP one is how agents use it — a feature that
+  only the CLI can reach is half-shipped. `tests/mcp/parity.test.ts` fails on any command that
+  has neither a tool nor a written reason it does not need one; the reason goes in that file's
+  `NO_TOOL` map and in `docs/limitations.md`. Refusals and confirmations count as functionality:
+  if the CLI refuses something, the tool refuses it too, with the same words.
 - **Every MCP tool sets all four annotation hints** (`readOnlyHint`,
   `destructiveHint`, `idempotentHint`, `openWorldHint`) plus `title`. Defaults are insufficient. (R10)
 - **Default security-group/firewall rules are deny-all.** Never default `0.0.0.0/0`
@@ -82,7 +90,8 @@ corresponding documents in the same commit or PR.
 
 | When you… | Update… |
 |---|---|
-| Add, remove, or rename a CLI command or flag | `README.md` commands table + help text in the command file |
+| Add, remove, or rename a CLI command or flag | `README.md` commands table + help text in the command file + `spec/mcp-tools.yaml` (a tool, or an input on one) |
+| Add or change an MCP tool | `spec/mcp-tools.yaml` first, then `pnpm gen:schemas` + `README.md` tool table + `docs/security/tool-risk-matrix.md` + the counts in `docs/security/mcp-safety.md` and `docs/mcp/read-only.md` |
 | Change command behavior, output format, or semantics | `README.md` relevant section + `docs/operations.md` if day-2 ops |
 | Change plan/apply semantics (what plan stores, what apply executes) | `docs/plan-apply.md` + `README.md` Plan→Apply section + ADR if spec changes |
 | Add or remove a provider capability | `docs/providers/matrix.md` (supported/partial/planned/unsupported) |
