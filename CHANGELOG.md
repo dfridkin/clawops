@@ -1,5 +1,40 @@
 # @clawops/cli
 
+## 2.1.1
+
+### Patch Changes
+
+- 346ada1: **`clawops` with no command, started over a pipe, serves MCP instead of printing help.** The
+  things that start MCP servers routinely start them by running the package's binary with no
+  arguments. Glama's directory build did exactly that three times — got the CLI's help text where
+  it wanted a handshake, and withheld the listing each time — and no fix in this repository reached
+  it, because its stored build spec never consults the Dockerfile.
+
+  The condition is narrow: no arguments at all, and stdin is not a terminal. Typed at a prompt,
+  `clawops` still prints help; so does `clawops | less`, because stdin is still the terminal there.
+  A flag with no command is still a malformed invocation. When it does start the server it says so
+  on stderr, never stdout, which carries the protocol.
+
+  `pnpm verify:docker` now probes the image both ways — through its ENTRYPOINT, and with the bare
+  binary a directory infers — so the invocation that failed three times is one a release cannot
+  break again.
+
+- 346ada1: The MCP config example is `npx -y @clawops/cli mcp serve`, which works with nothing on `$PATH`
+  and can be copied verbatim by a directory or an installer. The absolute-path form is kept below
+  it for anyone who would rather point at a binary they already have. Both spell out the arguments,
+  because `clawops` on its own prints help and exits — it is a CLI first, and `mcp serve` is the
+  part that speaks the protocol.
+- 2d79c7e: The MCP registry backfill registers the version that was released rather than the one being
+  prepared. Changesets runs `version` in the working tree before pushing the release PR, so a
+  manual backfill read a `package.json` bumped to the next version, waited five minutes for npm to
+  serve a version it had never published, and failed — leaving the entry it was dispatched to
+  repair exactly where it was. The bump is committed in that job as well as written to the working
+  tree, so the step now restores both files from the commit the run was dispatched against.
+- 9870e03: The description is back inside the MCP registry's 100-character limit. The one 2.1.0 shipped was
+  110, so the registry refused it with a 422 — after npm had already published, because that step
+  runs first. A test now asserts the limit, so the next overrun fails in seconds rather than at the
+  end of a release.
+
 ## 2.1.0
 
 ### Minor Changes
