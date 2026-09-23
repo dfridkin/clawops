@@ -259,6 +259,14 @@ function genMcpTools(): string {
       '',
       `export const ${tool.name}Schema = z.object({${fieldsStr}})`,
       '',
+      /*
+       * The description is what a client shows a model when it decides which tool to call, and
+       * these are written for exactly that: each says when to use the tool and when not to.
+       * They were generated into nothing for the whole life of the server, so every client saw
+       * 19 tools with no descriptions at all, and Glama scored each one 1/5 for it.
+       */
+      `export const ${tool.name}Description = ${JSON.stringify(tool.description.trim())}`,
+      '',
       `export const ${tool.name}Annotations = {`,
       `  title: ${JSON.stringify(tool.annotations.title)},`,
       `  readOnlyHint: ${tool.annotations.readOnlyHint},`,
