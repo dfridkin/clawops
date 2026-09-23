@@ -542,7 +542,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (1855 tests, ~13s)
+pnpm test                  # vitest (1897 tests, ~13s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm typecheck             # tsc --noEmit
@@ -603,6 +603,7 @@ Use `pnpm changeset` to record a release note before merging a `feat` or `fix`.
 ## What's new in 2.1
 
 Private networking, hardening on every cloud, and two fixes to commands that could not start.
+2.1.1 follows with the fixes below it.
 
 ### Reach a stack over your tailnet
 
@@ -644,6 +645,25 @@ Private networking, hardening on every cloud, and two fixes to commands that cou
   at publish time. The committed file had read `1.7.3` against a published `2.0.2`.
 - The published package carries its license, keywords and issue tracker, so it is findable on npm
   and its listing is complete.
+
+### 2.1.1
+
+- **`clawops` started with no command and a pipe on stdin serves MCP** instead of printing help.
+  That is how every MCP client starts a server, and how directories that infer a run command
+  start one; several were getting the help text and reporting the server as broken. Typed at a
+  terminal, `clawops` still prints help, and so does `clawops | less`.
+- The MCP config example is `npx -y @clawops/cli mcp serve`, which runs as written. It used to
+  say `/path/to/clawops`, which nothing could run and no directory could copy.
+- The description is inside the MCP registry's 100-character limit. The one 2.1.0 shipped was
+  110, and the registry refused it with a 422 after npm had already published — so 2.1.0 reached
+  npm and not the registry.
+- `clawops harden` says a stack is not deployed, or that its state could not be read, instead of
+  passing along `code: -2` and a subprocess dump.
+- The MCP registry backfill registers the version that was released rather than the one the
+  release tooling is preparing, so an entry that falls behind can actually be repaired.
+- The Docker image builds. It had never been built, and did not: `npm pack --pack-destination`
+  does not create its destination. `pnpm verify:docker` builds it and speaks MCP to the running
+  container, both through its entrypoint and as a bare binary, in CI.
 
 ---
 
