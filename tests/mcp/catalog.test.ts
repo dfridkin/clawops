@@ -21,6 +21,32 @@ const spec = yaml.load(
 const HINTS = ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'] as const
 const toolsetsOf = (t: Tool) => (Array.isArray(t.toolset) ? t.toolset : [t.toolset])
 
+describe('the parameter documentation a client actually receives', () => {
+  /*
+   * Same failure as the tool descriptions, one level down: written in the spec, dropped by the
+   * generator, so every inputSchema arrived as bare types. Glama scores this separately.
+   */
+  it('gives every input parameter a description in the spec', () => {
+    const missing = spec.tools.flatMap((t) =>
+      Object.entries((t as { input?: Record<string, { description?: string }> }).input ?? {})
+        .filter(([, v]) => !v.description?.trim())
+        .map(([k]) => `${t.name}.${k}`),
+    )
+    expect(missing, `parameters with no description: ${missing.join(', ')}`).toEqual([])
+  })
+
+  it('carries each one into the generated schema, so it reaches the wire', async () => {
+    const generated = readFileSync(path.join(process.cwd(), 'src/mcp/tools/_generated.ts'), 'utf-8')
+    const documented = spec.tools.flatMap((t) =>
+      Object.values((t as { input?: Record<string, { description?: string }> }).input ?? {})
+        .map((v) => v.description)
+        .filter((d): d is string => Boolean(d)),
+    )
+    const absent = documented.filter((d) => !generated.includes(JSON.stringify(d)))
+    expect(absent.length, `descriptions not emitted: ${absent.slice(0, 3).join(' | ')}`).toBe(0)
+  })
+})
+
 describe('the description a client actually receives', () => {
   /*
    * These are written per R3 to route a model: each says when to use the tool and when to reach

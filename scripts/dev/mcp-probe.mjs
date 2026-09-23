@@ -138,6 +138,12 @@ try {
   check('every description says when to use the tool (R3)', routable.length === tools.length,
     tools.filter((t) => !/Use when/.test(t.description ?? '')).map((t) => t.name).join(', '))
 
+  const params = tools.flatMap((t) => Object.entries(t.inputSchema?.properties ?? {}).map(([k, v]) => [t.name, k, v]))
+  const describedParams = params.filter(([, , v]) => typeof v.description === 'string' && v.description.length > 0)
+  check(`every parameter carries a description (${describedParams.length}/${params.length})`,
+    describedParams.length === params.length,
+    params.filter(([, , v]) => !v.description).map(([t, k]) => `${t}.${k}`).slice(0, 4).join(', '))
+
   const harden = tools.find((t) => t.name === 'clawops_harden')
   if (harden) {
     const props = Object.keys(harden.inputSchema?.properties ?? {})

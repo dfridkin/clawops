@@ -9,7 +9,7 @@ export type Toolset = 'cli' | 'workflow' | 'read' | 'admin'
 // ── clawops_status ──────────────────────────────────────────────────────────
 
 export const clawops_statusSchema = z.object({
-  stackName: z.string().optional(),
+  stackName: z.string().optional().describe("Stack name. Defaults to active stack from config."),
 })
 
 export const clawops_statusDescription = "Get what is deployed for a clawops-managed stack: public IP, gateway URL,\nSSH user, or that nothing is deployed yet. Reads stack outputs; does not\ncontact the host.\n\nUse when: the user asks what exists for a stack, or where to reach it.\n\nDo NOT use when: the user asks whether the gateway is actually WORKING —\nthat needs the host, so use clawops_doctor. Also not for live logs (use\nclawops_logs_tail) or config values (use clawops_config_get)."
@@ -28,8 +28,8 @@ export type StatusInput = z.infer<typeof clawops_statusSchema>
 // ── clawops_doctor ──────────────────────────────────────────────────────────
 
 export const clawops_doctorSchema = z.object({
-  stackName: z.string().optional(),
-  failuresOnly: z.boolean().optional().default(false),
+  stackName: z.string().optional().describe("Stack to include remote checks for. Without it, only the local machine is\nchecked — no SSH connection is made.\n"),
+  failuresOnly: z.boolean().optional().default(false).describe("Return only failing and warning checks. Passing checks are counted, not listed."),
 })
 
 export const clawops_doctorDescription = "Run clawops's diagnostics and return the report: Node and Pulumi runtime, config,\nSSH key and known_hosts, cloud credentials per configured provider, and the\nsupported OpenClaw range. With stackName, also contacts the host for container\nstate, the deployed OpenClaw version, a real gateway health probe, whether the\nport is published to the internet, disk usage on the state directory, log\nrotation, and hardening drift.\n\nUse when: something is not working and you do not yet know what; before any\ndeploy, upgrade or migration; or to find out which OpenClaw version a gateway is\nactually running.\n\nDo NOT use when: you already know the problem and want to fix it. This tool only\nreports — it changes nothing, and never runs `openclaw doctor --fix`. No tool\nrepairs a gateway: `clawops gateway update` is CLI-only, so tell the user to run\nit themselves, after `clawops backup create`.\n\nEvery check carries a status: fail (something is wrong that clawops can name),\nwarn (worth knowing, not broken), info (did not apply). `ok` is false only when\nsomething failed — a fresh machine with no stacks is full of warnings and healthy."
@@ -48,9 +48,9 @@ export type DoctorInput = z.infer<typeof clawops_doctorSchema>
 // ── clawops_logs_tail ───────────────────────────────────────────────────────
 
 export const clawops_logs_tailSchema = z.object({
-  stackName: z.string().optional(),
-  tailLines: z.number().int().optional().default(100),
-  sinceMin: z.number().int().optional(),
+  stackName: z.string().optional().describe("Which stack's gateway to read. Omitted = the default stack in ~/.clawops/config.json"),
+  tailLines: z.number().int().optional().default(100).describe("How many of the most recent lines to return. Keep it small; output is trimmed to 8KB regardless"),
+  sinceMin: z.number().int().optional().describe("Lines since N minutes ago"),
 })
 
 export const clawops_logs_tailDescription = "Tail recent gateway logs from a clawops-managed instance.\n\nUse when: the user wants to investigate recent activity or errors, or\nasks \"what's been happening\" on the gateway.\n\nDo NOT use when: the user wants real-time streaming logs (those are not\nwell-suited to tool calls; suggest the user run `clawops logs -f` directly\nin their terminal). Do NOT use for instance-level system logs: no tool runs\narbitrary remote commands, so tell the user to run `clawops ssh --command\n'journalctl ...'` themselves."
@@ -69,8 +69,8 @@ export type LogsTailInput = z.infer<typeof clawops_logs_tailSchema>
 // ── clawops_monitor ─────────────────────────────────────────────────────────
 
 export const clawops_monitorSchema = z.object({
-  stackName: z.string().optional(),
-  tailLines: z.number().int().optional().default(5),
+  stackName: z.string().optional().describe("Stack name. Defaults to active stack."),
+  tailLines: z.number().int().optional().default(5).describe("Log lines to include in snapshot."),
 })
 
 export const clawops_monitorDescription = "Take a live snapshot of a running clawops stack: gateway health, container\nstatus, resource usage (CPU, memory, disk), and recent log lines.\n\nUse when: the user wants to know if the gateway is running, how much\nmemory or CPU it is using, what recent log activity looks like, or\nwants a quick health overview richer than clawops_status.\n\nDo NOT use when: the user wants real-time streaming logs (use\nclawops_logs_tail or suggest `clawops logs -f`). Do NOT use for\nconfiguration queries (use clawops_config_get)."
@@ -106,8 +106,8 @@ export type StacksListInput = z.infer<typeof clawops_stacks_listSchema>
 // ── clawops_config_get ──────────────────────────────────────────────────────
 
 export const clawops_config_getSchema = z.object({
-  stackName: z.string().optional(),
-  key: z.string().optional(),
+  stackName: z.string().optional().describe("Which stack's gateway config to read. Omitted = the default stack in ~/.clawops/config.json"),
+  key: z.string().optional().describe("Dot-path config key, e.g., gateway.auth.mode. Omit to dump the full config."),
 })
 
 export const clawops_config_getDescription = "Read a configuration value from the remote OpenClaw gateway.\n\nUse when: the user wants to inspect current OpenClaw config (e.g., which\nmodel provider is active, which channels are enabled).\n\nDo NOT use when: the user wants to change the config — use\nclawops_config_set instead."
@@ -126,7 +126,7 @@ export type ConfigGetInput = z.infer<typeof clawops_config_getSchema>
 // ── clawops_agents_list ─────────────────────────────────────────────────────
 
 export const clawops_agents_listSchema = z.object({
-  stackName: z.string().optional(),
+  stackName: z.string().optional().describe("Which stack's agents to list. Omitted = the default stack in ~/.clawops/config.json"),
 })
 
 export const clawops_agents_listDescription = "List agents currently registered on the remote OpenClaw gateway.\n\nUse when: the user wants to see which agents are running, debug agent\nrouting, or count active workspaces.\n\nDo NOT use when: the user wants one agent's logs — no tool exposes those; tell\nthe user to run `clawops agents logs <name>`."
@@ -145,15 +145,15 @@ export type AgentsListInput = z.infer<typeof clawops_agents_listSchema>
 // ── clawops_up ──────────────────────────────────────────────────────────────
 
 export const clawops_upSchema = z.object({
-  stackName: z.string().optional(),
-  provider: z.enum(['aws', 'gcp', 'azure', 'local']).optional(),
-  region: z.string().optional(),
-  instanceType: z.string().optional().default("small"),
-  sshCidr: z.string().optional(),
-  gatewayCidr: z.string().optional(),
-  publishGateway: z.enum(['loopback', 'all']).optional(),
-  openclawVersion: z.string().optional(),
-  dryRun: z.boolean().optional().default(false),
+  stackName: z.string().optional().describe("Name for the stack to provision, and the name every later command refers to it by. Omitted = the default stack in ~/.clawops/config.json"),
+  provider: z.enum(['aws', 'gcp', 'azure', 'local']).optional().describe("Defaults to provider configured for this stack"),
+  region: z.string().optional().describe("Cloud region to deploy into, in the provider's own spelling (us-east-1, us-central1, eastus). Omitted = the region recorded for the stack"),
+  instanceType: z.string().optional().default("small").describe("A clawops size (micro|small|medium|large|gpu) or a provider-native machine type.\nNot an enum: Azure offers SKU families per subscription, and an account offered\nnone of the five sizes clawops names would otherwise have no way to deploy.\n"),
+  sshCidr: z.string().optional().describe("CIDR(s) allowed to reach SSH, comma-separated, or 'auto' for the caller's own\naddress. Omitted means none, and nothing will be able to connect — including\nevery clawops day-two command.\n"),
+  gatewayCidr: z.string().optional().describe("CIDR(s) allowed to reach the gateway port. Requires publishGateway=all."),
+  publishGateway: z.enum(['loopback', 'all']).optional().describe("Which interface the gateway binds. 'all' serves plaintext HTTP."),
+  openclawVersion: z.string().optional().describe("semver or 'stable'/'dev'"),
+  dryRun: z.boolean().optional().default(false).describe("Show what would be created and change nothing. Use this first when the user has not yet approved a spend"),
 })
 
 export const clawops_upDescription = "Provision and deploy a clawops stack. Idempotent — re-running with no spec\nchange produces no diff. Long-running (median 3min, p99 8min) so emits\nprogress notifications per R12.\n\nUse when: the user explicitly asks to deploy, provision, create, or \"spin\nup\" a stack. Always after the user has reviewed a plan\n(clawops_plan first when in doubt).\n\nDo NOT use when: the user has not yet generated a plan and is in\nexploratory/discovery mode — use clawops_plan first. Do NOT use for an\nexisting stack you only need to update; refresh first."
@@ -172,8 +172,8 @@ export type UpInput = z.infer<typeof clawops_upSchema>
 // ── clawops_destroy ─────────────────────────────────────────────────────────
 
 export const clawops_destroySchema = z.object({
-  stackName: z.string(),
-  yes: z.boolean().optional().default(false),
+  stackName: z.string().describe("The stack to destroy. Required, and worth repeating back to the user before calling: this deletes every resource it provisioned"),
+  yes: z.boolean().optional().default(false).describe("Skip elicitation; CI/scripted use only"),
 })
 
 export const clawops_destroyDescription = "Destroy a clawops stack. Removes ALL provisioned resources. Triggers\nelicitation confirmation showing the resource diff before execution\n(R19). Cannot be undone.\n\nUse when: the user explicitly asks to destroy, tear down, delete, or\nremove a stack. Always confirm the stack name.\n\nDo NOT use when: the user wants to stop the gateway temporarily — that is not\na destroy, and no tool stops a gateway; clawops_gateway_restart is the only\ngateway tool. Do NOT use when in doubt about which stack; list first with\nclawops_stacks_list."
@@ -192,8 +192,8 @@ export type DestroyInput = z.infer<typeof clawops_destroySchema>
 // ── clawops_apply ───────────────────────────────────────────────────────────
 
 export const clawops_applySchema = z.object({
-  planPath: z.string(),
-  yes: z.boolean().optional().default(false),
+  planPath: z.string().describe("Absolute path to plan JSON (R7)"),
+  yes: z.boolean().optional().default(false).describe("Skip the confirmation and apply immediately. Only when the user has already approved this specific plan"),
 })
 
 export const clawops_applyDescription = "Apply a previously-generated Maker plan (deploy-plan.schema.json).\nDeterministic — the plan describes exactly what will be created.\n\nUse when: the user has a plan file path and wants to apply it. This is\nthe agent-friendly path for any deploy/destroy operation.\n\nDo NOT use when: there's no plan file — generate one first with\nclawops_plan."
@@ -212,16 +212,16 @@ export type ApplyInput = z.infer<typeof clawops_applySchema>
 // ── clawops_plan ────────────────────────────────────────────────────────────
 
 export const clawops_planSchema = z.object({
-  stackName: z.string().optional(),
-  provider: z.enum(['aws', 'gcp', 'azure', 'local']).optional(),
-  region: z.string().optional(),
-  instanceType: z.string().optional(),
-  openclawVersion: z.string().optional(),
-  sshCidr: z.string().optional(),
-  gatewayCidr: z.string().optional(),
-  publishGateway: z.enum(['loopback', 'all']).optional(),
-  privateOnly: z.boolean().optional(),
-  outPath: z.string().optional(),
+  stackName: z.string().optional().describe("Which stack the plan is for. Omitted = the default stack in ~/.clawops/config.json"),
+  provider: z.enum(['aws', 'gcp', 'azure', 'local']).optional().describe("Cloud to plan against. Omitted = the provider recorded for the stack. 'local' has no plan/apply path and is refused"),
+  region: z.string().optional().describe("Cloud region, in the provider's own spelling (us-east-1, us-central1, eastus). Omitted = the region recorded for the stack"),
+  instanceType: z.string().optional().describe("A clawops alias (micro|small|medium|large|gpu) or a machine type the cloud names itself, e.g. t3.small"),
+  openclawVersion: z.string().optional().describe("semver, or 'stable'/'dev'"),
+  sshCidr: z.string().optional().describe("CIDR(s) allowed to reach SSH, comma-separated, or 'auto' for this machine. Omitted = none, and nothing will be able to connect"),
+  gatewayCidr: z.string().optional().describe("CIDR(s) allowed to reach the gateway port, or 'auto'. Requires publishGateway=all"),
+  publishGateway: z.enum(['loopback', 'all']).optional().describe("Which interface the gateway binds. loopback (default) keeps it off the network"),
+  privateOnly: z.boolean().optional().describe("Close public SSH and gateway access; reach the stack over its tailnet. Requires a verified tailnet address (clawops_harden with tailscale), and refuses unless that address answers SSH now"),
+  outPath: z.string().optional().describe("Absolute path to write plan; if omitted, plan returned inline"),
 })
 
 export const clawops_planDescription = "Generate a Maker deploy plan (does NOT apply). Plan is JSON conforming to\ndeploy-plan.schema.json — review before applying.\n\nUse when: the user wants to see what would be created before committing,\nor you (the agent) need a reviewable artifact for the user to approve.\n\nDo NOT use when: the user has explicitly asked to deploy and you already\nhave their approval — go directly to clawops_up."
@@ -240,10 +240,10 @@ export type PlanInput = z.infer<typeof clawops_planSchema>
 // ── clawops_config_set ──────────────────────────────────────────────────────
 
 export const clawops_config_setSchema = z.object({
-  stackName: z.string().optional(),
-  key: z.string(),
-  value: z.string(),
-  restart: z.boolean().optional().default(false),
+  stackName: z.string().optional().describe("Which stack's gateway config to write. Omitted = the default stack in ~/.clawops/config.json"),
+  key: z.string().describe("Dotted path into the gateway config, e.g. models.provider or channels.slack.enabled"),
+  value: z.string().describe("Stringified; JSON for complex values"),
+  restart: z.boolean().optional().default(false).describe("Restart the gateway so the change takes effect. Without it the value is written and the running gateway keeps the old one"),
 })
 
 export const clawops_config_setDescription = "Set a configuration value on the remote OpenClaw gateway. Optionally\nrestarts the gateway after.\n\nUse when: the user wants to change OpenClaw configuration (model\nprovider, channel auth, gateway port).\n\nDo NOT use when: the user is reading config — use clawops_config_get.\nDo NOT bulk-edit; one key at a time so changes are auditable (R21)."
@@ -262,9 +262,9 @@ export type ConfigSetInput = z.infer<typeof clawops_config_setSchema>
 // ── clawops_config_unset ────────────────────────────────────────────────────
 
 export const clawops_config_unsetSchema = z.object({
-  stackName: z.string().optional(),
-  key: z.string(),
-  restart: z.boolean().optional().default(false),
+  stackName: z.string().optional().describe("Which stack's gateway config to write. Omitted = the default stack in ~/.clawops/config.json"),
+  key: z.string().describe("Dot-path config key to remove"),
+  restart: z.boolean().optional().default(false).describe("Restart the gateway so the removal takes effect. Without it the key is removed and the running gateway keeps the old value"),
 })
 
 export const clawops_config_unsetDescription = "Remove a configuration key from the remote OpenClaw gateway config, reverting\nit to the OpenClaw default.\n\nUse when: the user wants to delete a config key entirely (e.g., remove a\nchannel, clear an override).\n\nDo NOT use when: the user wants to set the key to a new value — use\nclawops_config_set instead."
@@ -283,7 +283,7 @@ export type ConfigUnsetInput = z.infer<typeof clawops_config_unsetSchema>
 // ── clawops_config_validate ─────────────────────────────────────────────────
 
 export const clawops_config_validateSchema = z.object({
-  stackName: z.string().optional(),
+  stackName: z.string().optional().describe("Which stack's deployed config to validate. Omitted = the default stack in ~/.clawops/config.json"),
 })
 
 export const clawops_config_validateDescription = "Validate the remote OpenClaw gateway config against the known schema. Checks\nfor structural errors (wrong types, unknown top-level keys) that would cause\nOpenClaw to fail on startup.\n\nUse when: the user wants to verify config before restarting the gateway, or\nafter editing openclaw.json manually.\n\nDo NOT use when: the user wants to change config — use clawops_config_set."
@@ -302,7 +302,7 @@ export type ConfigValidateInput = z.infer<typeof clawops_config_validateSchema>
 // ── clawops_gateway_restart ─────────────────────────────────────────────────
 
 export const clawops_gateway_restartSchema = z.object({
-  stackName: z.string().optional(),
+  stackName: z.string().optional().describe("Which stack's gateway to restart. Omitted = the default stack in ~/.clawops/config.json"),
 })
 
 export const clawops_gateway_restartDescription = "Restart the OpenClaw gateway daemon on the remote instance.\n\nUse when: a gateway-wide config change requires reload, or the gateway is\nreported as unresponsive.\n\nNote: OpenClaw 2.0 removed per-agent restart; `gateway restart` is the only\nrestart it offers, and it affects every agent on the host. Brief downtime (~10s)."
@@ -321,12 +321,12 @@ export type GatewayRestartInput = z.infer<typeof clawops_gateway_restartSchema>
 // ── clawops_harden ──────────────────────────────────────────────────────────
 
 export const clawops_hardenSchema = z.object({
-  stackName: z.string().optional(),
-  options: z.string().optional(),
-  dryRun: z.boolean().optional().default(false),
-  tailscale: z.boolean().optional().default(false),
-  tailscaleRevert: z.boolean().optional().default(false),
-  yes: z.boolean().optional().default(false),
+  stackName: z.string().optional().describe("Which stack to harden. Omitted = the default stack in ~/.clawops/config.json"),
+  options: z.string().optional().describe("Comma-separated module IDs; default is every defaultOn module for the provider"),
+  dryRun: z.boolean().optional().default(false).describe("Report the current state, change nothing"),
+  tailscale: z.boolean().optional().default(false).describe("Join the tailnet, verify this machine reaches the host there, then use that address"),
+  tailscaleRevert: z.boolean().optional().default(false).describe("Leave the tailnet and go back to the public address"),
+  yes: z.boolean().optional().default(false).describe("Skip elicitation; CI/scripted use only"),
 })
 
 export const clawops_hardenDescription = "Apply security hardening to a deployed stack: SSH, UFW, fail2ban,\nunattended-upgrades, the Docker socket, and per-cloud checks. Optionally join\nthe stack to a Tailscale network and reach it there instead of over the public\ninternet.\n\nUse when: the user asks to harden, secure, or lock down a stack; asks what the\nhardening report says (with dryRun: true, which changes nothing); or asks to put\na stack on their tailnet.\n\ntailscale: true installs Tailscale, joins the tailnet as clawops-<stack>, and\nthen moves clawops onto that address — but only after opening an SSH session to\nit, against host keys pinned over the connection already trusted. If that fails,\nnothing is recorded and the public address stays in use. The auth key comes from\n`clawops secret set TAILSCALE_AUTH_KEY` and is never passed through this tool\n(R6).\n\ntailscaleRevert: true takes the host back off the tailnet, over its public\naddress. On a private-only stack it refuses and names the plan/apply commands\nthat reopen SSH first — relay them rather than trying to work around it.\n\nTo close the public ports afterwards, plan with privateOnly: true and apply that\nplan; this tool does not change firewall rules.\n\nDo NOT use when: the user wants to know whether a stack is healthy — that is\nclawops_doctor. Do NOT pass tailscale and tailscaleRevert together."
@@ -345,10 +345,10 @@ export type HardenInput = z.infer<typeof clawops_hardenSchema>
 // ── clawops_workflow_deploy_app ─────────────────────────────────────────────
 
 export const clawops_workflow_deploy_appSchema = z.object({
-  provider: z.enum(['aws', 'gcp', 'azure', 'local']),
-  region: z.string().optional(),
-  stackName: z.string().optional().default("default"),
-  instanceType: z.enum(['micro', 'small', 'medium', 'large', 'gpu']).optional().default("small"),
+  provider: z.enum(['aws', 'gcp', 'azure', 'local']).describe("Cloud to deploy to. Omitted = the default provider in ~/.clawops/config.json"),
+  region: z.string().optional().describe("Cloud region, in the provider's own spelling (us-east-1, us-central1, eastus). Omitted = the provider's default"),
+  stackName: z.string().optional().default("default").describe("Name for the new stack. Omitted = the default stack name in ~/.clawops/config.json"),
+  instanceType: z.enum(['micro', 'small', 'medium', 'large', 'gpu']).optional().default("small").describe("Machine size: a clawops alias (micro|small|medium|large|gpu) or a type the cloud names itself, e.g. t3.small"),
 })
 
 export const clawops_workflow_deploy_appDescription = "Single-tool workflow that takes a user from \"I want to deploy OpenClaw\nto <provider>\" to a verified, healthy gateway. Internally: plan → user\nconfirms (elicitation) → up → wait for healthy → return URL.\n\nUse when: the user expresses end-to-end deployment intent (\"deploy to\nAWS\", \"spin up an OpenClaw on GCP for me\").\n\nDo NOT use when: the user is mid-deployment and only needs one step\n(e.g., they already have a plan; use clawops_apply). Do NOT use for\ndestroying or updating — separate workflows."
@@ -367,7 +367,7 @@ export type WorkflowDeployAppInput = z.infer<typeof clawops_workflow_deploy_appS
 // ── clawops_workflow_recover ────────────────────────────────────────────────
 
 export const clawops_workflow_recoverSchema = z.object({
-  stackName: z.string().optional(),
+  stackName: z.string().optional().describe("Which stack to diagnose. Omitted = the default stack in ~/.clawops/config.json"),
 })
 
 export const clawops_workflow_recoverDescription = "Diagnostic workflow for an unhealthy stack. Internally: status check →\ngateway logs → agent logs → systemd service status → produces a structured\ndiagnostic report with suggested remediation.\n\nUse when: the user reports any \"not working\" symptom and you don't know\nwhere to start. Best entry point for troubleshooting.\n\nDo NOT use when: the user has already identified the problem and asks for\na specific fix."
@@ -386,7 +386,7 @@ export type WorkflowRecoverInput = z.infer<typeof clawops_workflow_recoverSchema
 // ── clawops_task_status ─────────────────────────────────────────────────────
 
 export const clawops_task_statusSchema = z.object({
-  taskId: z.string(),
+  taskId: z.string().describe("The taskId returned by a long-running tool such as clawops_up, clawops_apply or clawops_destroy"),
 })
 
 export const clawops_task_statusDescription = "Poll the status of a long-running clawops task (returned by clawops_up,\nclawops_destroy, clawops_apply, etc.). Per R12 streaming model.\n\nUse when: the user is waiting on a long-running deploy/destroy and wants\nprogress, OR you need to check whether a previously-started operation\nfinished.\n\nDo NOT use when: there is no active taskId — start the operation first."

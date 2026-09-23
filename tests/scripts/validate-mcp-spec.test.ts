@@ -39,6 +39,25 @@ describe('validateMcpSpec', () => {
     expect(() => validateMcpSpec(spec([tool()]))).not.toThrow()
   })
 
+  /*
+   * A parameter with no description reaches a client as a bare type. 26 of ours had none and
+   * another 29 had one the generator dropped, so a model choosing what to pass to `privateOnly`
+   * had the word and its type. This is the rule that stops the first half recurring.
+   */
+  it('rejects an input parameter with no description', () => {
+    rejects(tool({ input: { stackName: { type: 'string', optional: true } } }), /needs a description/)
+  })
+
+  it('rejects one whose description is only whitespace', () => {
+    rejects(tool({ input: { stackName: { type: 'string', description: '   ' } } }), /needs a description/)
+  })
+
+  it('accepts a documented parameter', () => {
+    expect(() =>
+      validateMcpSpec(spec([tool({ input: { stackName: { type: 'string', description: 'Which stack.' } } })])),
+    ).not.toThrow()
+  })
+
   it.each(['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'] as const)(
     'rejects a missing %s',
     (hint) => {
