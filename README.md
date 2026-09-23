@@ -188,8 +188,11 @@ would rather point at the binary you already have, use its absolute path — the
 }
 ```
 
-Either way the arguments are the part that matters: `clawops` on its own prints help and exits,
-because it is a CLI first. `mcp serve` is what speaks the protocol. Config file locations:
+Either way, pass the arguments. `mcp serve` is what speaks the protocol, and an explicit config
+is one that still reads clearly a year later. clawops does not strand a client that omits them:
+run with no command at all and a pipe on stdin — how every MCP client starts a server — and it
+starts `mcp serve`, saying so on stderr. Typed at a terminal, `clawops` still prints help.
+Config file locations:
 
 | App | Path |
 |---|---|

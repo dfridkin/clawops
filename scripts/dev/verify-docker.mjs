@@ -57,15 +57,34 @@ writeFileSync(
 chmodSync(home, 0o755)
 chmodSync(path.join(home, 'config.json'), 0o644)
 
-const probe = spawnSync(
-  process.execPath,
-  [
-    path.join(import.meta.dirname, 'mcp-probe.mjs'),
-    'docker', 'run', '-i', '--rm',
-    '-e', 'CLAWOPS_HOME=/probe',
-    '-v', `${home}:/probe`,
-    IMAGE,
-  ],
-  { stdio: 'inherit', env: { ...process.env, CLAWOPS_PROBE_HOME: home } },
-)
-process.exit(probe.status ?? 1)
+/*
+ * Both ways the image gets started.
+ *
+ * Its ENTRYPOINT is `clawops mcp serve`, but a directory that infers how to run a server does
+ * not necessarily use it: Glama's build spec installs the npm package and runs the bare binary.
+ * That invocation got the CLI's help text and a non-zero exit three times running, so it is
+ * checked here too, with the entrypoint overridden exactly as they override it.
+ */
+const invocations = [
+  { label: 'ENTRYPOINT (clawops mcp serve)', args: [] },
+  { label: 'bare binary, as a directory infers it', args: ['--entrypoint', 'clawops'] },
+]
+
+let failed = 0
+for (const { label, args } of invocations) {
+  console.log(`\n  ── ${label}`)
+  const probe = spawnSync(
+    process.execPath,
+    [
+      path.join(import.meta.dirname, 'mcp-probe.mjs'),
+      'docker', 'run', '-i', '--rm',
+      '-e', 'CLAWOPS_HOME=/probe',
+      '-v', `${home}:/probe`,
+      ...args,
+      IMAGE,
+    ],
+    { stdio: 'inherit', env: { ...process.env, CLAWOPS_PROBE_HOME: home } },
+  )
+  if (probe.status !== 0) failed += 1
+}
+process.exit(failed === 0 ? 0 : 1)
