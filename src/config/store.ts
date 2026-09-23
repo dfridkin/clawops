@@ -112,9 +112,9 @@ export function requireConfig(): ClawopsConfig {
   const cfg = getConfig()
   if (!cfg) {
     throw new UsageError(
-      `No clawops config at ${getConfigPath()}. Create one by running \`clawops init\` in a ` +
-        'terminal — it is a CLI command, so an MCP client cannot run it for you. It asks for a ' +
-        'provider and a state backend, or takes them as flags with --non-interactive.',
+      `No clawops config at ${getConfigPath()}. Create one with \`clawops init\` in a terminal, ` +
+        'or by calling the clawops_init tool. Either way it registers a stack — a provider and a ' +
+        'state backend — and generates an SSH key; nothing is provisioned and nothing is charged.',
     )
   }
   return cfg

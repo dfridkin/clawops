@@ -2,6 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@clawops/cli)](https://www.npmjs.com/package/@clawops/cli)
 [![npm downloads](https://img.shields.io/npm/dm/@clawops/cli)](https://www.npmjs.com/package/@clawops/cli)
+[![clawops MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/dfridkin/clawops/badges/score.svg)](https://glama.ai/mcp/servers/dfridkin/clawops)
 
 MCP-native infrastructure ops for OpenClaw, with read-only mode, destructive-action confirmation, and audit logs built in.
 
@@ -362,6 +363,7 @@ Do not bind to a non-loopback address without additional authentication controls
 | `clawops_config_validate` | cli | Validate the deployed config against the OpenClaw schema |
 | `clawops_gateway_restart` | cli | Restart the gateway (elicits confirmation) |
 | `clawops_harden` | cli | Apply hardening modules; join or leave a tailnet (elicits confirmation) |
+| `clawops_init` | cli | Register a stack and write `~/.clawops/config.json` (no cloud resources) |
 | `clawops_workflow_deploy_app` | workflow | End-to-end deploy: plan → confirm → apply → status |
 | `clawops_workflow_recover` | workflow | Diagnostic workflow for an unhealthy stack |
 | `clawops_task_status` | cli | Poll a long-running task |

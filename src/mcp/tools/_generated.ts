@@ -318,6 +318,32 @@ export const clawops_gateway_restartAnnotations = {
 
 export type GatewayRestartInput = z.infer<typeof clawops_gateway_restartSchema>
 
+// ── clawops_init ────────────────────────────────────────────────────────────
+
+export const clawops_initSchema = z.object({
+  provider: z.enum(['aws', 'gcp', 'azure', 'local']).describe("Which cloud this stack deploys to, or 'local' for a machine you already have"),
+  stackName: z.string().optional().describe("Name for the stack, used by every later call. Omitted = \"default\""),
+  stateUrl: z.string().optional().describe("Where Pulumi state lives, e.g. s3://bucket/clawops, gs://bucket/clawops, azblob://container. Omitted = clawops names one from the cloud account it can see, which needs credentials"),
+  region: z.string().optional().describe("Cloud region in the provider's own spelling. Omitted = us-east-1 (aws), us-central1 (gcp), eastus (azure)"),
+  host: z.string().optional().describe("[local only] Hostname or IP of the machine to manage. Required when provider is local"),
+  sshUser: z.string().optional().describe("[local only] SSH login user. Omitted = root"),
+  sshPort: z.number().int().optional().describe("[local only] SSH port. Omitted = 22"),
+  force: z.boolean().optional().describe("Overwrite a stack that already exists. Refused without it, because replacing a state backend orphans the state it points at"),
+})
+
+export const clawops_initDescription = "Register a stack and write ~/.clawops/config.json: the provider, the state backend, the\nregion, and an SSH key pair generated if one is not already there. Nothing is provisioned\nand nothing is charged; this only creates local configuration.\n\nUse when: any other clawops tool reports that there is no config, or the user wants to add\na second stack alongside the ones they have. This is the first call on a machine that has\nnever run clawops — a fresh container, a new laptop, a sandbox.\n\nAdding a stack is additive and safe: existing stacks are kept. Overwriting one needs\nforce: true, because changing a state backend orphans the Pulumi state it points at — the\ninfrastructure stays up and clawops can no longer see or destroy it.\n\nFor aws, gcp and azure, stateUrl can be omitted and clawops names a bucket from the\naccount it can see; that needs cloud credentials in the environment, so in a sandbox pass\nstateUrl explicitly. The local provider needs host instead, and no cloud account at all.\n\nDo NOT use when: the user wants to deploy — that is clawops_up, after this. Credentials\nare never passed here: clawops reads them from the environment (R6)."
+
+export const clawops_initAnnotations = {
+  title: "Initialise clawops Config",
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+  toolsets: ["cli"] as const,
+} as const
+
+export type InitInput = z.infer<typeof clawops_initSchema>
+
 // ── clawops_harden ──────────────────────────────────────────────────────────
 
 export const clawops_hardenSchema = z.object({
@@ -420,6 +446,7 @@ export const TOOLSETS: Record<Toolset, string[]> = {
     'clawops_config_unset',
     'clawops_config_validate',
     'clawops_gateway_restart',
+    'clawops_init',
     'clawops_harden',
     'clawops_task_status',
   ],

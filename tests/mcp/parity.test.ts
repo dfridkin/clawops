@@ -27,7 +27,7 @@ const NO_TOOL: Record<string, string> = {
   tunnel: 'A long-lived local process, not a request and a response.',
   bug: 'Opens a pre-filled GitHub issue in a browser.',
   // Tracked as gaps: see docs/limitations.md. Each needs a tool, not an excuse.
-  init: 'GAP (2.2): an agent cannot bootstrap a stack from zero.',
+  init: 'Covered by clawops_init.',
   ssh: 'GAP (2.2): no tool runs an arbitrary remote command.',
   secret: 'GAP (2.2): secret list and audit are read-only and safe to expose; set and rotate carry values (R6).',
   backup: 'GAP (2.2): no pre-upgrade safety step through MCP.',
