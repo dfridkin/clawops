@@ -1,5 +1,5 @@
 ---
-'@clawops/cli': minor
+'@clawops/cli': patch
 ---
 
 **`clawops` with no command, started over a pipe, serves MCP instead of printing help.** The
