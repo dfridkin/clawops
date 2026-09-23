@@ -166,6 +166,21 @@ To add the entry manually instead, paste this into your editor's MCP config:
 {
   "mcpServers": {
     "clawops": {
+      "command": "npx",
+      "args": ["-y", "@clawops/cli", "mcp", "serve", "--read-only"]
+    }
+  }
+}
+```
+
+That form needs nothing on `$PATH` and is what a directory or an installer will copy. If you
+would rather point at the binary you already have, use its absolute path — the output of
+`which clawops` — with the same arguments:
+
+```json
+{
+  "mcpServers": {
+    "clawops": {
       "command": "/path/to/clawops",
       "args": ["mcp", "serve", "--read-only"]
     }
@@ -173,7 +188,8 @@ To add the entry manually instead, paste this into your editor's MCP config:
 }
 ```
 
-Replace `/path/to/clawops` with the output of `which clawops`. Config file locations:
+Either way the arguments are the part that matters: `clawops` on its own prints help and exits,
+because it is a CLI first. `mcp serve` is what speaks the protocol. Config file locations:
 
 | App | Path |
 |---|---|
