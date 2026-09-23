@@ -100,11 +100,22 @@ export function getConfig(): ClawopsConfig | null {
   }
 }
 
-/** Like getConfig() but throws UsageError if the file is missing. */
+/**
+ * Like getConfig() but throws UsageError if the file is missing.
+ *
+ * The message names the file and says who can create it. `clawops init` is a terminal command
+ * and there is no tool for it, so an agent reading "run clawops init" was being told to do the
+ * one thing it cannot — which is what every MCP client sees on a machine that has never run
+ * clawops, and what an evaluator in a fresh sandbox sees from every tool they try.
+ */
 export function requireConfig(): ClawopsConfig {
   const cfg = getConfig()
   if (!cfg) {
-    throw new UsageError('No config found. Run `clawops init` first.')
+    throw new UsageError(
+      `No clawops config at ${getConfigPath()}. Create one by running \`clawops init\` in a ` +
+        'terminal — it is a CLI command, so an MCP client cannot run it for you. It asks for a ' +
+        'provider and a state backend, or takes them as flags with --non-interactive.',
+    )
   }
   return cfg
 }

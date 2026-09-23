@@ -39,7 +39,10 @@ const MODULE = { id: 'ssh', label: 'SSH hardening', defaultOn: true }
 /** An elicitation-capable server. `accept` is what a user clicking "yes" produces. */
 function serverThat(action: 'accept' | 'decline', confirmed = true): McpServer {
   return {
-    server: { elicitInput: vi.fn().mockResolvedValue({ action, content: { confirmed } }) },
+    server: {
+      getClientCapabilities: () => ({ elicitation: {} }),
+      elicitInput: vi.fn().mockResolvedValue({ action, content: { confirmed } }),
+    },
   } as unknown as McpServer
 }
 

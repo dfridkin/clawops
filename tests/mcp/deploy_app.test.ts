@@ -59,6 +59,7 @@ function makeServer(
 ): McpServer {
   return {
     server: {
+      getClientCapabilities: () => ({ elicitation: {} }),
       elicitInput: vi.fn().mockResolvedValue(elicitResult),
       notification: vi.fn().mockResolvedValue(undefined),
     },
@@ -127,7 +128,7 @@ describe('handleWorkflowDeployApp()', () => {
       { provider: 'aws', stackName: 'default', instanceType: 'small' },
       server,
     )
-    expect((result.content[0] as { type: 'text'; text: string }).text).toMatch(/cancelled/)
+    expect((result.content[0] as { type: 'text'; text: string }).text).toMatch(/cancelled/i)
     expect(mockApplyPlan).not.toHaveBeenCalled()
   })
 
@@ -138,7 +139,7 @@ describe('handleWorkflowDeployApp()', () => {
       { provider: 'aws', stackName: 'default', instanceType: 'small' },
       server,
     )
-    expect((result.content[0] as { type: 'text'; text: string }).text).toMatch(/cancelled/)
+    expect((result.content[0] as { type: 'text'; text: string }).text).toMatch(/cancelled/i)
   })
 
   it('calls applyPlan after confirmation', async () => {

@@ -9,20 +9,18 @@ import { UsageError } from '../../../errors/index.js'
 import { makeProgressEmitter, startTask, updateTask } from '../../progress.js'
 import { okText, errText } from '../_conn.js'
 import { trimForMcp } from '../_trim.js'
+import { confirmDestructive } from '../_confirm.js'
 
 export async function handleUp(input: UpInput, server: McpServer): Promise<CallToolResult> {
   // R19: elicit unless dryRun
   if (!input.dryRun) {
-    const elicit = await server.server.elicitInput({
+    const confirmation = await confirmDestructive(server, {
       message: `Deploy stack "${input.stackName ?? 'default'}" (provider: ${input.provider ?? 'from config'}, instance: ${input.instanceType})? This will provision cloud resources.`,
-      requestedSchema: {
-        type: 'object' as const,
-        properties: { confirmed: { type: 'boolean' as const, title: 'Confirm deployment' } },
-        required: ['confirmed'],
-      },
+      title: 'Confirm deployment',
+      what: 'provisioning cloud resources',
     })
-    if (elicit.action !== 'accept' || !elicit.content?.['confirmed']) {
-      return okText('Deployment cancelled.')
+    if (!confirmation.confirmed) {
+      return okText(confirmation.reason)
     }
   }
 

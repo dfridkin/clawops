@@ -9,19 +9,17 @@ import { resolveConn, okText, errText } from '../_conn.js'
 import { IMAGE_INSPECT_CMD, imageForRestart } from '../../../openclaw/run-flags.js'
 import { gatewayRunCommand, STATE_DIR_HOST_LINUX } from '../../../openclaw/runtime.js'
 import { execPrivileged } from '../../../transport/privileged.js'
+import { confirmDestructive } from '../_confirm.js'
 
 export async function handleGatewayRestart(input: GatewayRestartInput, server: McpServer): Promise<CallToolResult> {
   // R19: always elicit
-  const elicit = await server.server.elicitInput({
+  const confirmation = await confirmDestructive(server, {
     message: `Restart the OpenClaw gateway on stack "${input.stackName ?? 'default'}"? This will briefly interrupt connections.`,
-    requestedSchema: {
-      type: 'object' as const,
-      properties: { confirmed: { type: 'boolean' as const, title: 'Confirm restart' } },
-      required: ['confirmed'],
-    },
+    title: 'Confirm restart',
+    what: 'restarting the gateway',
   })
-  if (elicit.action !== 'accept' || !elicit.content?.['confirmed']) {
-    return okText('Gateway restart cancelled.')
+  if (!confirmation.confirmed) {
+    return okText(confirmation.reason)
   }
 
   const ctx = buildContext({ stack: input.stackName })

@@ -17,6 +17,7 @@ import { resolveConn, okText, errText } from '../_conn.js'
 import {
   readRemoteConfig, atomicWriteConfig, restartGateway as restartGatewayShared,
 } from '../../../plan/remote-config.js'
+import { confirmDestructive } from '../_confirm.js'
 
 
 export async function handleConfigGet(input: ConfigGetInput, _server: McpServer): Promise<CallToolResult> {
@@ -40,16 +41,13 @@ export async function handleConfigGet(input: ConfigGetInput, _server: McpServer)
 }
 
 export async function handleConfigSet(input: ConfigSetInput, server: McpServer): Promise<CallToolResult> {
-  const elicit = await server.server.elicitInput({
+  const confirmation = await confirmDestructive(server, {
     message: `Set ${input.key} = ${input.value} on stack "${input.stackName ?? 'default'}"?`,
-    requestedSchema: {
-      type: 'object' as const,
-      properties: { confirmed: { type: 'boolean' as const, title: 'Confirm config change' } },
-      required: ['confirmed'],
-    },
+    title: 'Confirm config change',
+    what: 'changing gateway configuration',
   })
-  if (elicit.action !== 'accept' || !elicit.content?.['confirmed']) {
-    return okText('Config change cancelled.')
+  if (!confirmation.confirmed) {
+    return okText(confirmation.reason)
   }
 
   const ac = new AbortController()
@@ -91,16 +89,13 @@ export async function handleConfigSet(input: ConfigSetInput, server: McpServer):
 }
 
 export async function handleConfigUnset(input: ConfigUnsetInput, server: McpServer): Promise<CallToolResult> {
-  const elicit = await server.server.elicitInput({
+  const confirmation = await confirmDestructive(server, {
     message: `Remove config key "${input.key}" on stack "${input.stackName ?? 'default'}"?`,
-    requestedSchema: {
-      type: 'object' as const,
-      properties: { confirmed: { type: 'boolean' as const, title: 'Confirm key removal' } },
-      required: ['confirmed'],
-    },
+    title: 'Confirm key removal',
+    what: 'changing gateway configuration',
   })
-  if (elicit.action !== 'accept' || !elicit.content?.['confirmed']) {
-    return okText('Config unset cancelled.')
+  if (!confirmation.confirmed) {
+    return okText(confirmation.reason)
   }
 
   const ac = new AbortController()
