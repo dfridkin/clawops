@@ -10,6 +10,7 @@ import type { HardenInput } from '../_generated.js'
 import { buildContext } from '../../../cli/context.js'
 import { okText, errText } from '../_conn.js'
 import { trimForMcp } from '../_trim.js'
+import { confirmDestructive } from '../_confirm.js'
 
 export async function handleHarden(input: HardenInput, server: McpServer): Promise<CallToolResult> {
   if (input.tailscale && input.tailscaleRevert) {
@@ -20,7 +21,12 @@ export async function handleHarden(input: HardenInput, server: McpServer): Promi
 
   const { getConfig } = await import('../../../config/store.js')
   const config = getConfig()
-  if (!config) return errText('No clawops config found. The user needs to run `clawops init` first.')
+  if (!config) {
+    return errText(
+      'No clawops config on this machine. Ask the user to run `clawops init` in a terminal — it ' +
+        'is a CLI command, so no tool can run it. Until then every clawops tool will say this.',
+    )
+  }
 
   const ctx = buildContext({ stack: input.stackName })
 
@@ -31,16 +37,13 @@ export async function handleHarden(input: HardenInput, server: McpServer): Promi
       : input.tailscale
         ? `Harden "${ctx.stackName}" and join it to your tailnet? clawops will use the tailnet address afterwards.`
         : `Apply hardening modules to "${ctx.stackName}"? This changes the running host.`
-    const elicit = await server.server.elicitInput({
+    const confirmation = await confirmDestructive(server, {
       message: what,
-      requestedSchema: {
-        type: 'object' as const,
-        properties: { confirmed: { type: 'boolean' as const, title: 'Confirm' } },
-        required: ['confirmed'],
-      },
+      title: 'Confirm',
+      what: 'changing a running host',
     })
-    if (elicit.action !== 'accept' || !elicit.content?.['confirmed']) {
-      return okText('Hardening cancelled. Nothing was changed.')
+    if (!confirmation.confirmed) {
+      return okText(confirmation.reason)
     }
   }
 

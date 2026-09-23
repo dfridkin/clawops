@@ -38,6 +38,7 @@ function serveConfig(session: FakeSshSession, json: string = FAKE_CONFIG_JSON): 
 function makeServer(action: 'accept' | 'decline' = 'accept'): McpServer {
   return {
     server: {
+      getClientCapabilities: () => ({ elicitation: {} }),
       elicitInput: vi.fn().mockResolvedValue({ action, content: { confirmed: true } }),
       notification: vi.fn().mockResolvedValue(undefined),
     },

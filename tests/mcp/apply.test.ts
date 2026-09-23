@@ -64,6 +64,7 @@ function makeServer(
 ): McpServer {
   return {
     server: {
+      getClientCapabilities: () => ({ elicitation: {} }),
       elicitInput: vi.fn().mockResolvedValue(elicitResult),
       notification: vi.fn().mockResolvedValue(undefined),
     },
@@ -121,14 +122,14 @@ describe('handleApply()', () => {
     const { handleApply } = await import('../../src/mcp/tools/cli/apply.js')
     const result = await handleApply({ planPath: '/tmp/plan.json', yes: false }, server)
     expect(result.isError).toBeFalsy()
-    expect((result.content[0] as { type: 'text'; text: string }).text).toBe('Apply cancelled.')
+    expect((result.content[0] as { type: 'text'; text: string }).text).toMatch(/Cancelled.*Nothing was changed/)
   })
 
   it('returns Apply cancelled when elicitation action is not accept', async () => {
     const server = makeServer({ action: 'decline', content: undefined })
     const { handleApply } = await import('../../src/mcp/tools/cli/apply.js')
     const result = await handleApply({ planPath: '/tmp/plan.json', yes: false }, server)
-    expect((result.content[0] as { type: 'text'; text: string }).text).toBe('Apply cancelled.')
+    expect((result.content[0] as { type: 'text'; text: string }).text).toMatch(/Cancelled.*Nothing was changed/)
   })
 
   it('skips elicitation when yes=true', async () => {

@@ -34,6 +34,7 @@ vi.mock('../../src/mcp/tools/_trim.js', () => ({
 function makeServer(action: 'accept' | 'decline' = 'accept', confirmed = true): McpServer {
   return {
     server: {
+      getClientCapabilities: () => ({ elicitation: {} }),
       elicitInput: vi.fn().mockResolvedValue({ action, content: { confirmed } }),
       notification: vi.fn().mockResolvedValue(undefined),
     },

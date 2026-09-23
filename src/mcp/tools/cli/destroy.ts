@@ -8,20 +8,18 @@ import { buildContext } from '../../../cli/context.js'
 import { makeProgressEmitter, startTask, updateTask } from '../../progress.js'
 import { okText, errText } from '../_conn.js'
 import { trimForMcp } from '../_trim.js'
+import { confirmDestructive } from '../_confirm.js'
 
 export async function handleDestroy(input: DestroyInput, server: McpServer): Promise<CallToolResult> {
   // R19: elicit unless yes flag
   if (!input.yes) {
-    const elicit = await server.server.elicitInput({
+    const confirmation = await confirmDestructive(server, {
       message: `DESTROY stack "${input.stackName}"? This permanently deletes all provisioned resources and cannot be undone.`,
-      requestedSchema: {
-        type: 'object' as const,
-        properties: { confirmed: { type: 'boolean' as const, title: 'Confirm destruction (irreversible)' } },
-        required: ['confirmed'],
-      },
+      title: 'Confirm destruction (irreversible)',
+      what: 'destroying a stack',
     })
-    if (elicit.action !== 'accept' || !elicit.content?.['confirmed']) {
-      return okText('Destruction cancelled.')
+    if (!confirmation.confirmed) {
+      return okText(confirmation.reason)
     }
   }
 

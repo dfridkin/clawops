@@ -863,6 +863,10 @@ const MUTATIONS = [
     file: 'scripts/gen-schemas.ts', from: '  if (def.description) {\n    base += `.describe(${JSON.stringify(def.description)})`\n  }\n', to: '', test: 'tests/mcp/catalog.test.ts' },
   { name: 'the spec stops requiring a description on every parameter',
     file: 'scripts/lib/validate-mcp-spec.ts', from: '      if (!input.description || input.description.trim().length === 0) {', to: '      if (false) {', test: 'tests/scripts/validate-mcp-spec.test.ts' },
+  { name: 'a client with no elicitation capability is asked anyway, and the SDK throws at the caller',
+    file: 'src/mcp/tools/_confirm.ts', from: '  if (!capabilities?.elicitation) {', to: '  if (false) {', test: 'tests/mcp/confirm.test.ts' },
+  { name: 'a declined confirmation reads as confirmed',
+    file: 'src/mcp/tools/_confirm.ts', from: "  if (elicit.action !== 'accept' || !elicit.content?.['confirmed']) {", to: '  if (false) {', test: 'tests/mcp/confirm.test.ts' },
 ]
 
 let survived = []

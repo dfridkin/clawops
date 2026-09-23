@@ -10,6 +10,7 @@ import { okText } from '../_conn.js'
 import { makeProgressEmitter } from '../../progress.js'
 import { generatePlan } from '../../../plan/generate.js'
 import { applyPlan } from '../../../plan/apply.js'
+import { confirmDestructive } from '../_confirm.js'
 
 export async function handleWorkflowDeployApp(
   input: WorkflowDeployAppInput,
@@ -55,19 +56,15 @@ export async function handleWorkflowDeployApp(
   const diffLine = plan.diff
     ? `${plan.diff.create.length} to create, ${plan.diff.update.length} to update, ${plan.diff.delete.length} to delete`
     : '? changes'
-  const elicit = await server.server.elicitInput({
-    message:
-      `Deploy OpenClaw on ${provider} (stack: "${input.stackName}", instance: ${input.instanceType}` +
+  const confirmation = await confirmDestructive(server, {
+    message: `Deploy OpenClaw on ${provider} (stack: "${input.stackName}", instance: ${input.instanceType}` +
       `${input.region ? `, region: ${input.region}` : ''})?\n` +
       `Changes: ${diffLine}. This will provision cloud resources and may incur costs.`,
-    requestedSchema: {
-      type: 'object' as const,
-      properties: { confirmed: { type: 'boolean' as const, title: 'Confirm end-to-end deployment' } },
-      required: ['confirmed'],
-    },
+    title: 'Confirm end-to-end deployment',
+    what: 'provisioning cloud resources',
   })
-  if (elicit.action !== 'accept' || !elicit.content?.['confirmed']) {
-    return okText('Deployment workflow cancelled.')
+  if (!confirmation.confirmed) {
+    return okText(confirmation.reason)
   }
 
   // Step 3: apply plan

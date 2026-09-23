@@ -11,6 +11,7 @@ import { makeProgressEmitter, startTask, updateTask } from '../../progress.js'
 import { validatePlan } from '../../../plan/validate.js'
 import { applyPlan } from '../../../plan/apply.js'
 import type { DeployPlan } from '../../../plan/generate.js'
+import { confirmDestructive } from '../_confirm.js'
 
 export async function handleApply(input: ApplyInput, server: McpServer): Promise<CallToolResult> {
   // Read and parse plan file
@@ -36,18 +37,14 @@ export async function handleApply(input: ApplyInput, server: McpServer): Promise
     const diffLine = plan.diff
       ? `${plan.diff.create.length} to create, ${plan.diff.update.length} to update, ${plan.diff.delete.length} to delete`
       : 'diff unavailable'
-    const elicit = await server.server.elicitInput({
-      message:
-        `Apply plan for stack "${plan.spec.stackName}" (${plan.spec.provider})?\n` +
+    const confirmation = await confirmDestructive(server, {
+      message: `Apply plan for stack "${plan.spec.stackName}" (${plan.spec.provider})?\n` +
         `Changes: ${diffLine}.\nThis will provision cloud resources and may incur costs.`,
-      requestedSchema: {
-        type: 'object' as const,
-        properties: { confirmed: { type: 'boolean' as const, title: 'Confirm plan apply' } },
-        required: ['confirmed'],
-      },
+      title: 'Confirm plan apply',
+      what: 'applying a plan',
     })
-    if (elicit.action !== 'accept' || !elicit.content?.['confirmed']) {
-      return okText('Apply cancelled.')
+    if (!confirmation.confirmed) {
+      return okText(confirmation.reason)
     }
   }
 
