@@ -61,8 +61,10 @@ describe('the release pipeline keeps it in step', () => {
   it('registers the committed version, not the one changesets is preparing', () => {
     const yml = readFileSync(resolve(root, '.github/workflows/release.yml'), 'utf8')
     const step = yml.slice(yml.indexOf('Publish to MCP Registry'))
-    expect(step).toContain('git checkout HEAD -- package.json server.json')
-    expect(step.indexOf('git checkout HEAD -- package.json server.json'))
+    // Not HEAD: changesets commits the bump in this job, so HEAD is the version commit.
+    expect(step).toContain('git checkout "$GITHUB_SHA" -- package.json server.json')
+    expect(step).not.toMatch(/git checkout HEAD -- package\.json/)
+    expect(step.indexOf('git checkout "$GITHUB_SHA" -- package.json server.json'))
       .toBeLessThan(step.indexOf("require('./package.json').version"))
   })
 
