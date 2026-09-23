@@ -849,6 +849,12 @@ const MUTATIONS = [
     file: 'src/mcp/tools/cli/plan.ts', from: '      network,\n', to: '      network: { allowedSshCidrs: [], allowedGatewayCidrs: [] },\n', test: 'tests/mcp/plan.test.ts' },
   { name: 'the audit log records a refused tool call as a success (R21)',
     file: 'src/mcp/audit.ts', from: "        result: result.isError === true ? 'error' : 'ok',", to: "        result: 'ok',", test: 'tests/mcp/audit.test.ts' },
+  { name: 'a bare invocation over a pipe prints help instead of serving MCP',
+    file: 'src/cli/default-command.ts', from: '  if (argv.length === 0 && !stdinIsTty) return [\'mcp\', \'serve\']', to: '  if (false) return [\'mcp\', \'serve\']', test: 'tests/cli/default-command.test.ts' },
+  { name: 'a bare invocation at a terminal serves MCP instead of printing help',
+    file: 'src/cli/default-command.ts', from: '  if (argv.length === 0 && !stdinIsTty) return [\'mcp\', \'serve\']', to: '  if (argv.length === 0) return [\'mcp\', \'serve\']', test: 'tests/cli/default-command.test.ts' },
+  { name: 'a flag with no command is rescued as an MCP server',
+    file: 'src/cli/default-command.ts', from: '  if (argv.length === 0 && !stdinIsTty) return [\'mcp\', \'serve\']', to: '  if (!stdinIsTty) return [\'mcp\', \'serve\']', test: 'tests/cli/default-command.test.ts' },
 ]
 
 let survived = []

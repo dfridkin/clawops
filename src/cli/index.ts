@@ -25,6 +25,7 @@ import helpCmd from './commands/help.js'
 import bugCmd from './commands/bug.js'
 import hardenCmd from './commands/harden.js'
 import { handleError } from './error-handler.js'
+import { resolveArgv } from './default-command.js'
 
 // Replaced at build time by tsup's `define`; falls back for the tsx/dev path where
 // no define is applied. Previously this was a hardcoded '0.2.0', so `clawops --help`
@@ -77,8 +78,18 @@ const main = defineCommand({
   },
 })
 
+const argv = resolveArgv(process.argv.slice(2), Boolean(process.stdin.isTTY))
+if (argv.length === 2 && argv[0] === 'mcp' && process.argv.length === 2) {
+  // Stderr, never stdout: stdout is the protocol (R15). Says what was assumed and how to say it
+  // explicitly, so this is never a silent surprise in a log someone is reading at 2am.
+  process.stderr.write(
+    '[clawops] no command given and stdin is not a terminal, so starting `clawops mcp serve`. ' +
+      'Pass `mcp serve` explicitly to make this deliberate, or run clawops from a terminal for help.\n',
+  )
+}
+
 try {
-  await runMain(main)
+  await runMain(main, { rawArgs: argv })
 } catch (err) {
   handleError(err)
 }
