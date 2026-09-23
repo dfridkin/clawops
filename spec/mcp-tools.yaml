@@ -136,8 +136,8 @@ tools:
       idempotentHint: true
       openWorldHint: true
     input:
-      stackName: { type: string, optional: true }
-      tailLines: { type: integer, optional: true, default: 100, max: 1000 }
+      stackName: { type: string, optional: true, description: "Which stack's gateway to read. Omitted = the default stack in ~/.clawops/config.json" }
+      tailLines: { type: integer, optional: true, default: 100, max: 1000, description: "How many of the most recent lines to return. Keep it small; output is trimmed to 8KB regardless" }
       sinceMin: { type: integer, optional: true, description: "Lines since N minutes ago" }
     output:
       lines: { type: array, items: { type: string }, description: "Trimmed log lines (R14: hard cap 8KB)" }
@@ -227,7 +227,7 @@ tools:
       idempotentHint: true
       openWorldHint: true
     input:
-      stackName: { type: string, optional: true }
+      stackName: { type: string, optional: true, description: "Which stack's gateway config to read. Omitted = the default stack in ~/.clawops/config.json" }
       key: { type: string, optional: true, description: "Dot-path config key, e.g., gateway.auth.mode. Omit to dump the full config." }
     output:
       value: { type: string, description: "Stringified value; complex objects are JSON-encoded" }
@@ -249,7 +249,7 @@ tools:
       idempotentHint: true
       openWorldHint: true
     input:
-      stackName: { type: string, optional: true }
+      stackName: { type: string, optional: true, description: "Which stack's agents to list. Omitted = the default stack in ~/.clawops/config.json" }
     output:
       agents:
         type: array
@@ -286,13 +286,13 @@ tools:
       idempotentHint: true
       openWorldHint: true
     input:
-      stackName: { type: string, optional: true }
+      stackName: { type: string, optional: true, description: "Name for the stack to provision, and the name every later command refers to it by. Omitted = the default stack in ~/.clawops/config.json" }
       provider:
         type: enum
         values: [aws, gcp, azure, local]
         optional: true
         description: Defaults to provider configured for this stack
-      region: { type: string, optional: true }
+      region: { type: string, optional: true, description: "Cloud region to deploy into, in the provider's own spelling (us-east-1, us-central1, eastus). Omitted = the region recorded for the stack" }
       instanceType:
         type: string
         optional: true
@@ -318,10 +318,10 @@ tools:
         optional: true
         description: Which interface the gateway binds. 'all' serves plaintext HTTP.
       openclawVersion: { type: string, optional: true, description: "semver or 'stable'/'dev'" }
-      dryRun: { type: boolean, optional: true, default: false }
+      dryRun: { type: boolean, optional: true, default: false, description: "Show what would be created and change nothing. Use this first when the user has not yet approved a spend" }
     output:
       taskId: { type: string, description: "For >60s ops; poll clawops_task_status" }
-      stackName: { type: string }
+      stackName: { type: string, description: "Name for the stack to provision, and the name every later command refers to it by. Omitted = the default stack in ~/.clawops/config.json" }
       gatewayUrl: { type: string, format: uri }
       resourceCount: { type: integer }
 
@@ -346,7 +346,7 @@ tools:
       idempotentHint: true
       openWorldHint: true
     input:
-      stackName: { type: string }
+      stackName: { type: string, description: "The stack to destroy. Required, and worth repeating back to the user before calling: this deletes every resource it provisioned" }
       yes: { type: boolean, optional: true, default: false, description: "Skip elicitation; CI/scripted use only" }
     output:
       taskId: { type: string }
@@ -371,7 +371,7 @@ tools:
       openWorldHint: true
     input:
       planPath: { type: string, description: "Absolute path to plan JSON (R7)" }
-      yes: { type: boolean, optional: true, default: false }
+      yes: { type: boolean, optional: true, default: false, description: "Skip the confirmation and apply immediately. Only when the user has already approved this specific plan" }
     output:
       taskId: { type: string }
       summary: { type: string, description: "Trimmed; full output as resource (R14)" }
@@ -394,9 +394,9 @@ tools:
       idempotentHint: true
       openWorldHint: true
     input:
-      stackName: { type: string, optional: true }
-      provider: { type: enum, values: [aws, gcp, azure, local], optional: true }
-      region: { type: string, optional: true }
+      stackName: { type: string, optional: true, description: "Which stack the plan is for. Omitted = the default stack in ~/.clawops/config.json" }
+      provider: { type: enum, values: [aws, gcp, azure, local], optional: true, description: "Cloud to plan against. Omitted = the provider recorded for the stack. 'local' has no plan/apply path and is refused" }
+      region: { type: string, optional: true, description: "Cloud region, in the provider's own spelling (us-east-1, us-central1, eastus). Omitted = the region recorded for the stack" }
       instanceType: { type: string, optional: true, description: "A clawops alias (micro|small|medium|large|gpu) or a machine type the cloud names itself, e.g. t3.small" }
       openclawVersion: { type: string, optional: true, description: "semver, or 'stable'/'dev'" }
       sshCidr: { type: string, optional: true, description: "CIDR(s) allowed to reach SSH, comma-separated, or 'auto' for this machine. Omitted = none, and nothing will be able to connect" }
@@ -428,10 +428,10 @@ tools:
       idempotentHint: true
       openWorldHint: true
     input:
-      stackName: { type: string, optional: true }
-      key: { type: string }
+      stackName: { type: string, optional: true, description: "Which stack's gateway config to write. Omitted = the default stack in ~/.clawops/config.json" }
+      key: { type: string, description: "Dotted path into the gateway config, e.g. models.provider or channels.slack.enabled" }
       value: { type: string, description: "Stringified; JSON for complex values" }
-      restart: { type: boolean, optional: true, default: false }
+      restart: { type: boolean, optional: true, default: false, description: "Restart the gateway so the change takes effect. Without it the value is written and the running gateway keeps the old one" }
     output:
       message: { type: string, description: "Confirmation of the change applied" }
 
@@ -453,9 +453,9 @@ tools:
       idempotentHint: true
       openWorldHint: true
     input:
-      stackName: { type: string, optional: true }
+      stackName: { type: string, optional: true, description: "Which stack's gateway config to write. Omitted = the default stack in ~/.clawops/config.json" }
       key: { type: string, description: "Dot-path config key to remove" }
-      restart: { type: boolean, optional: true, default: false }
+      restart: { type: boolean, optional: true, default: false, description: "Restart the gateway so the removal takes effect. Without it the key is removed and the running gateway keeps the old value" }
     output:
       message: { type: string, description: "Confirmation of the key removed" }
 
@@ -477,7 +477,7 @@ tools:
       idempotentHint: true
       openWorldHint: true
     input:
-      stackName: { type: string, optional: true }
+      stackName: { type: string, optional: true, description: "Which stack's deployed config to validate. Omitted = the default stack in ~/.clawops/config.json" }
     output:
       valid: { type: boolean }
       issues: { type: array, items: { type: string } }
@@ -499,7 +499,7 @@ tools:
       idempotentHint: true
       openWorldHint: true
     input:
-      stackName: { type: string, optional: true }
+      stackName: { type: string, optional: true, description: "Which stack's gateway to restart. Omitted = the default stack in ~/.clawops/config.json" }
     output:
       restartedAt: { type: string, format: date-time }
       previousUptimeSec: { type: integer }
@@ -543,7 +543,7 @@ tools:
       idempotentHint: true
       openWorldHint: true
     input:
-      stackName: { type: string, optional: true }
+      stackName: { type: string, optional: true, description: "Which stack to harden. Omitted = the default stack in ~/.clawops/config.json" }
       options: { type: string, optional: true, description: "Comma-separated module IDs; default is every defaultOn module for the provider" }
       dryRun: { type: boolean, optional: true, default: false, description: "Report the current state, change nothing" }
       tailscale: { type: boolean, optional: true, default: false, description: "Join the tailnet, verify this machine reaches the host there, then use that address" }
@@ -577,14 +577,14 @@ tools:
       idempotentHint: true
       openWorldHint: true
     input:
-      provider: { type: enum, values: [aws, gcp, azure, local] }
-      region: { type: string, optional: true }
-      stackName: { type: string, optional: true, default: "default" }
-      instanceType: { type: enum, values: [micro, small, medium, large, gpu], optional: true, default: small }
+      provider: { type: enum, values: [aws, gcp, azure, local], description: "Cloud to deploy to. Omitted = the default provider in ~/.clawops/config.json" }
+      region: { type: string, optional: true, description: "Cloud region, in the provider's own spelling (us-east-1, us-central1, eastus). Omitted = the provider's default" }
+      stackName: { type: string, optional: true, default: "default", description: "Name for the new stack. Omitted = the default stack name in ~/.clawops/config.json" }
+      instanceType: { type: enum, values: [micro, small, medium, large, gpu], optional: true, default: small, description: "Machine size: a clawops alias (micro|small|medium|large|gpu) or a type the cloud names itself, e.g. t3.small" }
     output:
       taskId: { type: string }
       gatewayUrl: { type: string, format: uri }
-      stackName: { type: string }
+      stackName: { type: string, description: "Name for the new stack. Omitted = the default stack name in ~/.clawops/config.json" }
 
   - name: clawops_workflow_recover
     toolset: [workflow, read]
@@ -605,7 +605,7 @@ tools:
       idempotentHint: true
       openWorldHint: true
     input:
-      stackName: { type: string, optional: true }
+      stackName: { type: string, optional: true, description: "Which stack to diagnose. Omitted = the default stack in ~/.clawops/config.json" }
     output:
       report:
         type: object
@@ -633,7 +633,7 @@ tools:
       idempotentHint: true
       openWorldHint: false
     input:
-      taskId: { type: string }
+      taskId: { type: string, description: "The taskId returned by a long-running tool such as clawops_up, clawops_apply or clawops_destroy" }
     output:
       status: { type: enum, values: [working, input_required, completed, failed, cancelled] }
       progress: { type: number, minimum: 0, maximum: 1 }

@@ -859,6 +859,10 @@ const MUTATIONS = [
     file: 'src/mcp/tools/registry.ts', from: '        description,\n', to: '', test: 'tests/mcp/catalog.test.ts' },
   { name: 'the generator stops emitting tool descriptions',
     file: 'scripts/gen-schemas.ts', from: '`export const ${tool.name}Description = ${JSON.stringify(tool.description.trim())}`,', to: '`export const ${tool.name}Description = ""`,', test: 'tests/mcp/catalog.test.ts' },
+  { name: 'the generator drops parameter descriptions',
+    file: 'scripts/gen-schemas.ts', from: '  if (def.description) {\n    base += `.describe(${JSON.stringify(def.description)})`\n  }\n', to: '', test: 'tests/mcp/catalog.test.ts' },
+  { name: 'the spec stops requiring a description on every parameter',
+    file: 'scripts/lib/validate-mcp-spec.ts', from: '      if (!input.description || input.description.trim().length === 0) {', to: '      if (false) {', test: 'tests/scripts/validate-mcp-spec.test.ts' },
 ]
 
 let survived = []

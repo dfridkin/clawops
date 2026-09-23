@@ -238,6 +238,19 @@ function zodField(key: string, def: ToolInput): string {
     base += '.optional()'
   }
 
+  /*
+   * The parameter's own description, which is what a model reads when it decides what to pass.
+   * These were written in the spec and dropped here, so every inputSchema reached clients as
+   * bare types: `privateOnly: boolean`, with nothing saying that it closes public access and
+   * needs a verified tailnet address. Glama scores parameter documentation separately from the
+   * tool description, and that is the row it marked down.
+   *
+   * .describe() lands in the JSON Schema as `description`, which is the field clients render.
+   */
+  if (def.description) {
+    base += `.describe(${JSON.stringify(def.description)})`
+  }
+
   return `  ${key}: ${base},`
 }
 

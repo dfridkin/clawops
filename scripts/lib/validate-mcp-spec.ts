@@ -101,6 +101,17 @@ export function validateMcpSpec(spec: McpSpec): void {
     if (!tool.description?.includes('Use when')) {
       problems.push(`${at}: description must say "Use when:" (R3)`)
     }
+
+    /*
+     * And one for every parameter, for the same reason one level down: a model choosing what to
+     * pass reads these. 26 parameters had none and 29 more had one that never left the spec, so
+     * `privateOnly: boolean` reached clients with nothing saying it closes public access.
+     */
+    for (const [name, input] of Object.entries(tool.input ?? {})) {
+      if (!input.description || input.description.trim().length === 0) {
+        problems.push(`${at}: input "${name}" needs a description — a model reads it to decide what to pass`)
+      }
+    }
   }
 
   // R1 — the catalog is capped so an agent can hold it in context.
