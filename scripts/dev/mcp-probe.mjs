@@ -23,7 +23,7 @@
  */
 
 import { spawn } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -123,7 +123,13 @@ try {
   const list = await send('tools/list', {})
   const tools = list.result?.tools ?? []
   const names = tools.map((t) => t.name)
-  check(`tools/list returns ${names.length} tools`, names.length === 19, names.length !== 19 ? names.join(',') : '')
+  /*
+   * Counted from the spec rather than written here. A number in this file is one more place to
+   * remember, and it went stale the first time a tool was added.
+   */
+  const declared = (readFileSync('spec/mcp-tools.yaml', 'utf8').match(/^ {2}- name: clawops_/gm) ?? []).length
+  check(`tools/list returns every declared tool (${names.length}/${declared})`, names.length === declared,
+    names.length !== declared ? names.join(',') : '')
   check('clawops_harden is served', names.includes('clawops_harden'))
 
   /*

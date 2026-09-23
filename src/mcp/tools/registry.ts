@@ -19,6 +19,7 @@ import {
   clawops_applySchema,           clawops_applyAnnotations, clawops_applyDescription,
   clawops_planSchema,            clawops_planAnnotations, clawops_planDescription,
   clawops_hardenSchema,          clawops_hardenAnnotations, clawops_hardenDescription,
+  clawops_initSchema,            clawops_initAnnotations, clawops_initDescription,
   clawops_config_setSchema,      clawops_config_setAnnotations, clawops_config_setDescription,
   clawops_config_unsetSchema,    clawops_config_unsetAnnotations, clawops_config_unsetDescription,
   clawops_config_validateSchema, clawops_config_validateAnnotations, clawops_config_validateDescription,
@@ -28,7 +29,7 @@ import {
   clawops_task_statusSchema,     clawops_task_statusAnnotations, clawops_task_statusDescription,
   type StatusInput, type LogsTailInput, type StacksListInput,
   type DoctorInput, type ConfigGetInput, type AgentsListInput, type UpInput,
-  type DestroyInput, type ApplyInput, type PlanInput, type HardenInput,
+  type DestroyInput, type ApplyInput, type PlanInput, type HardenInput, type InitInput,
   type ConfigSetInput, type ConfigUnsetInput, type ConfigValidateInput,
   type GatewayRestartInput,
   type WorkflowDeployAppInput, type WorkflowRecoverInput, type TaskStatusInput,
@@ -49,6 +50,7 @@ import { handleUp } from './cli/up.js'
 import { handleDestroy } from './cli/destroy.js'
 import { handlePlan } from './cli/plan.js'
 import { handleHarden } from './cli/harden.js'
+import { handleInit } from './cli/init.js'
 import { handleApply } from './cli/apply.js'
 import { handleTaskStatus } from './cli/task.js'
 import { handleMonitor } from './cli/monitor.js'
@@ -93,6 +95,7 @@ const TOOL_REGISTRY: Record<string, ToolEntry> = {
   clawops_destroy:          makeEntry<DestroyInput>(clawops_destroySchema, clawops_destroyAnnotations, handleDestroy, clawops_destroyDescription),
   clawops_apply:            makeEntry<ApplyInput>(clawops_applySchema, clawops_applyAnnotations, handleApply, clawops_applyDescription),
   clawops_plan:             makeEntry<PlanInput>(clawops_planSchema, clawops_planAnnotations, handlePlan, clawops_planDescription),
+  clawops_init:             makeEntry<InitInput>(clawops_initSchema, clawops_initAnnotations, handleInit, clawops_initDescription),
   clawops_harden:           makeEntry<HardenInput>(clawops_hardenSchema, clawops_hardenAnnotations, handleHarden, clawops_hardenDescription),
   clawops_config_set:       makeEntry<ConfigSetInput>(clawops_config_setSchema, clawops_config_setAnnotations, handleConfigSet, clawops_config_setDescription),
   clawops_config_unset:     makeEntry<ConfigUnsetInput>(clawops_config_unsetSchema, clawops_config_unsetAnnotations, handleConfigUnset, clawops_config_unsetDescription),

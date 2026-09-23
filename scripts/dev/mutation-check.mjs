@@ -400,9 +400,9 @@ const MUTATIONS = [
     file: 'src/plan/generate.ts', from: '    if (seen.has(`${op}${urn}`)) continue\n    seen.add(`${op}${urn}`)', to: '    if (seen.has(urn)) continue\n    seen.add(urn)', test: 'tests/plan/generate.test.ts' },
 
   { name: 'init generates a PKCS#8 key ssh2 cannot use again',
-    file: 'src/cli/commands/init.ts', from: "['-t', 'ed25519', '-f', keyPath, '-N', '', '-C', 'clawops', '-q']", to: "['-t', 'rsa', '-m', 'PKCS8', '-f', keyPath, '-N', '', '-C', 'clawops', '-q']", test: 'tests/cli/init.test.ts' },
+    file: 'src/config/init.ts', from: "['-t', 'ed25519', '-f', keyPath, '-N', '', '-C', 'clawops', '-q']", to: "['-t', 'rsa', '-m', 'PKCS8', '-f', keyPath, '-N', '', '-C', 'clawops', '-q']", test: 'tests/cli/init.test.ts' },
   { name: 'a failed ssh-keygen is ignored and init reports success',
-    file: 'src/cli/commands/init.ts', from: '      if (gen.error || gen.status !== 0) {', to: '      if (false) {', test: 'tests/cli/init.test.ts' },
+    file: 'src/config/init.ts', from: '    if (gen.error || gen.status !== 0) {', to: '    if (false) {', test: 'tests/cli/init.test.ts' },
   // Redirected, not unset. Unsetting it is the truer mutation and it is not worth running: the
   // suite would then write its fixtures — three stacks, a new default — straight into the
   // developer's own ~/.clawops. Running the mutation checker should not cost you your config.
@@ -410,13 +410,13 @@ const MUTATIONS = [
     file: 'tests/cli/init.test.ts', from: "  process.env['CLAWOPS_HOME'] = suiteHome", to: "  process.env['CLAWOPS_HOME'] = `${suiteHome}-elsewhere`", test: 'tests/cli/init.test.ts' },
 
   { name: 'init overwrites the whole config again',
-    file: 'src/cli/commands/init.ts', from: '    stacks: { ...(existing?.stacks ?? {}), [stackName]: stack },', to: '    stacks: { [stackName]: stack },', test: 'tests/cli/init.test.ts' },
+    file: 'src/config/init.ts', from: '    stacks: { ...(existing?.stacks ?? {}), [stackName]: stack },', to: '    stacks: { [stackName]: stack },', test: 'tests/config/init.test.ts' },
   { name: 'init drops config outside stacks',
-    file: 'src/cli/commands/init.ts', from: '    ...(existing ?? {}),\n', to: '', test: 'tests/cli/init.test.ts' },
+    file: 'src/config/init.ts', from: '    ...(existing ?? {}),\n', to: '', test: 'tests/config/init.test.ts' },
   { name: 'an existing stack is silently overwritten',
-    file: 'src/cli/commands/init.ts', from: '    if (existing?.stacks[stackName] && !forceOverwrite) {', to: '    if (false) {', test: 'tests/cli/init.test.ts' },
+    file: 'src/config/init.ts', from: '  if (existing?.stacks[stackName] && !opts.force) {', to: '  if (false) {', test: 'tests/config/init.test.ts' },
   { name: '--force is required to add a brand new stack',
-    file: 'src/cli/commands/init.ts', from: '    if (existing?.stacks[stackName] && !forceOverwrite) {', to: '    if (existing && !forceOverwrite) {', test: 'tests/cli/init.test.ts' },
+    file: 'src/config/init.ts', from: '  if (existing?.stacks[stackName] && !opts.force) {', to: '  if (existing && !opts.force) {', test: 'tests/config/init.test.ts' },
   { name: 'plan swallows an unregistered stack again',
     file: 'src/plan/generate.ts', from: '    if (err instanceof UsageError) throw err\n', to: '', test: 'tests/plan/generate.test.ts' },
   { name: 'plan rethrows every preview failure',
@@ -703,7 +703,7 @@ const MUTATIONS = [
   { name: 'the length ceiling stops being enforced',
     file: 'src/providers/state-bucket.ts', from: '  if (n.length > max) return', to: '  if (false) return', test: 'tests/providers/state-bucket.test.ts' },
   { name: 'init writes a stack it could not name a backend for',
-    file: 'src/cli/commands/init.ts', from: '        if (!derived.ok) {', to: '        if (false) {', test: 'tests/cli/init.test.ts' },
+    file: 'src/config/init.ts', from: '    if (!derived.ok) {', to: '    if (false) {', test: 'tests/config/init.test.ts' },
   { name: 'the wizard suggests a bucket name ignoring the region just chosen',
     file: 'src/cli/commands/setup.ts', from: '        region: answers.region ?? defaultRegion(provider),', to: '        region: defaultRegion(provider),', test: 'tests/cli/setup-preflight.test.ts' },
   { name: 'a state URL is built from an unchecked name',
@@ -867,6 +867,10 @@ const MUTATIONS = [
     file: 'src/mcp/tools/_confirm.ts', from: '  if (!capabilities?.elicitation) {', to: '  if (false) {', test: 'tests/mcp/confirm.test.ts' },
   { name: 'a declined confirmation reads as confirmed',
     file: 'src/mcp/tools/_confirm.ts', from: "  if (elicit.action !== 'accept' || !elicit.content?.['confirmed']) {", to: '  if (false) {', test: 'tests/mcp/confirm.test.ts' },
+  { name: 'clawops_init reports a refusal as success',
+    file: 'src/mcp/tools/cli/init.ts', from: '  if (!result.ok) return errText(result.reason)', to: '  if (!result.ok) return okText(result.reason)', test: 'tests/mcp/init.test.ts' },
+  { name: 'the image drops the CA bundle, so nothing inside it can reach an HTTPS endpoint',
+    file: 'Dockerfile', from: 'openssh-client ca-certificates', to: 'openssh-client', test: 'tests/release/image.test.ts' },
 ]
 
 let survived = []

@@ -23,8 +23,8 @@ export async function handleHarden(input: HardenInput, server: McpServer): Promi
   const config = getConfig()
   if (!config) {
     return errText(
-      'No clawops config on this machine. Ask the user to run `clawops init` in a terminal — it ' +
-        'is a CLI command, so no tool can run it. Until then every clawops tool will say this.',
+      'No clawops config on this machine. Call clawops_init first to register a stack; until ' +
+        'then every clawops tool will say this.',
     )
   }
 

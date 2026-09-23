@@ -93,7 +93,7 @@ know the proxy is there.
 TLS termination. Bring your own reverse proxy (nginx, Caddy, Cloudflare Tunnel) for HTTPS. TLS
 automation is tracked in the roadmap.
 
-**Not every CLI command has an MCP tool.** 13 of 24 commands are exposed. `init`, `ssh`,
+**Not every CLI command has an MCP tool.** 14 of 24 commands are exposed. `ssh`,
 `secret`, `backup` and `migrate` have no tool; `gateway` has restart but not status or update,
 `agents` has list but not per-agent logs, and `stacks` has list but not delete. An agent driving
 clawops hits these as missing capabilities and has to ask the user to run a command themselves.

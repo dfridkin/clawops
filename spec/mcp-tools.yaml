@@ -508,6 +508,47 @@ tools:
 # COMPOSITE WORKFLOW TOOLS (R2: encode user intent, not API sequences)
 # ────────────────────────────────────────────────────────────────────────────
 
+  - name: clawops_init
+    toolset: [cli]
+    description: |
+      Register a stack and write ~/.clawops/config.json: the provider, the state backend, the
+      region, and an SSH key pair generated if one is not already there. Nothing is provisioned
+      and nothing is charged; this only creates local configuration.
+
+      Use when: any other clawops tool reports that there is no config, or the user wants to add
+      a second stack alongside the ones they have. This is the first call on a machine that has
+      never run clawops — a fresh container, a new laptop, a sandbox.
+
+      Adding a stack is additive and safe: existing stacks are kept. Overwriting one needs
+      force: true, because changing a state backend orphans the Pulumi state it points at — the
+      infrastructure stays up and clawops can no longer see or destroy it.
+
+      For aws, gcp and azure, stateUrl can be omitted and clawops names a bucket from the
+      account it can see; that needs cloud credentials in the environment, so in a sandbox pass
+      stateUrl explicitly. The local provider needs host instead, and no cloud account at all.
+
+      Do NOT use when: the user wants to deploy — that is clawops_up, after this. Credentials
+      are never passed here: clawops reads them from the environment (R6).
+    annotations:
+      title: Initialise clawops Config
+      readOnlyHint: false
+      destructiveHint: false
+      idempotentHint: false
+      openWorldHint: false
+    input:
+      provider: { type: enum, values: [aws, gcp, azure, local], description: "Which cloud this stack deploys to, or 'local' for a machine you already have" }
+      stackName: { type: string, optional: true, description: "Name for the stack, used by every later call. Omitted = \"default\"" }
+      stateUrl: { type: string, optional: true, description: "Where Pulumi state lives, e.g. s3://bucket/clawops, gs://bucket/clawops, azblob://container. Omitted = clawops names one from the cloud account it can see, which needs credentials" }
+      region: { type: string, optional: true, description: "Cloud region in the provider's own spelling. Omitted = us-east-1 (aws), us-central1 (gcp), eastus (azure)" }
+      host: { type: string, optional: true, description: "[local only] Hostname or IP of the machine to manage. Required when provider is local" }
+      sshUser: { type: string, optional: true, description: "[local only] SSH login user. Omitted = root" }
+      sshPort: { type: integer, optional: true, description: "[local only] SSH port. Omitted = 22" }
+      force: { type: boolean, optional: true, description: "Overwrite a stack that already exists. Refused without it, because replacing a state backend orphans the state it points at" }
+    output:
+      configPath: { type: string }
+      stackName: { type: string }
+      stateUrl: { type: string }
+
   - name: clawops_harden
     toolset: [cli]
     description: |

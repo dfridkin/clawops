@@ -32,6 +32,17 @@ RUN mkdir -p /out && pnpm build && npm pack --pack-destination /out
 FROM node:22-slim
 # Install the tarball a user would install, not the working tree. `files` in package.json is
 # ["dist","spec"], so this also proves nothing needed at runtime was left out of the package.
+# Two packages the slim image leaves out and clawops cannot work without:
+#
+#   openssh-client — `clawops init` generates its ed25519 key with ssh-keygen, not with node's
+#     crypto, which writes a PKCS#8 PEM that ssh2 and OpenSSH both refuse.
+#   ca-certificates — there is no CA bundle in node:*-slim, so every HTTPS call from inside the
+#     container fails to verify. That is the Pulumi CLI download on first use and every cloud
+#     API call after it: the container could reach nothing, credentials or not.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssh-client ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /out/*.tgz /tmp/
 RUN npm install -g /tmp/*.tgz && rm -f /tmp/*.tgz
 
