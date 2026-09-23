@@ -85,13 +85,17 @@ jobs:
 
           # Register what was released, not what is being prepared.
           #
-          # When changesets has pending changesets it runs `version` here in the working tree
-          # before pushing the release PR, so package.json and server.json are left bumped to the
-          # NEXT version. A backfill dispatch then tried to register 2.1.1 — a version npm had
-          # never seen — waited five minutes for it and failed, while the entry it was dispatched
-          # to repair stayed on 1.2.1. The release PR carries those edits on its own branch; this
-          # job wants the committed files.
-          git checkout HEAD -- package.json server.json
+          # When changesets has pending changesets it runs `version` and COMMITS the bump in this
+          # job before pushing the release branch, so both the working tree and HEAD carry the
+          # NEXT version. A backfill dispatch tried to register 2.1.1 — a version npm had never
+          # seen — waited five minutes for it and failed, twice: the first attempt read the
+          # working tree, the second read HEAD, and by then HEAD was the version commit too.
+          #
+          # GITHUB_SHA is the commit this run was dispatched against, which is the one whose
+          # package.json was actually published. mcp-publisher reads server.json from the working
+          # tree, so that is restored to the same commit rather than merely inspected.
+          git checkout "$GITHUB_SHA" -- package.json server.json
+          echo "Restored package.json and server.json from ${GITHUB_SHA}"
 
           VERSION=$(node -p "require('./package.json').version")
           echo "Registering @clawops/cli@${VERSION} with the MCP registry"
