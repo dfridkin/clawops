@@ -1,5 +1,50 @@
 # @clawops/cli
 
+## 2.1.3
+
+### Patch Changes
+
+- a7fc528: **`clawops_init` registers a stack over MCP, so a client can bootstrap from nothing.** Every
+  clawops tool needs a config, and creating one was a terminal-only act — so on a machine that had
+  never run clawops, every tool refused and told the caller to run a command it could not run. In a
+  directory's sandbox that is the entire server: an evaluator opens the inspector, tries a tool,
+  and is told to use a terminal they do not have. The tool writes `~/.clawops/config.json` and
+  generates an SSH key; it provisions nothing and costs nothing. Adding a stack is additive, and
+  overwriting one still needs `force`.
+
+  **The published image was missing two packages clawops cannot work without.** `node:*-slim`
+  ships no `ssh-keygen`, so `init` could not make a usable key — and no CA bundle, so every HTTPS
+  call from inside the container failed to verify: the Pulumi CLI download on first use, and every
+  cloud API call after it, credentials or not. The container could reach nothing. Both are
+  installed now, and a test asserts the Dockerfile keeps them.
+
+  The "no config" message names the tool that fixes it rather than a command an agent cannot run.
+
+- 33d7a84: **A client that cannot show a confirmation now gets an answer it can act on.** Every destructive
+  tool asks for confirmation (R19) by calling MCP elicitation, and elicitation is a capability a
+  client declares at connect. Against a client without it — Glama's inspector, among others — the
+  SDK threw `Client does not support form elicitation`, which names no tool, no stack, and no way
+  forward. All eight call sites now check first and return: _ask the user, then call again with
+  `yes: true`_.
+
+  Nothing changed about the rule. Unconfirmed destructive work still does not run; being unable to
+  ask is simply no longer reported as a crash.
+
+  **The "no config" error stops pointing at a tool that does not exist.** `clawops init` is a
+  terminal command with no MCP tool, so an agent reading "Run `clawops init` first" was told to do
+  the one thing it cannot. The message now names the config file, says `init` is CLI-only, and says
+  what it asks for — which is what every tool returns on a machine that has never run clawops.
+
+- 86f1239: **Every MCP tool parameter now documents itself.** The same failure as the tool descriptions, one
+  level down: 29 parameters had a description in `spec/mcp-tools.yaml` that the generator never
+  emitted, and 26 more had none at all. A model deciding what to pass `clawops_plan` saw
+  `privateOnly: boolean` with nothing saying that it closes public SSH and the gateway, needs a
+  verified tailnet address, and refuses unless that address answers.
+
+  All 55 parameters now carry a description into `inputSchema`, saying what the value means and
+  what omitting it does. The spec validator rejects a parameter without one, so the next parameter
+  added cannot arrive bare, and `pnpm verify:mcp` checks them over the protocol.
+
 ## 2.1.2
 
 ### Patch Changes
