@@ -126,6 +126,18 @@ try {
   check(`tools/list returns ${names.length} tools`, names.length === 19, names.length !== 19 ? names.join(',') : '')
   check('clawops_harden is served', names.includes('clawops_harden'))
 
+  /*
+   * The text a model reads when it chooses a tool. Held in spec/mcp-tools.yaml, generated into
+   * nothing, and passed to registerTool not at all — so every client saw 19 tools with no
+   * description, and Glama scored each one 1/5 for it. tools/list is the only place this shows.
+   */
+  const described = tools.filter((t) => typeof t.description === 'string' && t.description.length > 0)
+  check(`every tool carries a description (${described.length}/${tools.length})`, described.length === tools.length,
+    tools.filter((t) => !t.description).map((t) => t.name).join(', '))
+  const routable = tools.filter((t) => /Use when/.test(t.description ?? ''))
+  check('every description says when to use the tool (R3)', routable.length === tools.length,
+    tools.filter((t) => !/Use when/.test(t.description ?? '')).map((t) => t.name).join(', '))
+
   const harden = tools.find((t) => t.name === 'clawops_harden')
   if (harden) {
     const props = Object.keys(harden.inputSchema?.properties ?? {})

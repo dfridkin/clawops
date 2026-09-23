@@ -855,6 +855,10 @@ const MUTATIONS = [
     file: 'src/cli/default-command.ts', from: '  if (argv.length === 0 && !stdinIsTty) return [\'mcp\', \'serve\']', to: '  if (argv.length === 0) return [\'mcp\', \'serve\']', test: 'tests/cli/default-command.test.ts' },
   { name: 'a flag with no command is rescued as an MCP server',
     file: 'src/cli/default-command.ts', from: '  if (argv.length === 0 && !stdinIsTty) return [\'mcp\', \'serve\']', to: '  if (!stdinIsTty) return [\'mcp\', \'serve\']', test: 'tests/cli/default-command.test.ts' },
+  { name: 'tools are registered with no description, as they were for the whole life of the server',
+    file: 'src/mcp/tools/registry.ts', from: '        description,\n', to: '', test: 'tests/mcp/catalog.test.ts' },
+  { name: 'the generator stops emitting tool descriptions',
+    file: 'scripts/gen-schemas.ts', from: '`export const ${tool.name}Description = ${JSON.stringify(tool.description.trim())}`,', to: '`export const ${tool.name}Description = ""`,', test: 'tests/mcp/catalog.test.ts' },
 ]
 
 let survived = []

@@ -12,6 +12,8 @@ export const clawops_statusSchema = z.object({
   stackName: z.string().optional(),
 })
 
+export const clawops_statusDescription = "Get what is deployed for a clawops-managed stack: public IP, gateway URL,\nSSH user, or that nothing is deployed yet. Reads stack outputs; does not\ncontact the host.\n\nUse when: the user asks what exists for a stack, or where to reach it.\n\nDo NOT use when: the user asks whether the gateway is actually WORKING —\nthat needs the host, so use clawops_doctor. Also not for live logs (use\nclawops_logs_tail) or config values (use clawops_config_get)."
+
 export const clawops_statusAnnotations = {
   title: "Get Stack Status",
   readOnlyHint: true,
@@ -29,6 +31,8 @@ export const clawops_doctorSchema = z.object({
   stackName: z.string().optional(),
   failuresOnly: z.boolean().optional().default(false),
 })
+
+export const clawops_doctorDescription = "Run clawops's diagnostics and return the report: Node and Pulumi runtime, config,\nSSH key and known_hosts, cloud credentials per configured provider, and the\nsupported OpenClaw range. With stackName, also contacts the host for container\nstate, the deployed OpenClaw version, a real gateway health probe, whether the\nport is published to the internet, disk usage on the state directory, log\nrotation, and hardening drift.\n\nUse when: something is not working and you do not yet know what; before any\ndeploy, upgrade or migration; or to find out which OpenClaw version a gateway is\nactually running.\n\nDo NOT use when: you already know the problem and want to fix it. This tool only\nreports — it changes nothing, and never runs `openclaw doctor --fix`. No tool\nrepairs a gateway: `clawops gateway update` is CLI-only, so tell the user to run\nit themselves, after `clawops backup create`.\n\nEvery check carries a status: fail (something is wrong that clawops can name),\nwarn (worth knowing, not broken), info (did not apply). `ok` is false only when\nsomething failed — a fresh machine with no stacks is full of warnings and healthy."
 
 export const clawops_doctorAnnotations = {
   title: "Run Diagnostics",
@@ -49,6 +53,8 @@ export const clawops_logs_tailSchema = z.object({
   sinceMin: z.number().int().optional(),
 })
 
+export const clawops_logs_tailDescription = "Tail recent gateway logs from a clawops-managed instance.\n\nUse when: the user wants to investigate recent activity or errors, or\nasks \"what's been happening\" on the gateway.\n\nDo NOT use when: the user wants real-time streaming logs (those are not\nwell-suited to tool calls; suggest the user run `clawops logs -f` directly\nin their terminal). Do NOT use for instance-level system logs: no tool runs\narbitrary remote commands, so tell the user to run `clawops ssh --command\n'journalctl ...'` themselves."
+
 export const clawops_logs_tailAnnotations = {
   title: "Tail Gateway Logs",
   readOnlyHint: true,
@@ -67,6 +73,8 @@ export const clawops_monitorSchema = z.object({
   tailLines: z.number().int().optional().default(5),
 })
 
+export const clawops_monitorDescription = "Take a live snapshot of a running clawops stack: gateway health, container\nstatus, resource usage (CPU, memory, disk), and recent log lines.\n\nUse when: the user wants to know if the gateway is running, how much\nmemory or CPU it is using, what recent log activity looks like, or\nwants a quick health overview richer than clawops_status.\n\nDo NOT use when: the user wants real-time streaming logs (use\nclawops_logs_tail or suggest `clawops logs -f`). Do NOT use for\nconfiguration queries (use clawops_config_get)."
+
 export const clawops_monitorAnnotations = {
   title: "Monitor Stack Health",
   readOnlyHint: true,
@@ -81,6 +89,8 @@ export type MonitorInput = z.infer<typeof clawops_monitorSchema>
 // ── clawops_stacks_list ─────────────────────────────────────────────────────
 
 export const clawops_stacks_listSchema = z.object({})
+
+export const clawops_stacks_listDescription = "List all clawops-managed stacks across all configured providers.\n\nUse when: the user wants an overview of their deployments, asks \"what\nstacks do I have\", or wants to compare stacks before an operation.\n\nDo NOT use when: the user named a specific stack — use clawops_status\ndirectly with that name."
 
 export const clawops_stacks_listAnnotations = {
   title: "List Stacks",
@@ -100,6 +110,8 @@ export const clawops_config_getSchema = z.object({
   key: z.string().optional(),
 })
 
+export const clawops_config_getDescription = "Read a configuration value from the remote OpenClaw gateway.\n\nUse when: the user wants to inspect current OpenClaw config (e.g., which\nmodel provider is active, which channels are enabled).\n\nDo NOT use when: the user wants to change the config — use\nclawops_config_set instead."
+
 export const clawops_config_getAnnotations = {
   title: "Get OpenClaw Config Value",
   readOnlyHint: true,
@@ -116,6 +128,8 @@ export type ConfigGetInput = z.infer<typeof clawops_config_getSchema>
 export const clawops_agents_listSchema = z.object({
   stackName: z.string().optional(),
 })
+
+export const clawops_agents_listDescription = "List agents currently registered on the remote OpenClaw gateway.\n\nUse when: the user wants to see which agents are running, debug agent\nrouting, or count active workspaces.\n\nDo NOT use when: the user wants one agent's logs — no tool exposes those; tell\nthe user to run `clawops agents logs <name>`."
 
 export const clawops_agents_listAnnotations = {
   title: "List OpenClaw Agents",
@@ -142,6 +156,8 @@ export const clawops_upSchema = z.object({
   dryRun: z.boolean().optional().default(false),
 })
 
+export const clawops_upDescription = "Provision and deploy a clawops stack. Idempotent — re-running with no spec\nchange produces no diff. Long-running (median 3min, p99 8min) so emits\nprogress notifications per R12.\n\nUse when: the user explicitly asks to deploy, provision, create, or \"spin\nup\" a stack. Always after the user has reviewed a plan\n(clawops_plan first when in doubt).\n\nDo NOT use when: the user has not yet generated a plan and is in\nexploratory/discovery mode — use clawops_plan first. Do NOT use for an\nexisting stack you only need to update; refresh first."
+
 export const clawops_upAnnotations = {
   title: "Provision and Deploy Stack",
   readOnlyHint: false,
@@ -160,6 +176,8 @@ export const clawops_destroySchema = z.object({
   yes: z.boolean().optional().default(false),
 })
 
+export const clawops_destroyDescription = "Destroy a clawops stack. Removes ALL provisioned resources. Triggers\nelicitation confirmation showing the resource diff before execution\n(R19). Cannot be undone.\n\nUse when: the user explicitly asks to destroy, tear down, delete, or\nremove a stack. Always confirm the stack name.\n\nDo NOT use when: the user wants to stop the gateway temporarily — that is not\na destroy, and no tool stops a gateway; clawops_gateway_restart is the only\ngateway tool. Do NOT use when in doubt about which stack; list first with\nclawops_stacks_list."
+
 export const clawops_destroyAnnotations = {
   title: "Destroy Stack (DESTRUCTIVE)",
   readOnlyHint: false,
@@ -177,6 +195,8 @@ export const clawops_applySchema = z.object({
   planPath: z.string(),
   yes: z.boolean().optional().default(false),
 })
+
+export const clawops_applyDescription = "Apply a previously-generated Maker plan (deploy-plan.schema.json).\nDeterministic — the plan describes exactly what will be created.\n\nUse when: the user has a plan file path and wants to apply it. This is\nthe agent-friendly path for any deploy/destroy operation.\n\nDo NOT use when: there's no plan file — generate one first with\nclawops_plan."
 
 export const clawops_applyAnnotations = {
   title: "Apply Maker Plan",
@@ -204,6 +224,8 @@ export const clawops_planSchema = z.object({
   outPath: z.string().optional(),
 })
 
+export const clawops_planDescription = "Generate a Maker deploy plan (does NOT apply). Plan is JSON conforming to\ndeploy-plan.schema.json — review before applying.\n\nUse when: the user wants to see what would be created before committing,\nor you (the agent) need a reviewable artifact for the user to approve.\n\nDo NOT use when: the user has explicitly asked to deploy and you already\nhave their approval — go directly to clawops_up."
+
 export const clawops_planAnnotations = {
   title: "Generate Deploy Plan",
   readOnlyHint: true,
@@ -224,6 +246,8 @@ export const clawops_config_setSchema = z.object({
   restart: z.boolean().optional().default(false),
 })
 
+export const clawops_config_setDescription = "Set a configuration value on the remote OpenClaw gateway. Optionally\nrestarts the gateway after.\n\nUse when: the user wants to change OpenClaw configuration (model\nprovider, channel auth, gateway port).\n\nDo NOT use when: the user is reading config — use clawops_config_get.\nDo NOT bulk-edit; one key at a time so changes are auditable (R21)."
+
 export const clawops_config_setAnnotations = {
   title: "Set OpenClaw Config Value",
   readOnlyHint: false,
@@ -243,6 +267,8 @@ export const clawops_config_unsetSchema = z.object({
   restart: z.boolean().optional().default(false),
 })
 
+export const clawops_config_unsetDescription = "Remove a configuration key from the remote OpenClaw gateway config, reverting\nit to the OpenClaw default.\n\nUse when: the user wants to delete a config key entirely (e.g., remove a\nchannel, clear an override).\n\nDo NOT use when: the user wants to set the key to a new value — use\nclawops_config_set instead."
+
 export const clawops_config_unsetAnnotations = {
   title: "Unset OpenClaw Config Key",
   readOnlyHint: false,
@@ -260,6 +286,8 @@ export const clawops_config_validateSchema = z.object({
   stackName: z.string().optional(),
 })
 
+export const clawops_config_validateDescription = "Validate the remote OpenClaw gateway config against the known schema. Checks\nfor structural errors (wrong types, unknown top-level keys) that would cause\nOpenClaw to fail on startup.\n\nUse when: the user wants to verify config before restarting the gateway, or\nafter editing openclaw.json manually.\n\nDo NOT use when: the user wants to change config — use clawops_config_set."
+
 export const clawops_config_validateAnnotations = {
   title: "Validate OpenClaw Config",
   readOnlyHint: true,
@@ -276,6 +304,8 @@ export type ConfigValidateInput = z.infer<typeof clawops_config_validateSchema>
 export const clawops_gateway_restartSchema = z.object({
   stackName: z.string().optional(),
 })
+
+export const clawops_gateway_restartDescription = "Restart the OpenClaw gateway daemon on the remote instance.\n\nUse when: a gateway-wide config change requires reload, or the gateway is\nreported as unresponsive.\n\nNote: OpenClaw 2.0 removed per-agent restart; `gateway restart` is the only\nrestart it offers, and it affects every agent on the host. Brief downtime (~10s)."
 
 export const clawops_gateway_restartAnnotations = {
   title: "Restart Gateway Daemon",
@@ -299,6 +329,8 @@ export const clawops_hardenSchema = z.object({
   yes: z.boolean().optional().default(false),
 })
 
+export const clawops_hardenDescription = "Apply security hardening to a deployed stack: SSH, UFW, fail2ban,\nunattended-upgrades, the Docker socket, and per-cloud checks. Optionally join\nthe stack to a Tailscale network and reach it there instead of over the public\ninternet.\n\nUse when: the user asks to harden, secure, or lock down a stack; asks what the\nhardening report says (with dryRun: true, which changes nothing); or asks to put\na stack on their tailnet.\n\ntailscale: true installs Tailscale, joins the tailnet as clawops-<stack>, and\nthen moves clawops onto that address — but only after opening an SSH session to\nit, against host keys pinned over the connection already trusted. If that fails,\nnothing is recorded and the public address stays in use. The auth key comes from\n`clawops secret set TAILSCALE_AUTH_KEY` and is never passed through this tool\n(R6).\n\ntailscaleRevert: true takes the host back off the tailnet, over its public\naddress. On a private-only stack it refuses and names the plan/apply commands\nthat reopen SSH first — relay them rather than trying to work around it.\n\nTo close the public ports afterwards, plan with privateOnly: true and apply that\nplan; this tool does not change firewall rules.\n\nDo NOT use when: the user wants to know whether a stack is healthy — that is\nclawops_doctor. Do NOT pass tailscale and tailscaleRevert together."
+
 export const clawops_hardenAnnotations = {
   title: "Harden Stack",
   readOnlyHint: false,
@@ -319,6 +351,8 @@ export const clawops_workflow_deploy_appSchema = z.object({
   instanceType: z.enum(['micro', 'small', 'medium', 'large', 'gpu']).optional().default("small"),
 })
 
+export const clawops_workflow_deploy_appDescription = "Single-tool workflow that takes a user from \"I want to deploy OpenClaw\nto <provider>\" to a verified, healthy gateway. Internally: plan → user\nconfirms (elicitation) → up → wait for healthy → return URL.\n\nUse when: the user expresses end-to-end deployment intent (\"deploy to\nAWS\", \"spin up an OpenClaw on GCP for me\").\n\nDo NOT use when: the user is mid-deployment and only needs one step\n(e.g., they already have a plan; use clawops_apply). Do NOT use for\ndestroying or updating — separate workflows."
+
 export const clawops_workflow_deploy_appAnnotations = {
   title: "Deploy OpenClaw (End-to-End Workflow)",
   readOnlyHint: false,
@@ -336,6 +370,8 @@ export const clawops_workflow_recoverSchema = z.object({
   stackName: z.string().optional(),
 })
 
+export const clawops_workflow_recoverDescription = "Diagnostic workflow for an unhealthy stack. Internally: status check →\ngateway logs → agent logs → systemd service status → produces a structured\ndiagnostic report with suggested remediation.\n\nUse when: the user reports any \"not working\" symptom and you don't know\nwhere to start. Best entry point for troubleshooting.\n\nDo NOT use when: the user has already identified the problem and asks for\na specific fix."
+
 export const clawops_workflow_recoverAnnotations = {
   title: "Recover/Diagnose Stack",
   readOnlyHint: true,
@@ -352,6 +388,8 @@ export type WorkflowRecoverInput = z.infer<typeof clawops_workflow_recoverSchema
 export const clawops_task_statusSchema = z.object({
   taskId: z.string(),
 })
+
+export const clawops_task_statusDescription = "Poll the status of a long-running clawops task (returned by clawops_up,\nclawops_destroy, clawops_apply, etc.). Per R12 streaming model.\n\nUse when: the user is waiting on a long-running deploy/destroy and wants\nprogress, OR you need to check whether a previously-started operation\nfinished.\n\nDo NOT use when: there is no active taskId — start the operation first."
 
 export const clawops_task_statusAnnotations = {
   title: "Get Task Status",

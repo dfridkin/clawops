@@ -21,6 +21,31 @@ const spec = yaml.load(
 const HINTS = ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'] as const
 const toolsetsOf = (t: Tool) => (Array.isArray(t.toolset) ? t.toolset : [t.toolset])
 
+describe('the description a client actually receives', () => {
+  /*
+   * These are written per R3 to route a model: each says when to use the tool and when to reach
+   * for another. They lived in spec/mcp-tools.yaml and went nowhere — the generator did not emit
+   * them and registerTool was never given one, so every client saw a bare name. Glama's tool
+   * description score was 1/5 across all 19, which is how it surfaced.
+   */
+  it('is registered for every tool, not just written in the spec', async () => {
+    const { TOOL_REGISTRY_FOR_TESTS } = await import('../../src/mcp/tools/registry.js')
+    const missing = Object.entries(TOOL_REGISTRY_FOR_TESTS)
+      .filter(([, entry]) => !entry.description || entry.description.trim().length === 0)
+      .map(([name]) => name)
+    expect(missing, `tools registered with no description: ${missing.join(', ')}`).toEqual([])
+  })
+
+  it('matches what the spec says, so the two cannot drift', async () => {
+    const { TOOL_REGISTRY_FOR_TESTS } = await import('../../src/mcp/tools/registry.js')
+    for (const tool of spec.tools) {
+      const entry = TOOL_REGISTRY_FOR_TESTS[tool.name]
+      if (!entry || !tool.description) continue
+      expect(entry.description, tool.name).toBe(tool.description.trim())
+    }
+  })
+})
+
 describe('MCP catalog', () => {
   it('declares every tool the registry serves, and serves every tool it declares', () => {
     // A tool in the catalog with no handler is advertised to agents and throws when
