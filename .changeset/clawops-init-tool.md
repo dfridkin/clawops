@@ -1,5 +1,5 @@
 ---
-'@clawops/cli': minor
+'@clawops/cli': patch
 ---
 
 **`clawops_init` registers a stack over MCP, so a client can bootstrap from nothing.** Every
