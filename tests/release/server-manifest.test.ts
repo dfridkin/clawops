@@ -31,6 +31,16 @@ describe('the committed MCP server manifest', () => {
     expect(read('server.json').description).toBe(read('package.json').description)
   })
 
+  /*
+   * The registry rejects a longer description with a 422, and it does so at publish time — after
+   * npm has already published, since that step runs first. A 110-character description shipped
+   * exactly that way: npm got 2.1.0, the registry refused it, and the entry stayed on 1.2.1 for
+   * one more release. The limit is asserted here so the next one fails in seconds instead.
+   */
+  it('keeps the description inside the registry\'s 100-character limit', () => {
+    expect(read('server.json').description.length).toBeLessThanOrEqual(100)
+  })
+
   it('names the package that is actually published', () => {
     expect(read('server.json').packages[0].identifier).toBe(read('package.json').name)
   })
