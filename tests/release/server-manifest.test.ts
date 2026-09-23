@@ -54,6 +54,18 @@ describe('the release pipeline keeps it in step', () => {
     expect(read('package.json').scripts['version:packages']).toContain('sync-server-json')
   })
 
+  /*
+   * A backfill dispatch runs in the same job as changesets' `version`, which leaves the working
+   * tree bumped to the next version. Reading it registered a version npm had never published.
+   */
+  it('registers the committed version, not the one changesets is preparing', () => {
+    const yml = readFileSync(resolve(root, '.github/workflows/release.yml'), 'utf8')
+    const step = yml.slice(yml.indexOf('Publish to MCP Registry'))
+    expect(step).toContain('git checkout HEAD -- package.json server.json')
+    expect(step.indexOf('git checkout HEAD -- package.json server.json'))
+      .toBeLessThan(step.indexOf("require('./package.json').version"))
+  })
+
   it('refuses to publish a manifest that disagrees, instead of rewriting it', () => {
     // The old step edited the file in place during publish, which is exactly how it drifted.
     expect(workflow).not.toMatch(/fs\.writeFileSync\("server\.json"/)
