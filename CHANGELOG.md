@@ -1,5 +1,214 @@
 # @clawops/cli
 
+## 2.1.0
+
+### Minor Changes
+
+- 9f8fe05: **`clawops harden` gains four Azure checks (WO-32), so the hardening report covers all three
+  clouds rather than AWS and GCP only.**
+
+  - **NSG audit** reports any inbound Allow rule on a clawops network security group that admits
+    the whole internet, naming the port and saying when it is SSH or the gateway. Azure spells
+    "anywhere" four ways — `*`, the `Internet` service tag, `0.0.0.0/0` and `::/0` — and `*` is
+    what the portal writes by default, so all four count.
+  - **Disk encryption** reports the gap beyond Azure's default rather than the default itself.
+    Every managed disk is encrypted at rest with a platform key and cannot be otherwise, so the
+    check reports whether encryption at host is on and whether the key is yours.
+  - **Defender for Cloud** reports which relevant plans are on the free tier, which reports
+    recommendations and protects nothing.
+  - **JIT VM access** reports whether a policy covers the clawops VM, and says when the read
+    failed because Defender for Servers Plan 2 is absent rather than leaving it ambiguous.
+
+  All four are check-only, each for a stated reason: NSG rules are written from the plan and would
+  be undone by the next apply; encryption at host needs the VM deallocated; Defender is billed per
+  resource per month, so clawops will not put a recurring charge on a subscription; and JIT needs
+  the paid plan and takes the NSG rules over from the plan that wrote them.
+
+  A read that fails says why, because the fixes differ. Against a live subscription the Defender
+  read returned 404 "Subscription Not Registered", and reporting that as a missing permission
+  would send an operator to check RBAC when the fix is one `az provider register`. A 403 is
+  reported as a permission; a 404 naming registration names the provider to register.
+
+  JIT does not read an empty list as a definite negative. With `Microsoft.Security` unregistered,
+  `jitNetworkAccessPolicies` answers 200 with an empty list while `pricings` under the same
+  namespace answers 404, so the check confirms the provider is registered before concluding that
+  no policy covers the VM.
+
+  Resources are matched on their own name, never on their ARM id. An id carries the resource
+  group, and clawops names that group `clawops-<stack>`, so matching the id would mark every
+  resource in the group as ours.
+
+- e698496: `clawops harden` gains three GCP checks, so the hardening report is no longer AWS-only on the
+  cloud side.
+
+  - **VPC firewall audit** reports any ingress rule on a clawops network that admits `0.0.0.0/0`
+    or `::/0`, naming the port and saying when it is SSH or the gateway.
+  - **Shielded VM** reports whether Secure Boot, vTPM and integrity monitoring are on.
+  - **OS Login** reports whether it is enabled.
+
+  All three are check-only, and the last two are check-only for reasons worth stating. Shielded VM
+  settings cannot be changed while the instance is running, and clawops will not stop a gateway in
+  order to harden it. Enabling OS Login makes the instance ignore metadata SSH keys, which is the
+  key clawops authenticates with: every day-two command would stop working. A hardening step whose
+  success locks the operator out is not one clawops will take, so it reports the posture and leaves
+  the decision where it belongs.
+
+  A check that cannot be performed reports as skipped, naming what was missing, rather than as a
+  pass.
+
+  Both lookups match the names Pulumi actually creates rather than the logical names in the
+  program, which carry a generated suffix. Matching a substring also matched the project name, so
+  in a project called `clawops-test` every rule on the default network was reported as a clawops
+  rule open to the internet.
+
+- 125255b: **GCP instances boot with Secure Boot on.** `debian-12` supports it; left unset, GCP enables vTPM
+  and integrity monitoring and leaves Secure Boot off, which is what `clawops harden` reported on
+  every GCP stack. Existing stacks get this as an update, not a replacement: the machine stops,
+  the setting is applied, and it starts again with its boot disk and all OpenClaw state intact.
+
+  **A plan that would replace a resource said nothing about it.** Pulumi marks a replacement with
+  two characters and the plan parser matched only one, so a preview that would destroy the instance
+  and its boot disk summarised as "0 to create, 0 to update, 0 to delete". Replacements are counted
+  and listed now.
+
+  **`clawops plan` warns when a plan changes a deployment that already exists.** A replacement
+  names what is destroyed with it and points at `clawops backup create`; an instance update says
+  the gateway goes down and that disk state survives. A first deploy warns about nothing.
+
+- 32f5d7d: **Hardening, including the Tailscale flows, is reachable through MCP.** A new `clawops_harden`
+  tool applies hardening modules, joins a stack to a tailnet and moves clawops onto that address,
+  or takes it back off. `clawops_plan` gains the flags that decide who can reach a deployment:
+  `sshCidr`, `gatewayCidr`, `publishGateway`, `openclawVersion` and `privateOnly`.
+
+  Without these, the feature this release is named for could not be reached by an agent at all,
+  and every plan an agent generated described a host nothing could connect to — deny-all is the
+  right default, but a plan that cannot say otherwise is not a plan. `instanceType` also accepts
+  the provider-native machine types the CLI has always taken, instead of only the five clawops
+  aliases.
+
+  The refusals travel with the capability. Both surfaces call the same flows, so an agent asking
+  to leave the tailnet on a private-only stack gets the operator's refusal — and the plan and
+  apply commands that reopen SSH first — rather than a way around it.
+
+  **The audit log called every refusal a success.** A tool reports failure by returning
+  `isError`, not by throwing, and the audit wrapper classified only the throw — so a declined
+  destroy and a completed one were indistinguishable in the log R21 exists to produce. It now
+  reads the returned result.
+
+  Four tool descriptions named tools that do not exist (`clawops_ssh`, `clawops_agents_logs`,
+  `clawops_gateway_update`, `clawops_gateway_stop`), so an agent following the advice in a
+  "use X instead" line got a tool-not-found. They now name a real tool or say plainly that none
+  exists. A test fails on any future description that points at a tool that is not served, and
+  another fails on any CLI command that has neither a tool nor a written reason it needs none.
+
+  `pnpm verify:mcp` drives the built server over stdio — the tool list a client receives, the
+  annotations on it, the confirmation a destructive tool raises, and the rule that stdout carries
+  protocol and nothing else — and runs in CI beside the packed-tarball check.
+
+- 1d5aa17: **A stack can move onto its tailnet, close its public ports, and move back (WO-34, steps 4–6 and
+  revert).**
+
+  - **`clawops harden --tailscale`** joins the tailnet, then proves the new address works before
+    clawops uses it. First it pins the host's keys for the tailnet address, read over the public
+    connection that is already trusted. Then it opens a fresh SSH session to that address. Only if
+    the session succeeds is the address recorded, and from then on every connection clawops makes
+    to the stack goes there. The stack joins under its own name, `clawops-<stack>`, not the host's.
+  - **`clawops plan --private-only`** writes a plan with no public SSH or gateway rules, and
+    `clawops apply` closes the ports at the cloud firewall. Both refuse unless this machine can
+    reach the stack over the tailnet at that moment. Apply checks again because the tailnet can
+    drop between review and apply. Apply also refuses a plan made for an address the stack no
+    longer has. This goes through the plan instead of `harden` because clawops keeps no stack
+    config between runs, so an update started from `harden` would run with default settings and
+    could replace the instance (ADR 0013).
+  - **`clawops harden --tailscale-revert`** takes the host off the tailnet over its public
+    address. Run over the tailnet, the command cuts its own connection, which hung for eight
+    minutes on AWS. It then forgets the tailnet host key and points clawops back at the public
+    address. On a private-only stack it refuses and prints the plan and apply commands that
+    reopen SSH first.
+  - **`clawops destroy`** now forgets the host keys for both addresses of a stack on its tailnet.
+    It used to forget only the tailnet key, leaving the public address pinned for an instance
+    that no longer existed, on an address the cloud reassigns.
+
+  The reachability probe opens its own connection and closes it. Left in the connection pool it
+  kept the process alive for the pool's five-minute idle sweep, so `plan --private-only` printed
+  its plan and then appeared to hang. `clawops doctor` doesn't yet report tailnet status. Local stacks can join and repoint but have
+  no private-only mode, because they have no plan/apply path.
+
+- 1d5aa17: **`clawops harden` can put a host on your tailnet (WO-34, first part).**
+
+  A new `tailscale` module installs Tailscale if it is absent, joins the tailnet, and reports the
+  address it was given. It is off by default: every other module hardens a host that is already
+  reachable, and joining a network the operator has to own an account on is not something to do
+  as part of a `clawops harden` with no arguments.
+
+  The auth key comes from `clawops secret set TAILSCALE_AUTH_KEY` and nowhere else, so a key never
+  reaches a terminal scrollback or a CI log. Getting it to the host without exposing it takes two
+  separate measures, because there are two separate exposures. It is passed to `tailscale up`
+  through a file rather than an argument, so it is not in that process's argv; and it travels to
+  the host over the SSH data channel as stdin rather than inside the command string, because sshd
+  runs whatever string it is given as `$SHELL -c '<string>'` and every byte of that lands in the
+  outer shell's argv. The staged file is created under `umask 077` rather than chmod-ed afterwards,
+  and a trap removes it even if the command is interrupted. Anything shown after a failure has the
+  key stripped from it.
+
+  `RemoteExec` gains an optional `stdin`, routed to the transport's existing `execWithInput`, so
+  any hardening module that needs to hand a secret to a host has a way that does not put it in a
+  command line.
+
+  The module only joins. Moving clawops onto the tailnet address, closing public access and undoing
+  both are separate, explicit steps, because they are the ones that can lock an operator out of
+  their own machine; see the `tailscale-cutover` note.
+
+  The address is checked against 100.64.0.0/10 rather than taken on trust, because `tailscale ip
+-4` prints nothing on a host that is not up, and an empty string arriving at a config rewrite as
+  "the new SSH host" is a lockout.
+
+### Patch Changes
+
+- 349e303: The npm listing and the MCP registry entry now say the same thing, and both say that clawops is
+  an MCP server as well as a CLI — the word someone searching a registry for this would type, and
+  the one both descriptions left out.
+- 389afa7: **The Dockerfile had never been built, and did not build.** `npm pack --pack-destination /out`
+  fails with ENOENT because npm does not create that directory. The image exists so the Glama MCP
+  directory can build the server and decide whether to list it; unable to build it, Glama inferred
+  a spec of its own, ran `clawops` with no subcommand, got the CLI's help text where it wanted a
+  handshake, and withheld the listing. One `mkdir` was the whole fix.
+
+  `pnpm verify:docker` now builds the image and runs the MCP protocol probe against the running
+  container — the same checks the local server passes, against the artifact a directory actually
+  evaluates — and it runs in CI as a job of its own.
+
+- d3a8522: **`clawops mcp serve` could not start.** The published 2.0.2 binary died on import before
+  emitting a byte of protocol, so every MCP client that tried to connect got nothing. Half of what
+  this package is was unusable.
+
+  `ajv/dist/2020` resolves under CommonJS and not under ESM: ajv ships no `exports` map, so Node
+  looks for a file of that exact name and only `2020.js` exists. The import now carries the
+  extension.
+
+  This is the same bug 2.0.1 shipped as `@pulumi/pulumi/automation`, in the other half of the
+  product. `pnpm verify:pack` exists because of that one, and it missed this one because all four
+  of its checks are commands that exit and print, and the MCP server is neither. It now speaks
+  protocol to the packed tarball and fails if no handshake comes back. Reintroducing the bug leaves
+  the four original checks green and fails only the new one.
+
+- 1bbca31: The published package now carries its license, keywords and issue tracker, so npm shows what
+  clawops is and searches for "openclaw", "mcp-server" or "pulumi" can find it. The repository also
+  ships a Dockerfile and a `glama.json`, which is what the Glama MCP directory needs before it will
+  list a server rather than withhold it.
+- f2e0a04: The MCP registry manifest (`server.json`) is bumped when the version is, rather than rewritten in
+  CI at publish time and never committed. The committed file had read `1.7.3` against a published
+  `2.0.2`.
+
+  The registry entry itself was further behind still: it has served `1.2.1` since that release,
+  because the step that registers it had been failing for several releases without failing the
+  run. Every MCP client that discovered clawops through the registry was offered a version from
+  long before 2.0. This is the first release that updates it.
+
+  `server.json` is now bumped by `pnpm version:packages` inside the Version Packages PR, the
+  publish step refuses to register a manifest that disagrees with `package.json` instead of
+  quietly rewriting it, and a test asserts the two agree.
+
 ## 2.0.2
 
 ### Patch Changes

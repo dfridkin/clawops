@@ -3,7 +3,7 @@
   "name": "io.github.dfridkin/clawops",
   "title": "clawops",
   "description": "Deploy and operate self-hosted OpenClaw across AWS, GCP, Azure and local VMs — a CLI and an MCP server in one.",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "websiteUrl": "https://clawops.fyi",
   "repository": {
     "url": "https://github.com/dfridkin/clawops",
@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "identifier": "@clawops/cli",
-      "version": "2.0.2",
+      "version": "2.1.0",
       "packageArguments": [
         {
           "type": "positional",
