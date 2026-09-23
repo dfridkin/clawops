@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.dfridkin/clawops",
   "title": "clawops",
-  "description": "Deploy and operate self-hosted OpenClaw across AWS, GCP, Azure and local VMs — a CLI and an MCP server in one.",
+  "description": "Deploy self-hosted OpenClaw to AWS, GCP, Azure or a local VM — a CLI and an MCP server in one.",
   "version": "2.1.0",
   "websiteUrl": "https://clawops.fyi",
   "repository": {
