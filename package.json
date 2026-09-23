@@ -70,6 +70,7 @@
     "graph": "node scripts/dev/graph.mjs",
     "verify:pack": "node scripts/dev/verify-pack.mjs",
     "verify:mcp": "node scripts/dev/mcp-probe.mjs",
+    "verify:docker": "node scripts/dev/verify-docker.mjs",
     "version:packages": "changeset version && node scripts/sync-server-json.mjs",
     "sync:server-json": "node scripts/sync-server-json.mjs"
   },

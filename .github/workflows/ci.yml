@@ -59,3 +59,20 @@ jobs:
         with:
           files: coverage/lcov.info
           fail_ci_if_error: false
+
+  # The image Glama builds to decide whether this server is listable. It shipped in 2.1 having
+  # never been built: the first real build failed on a missing `mkdir`, Glama fell back to a spec
+  # it inferred, ran `clawops` with no subcommand, and got the CLI's help text where it wanted a
+  # handshake. Its own job, so a Docker daemon is never a dependency of the unit suite.
+  docker:
+    name: docker image speaks MCP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.x'
+
+      - name: Build the image and hold it to the protocol
+        run: node scripts/dev/verify-docker.mjs
