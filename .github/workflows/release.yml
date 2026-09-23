@@ -71,8 +71,10 @@ jobs:
 
       - name: Publish to MCP Registry
         # Also runs on manual dispatch, so a registry entry that fell behind can be
-        # backfilled without waiting for the next release. The registry was stuck on
-        # 1.2.1 because this step had been failing silently-ish for several releases.
+        # backfilled without waiting for the next release — which is how 2.1.0 reached the
+        # registry after a 110-character description was refused with a 422 here, having
+        # already been published to npm by the step above. (An older stall at 1.2.1, from
+        # this step failing without failing the run, was fixed in WO-64.)
         #
         # main only: the registry serves one current version per server, so a 1.x
         # patch published after 2.0.0 would drag the entry backwards for every MCP
