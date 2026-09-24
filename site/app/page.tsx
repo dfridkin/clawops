@@ -2,6 +2,7 @@ import styles from './page.module.css'
 import HeroIntro from './components/HeroIntro'
 import Atmosphere from './components/Atmosphere'
 import { OPENCLAW_SUPPORTED } from './constants'
+import { StructuredData } from './components/StructuredData'
 
 const GITHUB = 'https://github.com/dfridkin/clawops'
 const NPM = 'https://www.npmjs.com/package/@clawops/cli'
@@ -10,6 +11,7 @@ const NPM = 'https://www.npmjs.com/package/@clawops/cli'
 export default function Home() {
   return (
     <>
+      <StructuredData />
       {/*
         The strip and the hero share one pinned-chrome scope. Everything inside renders in the
         Win95 light palette in both themes, the WebGL shell included, because the shell reads

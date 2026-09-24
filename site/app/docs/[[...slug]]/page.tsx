@@ -29,5 +29,20 @@ export async function generateMetadata(props: { params: Promise<{ slug?: string[
   const params = await props.params
   const page = source.getPage(params.slug)
   if (!page) notFound()
-  return { title: page.data.title, description: page.data.description }
+  /*
+   * Canonical and OpenGraph per page. Without them every docs page inherited the site-wide card,
+   * so a link to the Azure guide previewed — and was summarised — as the landing page.
+   */
+  return {
+    title: page.data.title,
+    description: page.data.description,
+    alternates: { canonical: page.url },
+    openGraph: {
+      title: page.data.title,
+      description: page.data.description,
+      url: page.url,
+      siteName: 'clawops',
+      type: 'article',
+    },
+  }
 }

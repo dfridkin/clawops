@@ -3,6 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@clawops/cli)](https://www.npmjs.com/package/@clawops/cli)
 [![npm downloads](https://img.shields.io/npm/dm/@clawops/cli)](https://www.npmjs.com/package/@clawops/cli)
 [![clawops MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/dfridkin/clawops/badges/score.svg)](https://glama.ai/mcp/servers/dfridkin/clawops)
+[![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/dfridkin/clawops)
 
 MCP-native infrastructure ops for OpenClaw, with read-only mode, destructive-action confirmation, and audit logs built in.
 

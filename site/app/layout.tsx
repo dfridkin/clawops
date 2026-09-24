@@ -51,6 +51,9 @@ export const metadata: Metadata = {
   },
   twitter: { card: 'summary_large_image', title: 'clawops', description: DESCRIPTION },
   robots: { index: true, follow: true },
+  // Consolidates the signal from every link that carries a tracking parameter — directory
+  // listings and newsletters add them liberally, and each variant otherwise reads as its own page.
+  alternates: { canonical: '/' },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
