@@ -70,3 +70,65 @@ describe('canonical URLs', () => {
     expect(page).toMatch(/openGraph:/)
   })
 })
+
+describe('the FAQ', () => {
+  const data = read('app/components/faq-data.ts')
+  const component = read('app/components/Faq.tsx')
+
+  /*
+   * The page and its structured data come from one array. Authoring the answers twice — once in
+   * MDX, once in schema — is the drift that shipped three times in this project already, and a
+   * stale copy in structured data is quoted by an assistant as fact.
+   */
+  it('renders the page and the schema from the same source', () => {
+    expect(component).toContain("from './faq-data'")
+    expect(component).toContain("'@type': 'FAQPage'")
+    expect(component).toContain('FAQ.map')
+    expect(read('content/docs/faq.mdx')).toContain('<Faq />')
+  })
+
+  it('answers the questions people ask an assistant, in their words', () => {
+    for (const question of [
+      'How do I self-host OpenClaw?',
+      'Can I run OpenClaw on AWS, GCP or Azure?',
+      'Is it safe to let an AI agent deploy infrastructure?',
+      'What does clawops cost?',
+    ]) {
+      expect(data, question).toContain(question)
+    }
+  })
+
+  // An extracted answer is usually the first sentence, so it has to be the answer.
+  it('leads with the answer rather than restating the question', () => {
+    const answers = [...data.matchAll(/answer:\n?\s*'([^']+)/g)].map((m) => m[1] ?? '')
+    expect(answers.length).toBeGreaterThan(8)
+    for (const answer of answers) {
+      expect(answer.trimStart()).not.toMatch(/^(Well|So|Basically|In order to)/)
+    }
+  })
+})
+
+describe('the comparison page', () => {
+  const page = read('content/docs/comparison.mdx')
+
+  it('exists and is in the docs navigation', () => {
+    expect(page).toContain('title: How clawops compares')
+    expect(read('content/docs/meta.json')).toContain('"comparison"')
+  })
+
+  /*
+   * A comparison that never concedes anything is marketing, and reads as marketing to the reader
+   * and to whatever summarises it. Each section has to say when the alternative is the better
+   * choice.
+   */
+  it('says when each alternative is the better choice', () => {
+    const concessions = page.match(/\*\*Use [^*]+ if\*\*/g) ?? []
+    expect(concessions.length).toBeGreaterThanOrEqual(4)
+  })
+
+  it('names the tools people actually compare against', () => {
+    for (const tool of ['Terraform', 'Pulumi', 'Docker Compose', 'Coolify', 'Ansible']) {
+      expect(page, tool).toContain(tool)
+    }
+  })
+})

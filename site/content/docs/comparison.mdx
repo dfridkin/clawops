@@ -1,0 +1,87 @@
+---
+title: How clawops compares
+description: What clawops does that a compose file, a PaaS or your own Terraform does not — and when those are the better answer.
+---
+
+clawops does one thing: it runs self-hosted OpenClaw on infrastructure you own. Most of the tools
+it gets compared to are more general, which makes them better at other jobs and worse at this one.
+This page is about where the line falls, including the cases where you should use something else.
+
+## Versus writing your own Terraform or Pulumi
+
+**clawops is not a general infrastructure-as-code tool, and does not try to be.** It uses the
+Pulumi Automation API internally — the same engine, driven as a library — so you get the state
+handling and the preview-before-apply model without writing or maintaining any of it. There are no
+`.tf` files and no Pulumi program in your repository.
+
+What you review instead is a JSON deploy plan: the machine, the region, the firewall CIDRs, the
+OpenClaw version. It is much smaller than a Terraform plan because it describes one application's
+deployment rather than arbitrary resources.
+
+**Use Terraform or Pulumi directly if** your OpenClaw box is one resource in a larger estate you
+already manage as code, or you need something clawops does not model — a load balancer, a managed
+database, several nodes behind a proxy. clawops owns the whole stack for its own instance; it is
+not a module you drop into an existing one.
+
+## Versus a Docker Compose file on a box you own
+
+A compose file is a perfectly good way to run OpenClaw, and for a single machine you set up once
+and rarely touch, it is less machinery than this.
+
+What clawops adds is everything either side of `docker run`: provisioning the machine and its
+network, deny-all firewall rules, an SSH key and pinned host keys, hardening modules, gateway
+health probes, config validation against the OpenClaw schema before a restart, version upgrades
+that refuse untested versions, backups, and secret storage that keeps values out of logs.
+
+**Use a compose file if** you already have the host, you are comfortable with the firewall and
+upgrade story, and you do not want another tool in the path.
+
+## Versus Coolify, Dokku or CapRover
+
+Those are self-hosted platforms: you bring a machine, they run many applications on it with
+routing, TLS and a dashboard. They are the better answer when OpenClaw is one of several things
+you host, and when you want HTTPS and a domain handled for you — which clawops deliberately does
+not do.
+
+clawops goes the other way: one application, whose deployment it understands in detail. It knows
+what an OpenClaw config file may contain, which versions are compatible, how to read the gateway's
+health, and what a safe upgrade looks like. A general platform cannot know any of that.
+
+**Use a PaaS if** you want TLS and a domain out of the box, or you are hosting several services
+and want one place to see them.
+
+## Versus Ansible or a shell script
+
+Configuration management assumes the machine exists. clawops creates it, and destroys it — the
+same command that provisions can tear the whole stack down, because it holds the state that
+records what it made.
+
+The sharper difference is what happens on the second run. `clawops up` is idempotent against
+recorded state, so re-running with no change produces no change; a script re-runs whatever it
+contains and hopes the steps are safe twice.
+
+**Use Ansible if** you manage a fleet of machines with a shared baseline and OpenClaw is one role
+among many.
+
+## Versus doing it by hand
+
+Worth saying plainly: for one machine, installed once, by hand is a legitimate choice and you will
+learn more. The cost lands later — on the upgrade you do twice a year and have to relearn, on the
+firewall rule nobody wrote down, on the backup taken the week before you needed it.
+
+## The part that has no obvious comparison
+
+clawops is also an MCP server, which is the piece none of the above have. The same operations the
+CLI exposes are available to a coding agent as typed tools, built so that an agent **cannot apply
+infrastructure from a prompt**: tools emit a plan, a person reads it, and only then does apply run.
+Destructive tools confirm first, a read-only mode serves only what changes nothing, and every call
+is audit-logged with secrets redacted.
+
+If you want an agent that can check a gateway's health, tail its logs and fix a config key without
+being one bad tool call away from destroying the host, that is the part to look at.
+
+<Callout>
+  Honest summary: choose clawops when self-hosted OpenClaw is the job and you want the deployment,
+  the hardening and the day-two operations handled with the same tool. Choose something more
+  general when OpenClaw is one part of a larger system you already run.
+</Callout>
