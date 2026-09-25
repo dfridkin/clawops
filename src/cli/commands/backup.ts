@@ -135,23 +135,31 @@ export default defineCommand({
 
         const { createReadStream } = await import('node:fs')
         const { statSync } = await import('node:fs')
-        const { STATE_DIR_CONTAINER, stateDirForOS } = await import('../../openclaw/runtime.js')
+        const { stateDirForOS } = await import('../../openclaw/runtime.js')
         const { activateRestored, hasRoomFor } = await import('../../openclaw/restore.js')
 
         const remoteArchive = '/tmp/clawops-restore.tar.gz'
         const stamp = Date.now()
         /*
-         * Staged under the state directory, which is the one path the container and the host both
-         * see. It used to be the container's own /tmp: unreachable from the host, and destroyed by
-         * `gateway restart`, which stops, removes and re-runs the container — so a restore staged
+         * Expanded in the container, then copied out to the host.
+         *
+         * OpenClaw refuses a target inside the live state directory — "Backup restore target must
+         * be outside the live OpenClaw state directory" — which rules out staging somewhere the
+         * bind mount already exposes. And the container's own /tmp does not survive
+         * `gateway restart`, which stops, removes and re-runs the container, so a restore left
          * there could evaporate at the next step of the procedure meant to adopt it.
+         *
+         * `docker cp` bridges the two: upstream expands where it insists, and the copy that the
+         * operator is asked to trust lives on the host, beside the state directory it will
+         * replace and on the same filesystem, so activation stays a rename.
          */
-        const stagingInContainer = `${STATE_DIR_CONTAINER}/.clawops-restore-${stamp}`
+        const stagingInContainer = `/tmp/clawops-restored-${stamp}`
 
         const hostExec = (command: string) => execPrivileged(session, command, abortController.signal)
-        const osProbe = await hostExec('uname -s')
+        const osProbe = await session.exec('uname -s', abortController.signal)
         const stateDir = stateDirForOS(osProbe.stdout.trim() === 'Darwin' ? 'Darwin' : 'Linux')
-        const stagingOnHost = `${stateDir}/.clawops-restore-${stamp}`
+        const stateParent = stateDir.replace(/\/+$/, '').replace(/\/[^/]+$/, '') || '/'
+        const stagingOnHost = `${stateParent}/.clawops-restored-${stamp}`
 
         // Expanding needs room for the archive and its contents; the swap afterwards is renames
         // inside one directory and needs none.
@@ -190,6 +198,21 @@ export default defineCommand({
 
         if (restore.code !== 0) {
           throw new Error(`Restore failed: ${(restore.stderr || restore.stdout).slice(0, 400)}`)
+        }
+
+        // Out of the container before anything else touches it, so what the operator is pointed
+        // at cannot be destroyed by a container restart.
+        const copyOut = await hostExec(
+          `docker cp openclaw:${stagingInContainer} ${stagingOnHost}`,
+        )
+        await execPrivileged(
+          session, `docker exec openclaw rm -rf ${stagingInContainer}`, abortController.signal,
+        )
+        if (copyOut.code !== 0) {
+          throw new Error(
+            `The archive was restored inside the container but could not be copied to the host: ` +
+              `${(copyOut.stderr || copyOut.stdout).slice(0, 300)}`,
+          )
         }
 
         let report: { entryCount?: number; warnings?: string[] } = {}

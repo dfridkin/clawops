@@ -194,16 +194,54 @@ describe('backup command — restore', () => {
     expect(restore).toBeDefined()
     // --target, so upstream's "must be empty" guard applies; never in place.
     //
-    // Under the state directory, not the container's /tmp. That directory is the one path the
-    // host and the container both see, and `gateway restart` stops, removes and re-runs the
-    // container — so a restore staged in its /tmp evaporated at the next step of the procedure
-    // meant to adopt it, while the message about it said "on the host".
-    expect(restore).toMatch(/--target \/home\/node\/\.openclaw\/\.clawops-restore-/)
+    // In the container's /tmp, because OpenClaw refuses a target inside the live state directory:
+    // "Backup restore target must be outside the live OpenClaw state directory". Staging under
+    // the bind mount, so the host could see it directly, was rejected on a real host.
+    expect(restore).toMatch(/--target \/tmp\/clawops-restored-/)
     expect(restore).toContain('--json')
     // clawops does not untar anything itself.
     // An invocation, not the substring in "restore.tar.gz" — which is what a bare
     // \btar\b matched on the first attempt.
     expect(cmds.some((c) => /(^|[\s;&|])tar\s/.test(c))).toBe(false)
+  })
+
+  /*
+   * The container's /tmp does not survive `gateway restart`, which stops, removes and re-runs the
+   * container — so a restore left there could evaporate at the next step of the procedure meant
+   * to adopt it, and the message describing it said "on the host", which it was not.
+   */
+  it('copies the restored state out to the host, beside the directory it will replace', async () => {
+    const { writeFileSync, mkdtempSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const os = await import('node:os')
+    const dir = mkdtempSync(join(os.tmpdir(), 'clawops-restore-test-'))
+    const archive = join(dir, 'b.tar.gz')
+    writeFileSync(archive, 'archive-bytes')
+
+    const cmds: string[] = []
+    const session = new FakeSshSession()
+    session.onExec(function handler(cmd: string) {
+      cmds.push(cmd)
+      session.onExec(handler)
+      if (cmd.includes('backup restore')) return { stdout: RESTORE_JSON, stderr: '', code: 0 }
+      if (cmd.startsWith('uname')) return { stdout: 'Linux', stderr: '', code: 0 }
+      if (cmd.startsWith('df ')) return { stdout: '99999999', stderr: '', code: 0 }
+      return { stdout: '', stderr: '', code: 0 }
+    })
+
+    const { buildContext, acquireSession } = await getMocks()
+    buildContext.mockReturnValue(makeLocalFakeContext(FAKE_LOCAL_STATE))
+    acquireSession.mockResolvedValue({ session, release: vi.fn() })
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    const cmd = await getCmd()
+    await (cmd.run as AnyRunFn)({ args: { action: 'restore', file: archive, yes: true } })
+
+    const copy = cmds.find((c) => c.includes('docker cp openclaw:'))
+    expect(copy, 'the restored state must leave the container').toBeDefined()
+    expect(copy).toMatch(/docker cp openclaw:\/tmp\/clawops-restored-\d+ \S*\.clawops-restored-\d+/)
+    // And the container-side copy is not left behind.
+    expect(cmds.some((c) => /rm -rf \/tmp\/clawops-restored-/.test(c))).toBe(true)
   })
 
   it('surfaces the restore warnings verbatim', async () => {
