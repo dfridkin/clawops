@@ -881,6 +881,8 @@ const MUTATIONS = [
     file: 'src/openclaw/restore.ts', from: '    const parkErr = await move(exec, stateDir, keptFailed)', to: '    const parkErr = await exec(`rm -rf ${shellArg(stateDir)}`).then(() => null)', test: 'tests/openclaw/restore.test.ts' },
   { name: 'a full disk is discovered halfway through expanding the archive',
     file: 'src/openclaw/restore.ts', from: '  return availableBytes >= bytes ? { ok: true } : { ok: false, availableBytes, neededBytes: bytes }', to: '  return { ok: true }', test: 'tests/openclaw/restore.test.ts' },
+  { name: 'a docker upload trusts what an unrelated command learned about sudo',
+    file: 'src/transport/privileged.ts', from: '  const known = dockerSudoNeeded.get(key)', to: '  const known = sudoNeeded.get(key)', test: 'tests/transport/privileged.test.ts' },
 ]
 
 let survived = []

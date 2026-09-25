@@ -61,9 +61,37 @@ function looksLikePermissionDenied(result: SshExecResult): boolean {
  */
 const sudoNeeded = new WeakMap<object, boolean>()
 
+/**
+ * The same question asked only of Docker, kept apart on purpose.
+ *
+ * `sudoNeeded` records whether the last command this session ran needed escalation, which is a
+ * property of that command as much as of the host: `uname -s` succeeds unprivileged everywhere,
+ * so a successful one stored `false` and the next Docker call trusted it. On AWS, where the login
+ * user is not in the docker group, that meant `docker exec` ran unescalated and failed with
+ * "permission denied while trying to connect to the docker API" — which is exactly how a backup
+ * upload died on a real host after a harmless `uname` ran first.
+ *
+ * The streaming paths cannot retry once bytes are moving, so they need an answer that is true
+ * before they start. This map holds that answer, and only a Docker probe ever writes to it.
+ */
+const dockerSudoNeeded = new WeakMap<object, boolean>()
+
 /** For tests: forget what we learned about a session. */
 export function resetPrivilegeCache(session: SshSession): void {
   sudoNeeded.delete(session as unknown as object)
+  dockerSudoNeeded.delete(session as unknown as object)
+}
+
+/** Settle whether Docker needs sudo on this host, once per session. */
+async function dockerNeedsSudo(session: SshSession, signal?: AbortSignal): Promise<boolean> {
+  const key = session as unknown as object
+  const known = dockerSudoNeeded.get(key)
+  if (known !== undefined) return known
+  // `docker version` touches the socket and nothing else — the cheapest possible probe.
+  const probe = await session.exec('docker version --format "{{.Server.Version}}"', signal)
+  const needed = looksLikePermissionDenied(probe)
+  dockerSudoNeeded.set(key, needed)
+  return needed
 }
 
 /**
@@ -103,15 +131,7 @@ export async function streamPrivileged(
   cmd: string,
   signal?: AbortSignal,
 ): ReturnType<SshSession['stream']> {
-  const key = session as unknown as object
-
-  if (sudoNeeded.get(key) === undefined) {
-    // `docker version` touches the socket and nothing else — the cheapest possible probe.
-    const probe = await session.exec('docker version --format "{{.Server.Version}}"', signal)
-    sudoNeeded.set(key, looksLikePermissionDenied(probe))
-  }
-
-  return session.stream(sudoNeeded.get(key) ? sudoWrap(cmd) : cmd, signal)
+  return session.stream((await dockerNeedsSudo(session, signal)) ? sudoWrap(cmd) : cmd, signal)
 }
 
 /**
@@ -128,12 +148,6 @@ export async function execPrivilegedWithInput(
   input: NodeJS.ReadableStream,
   signal?: AbortSignal,
 ): Promise<SshExecResult> {
-  const key = session as unknown as object
-
-  if (sudoNeeded.get(key) === undefined) {
-    const probe = await session.exec('docker version --format "{{.Server.Version}}"', signal)
-    sudoNeeded.set(key, looksLikePermissionDenied(probe))
-  }
-
-  return session.execWithInput(sudoNeeded.get(key) ? sudoWrap(cmd) : cmd, input, signal)
+  const escalate = await dockerNeedsSudo(session, signal)
+  return session.execWithInput(escalate ? sudoWrap(cmd) : cmd, input, signal)
 }
