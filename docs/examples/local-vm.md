@@ -277,5 +277,5 @@ the `clawops` user from the host. Those require manual cleanup if desired.
 
 - [Configure models and channels](../configuration.md)
 - [Day-to-day operations](../operations.md)
-- [Connect Claude Code via MCP](../../README.md#connect-claude-code)
+- [Connect Claude Code via MCP](../../README.md#connect-an-ai-editor)
 - [Backup and restore](../backup-restore.md)

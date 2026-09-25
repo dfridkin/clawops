@@ -72,8 +72,8 @@ ls -lh /backups/openclaw-prod-20260508.tar.gz
 ```
 
 For production stacks, rehearse recovery against a staging stack at least monthly (see
-[Recovering from an archive](#recovering-from-an-archive) below). Because recovery is manual on
-this line, the rehearsal matters more, not less.
+[Adopting the restored state](#adopting-the-restored-state) below). An archive nobody has ever
+restored is a guess, not a backup.
 
 ## Restoring
 
@@ -179,10 +179,14 @@ Use S3 Lifecycle rules to transition backups to Glacier after 30 days and expire
    ```bash
    clawops gateway status
    ```
-3. **Recover the most recent backup** using the manual procedure in
-   [Recovering from an archive](#recovering-from-an-archive). Budget real time for this step and
-   rehearse it before an outage. It is not a one-liner on this release line.
-4. **Restart the gateway:**
+3. **Recover the most recent backup** — see
+   [Adopting the restored state](#adopting-the-restored-state):
+   ```bash
+   clawops backup restore --file /backups/openclaw-prod-<date>.tar.gz --activate
+   ```
+   `--activate` restarts the gateway itself and puts the previous state back if it does not
+   come up, so step 4 is only needed if you adopted the state by hand.
+4. **Restart the gateway** (if you did not use `--activate`):
    ```bash
    clawops gateway restart
    ```
