@@ -139,11 +139,13 @@ not set up Prometheus, Grafana, or alert routing. This is planned for a future r
 
 ## Backup and restore
 
-**Backups are created and restored, but never activated for you.** `clawops backup restore`
-verifies the archive and expands it into a fresh staging directory on the host; adopting it is a
-deliberate manual step (stop the gateway, replace the state directory, restart, re-apply to
-reinstall provider plugins). Restoring in place is not offered, writing an archive over a live
-state directory is how a backup becomes corruption.
+**Restoring in place is not offered.** `clawops backup restore` verifies the archive and expands
+it into a staging directory beside the live state; writing an archive over a live state directory
+is how a backup becomes corruption. `--activate` then swaps it in — stop the gateway, move the
+current state aside, put the restored state in place, restart, and confirm it answers — and puts
+the previous state back if it does not. Without `--activate` nothing is touched, and adopting the
+restore by hand remains possible. Provider plugins are not carried in an archive; re-run
+`clawops apply` afterwards to reinstall them.
 
 **The archive is a credential.** It carries the state database, whose tables include
 `mcp_oauth_stores`, `secret_store_entries`, `worker_environment_credentials` and

@@ -72,8 +72,8 @@ ls -lh /backups/openclaw-prod-20260508.tar.gz
 ```
 
 For production stacks, rehearse recovery against a staging stack at least monthly (see
-[Recovering from an archive](#recovering-from-an-archive) below). Because recovery is manual on
-this line, the rehearsal matters more, not less.
+[Adopting the restored state](#adopting-the-restored-state) below). An archive nobody has ever
+restored is a guess, not a backup.
 
 ## Restoring
 
@@ -83,10 +83,11 @@ clawops backup restore --file /backups/openclaw-prod-20260908.tar.gz
 
 clawops does not extract the archive itself. It uploads it and calls
 `openclaw backup restore`, which verifies the archive and expands it into a **fresh staging
-directory**. Refusing a non-empty target. Nothing is activated:
+directory**, refusing a non-empty target. clawops then copies the result out of the container
+to the host, beside the state directory it would replace. Nothing is activated unless you ask:
 
 ```
-✓ Archive verified and restored to /tmp/clawops-restored-1757... on the host.
+✓ Archive verified and expanded to /var/lib/clawops/.clawops-restored-1757... on the host.
   10 entries restored.
 ⚠ Restoring an archive is time travel: every restored state surface rolls back to the
   archive timestamp.
@@ -102,12 +103,35 @@ clawops cannot judge for you, and summarising them would lose the detail that ma
 
 ### Adopting the restored state
 
+The quick way:
+
+```bash
+clawops backup restore --file /backups/openclaw-prod-20260908.tar.gz --activate
+clawops apply <plan>.json     # reinstalls provider plugins
+```
+
+`--activate` stops the gateway, moves the current state aside — it is kept, never deleted —
+puts the restored state in place, restarts, and waits for the gateway to answer. If it does
+not answer within three minutes, clawops puts the previous state back, restarts again, and
+keeps the state that would not run under `.failed-restore-<timestamp>`.
+
+By hand, if you would rather see each step:
+
 ```bash
 clawops ssh --command 'sudo docker stop openclaw'
-# replace the state directory contents with the staging directory
+# replace the CONTENTS of the state directory with the contents of
+#   <staging>/<archiveRoot>/payload/posix/home/node/.openclaw
+# and chown them to uid 1000, the user the gateway runs as
 clawops gateway restart
 clawops apply <plan>.json     # reinstalls provider plugins
 ```
+
+**Note the path.** What OpenClaw expands is a bundle, not a drop-in state directory: a
+`manifest.json` beside a `payload/posix/` tree that mirrors the state directory's original
+absolute path. Moving the bundle itself into place leaves the gateway looking at a manifest
+where its config should be, and it will not start. clawops reads the manifest to find the
+right subtree, and refuses any `schemaVersion` it has not been tested against rather than
+guessing at a layout that has changed.
 
 The last step is not optional if you use a provider whose plugin is not bundled, the
 archive does not carry plugin `node_modules`, so the gateway would start without its model
@@ -155,10 +179,14 @@ Use S3 Lifecycle rules to transition backups to Glacier after 30 days and expire
    ```bash
    clawops gateway status
    ```
-3. **Recover the most recent backup** using the manual procedure in
-   [Recovering from an archive](#recovering-from-an-archive). Budget real time for this step and
-   rehearse it before an outage. It is not a one-liner on this release line.
-4. **Restart the gateway:**
+3. **Recover the most recent backup** — see
+   [Adopting the restored state](#adopting-the-restored-state):
+   ```bash
+   clawops backup restore --file /backups/openclaw-prod-<date>.tar.gz --activate
+   ```
+   `--activate` restarts the gateway itself and puts the previous state back if it does not
+   come up, so step 4 is only needed if you adopted the state by hand.
+4. **Restart the gateway** (if you did not use `--activate`):
    ```bash
    clawops gateway restart
    ```

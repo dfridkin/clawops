@@ -38,6 +38,11 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # Links between docs, followed the way a reader follows them. A renamed heading leaves
+      # the prose reading correctly and the link going nowhere; review does not catch that.
+      - name: Verify doc links resolve
+        run: pnpm verify:docs
+
       - name: Test
         run: pnpm test --coverage
 

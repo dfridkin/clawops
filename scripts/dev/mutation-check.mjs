@@ -871,6 +871,22 @@ const MUTATIONS = [
     file: 'src/mcp/tools/cli/init.ts', from: '  if (!result.ok) return errText(result.reason)', to: '  if (!result.ok) return okText(result.reason)', test: 'tests/mcp/init.test.ts' },
   { name: 'the image drops the CA bundle, so nothing inside it can reach an HTTPS endpoint',
     file: 'Dockerfile', from: 'openssh-client ca-certificates', to: 'openssh-client', test: 'tests/release/image.test.ts' },
+  { name: 'activating a restore deletes the state it replaces instead of setting it aside',
+    file: 'src/openclaw/restore.ts', from: '  const asideErr = await move(exec, stateDir, preserved)', to: '  const asideErr = await exec(`rm -rf ${shellArg(stateDir)}`).then(() => null)', test: 'tests/openclaw/restore.test.ts' },
+  { name: 'a gateway that will not come up is left broken, with no rollback',
+    file: 'src/openclaw/restore.ts', from: '    const backErr = await move(exec, preserved, stateDir)', to: '    const backErr = null', test: 'tests/openclaw/restore.test.ts' },
+  { name: 'staging is renamed along with the directory that contains it',
+    file: 'src/openclaw/restore.ts', from: '  const outFirst = await move(exec, staging, holding)', to: '  const outFirst = null', test: 'tests/openclaw/restore.test.ts' },
+  { name: 'the state that failed to run is discarded rather than kept',
+    file: 'src/openclaw/restore.ts', from: '    const parkErr = await move(exec, stateDir, keptFailed)', to: '    const parkErr = await exec(`rm -rf ${shellArg(stateDir)}`).then(() => null)', test: 'tests/openclaw/restore.test.ts' },
+  { name: 'a full disk is discovered halfway through expanding the archive',
+    file: 'src/openclaw/restore.ts', from: '  return availableBytes >= bytes ? { ok: true } : { ok: false, availableBytes, neededBytes: bytes }', to: '  return { ok: true }', test: 'tests/openclaw/restore.test.ts' },
+  { name: 'a docker upload trusts what an unrelated command learned about sudo',
+    file: 'src/transport/privileged.ts', from: '  const known = dockerSudoNeeded.get(key)', to: '  const known = sudoNeeded.get(key)', test: 'tests/transport/privileged.test.ts' },
+  { name: 'a restore bundle is moved into place instead of the state inside it',
+    file: 'src/openclaw/restore.ts', from: "    statePath: `${bundleRoot}/${archiveRoot}/payload/posix/${stateDir.replace(/^\\/+/, '')}`,", to: '    statePath: bundleRoot,', test: 'tests/openclaw/restore.test.ts' },
+  { name: 'an untested manifest schema is adopted anyway',
+    file: 'src/openclaw/restore.ts', from: '  if (manifest.schemaVersion !== SUPPORTED_MANIFEST_SCHEMA) {', to: '  if (false) {', test: 'tests/openclaw/restore.test.ts' },
 ]
 
 let survived = []

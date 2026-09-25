@@ -121,10 +121,9 @@ export const FAQ: readonly FaqItem[] = [
     question: 'What does clawops not do?',
     answer:
       'It does not terminate TLS or manage domains, so put a reverse proxy in front if you need ' +
-      'HTTPS. It deploys one node per stack, with no clustering or failover. Restoring a backup ' +
-      'verifies the archive and expands it into a staging directory, but adopting it is a manual ' +
-      'step rather than one command. Windows is supported through WSL2 rather than natively. And ' +
-      'it manages the infrastructure OpenClaw runs on, not the agent itself.',
+      'HTTPS. It deploys one node per stack, with no clustering or failover. Windows is supported ' +
+      'through WSL2 rather than natively. And it manages the infrastructure OpenClaw runs on, not ' +
+      'the agent itself.',
     more: { label: 'Limitations', href: '/docs/limitations' },
   },
 ] as const

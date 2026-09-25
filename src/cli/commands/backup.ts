@@ -19,6 +19,7 @@ export default defineCommand({
     file: { type: 'string', description: '[restore] Local backup archive to verify and expand on the host' },
     stack: { type: 'string', description: 'Target stack name' },
     yes: { type: 'boolean', description: '[restore] Skip confirmation prompt' },
+    activate: { type: 'boolean', description: '[restore] Put the restored state into service: stop the gateway, swap it in, restart, and roll back if it does not come up' },
   },
   async run({ args }) {
     const { buildContext } = await import('../context.js')
@@ -133,8 +134,44 @@ export default defineCommand({
         }
 
         const { createReadStream } = await import('node:fs')
+        const { statSync } = await import('node:fs')
+        const { stateDirForOS, CONTAINER_UID } = await import('../../openclaw/runtime.js')
+        const { activateRestored, hasRoomFor, locateRestoredState } = await import('../../openclaw/restore.js')
+
         const remoteArchive = '/tmp/clawops-restore.tar.gz'
-        const staging = `/tmp/clawops-restored-${Date.now()}`
+        const stamp = Date.now()
+        /*
+         * Expanded in the container, then copied out to the host.
+         *
+         * OpenClaw refuses a target inside the live state directory — "Backup restore target must
+         * be outside the live OpenClaw state directory" — which rules out staging somewhere the
+         * bind mount already exposes. And the container's own /tmp does not survive
+         * `gateway restart`, which stops, removes and re-runs the container, so a restore left
+         * there could evaporate at the next step of the procedure meant to adopt it.
+         *
+         * `docker cp` bridges the two: upstream expands where it insists, and the copy that the
+         * operator is asked to trust lives on the host, beside the state directory it will
+         * replace and on the same filesystem, so activation stays a rename.
+         */
+        const stagingInContainer = `/tmp/clawops-restored-${stamp}`
+
+        const hostExec = (command: string) => execPrivileged(session, command, abortController.signal)
+        const osProbe = await session.exec('uname -s', abortController.signal)
+        const stateDir = stateDirForOS(osProbe.stdout.trim() === 'Darwin' ? 'Darwin' : 'Linux')
+        const stateParent = stateDir.replace(/\/+$/, '').replace(/\/[^/]+$/, '') || '/'
+        const stagingOnHost = `${stateParent}/.clawops-restored-${stamp}`
+
+        // Expanding needs room for the archive and its contents; the swap afterwards is renames
+        // inside one directory and needs none.
+        const archiveBytes = statSync(file).size
+        const room = await hasRoomFor(hostExec, stateDir, archiveBytes * 3)
+        if (!room.ok) {
+          throw new UsageError(
+            `Not enough free space on the host to expand this archive: ${mib(room.availableBytes)} ` +
+              `available where the state lives, and the restore needs about ${mib(room.neededBytes)}. ` +
+              'Free some space and run this again; nothing has been changed.',
+          )
+        }
 
         const spin = spinner('Uploading archive...')
         const uploadResult = await execPrivilegedWithInput(
@@ -151,7 +188,7 @@ export default defineCommand({
         spin.text = 'Verifying and restoring to a staging directory...'
         const restore = await execPrivileged(
           session,
-          `docker exec openclaw openclaw backup restore ${remoteArchive} --target ${staging} --json`,
+          `docker exec openclaw openclaw backup restore ${remoteArchive} --target ${stagingInContainer} --json`,
           abortController.signal,
         )
         await execPrivileged(
@@ -163,6 +200,21 @@ export default defineCommand({
           throw new Error(`Restore failed: ${(restore.stderr || restore.stdout).slice(0, 400)}`)
         }
 
+        // Out of the container before anything else touches it, so what the operator is pointed
+        // at cannot be destroyed by a container restart.
+        const copyOut = await hostExec(
+          `docker cp openclaw:${stagingInContainer} ${stagingOnHost}`,
+        )
+        await execPrivileged(
+          session, `docker exec openclaw rm -rf ${stagingInContainer}`, abortController.signal,
+        )
+        if (copyOut.code !== 0) {
+          throw new Error(
+            `The archive was restored inside the container but could not be copied to the host: ` +
+              `${(copyOut.stderr || copyOut.stdout).slice(0, 300)}`,
+          )
+        }
+
         let report: { entryCount?: number; warnings?: string[] } = {}
         try {
           report = JSON.parse(restore.stdout.trim()) as typeof report
@@ -170,7 +222,20 @@ export default defineCommand({
           info(restore.stdout)
         }
 
-        success(`Archive verified and restored to ${staging} on the host.`)
+        /*
+         * What upstream produced is a bundle, not a state directory: manifest.json beside a
+         * payload tree that mirrors the original absolute path. Moving the bundle into place
+         * gives the gateway a manifest where its config should be, and it will not start.
+         */
+        const manifestRead = await hostExec(`cat ${stagingOnHost}/*/manifest.json`)
+        const located = locateRestoredState(manifestRead.stdout, stagingOnHost)
+        if (!located.ok) {
+          failure(located.reason)
+          info(`The expanded archive is at ${stagingOnHost}; nothing has been changed.`)
+          process.exit(1)
+        }
+
+        success(`Archive verified and expanded to ${stagingOnHost} on the host.`)
         if (report.entryCount !== undefined) info(`${report.entryCount} entries restored.`)
 
         // Surfaced verbatim rather than summarised: they describe consequences clawops
@@ -178,11 +243,84 @@ export default defineCommand({
         // may need relinking — and paraphrasing would lose exactly that detail.
         for (const w of report.warnings ?? []) warn(w)
 
-        info('')
-        info('Nothing has been activated. To adopt the restored state:')
-        info("  1. clawops ssh --command 'sudo docker stop openclaw'")
-        info(`  2. replace the state directory contents with ${staging}`)
-        info('  3. clawops gateway restart')
+        if (!args.activate) {
+          info('')
+          info('Nothing has been activated. Re-run with --activate to put this state into')
+          info('service, or adopt it by hand:')
+          info("  1. clawops ssh --command 'sudo docker stop openclaw'")
+          info(`  2. replace the contents of ${stateDir} with those of`)
+          info(`     ${located.statePath}`)
+          info(`     (the archive holds ${located.stateDirInArchive} under payload/posix, not a`)
+          info('      drop-in state directory — moving the bundle itself stops the gateway)')
+          info('  3. clawops gateway restart')
+          info('Provider plugins are not carried in the archive; re-run `clawops apply` to')
+          info('reinstall them, or the gateway starts without its model providers.')
+          return
+        }
+
+        if (!args.yes) {
+          const { createInterface } = await import('node:readline/promises')
+          const rl = createInterface({ input: process.stdin, output: process.stdout })
+          const answer = await rl.question(
+            `Stop the gateway and put this restored state into service? The state it replaces ` +
+              `is kept alongside it, and clawops puts it back if the gateway does not come up. [y/N] `,
+          )
+          rl.close()
+          if (!answer.toLowerCase().startsWith('y')) {
+            info(`Aborted. The restored state is at ${stagingOnHost}; nothing was changed.`)
+            return
+          }
+        }
+
+        const { restartGateway } = await import('../../plan/remote-config.js')
+        const { waitForGateway } = await import('../../openclaw/ready.js')
+
+        const activating = spinner('Activating the restored state...')
+        /*
+         * `docker exec` runs as root, so everything upstream wrote is root-owned; the gateway
+         * runs as the container user and cannot read its own state that way.
+         */
+        const chown = await hostExec(`chown -R ${CONTAINER_UID}:${CONTAINER_UID} ${located.statePath}`)
+        if (chown.code !== 0) {
+          activating.stop()
+          failure(`Could not give the restored state to the gateway's user: ${(chown.stderr || chown.stdout).slice(0, 200)}`)
+          info(`The expanded archive is at ${stagingOnHost}; nothing has been changed.`)
+          process.exit(1)
+        }
+
+        const outcome = await activateRestored({
+          stateDir,
+          staging: located.statePath,
+          exec: hostExec,
+          restart: async () => {
+            activating.text = 'Restarting the gateway...'
+            await restartGateway(session, abortController.signal)
+          },
+          waitHealthy: async () => {
+            activating.text = 'Waiting for the gateway to answer...'
+            /*
+             * Three minutes, not the ten a deploy allows. This runs during an incident, on a
+             * gateway that was answering a minute ago, and every second past "it is not coming
+             * up" is a second before the previous state goes back.
+             */
+            await waitForGateway(session, { signal: abortController.signal, timeoutMs: 180_000 })
+          },
+        })
+        activating.stop()
+
+        if (!outcome.ok) {
+          failure(outcome.reason)
+          if (outcome.keptFailed) info(`The restored state was kept at ${outcome.keptFailed}.`)
+          if (outcome.preserved) info(`The previous state is at ${outcome.preserved}.`)
+          process.exit(1)
+        }
+
+        // The bundle wrapper is a copy, and the part worth keeping has moved out of it.
+        await hostExec(`rm -rf ${stagingOnHost}`)
+
+        success('The restored state is live and the gateway is answering.')
+        info(`The state it replaced is at ${outcome.preserved}.`)
+        info('Remove that directory once you are satisfied; clawops will not.')
         info('Provider plugins are not carried in the archive; re-run `clawops apply` to')
         info('reinstall them, or the gateway starts without its model providers.')
       }
@@ -192,3 +330,8 @@ export default defineCommand({
     }
   },
 })
+
+/** Bytes as MiB, for a message about disk space someone reads while under pressure. */
+function mib(bytes: number): string {
+  return `${Math.round(bytes / 1024 / 1024)} MiB`
+}

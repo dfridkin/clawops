@@ -129,6 +129,38 @@ describe('execPrivilegedWithInput', () => {
     expect(calls[1]).toContain('docker exec -i openclaw')
   })
 
+  /*
+   * Found on a real AWS host. `execPrivileged` records whether the LAST command needed sudo, and
+   * that is a property of the command as much as of the host: `uname -s` succeeds unprivileged
+   * everywhere, so it stored "no sudo needed" and the upload that followed trusted it. The login
+   * user on AWS is not in the docker group, so `docker exec` then died with "permission denied
+   * while trying to connect to the docker API" — after a backup had already been taken.
+   */
+  it('still probes Docker after an unrelated command succeeded without sudo', async () => {
+    const { execPrivileged, execPrivilegedWithInput, resetPrivilegeCache } =
+      await import('../../src/transport/privileged.js')
+    const { Readable } = await import('node:stream')
+
+    const calls: string[] = []
+    const session = {
+      // uname succeeds for anyone; docker refuses this user.
+      exec: vi.fn(async (cmd: string) => {
+        calls.push(cmd)
+        return cmd.includes('docker') ? DENIED : OK('Linux')
+      }),
+      execWithInput: vi.fn(async (cmd: string) => { calls.push(cmd); return OK() }),
+      stream: vi.fn(),
+    } as unknown as SshSession
+    resetPrivilegeCache(session)
+
+    await execPrivileged(session, 'uname -s')
+    await execPrivilegedWithInput(session, 'docker exec -i openclaw sh -c "cat > /tmp/a"',
+      Readable.from(['x']))
+
+    const upload = calls.find((c) => c.includes('docker exec -i openclaw'))
+    expect(upload, 'the upload must be escalated, whatever a harmless command learned').toContain('sudo -n bash -c')
+  })
+
   it('does not escalate where the SSH user already has Docker access', async () => {
     const { execPrivilegedWithInput, resetPrivilegeCache } =
       await import('../../src/transport/privileged.js')

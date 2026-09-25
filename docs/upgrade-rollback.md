@@ -131,14 +131,17 @@ If the upgrade corrupted application data, restore from the pre-upgrade backup a
 back the software:
 
 Data rollback uses `clawops backup restore`, which delegates to OpenClaw 2.0's own restore:
-it verifies the archive and expands it into a fresh staging directory, never in place. Follow [Recovering from an archive](backup-restore.md#recovering-from-an-archive),
-which stops the gateway, unpacks the archive and restarts:
+it verifies the archive and expands it into a fresh staging directory, never in place. Adding
+`--activate` then stops the gateway, puts the restored state in place — keeping the state it
+replaces — and restarts. See
+[Adopting the restored state](backup-restore.md#adopting-the-restored-state):
 
 ```bash
 # 1. Roll back the software (gateway or plan/apply as above)
-# 2. Recover data: see backup-restore.md#recovering-from-an-archive
-# 3. Restart gateway to pick up restored state
-clawops gateway restart
+# 2. Recover data
+clawops backup restore --file /backups/openclaw-pre-upgrade.tar.gz --activate
+# 3. Reinstall provider plugins (not carried in the archive)
+clawops apply <plan>.json
 # 4. Verify
 clawops agents list
 ```
