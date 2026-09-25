@@ -193,7 +193,12 @@ describe('backup command — restore', () => {
     const restore = cmds.find((c) => c.includes('backup restore'))
     expect(restore).toBeDefined()
     // --target, so upstream's "must be empty" guard applies; never in place.
-    expect(restore).toMatch(/--target \/tmp\/clawops-restored-/)
+    //
+    // Under the state directory, not the container's /tmp. That directory is the one path the
+    // host and the container both see, and `gateway restart` stops, removes and re-runs the
+    // container — so a restore staged in its /tmp evaporated at the next step of the procedure
+    // meant to adopt it, while the message about it said "on the host".
+    expect(restore).toMatch(/--target \/home\/node\/\.openclaw\/\.clawops-restore-/)
     expect(restore).toContain('--json')
     // clawops does not untar anything itself.
     // An invocation, not the substring in "restore.tar.gz" — which is what a bare

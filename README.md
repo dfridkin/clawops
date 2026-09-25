@@ -255,7 +255,7 @@ clawops down --yes          # Destroy local-provider stack
 | `config` | Get/set remote OpenClaw config values (`--dry-run` shows would-write JSON) |
 | `agents` | List OpenClaw agents, or stream one agent's logs |
 | `gateway` | Restart the OpenClaw gateway service |
-| `backup` | Create and restore OpenClaw state backups (`restore` expands into a staging directory, never in place) |
+| `backup` | Create and restore OpenClaw state backups (`restore` expands into a staging directory, never in place; `--activate` swaps it in and rolls back if the gateway does not come up) |
 | `stacks` | List named stacks and their state |
 | `doctor` | Check the local machine; with `--stack`, the deployment's health too; with `--provider`, one cloud's credentials and account setup whether or not a stack exists; with `--instance-type`, account checks ask about that size rather than the provider default. `--json` for the report. Exits 1 on any failure |
 | `secret` | Manage secrets: `list`, `set`, `delete`, `rotate`, `audit` |
