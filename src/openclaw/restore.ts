@@ -17,6 +17,60 @@
 
 export type RestoreExec = (command: string) => Promise<{ stdout: string; stderr: string; code: number }>
 
+/**
+ * The layout OpenClaw's restore actually produces, which is a bundle rather than a state
+ * directory:
+ *
+ *   <target>/<archiveRoot>/manifest.json
+ *   <target>/<archiveRoot>/payload/posix/<the state directory at its original absolute path>
+ *
+ * Moving `<target>` into place gives the gateway a manifest.json where its config should be, and
+ * it refuses to start — which is what a live host demonstrated. The state to adopt is the subtree
+ * under `payload/posix`, at the path the manifest records.
+ *
+ * This is upstream's format, so clawops reads the schemaVersion and refuses one it has not been
+ * tested against. A restore that half-understands the archive is worse than one that declines.
+ */
+export const SUPPORTED_MANIFEST_SCHEMA = 1
+
+export type LocatedState =
+  | { ok: true; statePath: string; stateDirInArchive: string }
+  | { ok: false; reason: string }
+
+/** Where the adoptable state sits inside a restored bundle, according to its manifest. */
+export function locateRestoredState(manifestJson: string, bundleRoot: string): LocatedState {
+  let manifest: { schemaVersion?: unknown; archiveRoot?: unknown; paths?: { stateDir?: unknown } }
+  try {
+    manifest = JSON.parse(manifestJson) as typeof manifest
+  } catch {
+    return { ok: false, reason: 'The restored archive has no readable manifest.json.' }
+  }
+
+  if (manifest.schemaVersion !== SUPPORTED_MANIFEST_SCHEMA) {
+    return {
+      ok: false,
+      reason:
+        `This archive declares manifest schemaVersion ${String(manifest.schemaVersion)}, and clawops ` +
+        `has only been tested against ${SUPPORTED_MANIFEST_SCHEMA}. Its layout may have changed, so ` +
+        'clawops will not move it into place. The archive is expanded and can be adopted by hand.',
+    }
+  }
+
+  const archiveRoot = typeof manifest.archiveRoot === 'string' ? manifest.archiveRoot : ''
+  const stateDir = typeof manifest.paths?.stateDir === 'string' ? manifest.paths.stateDir : ''
+  if (!archiveRoot || !stateDir) {
+    return { ok: false, reason: 'The manifest names no archiveRoot or stateDir, so clawops cannot tell which directory to adopt.' }
+  }
+
+  // payload/posix mirrors the original absolute path, so the leading slash is dropped rather
+  // than joined — `${a}/${b}` with an absolute b would otherwise escape the bundle entirely.
+  return {
+    ok: true,
+    stateDirInArchive: stateDir,
+    statePath: `${bundleRoot}/${archiveRoot}/payload/posix/${stateDir.replace(/^\/+/, '')}`,
+  }
+}
+
 export interface ActivateOpts {
   /** Host path of the live state directory, e.g. /var/lib/clawops/openclaw. */
   stateDir: string

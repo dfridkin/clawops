@@ -141,6 +141,13 @@ describe('backup command — restore', () => {
   // clawops delegates rather than extracting archives itself: writing an archive over a
   // live state directory is how a backup becomes corruption.
 
+  /* The bundle layout a live host produced: manifest beside payload/posix/<original path>. */
+  const RESTORE_MANIFEST = JSON.stringify({
+    schemaVersion: 1,
+    archiveRoot: '2026-09-25T20-23-13.773+00-00-openclaw-backup',
+    paths: { stateDir: '/home/node/.openclaw' },
+  })
+
   const RESTORE_JSON = JSON.stringify({
     ok: true,
     entryCount: 10,
@@ -165,6 +172,7 @@ describe('backup command — restore', () => {
       cmds.push(cmd)
       session.onExec(handler)
       if (cmd.includes('backup restore')) return { stdout: RESTORE_JSON, stderr: '', code: 0 }
+      if (cmd.includes('manifest.json')) return { stdout: RESTORE_MANIFEST, stderr: '', code: 0 }
       return { stdout: '', stderr: '', code: 0 }
     })
 
@@ -224,6 +232,7 @@ describe('backup command — restore', () => {
       cmds.push(cmd)
       session.onExec(handler)
       if (cmd.includes('backup restore')) return { stdout: RESTORE_JSON, stderr: '', code: 0 }
+      if (cmd.includes('manifest.json')) return { stdout: RESTORE_MANIFEST, stderr: '', code: 0 }
       if (cmd.startsWith('uname')) return { stdout: 'Linux', stderr: '', code: 0 }
       if (cmd.startsWith('df ')) return { stdout: '99999999', stderr: '', code: 0 }
       return { stdout: '', stderr: '', code: 0 }
@@ -259,6 +268,7 @@ describe('backup command — restore', () => {
     session.onExec(function handler(cmd: string) {
       session.onExec(handler)
       if (cmd.includes('backup restore')) return { stdout: RESTORE_JSON, stderr: '', code: 0 }
+      if (cmd.includes('manifest.json')) return { stdout: RESTORE_MANIFEST, stderr: '', code: 0 }
       return { stdout: '', stderr: '', code: 0 }
     })
     const { buildContext, acquireSession } = await getMocks()

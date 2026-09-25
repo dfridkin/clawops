@@ -5,7 +5,7 @@
 // replaced still exists.
 
 import { describe, it, expect, vi } from 'vitest'
-import { activateRestored, hasRoomFor, type RestoreExec } from '../../src/openclaw/restore.js'
+import { activateRestored, hasRoomFor, locateRestoredState, type RestoreExec } from '../../src/openclaw/restore.js'
 
 const STATE = '/var/lib/clawops/openclaw'
 const STAGING = `${STATE}/.clawops-restore-1`
@@ -151,5 +151,58 @@ describe('hasRoomFor', () => {
   /* An unreadable df is not a reason to block a restore; the expand fails honestly if space runs out. */
   it('does not block on a df it cannot parse', async () => {
     expect(await hasRoomFor(df('not a number'), STATE, 1)).toEqual({ ok: true })
+  })
+})
+
+describe('locateRestoredState', () => {
+  /*
+   * The layout a real host produced. clawops moved the bundle into place, the gateway found
+   * manifest.json where its config belongs, and refused to start — which the rollback then
+   * undid. The state to adopt is under payload/posix, at the path the manifest records.
+   */
+  const MANIFEST = JSON.stringify({
+    schemaVersion: 1,
+    archiveRoot: '2026-09-25T20-23-13.773+00-00-openclaw-backup',
+    runtimeVersion: '2026.9.2',
+    paths: { stateDir: '/home/node/.openclaw', configPath: '/home/node/.openclaw/openclaw.json' },
+  })
+
+  it('points at the state inside the payload, not at the bundle', () => {
+    const located = locateRestoredState(MANIFEST, '/var/lib/clawops/.clawops-restored-1')
+    expect(located.ok).toBe(true)
+    if (!located.ok) return
+    expect(located.statePath).toBe(
+      '/var/lib/clawops/.clawops-restored-1/2026-09-25T20-23-13.773+00-00-openclaw-backup/payload/posix/home/node/.openclaw',
+    )
+    expect(located.stateDirInArchive).toBe('/home/node/.openclaw')
+  })
+
+  // `${bundle}/${stateDir}` with an absolute stateDir would resolve outside the bundle entirely.
+  it('joins the absolute state path without escaping the bundle', () => {
+    const located = locateRestoredState(MANIFEST, '/var/lib/clawops/.clawops-restored-1')
+    if (!located.ok) return
+    expect(located.statePath.startsWith('/var/lib/clawops/.clawops-restored-1/')).toBe(true)
+  })
+
+  /*
+   * This is upstream's format. Refusing a version clawops has not been tested against is the
+   * difference between declining to act and moving the wrong directory over live state.
+   */
+  it('refuses a manifest schema it has not been tested against', () => {
+    const future = JSON.stringify({ schemaVersion: 2, archiveRoot: 'x', paths: { stateDir: '/home/node/.openclaw' } })
+    const located = locateRestoredState(future, '/staged')
+    expect(located.ok).toBe(false)
+    if (!located.ok) {
+      expect(located.reason).toContain('schemaVersion 2')
+      expect(located.reason).toMatch(/by hand/)
+    }
+  })
+
+  it.each([
+    ['not json at all', 'not json'],
+    ['a manifest with no archiveRoot', JSON.stringify({ schemaVersion: 1, paths: { stateDir: '/s' } })],
+    ['a manifest with no stateDir', JSON.stringify({ schemaVersion: 1, archiveRoot: 'r' })],
+  ])('refuses %s', (_label, manifest) => {
+    expect(locateRestoredState(manifest, '/staged').ok).toBe(false)
   })
 })

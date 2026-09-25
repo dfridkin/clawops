@@ -883,6 +883,10 @@ const MUTATIONS = [
     file: 'src/openclaw/restore.ts', from: '  return availableBytes >= bytes ? { ok: true } : { ok: false, availableBytes, neededBytes: bytes }', to: '  return { ok: true }', test: 'tests/openclaw/restore.test.ts' },
   { name: 'a docker upload trusts what an unrelated command learned about sudo',
     file: 'src/transport/privileged.ts', from: '  const known = dockerSudoNeeded.get(key)', to: '  const known = sudoNeeded.get(key)', test: 'tests/transport/privileged.test.ts' },
+  { name: 'a restore bundle is moved into place instead of the state inside it',
+    file: 'src/openclaw/restore.ts', from: "    statePath: `${bundleRoot}/${archiveRoot}/payload/posix/${stateDir.replace(/^\\/+/, '')}`,", to: '    statePath: bundleRoot,', test: 'tests/openclaw/restore.test.ts' },
+  { name: 'an untested manifest schema is adopted anyway',
+    file: 'src/openclaw/restore.ts', from: '  if (manifest.schemaVersion !== SUPPORTED_MANIFEST_SCHEMA) {', to: '  if (false) {', test: 'tests/openclaw/restore.test.ts' },
 ]
 
 let survived = []

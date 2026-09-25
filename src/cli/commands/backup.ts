@@ -135,8 +135,8 @@ export default defineCommand({
 
         const { createReadStream } = await import('node:fs')
         const { statSync } = await import('node:fs')
-        const { stateDirForOS } = await import('../../openclaw/runtime.js')
-        const { activateRestored, hasRoomFor } = await import('../../openclaw/restore.js')
+        const { stateDirForOS, CONTAINER_UID } = await import('../../openclaw/runtime.js')
+        const { activateRestored, hasRoomFor, locateRestoredState } = await import('../../openclaw/restore.js')
 
         const remoteArchive = '/tmp/clawops-restore.tar.gz'
         const stamp = Date.now()
@@ -222,6 +222,19 @@ export default defineCommand({
           info(restore.stdout)
         }
 
+        /*
+         * What upstream produced is a bundle, not a state directory: manifest.json beside a
+         * payload tree that mirrors the original absolute path. Moving the bundle into place
+         * gives the gateway a manifest where its config should be, and it will not start.
+         */
+        const manifestRead = await hostExec(`cat ${stagingOnHost}/*/manifest.json`)
+        const located = locateRestoredState(manifestRead.stdout, stagingOnHost)
+        if (!located.ok) {
+          failure(located.reason)
+          info(`The expanded archive is at ${stagingOnHost}; nothing has been changed.`)
+          process.exit(1)
+        }
+
         success(`Archive verified and expanded to ${stagingOnHost} on the host.`)
         if (report.entryCount !== undefined) info(`${report.entryCount} entries restored.`)
 
@@ -235,7 +248,10 @@ export default defineCommand({
           info('Nothing has been activated. Re-run with --activate to put this state into')
           info('service, or adopt it by hand:')
           info("  1. clawops ssh --command 'sudo docker stop openclaw'")
-          info(`  2. replace the contents of ${stateDir} with ${stagingOnHost}`)
+          info(`  2. replace the contents of ${stateDir} with those of`)
+          info(`     ${located.statePath}`)
+          info(`     (the archive holds ${located.stateDirInArchive} under payload/posix, not a`)
+          info('      drop-in state directory — moving the bundle itself stops the gateway)')
           info('  3. clawops gateway restart')
           info('Provider plugins are not carried in the archive; re-run `clawops apply` to')
           info('reinstall them, or the gateway starts without its model providers.')
@@ -260,9 +276,21 @@ export default defineCommand({
         const { waitForGateway } = await import('../../openclaw/ready.js')
 
         const activating = spinner('Activating the restored state...')
+        /*
+         * `docker exec` runs as root, so everything upstream wrote is root-owned; the gateway
+         * runs as the container user and cannot read its own state that way.
+         */
+        const chown = await hostExec(`chown -R ${CONTAINER_UID}:${CONTAINER_UID} ${located.statePath}`)
+        if (chown.code !== 0) {
+          activating.stop()
+          failure(`Could not give the restored state to the gateway's user: ${(chown.stderr || chown.stdout).slice(0, 200)}`)
+          info(`The expanded archive is at ${stagingOnHost}; nothing has been changed.`)
+          process.exit(1)
+        }
+
         const outcome = await activateRestored({
           stateDir,
-          staging: stagingOnHost,
+          staging: located.statePath,
           exec: hostExec,
           restart: async () => {
             activating.text = 'Restarting the gateway...'
@@ -270,7 +298,12 @@ export default defineCommand({
           },
           waitHealthy: async () => {
             activating.text = 'Waiting for the gateway to answer...'
-            await waitForGateway(session, { signal: abortController.signal })
+            /*
+             * Three minutes, not the ten a deploy allows. This runs during an incident, on a
+             * gateway that was answering a minute ago, and every second past "it is not coming
+             * up" is a second before the previous state goes back.
+             */
+            await waitForGateway(session, { signal: abortController.signal, timeoutMs: 180_000 })
           },
         })
         activating.stop()
@@ -281,6 +314,9 @@ export default defineCommand({
           if (outcome.preserved) info(`The previous state is at ${outcome.preserved}.`)
           process.exit(1)
         }
+
+        // The bundle wrapper is a copy, and the part worth keeping has moved out of it.
+        await hostExec(`rm -rf ${stagingOnHost}`)
 
         success('The restored state is live and the gateway is answering.')
         info(`The state it replaced is at ${outcome.preserved}.`)
