@@ -78,6 +78,11 @@ Examples:
 - **Pulumi component tests:** use `pulumi.runtime.setMocks()`. See `tests/pulumi/components.test.ts`.
 - **MCP tool tests:** invoke via in-memory client; assert schema conformance.
 - **Integration tests:** Docker-based fixtures (see `tests/integration/`).
+- **Local provider e2e:** `pnpm test:e2e:local` runs the bootstrap script for real — installing
+  Docker, pulling the OpenClaw image, writing the systemd unit — against a privileged systemd
+  container (`tests/e2e/local/`). Opt-in, because it needs a few minutes and several gigabytes;
+  the first run pulls the image and later ones reuse it. Run it when you touch
+  `src/providers/local/` or `bootstrap.sh.tmpl`, or label a PR `e2e` to run it in CI.
 - **E2E:** opt-in workflow against sandbox cloud accounts.
 
 Coverage targets per SPEC §11.4:

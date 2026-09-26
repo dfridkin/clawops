@@ -60,6 +60,7 @@
     "test:pulumi": "vitest run tests/providers/aws/program.test.ts tests/providers/azure/program.test.ts",
     "test:changed": "vitest --changed",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e:local": "CLAWOPS_E2E_LOCAL=1 vitest run --config vitest.integration.config.ts tests/e2e/local",
     "test:cloud": "bash scripts/e2e/cloud.sh",
     "typecheck": "NODE_OPTIONS=--max-old-space-size=4096 tsc --noEmit",
     "lint": "eslint --max-warnings=0 src tests scripts",
