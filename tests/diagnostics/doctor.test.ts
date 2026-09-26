@@ -287,6 +287,37 @@ describe('runDiagnostics — remote checks', () => {
     expect(report.ok).toBe(false)
   })
 
+  it('puts the transport diagnosis on the Connection check, advice in the remedy', async () => {
+    const { describeConnectError } = await import('../../src/transport/ssh.js')
+    const thrown = describeConnectError('connect ETIMEDOUT 203.0.113.4:22', {
+      host: '203.0.113.4',
+      port: 22,
+      knownHostsPath: '/home/u/.clawops/known_hosts',
+    })
+    const report = await runDiagnostics(
+      { stack: 'prod' },
+      { openSession: async () => { throw new Error(thrown) } },
+    )
+    const check = find(report, 'Connection')
+    // `doctor --stack` is where an operator goes when nothing can reach the host, so the
+    // advice has to arrive here and not only from the command that failed.
+    expect(check?.detail).toBe(
+      '203.0.113.4:22 never answered — nothing came back at all, which is what a firewall ' +
+        'dropping the packets looks like (connect ETIMEDOUT 203.0.113.4:22).',
+    )
+    expect(check?.remedy).toContain('clawops plan --stack <name> --ssh-cidr auto')
+    // The detail is one line: it renders after a 13-column label.
+    expect(check?.detail).not.toContain('\n')
+  })
+
+  it('leaves a single-line failure without a remedy it does not have', async () => {
+    const report = await runDiagnostics(
+      { stack: 'prod' },
+      { openSession: async () => { throw new Error('no config — run `clawops init`') } },
+    )
+    expect(find(report, 'Connection')?.remedy).toBeUndefined()
+  })
+
   it('releases the session even when a remote check throws', async () => {
     const release = vi.fn()
     const session = new FakeSshSession().respond(/State\.Status/, () => {

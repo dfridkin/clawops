@@ -25,6 +25,16 @@ function flaky(failures: number, message = 'SSH connection failed: connect ECONN
 
 const noSleep = vi.fn(async () => undefined)
 
+describe('waitForSsh and the transport diagnoses', () => {
+  it('tells connect it is waiting on a boot, so it does not diagnose a refusal', async () => {
+    // Without this the operator waiting out a normal 30-second boot is told the instance is up
+    // and sshd is down, and sent to check a firewall that is fine.
+    const { connect } = flaky(0)
+    await waitForSsh(CONN, { connect, sleep: noSleep })
+    expect(connect).toHaveBeenCalledWith(expect.objectContaining({ awaitingBoot: true }))
+  })
+})
+
 describe('isTransient', () => {
   it.each([
     'connect ECONNREFUSED 203.0.113.4:22',

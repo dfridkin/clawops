@@ -328,19 +328,136 @@ describe('describeConnectError', () => {
     expect(message).toContain('ssh-keygen -R [203.0.113.4]:2222')
   })
 
-  it('leaves every other failure as it was', async () => {
+  it('leaves a failure it has nothing to say about as it was', async () => {
     const { describeConnectError } = await import('../../src/transport/ssh.js')
-    expect(describeConnectError('connect ECONNREFUSED 203.0.113.4:22', OPTS)).toBe(
-      'SSH connection failed: connect ECONNREFUSED 203.0.113.4:22',
+    expect(describeConnectError('Protocol error: bad packet length 1349676916', OPTS)).toBe(
+      'SSH connection failed: Protocol error: bad packet length 1349676916',
     )
+  })
+
+  it('says nothing beyond ssh2 while a host is still booting', async () => {
+    const { describeConnectError } = await import('../../src/transport/ssh.js')
+    // "The instance is up and sshd is not" is advice about a problem that does not exist
+    // during the first half-minute of a VM's life. waitForSsh has its own deadline message.
+    expect(
+      describeConnectError('connect ECONNREFUSED 203.0.113.4:22', { ...OPTS, awaitingBoot: true }),
+    ).toBe('SSH connection failed: connect ECONNREFUSED 203.0.113.4:22')
+  })
+
+  it('still explains a host-key mismatch while booting, because waiting will not fix it', async () => {
+    const { describeConnectError } = await import('../../src/transport/ssh.js')
+    const message = describeConnectError('Host denied (verification failed)', {
+      ...OPTS,
+      awaitingBoot: true,
+    })
+    expect(message).toContain('ssh-keygen -R 203.0.113.4 -f /home/u/.clawops/known_hosts')
+  })
+
+  it('separates a refused connection from one that went nowhere', async () => {
+    const { diagnoseConnectError } = await import('../../src/transport/ssh.js')
+    // The distinction is the point: refused means sshd is down on a reachable host, and
+    // dropped means the firewall is not admitting this machine. Same-looking, opposite fixes.
+    const refused = diagnoseConnectError('connect ECONNREFUSED 203.0.113.4:22', OPTS)
+    expect(refused.summary).toContain('refused the connection')
+    expect(refused.summary).toContain('nothing is listening on that port')
+    expect(refused.remedy).toContain('clawops status --stack <name>')
+    expect(refused.remedy).not.toContain('--ssh-cidr')
+
+    const dropped = diagnoseConnectError('connect ETIMEDOUT 203.0.113.4:22', OPTS)
+    expect(dropped.summary).toContain('never answered')
+    expect(dropped.remedy).toContain('clawops plan --stack <name> --ssh-cidr auto')
+    expect(dropped.remedy).toContain('clawops apply <plan>.json')
+    expect(dropped.remedy).not.toContain('sshd')
+  })
+
+  it('reads a handshake timeout as a dropped packet, not a protocol fault', async () => {
+    const { diagnoseConnectError } = await import('../../src/transport/ssh.js')
+    // ssh2's 30s readyTimeout fires before the kernel gives up on the connect, so this is
+    // what a dropping firewall usually looks like.
+    const d = diagnoseConnectError('Timed out while waiting for handshake', OPTS)
+    expect(d.remedy).toContain('--ssh-cidr auto')
+  })
+
+  it.each([
+    ['connect EHOSTUNREACH 203.0.113.4:22'],
+    ['connect ENETUNREACH 203.0.113.4:22'],
+  ])('treats %s as the firewall case too', async (raw) => {
+    const { diagnoseConnectError } = await import('../../src/transport/ssh.js')
+    expect(diagnoseConnectError(raw, OPTS).remedy).toContain('--ssh-cidr auto')
+  })
+
+  it('names the key clawops offered, and does not call it wrong', async () => {
+    const { diagnoseConnectError } = await import('../../src/transport/ssh.js')
+    const d = diagnoseConnectError('All configured authentication methods failed', {
+      ...OPTS,
+      privateKeyPath: '/home/u/.clawops/id_ed25519',
+      user: 'ubuntu',
+    })
+    expect(d.summary).toContain('as ubuntu')
+    expect(d.remedy).toContain('ssh-keygen -y -f /home/u/.clawops/id_ed25519')
+    // The key being absent from the host is likelier than the key being bad, and saying
+    // "wrong key" sends the operator to regenerate the one thing that is fine.
+    expect(d.remedy).toContain('may not be installed on the host')
+  })
+
+  it('omits the key command when the caller did not say which key', async () => {
+    const { diagnoseConnectError } = await import('../../src/transport/ssh.js')
+    const d = diagnoseConnectError('All configured authentication methods failed', OPTS)
+    expect(d.summary).not.toContain('as undefined')
+    expect(d.remedy).not.toContain('ssh-keygen -y')
+    expect(d.remedy).toContain('may not be installed on the host')
+  })
+
+  it('blames an old OpenSSH for an algorithm mismatch', async () => {
+    const { diagnoseConnectError } = await import('../../src/transport/ssh.js')
+    const d = diagnoseConnectError('Handshake failed: no matching key exchange algorithm', OPTS)
+    expect(d.summary).toContain('no algorithm the SSH handshake needs')
+    expect(d.remedy).toContain('OpenSSH older than')
+  })
+
+  it('points a name that does not resolve at the recorded address', async () => {
+    const { diagnoseConnectError } = await import('../../src/transport/ssh.js')
+    const d = diagnoseConnectError('getaddrinfo ENOTFOUND gone.example.com', {
+      ...OPTS,
+      host: 'gone.example.com',
+    })
+    expect(d.summary).toContain('gone.example.com does not resolve')
+    expect(d.remedy).toContain('clawops stacks list')
+  })
+
+  it('keeps ssh2 wording in every diagnosis, for pasting and for isTransient', async () => {
+    const { diagnoseConnectError } = await import('../../src/transport/ssh.js')
+    const raws = [
+      'connect ECONNREFUSED 203.0.113.4:22',
+      'connect ETIMEDOUT 203.0.113.4:22',
+      'getaddrinfo ENOTFOUND gone.example.com',
+      'All configured authentication methods failed',
+      'Handshake failed: no matching key exchange algorithm',
+    ]
+    for (const raw of raws) {
+      expect(diagnoseConnectError(raw, { ...OPTS, host: 'gone.example.com' }).summary).toContain(raw)
+    }
   })
 
   it('keeps a refused connection classified as worth retrying', async () => {
     const { describeConnectError } = await import('../../src/transport/ssh.js')
     const { isTransient } = await import('../../src/transport/wait.js')
     // The readiness wait reads these messages; rewording one into something it no longer
-    // recognises would turn a booting instance into a hard failure.
-    expect(isTransient(describeConnectError('connect ECONNREFUSED', OPTS))).toBe(true)
-    expect(isTransient(describeConnectError('Host denied (verification failed)', OPTS))).toBe(false)
+    // recognises would turn a booting instance into a hard failure. It reads them on the
+    // awaitingBoot path, but the guarantee has to hold either way — the diagnoses keep
+    // ssh2's text for exactly this reason.
+    for (const awaitingBoot of [true, false]) {
+      const opts = { ...OPTS, awaitingBoot }
+      expect(isTransient(describeConnectError('connect ECONNREFUSED', opts))).toBe(true)
+      expect(isTransient(describeConnectError('connect ETIMEDOUT', opts))).toBe(true)
+      expect(isTransient(describeConnectError('connect EHOSTUNREACH', opts))).toBe(true)
+      expect(isTransient(describeConnectError('getaddrinfo ENOTFOUND h', opts))).toBe(true)
+      expect(
+        isTransient(describeConnectError('All configured authentication methods failed', opts)),
+      ).toBe(true)
+      expect(isTransient(describeConnectError('Host denied (verification failed)', opts))).toBe(
+        false,
+      )
+    }
   })
 })
