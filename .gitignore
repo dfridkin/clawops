@@ -158,3 +158,6 @@ graphify-out/
 
 # macOS
 .DS_Store
+
+# Agent worktrees (created inside the repo by tooling, never committed)
+.claude/worktrees/

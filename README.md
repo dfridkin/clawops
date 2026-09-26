@@ -548,6 +548,7 @@ pnpm build                 # tsup → dist/
 pnpm test                  # vitest (1977 tests, ~13s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
+pnpm test:e2e:local        # local provider bootstrap for real, in a systemd container
 pnpm typecheck             # tsc --noEmit
 pnpm lint                  # eslint src/ tests/ scripts/ (--max-warnings=0)
 pnpm gen:schemas           # regenerate src/providers/types.ts + src/mcp/tools/_generated.ts

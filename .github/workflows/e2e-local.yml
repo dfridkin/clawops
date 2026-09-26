@@ -1,0 +1,54 @@
+name: e2e (local provider)
+
+# The local provider's bootstrap, run for real against a systemd container: apt-installing
+# Docker, pulling the OpenClaw image, writing the unit and waiting for the gateway to answer.
+#
+# Not part of CI. It needs a privileged container and several gigabytes of image pull, which is
+# minutes on every pull request for a path that changes rarely — and a slow required check is a
+# check people learn to ignore. It runs nightly, on demand, and on any PR labelled `e2e`, which
+# is how a change to the bootstrap or the local provider should be sent for review.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *'
+  pull_request:
+    types: [labeled, synchronize]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  e2e-local:
+    name: bootstrap against a systemd target
+    # Linux only: the target needs the host's cgroup tree, and a privileged container is not
+    # something the macOS or Windows runners can give it.
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'e2e')
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.x'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Bootstrap a local provider target end to end
+        run: pnpm test:e2e:local
+
+      # No log-dumping step here. testcontainers reaps the target as the test process exits, so
+      # a `docker logs` afterwards finds nothing and prints "invalid container name or ID" —
+      # which is all the first run of this workflow managed to report. The helper streams PID 1's
+      # output as it happens and puts the tail in the thrown error instead.
+      #
+      # Nothing is cached between runs: the runner is thrown away, so the image pull is paid every
+      # time. The volumes in vm-container.ts are for a developer's machine.
