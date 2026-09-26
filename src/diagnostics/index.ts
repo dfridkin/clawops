@@ -113,7 +113,7 @@ export async function runDiagnostics(
     } catch (err) {
       sections.push({
         title: 'Remote health',
-        checks: [{ name: 'Connection', status: 'fail', detail: messageOf(err) }],
+        checks: [connectionCheck(messageOf(err))],
       })
     }
     if (handle) {
@@ -539,6 +539,28 @@ async function defaultOpenSession(stack: string, signal?: AbortSignal) {
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
+}
+
+/**
+ * The failed-connection check, with the transport's advice on its own line.
+ *
+ * `doctor --stack X` is where an operator goes when nothing can reach a host, and it used to
+ * answer with one run-on line: the whole multi-line explanation packed into `detail`, rendered
+ * after a 13-column label. The transport composes its diagnosis as a summary line followed by
+ * the advice, so splitting there puts each half where the renderer already expects it.
+ *
+ * Splitting on the first newline rather than re-deriving the diagnosis keeps one source of
+ * truth for the wording, and works for any multi-line error reaching this path.
+ */
+function connectionCheck(message: string): Check {
+  const [summary, ...rest] = message.split('\n')
+  const remedy = rest.join('\n  ').trim()
+  return {
+    name: 'Connection',
+    status: 'fail',
+    detail: summary,
+    ...(remedy ? { remedy } : {}),
+  }
 }
 
 /**

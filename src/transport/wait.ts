@@ -87,7 +87,10 @@ export async function waitForSsh(
     if (opts.signal?.aborted) throw new NetworkError('Waiting for SSH was aborted')
     attempts++
     try {
-      const session = await connect({ ...conn, signal: opts.signal })
+      // awaitingBoot: a refused connection is the expected answer here, so the transport's
+      // day-2 diagnoses ("the instance is up and sshd is not") would be advice about a problem
+      // that does not exist. The deadline message below is this path's own diagnosis.
+      const session = await connect({ ...conn, awaitingBoot: true, signal: opts.signal })
       if (attempts > 1) opts.onProgress?.(`SSH is up after ${attempts} attempts.`)
       return session
     } catch (err) {

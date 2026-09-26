@@ -167,39 +167,54 @@ clawops gateway restart
 
 ## Troubleshooting
 
+clawops diagnoses its own connection failures — the messages below are what it prints, and they
+name the remedy. What follows each is what to check when the remedy does not resolve it.
+
 ### SSH connection refused
 
 ```
-Error: ECONNREFUSED 192.168.1.50:22
+192.168.1.50:22 refused the connection — the host is reachable and nothing is listening on that
+port (connect ECONNREFUSED 192.168.1.50:22).
 ```
 
-- Is the host running?
-- Is port 22 open in the host's firewall?
-- Did you specify the right `--host` and `--ssh-port`?
+The packet arrived, so the host is up and sshd is not answering on that port. Check `--ssh-port`
+matches the host, and verify independently: `ssh -v -i ~/.clawops/id_ed25519 ubuntu@192.168.1.50`
 
-Verify: `ssh -v -i ~/.clawops/id_ed25519 ubuntu@192.168.1.50`
+### Nothing comes back at all
+
+```
+192.168.1.50:22 never answered — nothing came back at all, which is what a firewall dropping
+the packets looks like (Timed out while waiting for handshake).
+```
+
+A dropped packet, not a refused one. On a local VM this is the host firewall or a network the
+machine cannot route to; on a cloud stack it is usually the security group no longer admitting
+your address, and clawops names the `--ssh-cidr auto` re-plan in the message.
 
 ### Authentication failure
 
 ```
-Error: Authentication failed
+192.168.1.50:22 rejected every authentication method clawops offered as ubuntu (All configured
+authentication methods failed).
 ```
 
-- Is your public key in `~/.ssh/authorized_keys` on the host?
-- Is the key path correct? Check: `cat ~/.clawops/id_ed25519.pub`
-- Add to host: `ssh-copy-id -i ~/.clawops/id_ed25519.pub ubuntu@192.168.1.50`
+clawops names the key it offered. The likeliest cause is that key's public half not being on the
+host, rather than the key being wrong:
+```bash
+ssh-copy-id -i ~/.clawops/id_ed25519.pub ubuntu@192.168.1.50
+```
 
 ### Host key mismatch
 
 ```
-Error: Host key verification failed
+the host key for 192.168.1.50:22 does not match the one recorded in ~/.clawops/known_hosts.
+If your cloud reassigned this address — the usual cause — drop the stale entry and retry:
+  ssh-keygen -R 192.168.1.50 -f ~/.clawops/known_hosts
+If you did not expect this address to change hands, do not connect.
 ```
 
-The host's SSH fingerprint changed. Likely a VM rebuild. Remove the stale entry:
-```bash
-ssh-keygen -R 192.168.1.50 -f ~/.clawops/known_hosts
-```
-Then re-run `clawops up` to re-establish TOFU (trust on first use).
+Likely a VM rebuild. Run the command clawops printed, then re-run `clawops up` to re-establish
+TOFU (trust on first use).
 
 ### Bootstrap script failed
 
