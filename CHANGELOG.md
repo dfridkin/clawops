@@ -1,5 +1,108 @@
 # @clawops/cli
 
+## 2.2.0
+
+### Minor Changes
+
+- a7a5098: **`clawops backup restore --activate` puts a restored backup into service.** Restoring verified an
+  archive and then stopped, printing three manual steps whose middle one was a move over live state —
+  performed by hand, over SSH, by someone who has just had an incident. `--activate` performs it:
+  stop the gateway, swap the state in, restart, and confirm it answers.
+
+  **The state it replaces is kept, not deleted**, and if the gateway does not come up clawops puts
+  it back and restarts again. A restore that destroys what it replaces is not an improvement on the
+  manual procedure; it makes the mistake faster and unrecoverable. The state that failed to run is
+  kept too, under `.failed-restore-<timestamp>`, because it is evidence.
+
+  **The restored state is copied out to the host.** It stayed in the container's own `/tmp` —
+  unreachable from the host, and destroyed by `gateway restart`, which stops, removes and re-runs
+  the container. A restore left there could evaporate at the next step of the procedure meant to
+  adopt it, and the message describing it said "on the host", which it was not. OpenClaw refuses to
+  expand an archive inside the live state directory, so clawops expands where upstream insists and
+  then copies the result beside the directory it will replace, on the same filesystem, which keeps
+  activation a rename.
+
+  Free space is checked before an archive is expanded, so a restore refuses early rather than
+  filling the disk of a machine someone is mid-incident on.
+
+### Patch Changes
+
+- 8d2725a: The site now states what clawops is in a form machines can read: schema.org `SoftwareApplication`
+  structured data on the landing page, an `/llms.txt` map generated from the same source as the
+  sitemap, canonical URLs, and per-page OpenGraph on docs pages instead of every page inheriting the
+  landing page's card.
+
+  Two new docs pages answer the questions assistants are actually asked: a FAQ whose headings are
+  the questions verbatim, carrying `FAQPage` structured data generated from the same array that
+  renders the page, and a comparison page that says where a compose file, a PaaS or your own
+  Terraform is the better answer.
+
+  None of it changes the package. It changes what an assistant says when someone asks it what
+  clawops is — which, until now, it could only answer from third-party listings written by people
+  who had not read the code.
+
+- a7a5098: **The recovery docs no longer describe a procedure that is now a flag.** The backup guide and the
+  upgrade-rollback guide both told the reader that recovery was manual, budget real time for it, and
+  it is not a one-liner on this release line — written before `--activate` existed and left standing
+  after it shipped. Both now name the command, and the disaster-recovery checklist no longer asks for
+  a `gateway restart` that `--activate` performs itself.
+
+  Three links in those guides pointed at `#recovering-from-an-archive`, a heading that had been
+  renamed, and one in the local-VM example pointed at a README section that no longer exists under
+  that name. CI now follows every in-repo Markdown link and anchor (`pnpm verify:docs`): a renamed
+  heading leaves the surrounding prose reading correctly and the link going nowhere, which is
+  precisely what review does not catch.
+
+- a7a5098: A Docker command that streams — a backup upload, a log follow — no longer trusts what an unrelated
+  command learned about sudo. The cache recorded whether the _last_ command needed escalation, and
+  that is a property of the command as much as of the host: `uname -s` succeeds unprivileged
+  everywhere, so running one first stored "no sudo needed" and the upload that followed ran
+  unescalated. On AWS, where the login user is not in the docker group, that failed with "permission
+  denied while trying to connect to the docker API" — after the backup had already been taken.
+  Docker now has its own probe and its own cache, which only a Docker probe writes to.
+- 6654675: **The local provider's bootstrap is now actually tested.** Its e2e suite mocked
+  `localBootstrap` to return exit 0 and asserted on the state handling around it — the header said
+  why, and the reason was that the SSH target had no `apt-get` and no init, so the script could not
+  have run. Every claim the bootstrap makes went unverified, including two that have since caused a
+  live failure: the state directory must be owned by uid 1000 numerically, and the gateway token
+  must survive a re-run.
+
+  It now runs against a container with systemd as PID 1, which installs Docker from the apt repo,
+  pulls the OpenClaw image, writes the systemd unit and waits for the gateway to answer — the real
+  script, on a real host, with the result inspected on that host. Opt-in
+  (`pnpm test:e2e:local`), nightly, and on any pull request labelled `e2e`.
+
+  Verified by mutation rather than by passing: changing the chown to 1001 makes four tests fail with
+  the gateway restart-looping, and removing the token guard fails exactly the re-run test. The
+  previous suite would have passed both.
+
+- ca0ced1: `clawops backup --help` no longer says restore is unavailable. It has worked since 2.0: it
+  verifies an archive and expands it into a staging directory on the host, leaving adoption as a
+  deliberate manual step. The help text was left over from 1.7.5, when the OpenClaw of the day had
+  no restore subcommand to call, and it outlived the reason.
+- b41d50b: **A failed SSH connection now says what failed, not which syscall returned.** clawops passed ssh2's
+  text through unchanged — `SSH connection failed: connect ECONNREFUSED 34.70.45.162:22` — which is
+  true and tells an operator nothing about what to check. The distinction that matters most was the
+  one being thrown away: a _refused_ connection means the packet arrived and nothing is listening, so
+  the instance is up and sshd is not; a _timeout_ means nothing came back at all, and on a clawops
+  stack that is usually the security group, because `--ssh-cidr auto` admits the address the plan was
+  made from and home, office and VPN addresses change. The timeout message now names that cause and
+  prints the two commands that fix it.
+
+  The authentication message names the key clawops offered and says its public half may not be
+  installed on the host, rather than implying the key is wrong and sending someone to regenerate the
+  one thing that was fine. A name that does not resolve, and a handshake with no algorithm in common,
+  each say what they are. Every message keeps ssh2's own words, because operators paste them into
+  issues — and because the readiness wait classifies retryable failures by reading them.
+
+  **`clawops doctor --stack <name>` carries the same advice**, on its own line. It is where an
+  operator goes when nothing can reach a host, and it previously rendered the whole explanation as
+  one run-on line after a 13-column label, or no explanation at all.
+
+  None of this fires while clawops is waiting for a new instance to boot, where a refused connection
+  is the expected answer and "the instance is up and sshd is not" would be advice about a problem
+  that does not exist.
+
 ## 2.1.3
 
 ### Patch Changes
