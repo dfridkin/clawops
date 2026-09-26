@@ -45,8 +45,10 @@ jobs:
       - name: Bootstrap a local provider target end to end
         run: pnpm test:e2e:local
 
-      # The image pull is the expensive part and the runner is thrown away, so nothing is
-      # cached between runs here — the volumes in vm-container.ts are for a developer's machine.
-      - name: Container logs on failure
-        if: failure()
-        run: docker ps -a && docker logs "$(docker ps -aq --filter ancestor=clawops-vm-target:test | head -1)" 2>&1 | tail -100
+      # No log-dumping step here. testcontainers reaps the target as the test process exits, so
+      # a `docker logs` afterwards finds nothing and prints "invalid container name or ID" —
+      # which is all the first run of this workflow managed to report. The helper streams PID 1's
+      # output as it happens and puts the tail in the thrown error instead.
+      #
+      # Nothing is cached between runs: the runner is thrown away, so the image pull is paid every
+      # time. The volumes in vm-container.ts are for a developer's machine.

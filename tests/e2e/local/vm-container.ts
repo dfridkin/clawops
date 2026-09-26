@@ -75,21 +75,47 @@ export async function startVmTarget(openclawVersion: string): Promise<VmTarget> 
     .withBuildArgs({ AUTHORIZED_KEY: authorizedKey })
     .build('clawops-vm-target:test', { deleteOnExit: false })
 
-  const container = await image
-    // systemd needs to manage cgroups and dockerd needs to create them; /run and /run/lock are
-    // tmpfs because systemd writes its runtime state there and the image ships neither.
+  // systemd's own output, kept so a target that dies during startup can say why. testcontainers
+  // reaps the container as the process ends, so `docker logs` after the fact finds nothing —
+  // which is how the first CI run reported only "invalid container name or ID: value is empty".
+  const bootLog: string[] = []
+
+  const started = image
+    // Privileged, because systemd manages cgroups and dockerd creates them. /run and /run/lock
+    // are tmpfs: systemd writes its runtime state there and the image ships neither.
+    //
+    // Note what is NOT here: a bind mount of /sys/fs/cgroup. On a cgroup v2 host Docker gives a
+    // privileged container its own writable, namespaced cgroup2 mount, and bind-mounting the
+    // host's tree over it — with the default private cgroup namespace — leaves systemd looking
+    // at a hierarchy it does not own. It survives that on Docker Desktop's VM and exits
+    // immediately on a GitHub ubuntu-latest runner, which is how this was found.
     .withPrivilegedMode()
-    .withBindMounts([
-      { source: '/sys/fs/cgroup', target: '/sys/fs/cgroup', mode: 'rw' },
-      ...cacheVolumesFor(openclawVersion),
-    ])
+    .withBindMounts(cacheVolumesFor(openclawVersion))
     .withTmpFs({ '/run': '', '/run/lock': '' })
     .withExposedPorts(22)
+    .withLogConsumer((stream) => {
+      stream.on('data', (line: Buffer | string) => {
+        bootLog.push(String(line).trimEnd())
+        if (bootLog.length > 40) bootLog.shift()
+      })
+    })
     // Listening is not the same as ready: sshd answers before systemd has finished bringing
     // the unit up, and a connection in that window fails in a way that reads like a bad key.
     .withWaitStrategy(Wait.forSuccessfulCommand('systemctl is-active ssh'))
     .withStartupTimeout(120_000)
     .start()
+
+  let container: StartedTestContainer
+  try {
+    container = await started
+  } catch (err) {
+    const tail = bootLog.length > 0 ? bootLog.join('\n') : '(the container produced no output)'
+    throw new Error(
+      `The systemd target did not come up: ${(err as Error).message}\n` +
+        `Last lines from PID 1:\n${tail}`,
+      { cause: err },
+    )
+  }
 
   return {
     host: container.getHost(),
