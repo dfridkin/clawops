@@ -8,7 +8,8 @@ maturity, and hardening.
 R1–R13 have shipped. Bug reporting (`clawops bug`) and the hardening MVP landed in the 1.7 line.
 2.0 moved clawops onto OpenClaw 2.x; 2.0.1 and 2.0.2 made cloud deploys work on all three clouds.
 2.1 added Tailscale private networking and hardening on every cloud. 2.2 made recovery a flag
-(`clawops backup restore --activate`) and made SSH failures say what failed.
+(`clawops backup restore --activate`), gave every command an agent needs an MCP tool, and made SSH
+failures say what failed.
 
 Remaining work falls into three groups:
 

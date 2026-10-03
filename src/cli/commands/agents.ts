@@ -4,6 +4,8 @@ import { failure, info } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
 import { renderTable } from '../../output/table.js'
 import { execPrivileged } from '../../transport/privileged.js'
+import type { Result } from '../../types/result.js'
+import type { AgentActivityPage } from '../../openclaw/agent-activity.js'
 
 export default defineCommand({
   meta: {
@@ -119,24 +121,26 @@ export default defineCommand({
         // — it would have failed on every 2.0 gateway. Agent-scoped records live in the audit
         // log now. `openclaw logs` is gateway-wide and its envelope carries no agent key, so
         // filtering that would mean substring-matching a message field and hoping.
-        const { agentAuditCommand } = await import('../../openclaw/logs.js')
-        const limit = typeof args.limit === 'string' ? parseInt(args.limit, 10) : 50
-        const result = await execPrivileged(
+        const { readAgentActivityRaw, DEFAULT_AGENT_LOG_LIMIT } =
+          await import('../../openclaw/agent-activity.js')
+        const limit = typeof args.limit === 'string' ? parseInt(args.limit, 10) : DEFAULT_AGENT_LOG_LIMIT
+        const result = await readAgentActivityRaw(
           session,
-          agentAuditCommand({ agentId: name!, limit, cursor: typeof args.cursor === 'string' ? args.cursor : undefined }),
+          { agentId: name!, limit, ...(typeof args.cursor === 'string' ? { cursor: args.cursor } : {}) },
           abortController.signal,
         )
 
-        if (result.code !== 0) {
-          failure(`Cannot read activity for "${name}": ${result.stderr.trim() || result.stdout.trim() || `exit ${result.code}`}`)
+        if (!result.ok) {
+          failure(result.error)
           process.exitCode = 1
           return
         }
 
         if (args.json) {
-          process.stdout.write(result.stdout)
+          process.stdout.write(result.value)
         } else {
-          renderAgentRuns(name!, result.stdout)
+          const { parseAgentActivity } = await import('../../openclaw/agent-activity.js')
+          renderAgentRuns(name!, parseAgentActivity(name!, result.value))
         }
       }
     } finally {
@@ -153,18 +157,15 @@ export default defineCommand({
  * cursor to continue from. Presenting a poll loop as a follow would be a different thing
  * wearing the old command's clothes.
  */
-function renderAgentRuns(agentId: string, stdout: string): void {
-  interface Run { at?: string; status?: string; kind?: string; summary?: string; message?: string }
-  let page: { records?: Run[]; cursor?: string }
-  try {
-    page = JSON.parse(stdout.trim() || '{}') as typeof page
-  } catch {
-    failure(`Cannot read activity for "${agentId}": unexpected output: ${stdout.trim().slice(0, 200)}`)
+function renderAgentRuns(agentId: string, parsed: Result<AgentActivityPage, string>): void {
+  if (!parsed.ok) {
+    failure(parsed.error)
     process.exitCode = 1
     return
   }
+  const page = parsed.value
 
-  const records = page.records ?? []
+  const records = page.records
   if (records.length === 0) {
     info(`No recorded activity for agent "${agentId}".`)
     return

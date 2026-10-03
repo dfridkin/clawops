@@ -355,6 +355,10 @@ Do not bind to a non-loopback address without additional authentication controls
 | `clawops_stacks_list` | admin | List all stacks and their state |
 | `clawops_config_get` | cli | Read a remote config value |
 | `clawops_agents_list` | cli | List running agents |
+| `clawops_agents_logs` | cli | One agent's recent activity, paginated |
+| `clawops_gateway_status` | cli | Whether the gateway container is running, and its image |
+| `clawops_secret_list` | cli | List stored secrets by name and status (never values) |
+| `clawops_secret_audit` | cli | Report missing secrets and unresolvable `$secret:` references |
 | `clawops_up` | cli | Provision or update a stack |
 | `clawops_destroy` | cli | Destroy a stack (elicits confirmation) |
 | `clawops_apply` | cli | Apply a plan file |
@@ -363,6 +367,12 @@ Do not bind to a non-loopback address without additional authentication controls
 | `clawops_config_unset` | cli | Remove a remote config key |
 | `clawops_config_validate` | cli | Validate the deployed config against the OpenClaw schema |
 | `clawops_gateway_restart` | cli | Restart the gateway (elicits confirmation) |
+| `clawops_gateway_update` | cli | Move the gateway to a concrete OpenClaw version (elicits confirmation) |
+| `clawops_backup_create` | cli | Back up gateway state to a local archive |
+| `clawops_backup_restore` | cli | Restore a backup to staging, or with `activate` into service (elicits confirmation) |
+| `clawops_migrate` | cli | Migrate a 1.x deployment onto the 2.0 runtime (elicits confirmation) |
+| `clawops_stacks_delete` | admin | Forget a stack in config; does not destroy infrastructure (elicits confirmation) |
+| `clawops_secret_delete` | cli | Delete a stored secret (elicits confirmation) |
 | `clawops_harden` | cli | Apply hardening modules; join or leave a tailnet (elicits confirmation) |
 | `clawops_init` | cli | Register a stack and write `~/.clawops/config.json` (no cloud resources) |
 | `clawops_workflow_deploy_app` | workflow | End-to-end deploy: plan → confirm → apply → status |
@@ -545,7 +555,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (1977 tests, ~13s)
+pnpm test                  # vitest (2076 tests, ~13s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm test:e2e:local        # local provider bootstrap for real, in a systemd container
@@ -606,7 +616,7 @@ Use `pnpm changeset` to record a release note before merging a `feat` or `fix`.
 
 ## What's new in 2.2
 
-Recovery is a flag, and SSH failures say what failed.
+Recovery is a flag, agents can reach every command they need, and SSH failures say what failed.
 
 ### Restore puts a backup into service
 
@@ -620,6 +630,16 @@ Recovery is a flag, and SSH failures say what failed.
   the container's `/tmp`, where the next `gateway restart` destroyed it.
 - Free space is checked before an archive is expanded.
 - `clawops backup --help` no longer says restore is unavailable. It has worked since 2.0.
+
+### Every command an agent needs is an MCP tool
+
+- Ten new tools bring the catalog to 30: backup create and restore (with `activate`), gateway
+  status and update, one agent's logs, migrate, stacks delete, and secret list, audit and
+  delete. Each calls the same code as its command, so both refuse the same things in the same
+  words.
+- `clawops ssh` and `clawops secret set` / `rotate` stay CLI-only on purpose: a root shell or a
+  secret value does not belong in an agent's hands or its transcript. The secret tools never
+  return values.
 
 ### SSH failures name the cause
 

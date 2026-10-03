@@ -203,33 +203,65 @@ describe('handleGatewayRestart', () => {
     expect(text).toMatch(/cancel/i)
   })
 
-  it('runs docker restart commands when accepted', async () => {
+  /** A Linux host running 2026.9.2, published on `hostIp`, whose restart succeeds unless told otherwise. */
+  function restartHost(hostIp: string, run: { stderr?: string; code?: number } = {}) {
+    return new FakeSshSession()
+      .respond(/uname/, { stdout: 'Linux\n' })
+      .respond(/\.Config\.Image/, { stdout: 'ghcr.io/openclaw/openclaw:2026.9.2\n' })
+      .respond(/PortBindings/, { stdout: JSON.stringify({ '18789/tcp': [{ HostIp: hostIp, HostPort: '18789' }] }) })
+      .respond(/docker run/, { stdout: '', stderr: run.stderr ?? '', code: run.code ?? 0 })
+      .respond(/startupz/, { stdout: '{"ok":true,"status":"started"}' })
+  }
+
+  it('restarts on the version the host already runs, and says so', async () => {
     const { buildContext, acquireSession } = await getMocks()
     buildContext.mockReturnValue(makeFakeContext())
-
-    const session = new FakeSshSession()
-    session.onExec(() => ({ stdout: 'ghcr.io/openclaw/openclaw:stable', stderr: '', code: 0 }))
-    session.onExec(() => ({ stdout: '', stderr: '', code: 0 }))
+    const session = restartHost('127.0.0.1')
     acquireSession.mockResolvedValue({ session, release: vi.fn() })
 
     const { handleGatewayRestart } = await import('../../src/mcp/tools/cli/gateway.js')
     const result = await handleGatewayRestart({ stackName: 'default' }, makeServer())
-    const text = (result.content[0] as { type: 'text'; text: string }).text
-    expect(text).toMatch(/restart/i)
     expect(result.isError).toBeFalsy()
+    const run = session.execCalls().find((c) => c.includes('docker run'))!
+    expect(run).toContain('ghcr.io/openclaw/openclaw:2026.9.2')
+  })
+
+  it('keeps a gateway published on every interface on every interface', async () => {
+    // The handler used to rebuild the run command itself with the default scope, so an agent
+    // restarting a --publish-gateway all deployment took it off the public interface.
+    const { buildContext, acquireSession } = await getMocks()
+    buildContext.mockReturnValue(makeFakeContext())
+    const session = restartHost('0.0.0.0')
+    acquireSession.mockResolvedValue({ session, release: vi.fn() })
+
+    const { handleGatewayRestart } = await import('../../src/mcp/tools/cli/gateway.js')
+    await handleGatewayRestart({ stackName: 'default' }, makeServer())
+    const run = session.execCalls().find((c) => c.includes('docker run'))!
+    expect(run).not.toContain('127.0.0.1:18789')
+    expect(run).toMatch(/-p\s+(0\.0\.0\.0:)?18789:18789/)
+  })
+
+  it('keeps a loopback gateway on loopback', async () => {
+    const { buildContext, acquireSession } = await getMocks()
+    buildContext.mockReturnValue(makeFakeContext())
+    const session = restartHost('127.0.0.1')
+    acquireSession.mockResolvedValue({ session, release: vi.fn() })
+
+    const { handleGatewayRestart } = await import('../../src/mcp/tools/cli/gateway.js')
+    await handleGatewayRestart({ stackName: 'default' }, makeServer())
+    const run = session.execCalls().find((c) => c.includes('docker run'))!
+    expect(run).toContain('127.0.0.1:18789')
   })
 
   it('returns errText when restart command fails', async () => {
     const { buildContext, acquireSession } = await getMocks()
     buildContext.mockReturnValue(makeFakeContext())
-
-    const session = new FakeSshSession()
-    session.onExec(() => ({ stdout: 'ghcr.io/openclaw/openclaw:stable', stderr: '', code: 0 }))
-    session.onExec(() => ({ stdout: '', stderr: 'docker: error', code: 1 }))
+    const session = restartHost('127.0.0.1', { stderr: 'docker: error', code: 1 })
     acquireSession.mockResolvedValue({ session, release: vi.fn() })
 
     const { handleGatewayRestart } = await import('../../src/mcp/tools/cli/gateway.js')
     const result = await handleGatewayRestart({ stackName: 'default' }, makeServer())
     expect(result.isError).toBe(true)
+    expect((result.content[0] as { text: string }).text).toContain('docker: error')
   })
 })

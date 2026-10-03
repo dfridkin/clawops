@@ -26,15 +26,20 @@ const NO_TOOL: Record<string, string> = {
   down: 'Same operation as destroy, which clawops_destroy covers.',
   tunnel: 'A long-lived local process, not a request and a response.',
   bug: 'Opens a pre-filled GitHub issue in a browser.',
-  // Tracked as gaps: see docs/limitations.md. Each needs a tool, not an excuse.
+  // Deliberately not tools. docs/limitations.md says the same, for users.
+  ssh:
+    'An arbitrary remote command as root bypasses every typed refusal and confirmation, and a ' +
+    'prompt injection reaching the agent would reach it (T11). Each thing an agent needs over ' +
+    'SSH is a named tool instead.',
+  secret:
+    'Covered by clawops_secret_list, clawops_secret_audit and clawops_secret_delete. set and ' +
+    'rotate have no tool: the value would pass through the transcript and the model (R6).',
   init: 'Covered by clawops_init.',
-  ssh: 'GAP (unscheduled): no tool runs an arbitrary remote command.',
-  secret: 'GAP (unscheduled): secret list and audit are read-only and safe to expose; set and rotate carry values (R6).',
-  backup: 'GAP (unscheduled): no tool for create, restore or restore --activate, so an agent can neither take a pre-upgrade backup nor recover from one.',
-  migrate: 'GAP (unscheduled): 1.x to 2.0 migration is CLI-only.',
-  gateway: 'PARTIAL: clawops_gateway_restart exists; status and update do not.',
-  agents: 'PARTIAL: clawops_agents_list exists; per-agent logs do not.',
-  stacks: 'PARTIAL: clawops_stacks_list exists; delete does not.',
+  backup: 'Covered by clawops_backup_create and clawops_backup_restore (including activate).',
+  migrate: 'Covered by clawops_migrate.',
+  gateway: 'Covered by clawops_gateway_status, clawops_gateway_restart and clawops_gateway_update.',
+  agents: 'Covered by clawops_agents_list and clawops_agents_logs.',
+  stacks: 'Covered by clawops_stacks_list and clawops_stacks_delete.',
   logs: 'Covered by clawops_logs_tail. Following a stream is not tool-shaped.',
   config: 'Covered by clawops_config_get/set/unset/validate.',
   doctor: 'Covered by clawops_doctor.',

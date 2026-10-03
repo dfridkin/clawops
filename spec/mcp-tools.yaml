@@ -86,9 +86,8 @@ tools:
       actually running.
 
       Do NOT use when: you already know the problem and want to fix it. This tool only
-      reports — it changes nothing, and never runs `openclaw doctor --fix`. No tool
-      repairs a gateway: `clawops gateway update` is CLI-only, so tell the user to run
-      it themselves, after `clawops backup create`.
+      reports — it changes nothing, and never runs `openclaw doctor --fix`. To move a
+      gateway to another version, use clawops_gateway_update after clawops_backup_create.
 
       Every check carries a status: fail (something is wrong that clawops can name),
       warn (worth knowing, not broken), info (did not apply). `ok` is false only when
@@ -413,8 +412,7 @@ tools:
       remove a stack. Always confirm the stack name.
 
       Do NOT use when: the user wants to stop the gateway temporarily — that is not
-      a destroy, and no tool stops a gateway; clawops_gateway_restart is the only
-      gateway tool. Do NOT use when in doubt about which stack; list first with
+      a destroy, and no tool stops a gateway; clawops_gateway_restart restarts it. Do NOT use when in doubt about which stack; list first with
       clawops_stacks_list.
     annotations:
       title: Destroy Stack (DESTRUCTIVE)

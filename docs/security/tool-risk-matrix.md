@@ -1,6 +1,6 @@
 # MCP Tool Risk Matrix
 
-All 20 clawops MCP tools, their risk classification, and which safety mode includes them.
+All 30 clawops MCP tools, their risk classification, and which safety mode includes them.
 
 The `--read-only` column is the `read` toolset, and the `--no-destructive` column is
 `destructiveHint: false`. Both come from `spec/mcp-tools.yaml`, and a test asserts this table
@@ -27,6 +27,10 @@ unavailable in `--read-only` that the catalog put in the `read` toolset.
 | `clawops_stacks_list` | admin | Read-only | ✅ | ✅ | ✅ |
 | `clawops_config_get` | cli | Read-only | ✅ | ✅ | ✅ |
 | `clawops_agents_list` | cli | Read-only | ✅ | ✅ | ✅ |
+| `clawops_agents_logs` | cli | Read-only | ✅ | ✅ | ✅ |
+| `clawops_gateway_status` | cli | Read-only | ✅ | ✅ | ✅ |
+| `clawops_secret_list` | cli | Read-only (names only, never values) | ✅ | ✅ | ✅ |
+| `clawops_secret_audit` | cli | Read-only (names only, never values) | ✅ | ✅ | ✅ |
 | `clawops_up` | cli | High | ❌ | ❌ | ✅ |
 | `clawops_destroy` | cli | High | ❌ | ❌ | ✅ |
 | `clawops_apply` | cli | High | ❌ | ❌ | ✅ |
@@ -35,13 +39,24 @@ unavailable in `--read-only` that the catalog put in the `read` toolset.
 | `clawops_config_unset` | cli | Medium | ❌ | ❌ | ✅ |
 | `clawops_config_validate` | cli | Read-only | ✅ | ✅ | ✅ |
 | `clawops_gateway_restart` | cli | Medium | ❌ | ❌ | ✅ |
+| `clawops_gateway_update` | cli | Medium | ❌ | ❌ | ✅ |
+| `clawops_backup_create` | cli | Low | ❌ | ✅ | ✅ |
+| `clawops_backup_restore` | cli | High (with `activate`) | ❌ | ❌ | ✅ |
+| `clawops_migrate` | cli | High | ❌ | ❌ | ✅ |
+| `clawops_stacks_delete` | admin | Medium (forgets a stack; `force` can orphan resources) | ❌ | ❌ | ✅ |
+| `clawops_secret_delete` | cli | Medium | ❌ | ❌ | ✅ |
 | `clawops_harden` | cli | Medium | ❌ | ❌ | ✅ |
 | `clawops_init` | cli | Low | ❌ | ✅ | ✅ |
 | `clawops_workflow_deploy_app` | workflow | High | ❌ | ❌ | ✅ |
 | `clawops_workflow_recover` | workflow | Low | ✅ | ✅ | ✅ |
 | `clawops_task_status` | cli | Read-only | ✅ | ✅ | ✅ |
 
-`--read-only` enables 11 tools (TOOLSETS.read). `--no-destructive` enables 12 tools (filters `destructiveHint: true` from any active toolset). Default enables all 20.
+`--read-only` enables 15 tools (TOOLSETS.read). `--no-destructive` enables 17 tools (filters `destructiveHint: true` from any active toolset). Default enables all 30.
+
+**Deliberately no tool:** `clawops ssh` (an arbitrary remote command would bypass every typed
+refusal and confirmation, and a prompt injection could reach it, see T11), and `clawops secret
+set` / `rotate` (a secret value passed as a tool argument lands in the transcript, R6). The
+tools that refuse these say which command to ask the user to run.
 
 ## Annotations
 
