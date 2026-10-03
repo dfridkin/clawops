@@ -235,8 +235,9 @@ clawops backup create --out /backups/openclaw-$(date +%Y%m%d).tar.gz
 
 `clawops backup restore` works on this line. OpenClaw 2.0 ships a real restore and clawops
 delegates to it: the archive is verified upstream and expanded into a **fresh staging
-directory**, never in place. Adopting the restored state is a deliberate manual step, see
-[backup-restore.md](backup-restore.md).
+directory**, never in place. `--activate` puts it into service: it stops the gateway, swaps the
+state in (keeping the state it replaces), restarts, and rolls back if the gateway does not answer.
+See [backup-restore.md](backup-restore.md).
 
 On the clawops 1.x line the command is unavailable, because `2026.7.1-2` has no restore
 subcommand at all.

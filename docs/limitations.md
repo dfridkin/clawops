@@ -97,7 +97,9 @@ automation is tracked in the roadmap.
 `secret`, `backup` and `migrate` have no tool; `gateway` has restart but not status or update,
 `agents` has list but not per-agent logs, and `stacks` has list but not delete. An agent driving
 clawops hits these as missing capabilities and has to ask the user to run a command themselves.
-`tests/mcp/parity.test.ts` holds the full list with a reason for each. Tracked for 2.2.
+That includes `backup restore --activate`, new in 2.2: recovery is CLI-only.
+`tests/mcp/parity.test.ts` holds the full list with a reason for each. Closing these gaps is not
+scheduled for a release yet; 2.2 did not close them.
 
 **Tailscale: no private-only mode on local stacks, and no `doctor` check yet.** `clawops harden
 --tailscale` joins any stack to a tailnet and moves clawops onto that address. Closing the public

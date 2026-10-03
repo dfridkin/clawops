@@ -4,18 +4,19 @@ This document tracks the public roadmap for clawops. Development milestones (M0�
 core implementation; adoption milestones (R1–R12) cover documentation, safety, operational
 maturity, and hardening.
 
-**Current state (2.0.2, published):** all development milestones are complete, and adoption waves
+**Current state (2.2.0, published):** all development milestones are complete, and adoption waves
 R1–R13 have shipped. Bug reporting (`clawops bug`) and the hardening MVP landed in the 1.7 line.
-2.0 moved clawops onto OpenClaw 2.x; 2.0.1 and 2.0.2 made cloud deploys work on all three clouds
-and fixed a module resolution failure that broke every cloud command on an installed copy.
+2.0 moved clawops onto OpenClaw 2.x; 2.0.1 and 2.0.2 made cloud deploys work on all three clouds.
+2.1 added Tailscale private networking and hardening on every cloud. 2.2 made recovery a flag
+(`clawops backup restore --activate`) and made SSH failures say what failed.
 
 Remaining work falls into three groups:
 
 | Group | Items | Notes |
 |---|---|---|
 | **Carried from the 1.x waves** | WO-34 (Tailscale), partly | Azure hardening landed in WO-32. Tailscale joins, repoints, goes private-only and reverts; the doctor check is still open |
-| **clawops 2.1** | WO-53 sandboxing, WO-54 config surface, WO-55 TLS and public origin, WO-56 observability, WO-57 fleet multi-tenancy | WO-55 gates Portals, Teams, Slack and Discord Activities |
-| **clawops 2.2: alone** | WO-62 host agent | Ships by itself, behind preconditions. See below |
+| **2.x, unscheduled** | WO-53 sandboxing, WO-54 config surface, WO-55 TLS and public origin, WO-56 observability, WO-57 fleet multi-tenancy | Planned for 2.1 and not in it; 2.1 shipped private networking and hardening instead. WO-55 gates Portals, Teams, Slack and Discord Activities |
+| **clawops 2.3: alone** | WO-62 host agent | Ships by itself, behind preconditions. See below. It was 2.2 until 2.2 went to restore and SSH fixes |
 | **Housekeeping** | WO-64 `server.json` drift | ✅ shipped. Bumped at version time, with a test that it agrees with `package.json` |
 
 ### WO-62 ships on its own, and only after its preconditions

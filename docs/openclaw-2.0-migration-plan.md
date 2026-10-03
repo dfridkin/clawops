@@ -930,6 +930,9 @@ npm on the deployed host, which `docs/security/egress.md` already records.
 
 **WO-62. Clawops as a host agent** *(its own release, 2.2, ships alone, gated)*
 
+> **2026-10-03:** 2.2.0 shipped restore `--activate` and the SSH diagnostics instead, so WO-62 is
+> now **2.3**. It still ships alone; none of the preconditions below exist in code yet.
+
 For the gateway's AI to manage a stack unattended, clawops has to be installed and running on
 the gateway host. It was scoped as a fast follow after 2.0. That was wrong: it is not a feature
 with risks attached, it is a change of security posture that happens to be delivered as a
