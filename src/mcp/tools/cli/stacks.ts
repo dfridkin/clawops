@@ -19,3 +19,8 @@ export async function handleStacksList(_input: StacksListInput, _server: McpServ
   }))
   return { content: [{ type: 'text', text: JSON.stringify({ stacks }, null, 2) }] }
 }
+
+// STUB — replaced by its implementation.
+export async function handleStacksDelete(_input: import('../_generated.js').StacksDeleteInput, _server: McpServer): Promise<CallToolResult> {
+  return { content: [{ type: 'text', text: 'not implemented' }], isError: true }
+}

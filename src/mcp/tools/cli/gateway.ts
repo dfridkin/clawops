@@ -47,3 +47,12 @@ export async function handleGatewayRestart(input: GatewayRestartInput, server: M
     drainPool()
   }
 }
+
+// STUB — replaced by its implementation.
+export async function handleGatewayStatus(_input: import('../_generated.js').GatewayStatusInput, _server: McpServer): Promise<CallToolResult> {
+  return { content: [{ type: 'text', text: 'not implemented' }], isError: true }
+}
+
+export async function handleGatewayUpdate(_input: import('../_generated.js').GatewayUpdateInput, _server: McpServer): Promise<CallToolResult> {
+  return { content: [{ type: 'text', text: 'not implemented' }], isError: true }
+}

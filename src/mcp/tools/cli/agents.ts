@@ -32,3 +32,8 @@ export async function handleAgentsList(input: AgentsListInput, _server: McpServe
     drainPool()
   }
 }
+
+// STUB — replaced by its implementation.
+export async function handleAgentsLogs(_input: import('../_generated.js').AgentsLogsInput, _server: McpServer): Promise<CallToolResult> {
+  return { content: [{ type: 'text', text: 'not implemented' }], isError: true }
+}

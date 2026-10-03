@@ -34,6 +34,17 @@ import {
   type GatewayRestartInput,
   type WorkflowDeployAppInput, type WorkflowRecoverInput, type TaskStatusInput,
   type MonitorInput,
+  clawops_agents_logsSchema, clawops_agents_logsAnnotations, clawops_agents_logsDescription,
+  clawops_gateway_statusSchema, clawops_gateway_statusAnnotations, clawops_gateway_statusDescription,
+  clawops_secret_listSchema, clawops_secret_listAnnotations, clawops_secret_listDescription,
+  clawops_secret_auditSchema, clawops_secret_auditAnnotations, clawops_secret_auditDescription,
+  clawops_gateway_updateSchema, clawops_gateway_updateAnnotations, clawops_gateway_updateDescription,
+  clawops_backup_createSchema, clawops_backup_createAnnotations, clawops_backup_createDescription,
+  clawops_backup_restoreSchema, clawops_backup_restoreAnnotations, clawops_backup_restoreDescription,
+  clawops_migrateSchema, clawops_migrateAnnotations, clawops_migrateDescription,
+  clawops_stacks_deleteSchema, clawops_stacks_deleteAnnotations, clawops_stacks_deleteDescription,
+  clawops_secret_deleteSchema, clawops_secret_deleteAnnotations, clawops_secret_deleteDescription,
+  type AgentsLogsInput, type GatewayStatusInput, type SecretListInput, type SecretAuditInput, type GatewayUpdateInput, type BackupCreateInput, type BackupRestoreInput, type MigrateInput, type StacksDeleteInput, type SecretDeleteInput,
 } from './_generated.js'
 
 import type { McpServeOpts } from '../server.js'
@@ -42,10 +53,10 @@ import type { McpServeOpts } from '../server.js'
 import { handleStatus } from './cli/status.js'
 import { handleDoctor } from './cli/doctor.js'
 import { handleLogsTail } from './cli/logs.js'
-import { handleStacksList } from './cli/stacks.js'
+import { handleStacksList, handleStacksDelete } from './cli/stacks.js'
 import { handleConfigGet, handleConfigSet, handleConfigUnset, handleConfigValidate } from './cli/config.js'
-import { handleAgentsList } from './cli/agents.js'
-import { handleGatewayRestart } from './cli/gateway.js'
+import { handleAgentsList, handleAgentsLogs } from './cli/agents.js'
+import { handleGatewayRestart, handleGatewayStatus, handleGatewayUpdate } from './cli/gateway.js'
 import { handleUp } from './cli/up.js'
 import { handleDestroy } from './cli/destroy.js'
 import { handlePlan } from './cli/plan.js'
@@ -54,6 +65,9 @@ import { handleInit } from './cli/init.js'
 import { handleApply } from './cli/apply.js'
 import { handleTaskStatus } from './cli/task.js'
 import { handleMonitor } from './cli/monitor.js'
+import { handleBackupCreate, handleBackupRestore } from './cli/backup.js'
+import { handleMigrate } from './cli/migrate.js'
+import { handleSecretList, handleSecretAudit, handleSecretDelete } from './cli/secret.js'
 import { handleWorkflowDeployApp } from './workflow/deploy_app.js'
 import { handleWorkflowRecover } from './workflow/recover.js'
 
@@ -101,6 +115,16 @@ const TOOL_REGISTRY: Record<string, ToolEntry> = {
   clawops_config_unset:     makeEntry<ConfigUnsetInput>(clawops_config_unsetSchema, clawops_config_unsetAnnotations, handleConfigUnset, clawops_config_unsetDescription),
   clawops_config_validate:  makeEntry<ConfigValidateInput>(clawops_config_validateSchema, clawops_config_validateAnnotations, handleConfigValidate, clawops_config_validateDescription),
   clawops_gateway_restart:  makeEntry<GatewayRestartInput>(clawops_gateway_restartSchema, clawops_gateway_restartAnnotations, handleGatewayRestart, clawops_gateway_restartDescription),
+  clawops_agents_logs: makeEntry<AgentsLogsInput>(clawops_agents_logsSchema, clawops_agents_logsAnnotations, handleAgentsLogs, clawops_agents_logsDescription),
+  clawops_gateway_status: makeEntry<GatewayStatusInput>(clawops_gateway_statusSchema, clawops_gateway_statusAnnotations, handleGatewayStatus, clawops_gateway_statusDescription),
+  clawops_secret_list: makeEntry<SecretListInput>(clawops_secret_listSchema, clawops_secret_listAnnotations, handleSecretList, clawops_secret_listDescription),
+  clawops_secret_audit: makeEntry<SecretAuditInput>(clawops_secret_auditSchema, clawops_secret_auditAnnotations, handleSecretAudit, clawops_secret_auditDescription),
+  clawops_gateway_update: makeEntry<GatewayUpdateInput>(clawops_gateway_updateSchema, clawops_gateway_updateAnnotations, handleGatewayUpdate, clawops_gateway_updateDescription),
+  clawops_backup_create: makeEntry<BackupCreateInput>(clawops_backup_createSchema, clawops_backup_createAnnotations, handleBackupCreate, clawops_backup_createDescription),
+  clawops_backup_restore: makeEntry<BackupRestoreInput>(clawops_backup_restoreSchema, clawops_backup_restoreAnnotations, handleBackupRestore, clawops_backup_restoreDescription),
+  clawops_migrate: makeEntry<MigrateInput>(clawops_migrateSchema, clawops_migrateAnnotations, handleMigrate, clawops_migrateDescription),
+  clawops_stacks_delete: makeEntry<StacksDeleteInput>(clawops_stacks_deleteSchema, clawops_stacks_deleteAnnotations, handleStacksDelete, clawops_stacks_deleteDescription),
+  clawops_secret_delete: makeEntry<SecretDeleteInput>(clawops_secret_deleteSchema, clawops_secret_deleteAnnotations, handleSecretDelete, clawops_secret_deleteDescription),
   clawops_workflow_deploy_app: makeEntry<WorkflowDeployAppInput>(clawops_workflow_deploy_appSchema, clawops_workflow_deploy_appAnnotations, handleWorkflowDeployApp, clawops_workflow_deploy_appDescription),
   clawops_workflow_recover: makeEntry<WorkflowRecoverInput>(clawops_workflow_recoverSchema, clawops_workflow_recoverAnnotations, handleWorkflowRecover, clawops_workflow_recoverDescription),
   clawops_task_status:      makeEntry<TaskStatusInput>(clawops_task_statusSchema, clawops_task_statusAnnotations, handleTaskStatus, clawops_task_statusDescription),

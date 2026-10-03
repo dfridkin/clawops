@@ -240,8 +240,7 @@ tools:
       Use when: the user wants to see which agents are running, debug agent
       routing, or count active workspaces.
 
-      Do NOT use when: the user wants one agent's logs — no tool exposes those; tell
-      the user to run `clawops agents logs <name>`.
+      Do NOT use when: the user wants one agent's activity — that is clawops_agents_logs.
     annotations:
       title: List OpenClaw Agents
       readOnlyHint: true
@@ -260,6 +259,84 @@ tools:
             name: { type: string }
             status: { type: enum, values: [running, paused, errored, stopped] }
             channels: { type: array, items: { type: string } }
+
+  - name: clawops_agents_logs
+    toolset: [cli, read]
+    description: |
+      One agent's recent activity, read from the gateway's audit log, newest last.
+      Paginated: pass the returned cursor to continue.
+
+      Use when: the user asks what a specific agent did, or why it behaved as it did.
+
+      Do NOT use when: the user wants the gateway's own log stream — that is
+      clawops_logs_tail. Do NOT use to find agent names — that is clawops_agents_list.
+    annotations:
+      title: Read One Agent's Activity
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true, description: "Which stack the agent runs on. Omitted = the default stack in ~/.clawops/config.json" }
+      name: { type: string, description: "The agent's name, as clawops_agents_list reports it" }
+      limit: { type: integer, optional: true, default: 50, description: "Maximum activity records to return. Omitted = 50" }
+      cursor: { type: string, optional: true, description: "The cursor a previous call returned, to continue from where it stopped. Omitted = the most recent records" }
+
+  - name: clawops_gateway_status
+    toolset: [cli, read]
+    description: |
+      Whether the OpenClaw gateway container is running, when it started, and which image it
+      runs, as docker reports it on the host.
+
+      Use when: the user asks whether the gateway is up or which OpenClaw version is deployed.
+
+      Do NOT use when: the user wants a full health check — clawops_doctor probes the gateway
+      itself rather than the container. Do NOT use to change anything; this only reads.
+    annotations:
+      title: Gateway Container Status
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true, description: "Which stack's gateway to inspect. Omitted = the default stack in ~/.clawops/config.json" }
+
+  - name: clawops_secret_list
+    toolset: [cli, read]
+    description: |
+      List the secrets clawops stores locally, by name and status. Never returns a value.
+
+      Use when: the user asks which secrets are set, or before a deploy that references one.
+
+      Do NOT use when: the user wants to set or rotate a secret. No tool does that, because the
+      value would pass through the conversation (R6): ask the user to run
+      `clawops secret set <NAME>` or `clawops secret rotate <NAME>` in a terminal.
+    annotations:
+      title: List Stored Secrets
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: false
+    input: {}
+
+  - name: clawops_secret_audit
+    toolset: [cli, read]
+    description: |
+      Report secrets that stacks reference but clawops does not have, and `$secret:` references
+      that cannot be resolved. Never returns a value.
+
+      Use when: a deploy or config change fails on a missing secret, or before applying a plan
+      whose config references secrets.
+
+      Do NOT use when: the user wants to set the missing secret — ask them to run
+      `clawops secret set <NAME>` in a terminal; no tool takes a secret value (R6).
+    annotations:
+      title: Audit Secret References
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: false
+    input: {}
 
 # ────────────────────────────────────────────────────────────────────────────
 # MUTATING CLI TOOLS (destructive flagged per R10/R11; elicitation per R19)
@@ -503,6 +580,137 @@ tools:
     output:
       restartedAt: { type: string, format: date-time }
       previousUptimeSec: { type: integer }
+
+  - name: clawops_gateway_update
+    toolset: [cli]
+    description: |
+      Move the gateway to a different OpenClaw version: pull the image and restart the gateway
+      on it. Every agent on the host restarts with it.
+
+      Use when: the user asks to upgrade or downgrade OpenClaw on a running stack, naming a
+      version.
+
+      Do NOT use when: the user has not named a concrete version — moving tags such as
+      `latest` are refused, as the CLI refuses them. Do NOT use without a backup the user can
+      return to: suggest clawops_backup_create first.
+    annotations:
+      title: Update OpenClaw Version
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: true
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true, description: "Which stack's gateway to update. Omitted = the default stack in ~/.clawops/config.json" }
+      version: { type: string, description: "A concrete OpenClaw version to move to, e.g. 2026.9.2. Moving tags are refused" }
+      yes: { type: boolean, optional: true, default: false, description: "Skip the confirmation. Only when the user has already approved this specific update" }
+
+  - name: clawops_backup_create
+    toolset: [cli]
+    description: |
+      Take a backup of the gateway's state (config, database, sessions, transcripts and
+      installed plugins) and download it to a local archive. Live state is not changed.
+
+      Use when: the user asks for a backup, and before anything that replaces state: a
+      version update, a migration, a restore, or a plan that replaces the instance.
+
+      Do NOT use when: the user wants to back up cloud infrastructure — Pulumi state and plans
+      cover that, not this.
+    annotations:
+      title: Back Up Gateway State
+      readOnlyHint: false
+      destructiveHint: false
+      idempotentHint: false
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true, description: "Which stack to back up. Omitted = the default stack in ~/.clawops/config.json" }
+      out: { type: string, optional: true, description: "Absolute local path to write the archive to. Omitted = a timestamped file under ~/.clawops/backups" }
+
+  - name: clawops_backup_restore
+    toolset: [cli]
+    description: |
+      Verify a backup archive and expand it on the host beside the live state, never over it.
+      With activate: true, also put it into service: stop the gateway, swap the restored state
+      in (keeping the state it replaces), restart, and roll back if the gateway does not answer.
+
+      Use when: the user asks to restore or recover from a backup, naming the archive.
+
+      Do NOT use when: the gateway is merely unhealthy — clawops_workflow_recover diagnoses that
+      without discarding state. Restoring is time travel: everything since the backup is lost,
+      and channel credentials may need relinking.
+    annotations:
+      title: Restore Gateway State (DESTRUCTIVE with activate)
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: false
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true, description: "Which stack to restore onto. Omitted = the default stack in ~/.clawops/config.json" }
+      file: { type: string, description: "Absolute local path to the backup archive, as clawops_backup_create wrote it" }
+      activate: { type: boolean, optional: true, default: false, description: "Put the restored state into service. Omitted = expand into a staging directory and touch nothing live" }
+      yes: { type: boolean, optional: true, default: false, description: "Skip the confirmation. Only when the user has already approved this specific restore" }
+
+  - name: clawops_migrate
+    toolset: [cli]
+    description: |
+      Move a deployment from OpenClaw 1.x onto the 2.0 runtime contract: state ownership,
+      config, and the gateway's run command, in the order a real migration showed works.
+
+      Use when: a stack still runs OpenClaw 1.x and the user wants it on 2.x. clawops_doctor
+      and clawops_gateway_status say which line a stack runs.
+
+      Do NOT use when: the stack is already on 2.x — use clawops_gateway_update to change
+      versions within 2.x. Take a backup first with clawops_backup_create.
+    annotations:
+      title: Migrate 1.x to 2.0 (DESTRUCTIVE)
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: false
+      openWorldHint: true
+    input:
+      stackName: { type: string, optional: true, description: "Which stack to migrate. Omitted = the default stack in ~/.clawops/config.json" }
+      openclawVersion: { type: string, optional: true, description: "The OpenClaw 2.x version to migrate to. Omitted = the version this clawops release defaults to" }
+      yes: { type: boolean, optional: true, default: false, description: "Skip the confirmation. Only when the user has already approved this migration" }
+
+  - name: clawops_stacks_delete
+    toolset: [admin]
+    description: |
+      Remove a stack from ~/.clawops/config.json. This forgets the stack; it does not tear
+      down its infrastructure, and it refuses a stack that is still deployed unless forced.
+
+      Use when: the user wants to stop tracking a stack whose resources are already gone.
+
+      Do NOT use when: the user wants the infrastructure removed — that is clawops_destroy,
+      first. Forcing the delete of a deployed stack leaves resources running and billing that
+      clawops can no longer see.
+    annotations:
+      title: Forget a Stack (DESTRUCTIVE)
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: true
+      openWorldHint: false
+    input:
+      name: { type: string, description: "The stack to remove from config, as clawops_stacks_list reports it" }
+      force: { type: boolean, optional: true, default: false, description: "Skip the safety checks: allow deleting the default stack, or one still deployed. Omitted = refuse both" }
+      yes: { type: boolean, optional: true, default: false, description: "Skip the confirmation. Only when the user has already approved this deletion" }
+
+  - name: clawops_secret_delete
+    toolset: [cli]
+    description: |
+      Delete a locally stored secret by name. Warns when a stack still references it.
+
+      Use when: the user asks to remove a secret they no longer use.
+
+      Do NOT use when: the user wants to replace a value — ask them to run
+      `clawops secret rotate <NAME>`; no tool takes a secret value (R6).
+    annotations:
+      title: Delete a Stored Secret (DESTRUCTIVE)
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: true
+      openWorldHint: false
+    input:
+      name: { type: string, description: "The secret's name, as clawops_secret_list reports it" }
+      yes: { type: boolean, optional: true, default: false, description: "Skip the confirmation. Only when the user has already approved this deletion" }
 
 # ────────────────────────────────────────────────────────────────────────────
 # COMPOSITE WORKFLOW TOOLS (R2: encode user intent, not API sequences)

@@ -129,7 +129,7 @@ export const clawops_agents_listSchema = z.object({
   stackName: z.string().optional().describe("Which stack's agents to list. Omitted = the default stack in ~/.clawops/config.json"),
 })
 
-export const clawops_agents_listDescription = "List agents currently registered on the remote OpenClaw gateway.\n\nUse when: the user wants to see which agents are running, debug agent\nrouting, or count active workspaces.\n\nDo NOT use when: the user wants one agent's logs — no tool exposes those; tell\nthe user to run `clawops agents logs <name>`."
+export const clawops_agents_listDescription = "List agents currently registered on the remote OpenClaw gateway.\n\nUse when: the user wants to see which agents are running, debug agent\nrouting, or count active workspaces.\n\nDo NOT use when: the user wants one agent's activity — that is clawops_agents_logs."
 
 export const clawops_agents_listAnnotations = {
   title: "List OpenClaw Agents",
@@ -141,6 +141,81 @@ export const clawops_agents_listAnnotations = {
 } as const
 
 export type AgentsListInput = z.infer<typeof clawops_agents_listSchema>
+
+// ── clawops_agents_logs ─────────────────────────────────────────────────────
+
+export const clawops_agents_logsSchema = z.object({
+  stackName: z.string().optional().describe("Which stack the agent runs on. Omitted = the default stack in ~/.clawops/config.json"),
+  name: z.string().describe("The agent's name, as clawops_agents_list reports it"),
+  limit: z.number().int().optional().default(50).describe("Maximum activity records to return. Omitted = 50"),
+  cursor: z.string().optional().describe("The cursor a previous call returned, to continue from where it stopped. Omitted = the most recent records"),
+})
+
+export const clawops_agents_logsDescription = "One agent's recent activity, read from the gateway's audit log, newest last.\nPaginated: pass the returned cursor to continue.\n\nUse when: the user asks what a specific agent did, or why it behaved as it did.\n\nDo NOT use when: the user wants the gateway's own log stream — that is\nclawops_logs_tail. Do NOT use to find agent names — that is clawops_agents_list."
+
+export const clawops_agents_logsAnnotations = {
+  title: "Read One Agent's Activity",
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+  toolsets: ["cli","read"] as const,
+} as const
+
+export type AgentsLogsInput = z.infer<typeof clawops_agents_logsSchema>
+
+// ── clawops_gateway_status ──────────────────────────────────────────────────
+
+export const clawops_gateway_statusSchema = z.object({
+  stackName: z.string().optional().describe("Which stack's gateway to inspect. Omitted = the default stack in ~/.clawops/config.json"),
+})
+
+export const clawops_gateway_statusDescription = "Whether the OpenClaw gateway container is running, when it started, and which image it\nruns, as docker reports it on the host.\n\nUse when: the user asks whether the gateway is up or which OpenClaw version is deployed.\n\nDo NOT use when: the user wants a full health check — clawops_doctor probes the gateway\nitself rather than the container. Do NOT use to change anything; this only reads."
+
+export const clawops_gateway_statusAnnotations = {
+  title: "Gateway Container Status",
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+  toolsets: ["cli","read"] as const,
+} as const
+
+export type GatewayStatusInput = z.infer<typeof clawops_gateway_statusSchema>
+
+// ── clawops_secret_list ─────────────────────────────────────────────────────
+
+export const clawops_secret_listSchema = z.object({})
+
+export const clawops_secret_listDescription = "List the secrets clawops stores locally, by name and status. Never returns a value.\n\nUse when: the user asks which secrets are set, or before a deploy that references one.\n\nDo NOT use when: the user wants to set or rotate a secret. No tool does that, because the\nvalue would pass through the conversation (R6): ask the user to run\n`clawops secret set <NAME>` or `clawops secret rotate <NAME>` in a terminal."
+
+export const clawops_secret_listAnnotations = {
+  title: "List Stored Secrets",
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+  toolsets: ["cli","read"] as const,
+} as const
+
+export type SecretListInput = z.infer<typeof clawops_secret_listSchema>
+
+// ── clawops_secret_audit ────────────────────────────────────────────────────
+
+export const clawops_secret_auditSchema = z.object({})
+
+export const clawops_secret_auditDescription = "Report secrets that stacks reference but clawops does not have, and `$secret:` references\nthat cannot be resolved. Never returns a value.\n\nUse when: a deploy or config change fails on a missing secret, or before applying a plan\nwhose config references secrets.\n\nDo NOT use when: the user wants to set the missing secret — ask them to run\n`clawops secret set <NAME>` in a terminal; no tool takes a secret value (R6)."
+
+export const clawops_secret_auditAnnotations = {
+  title: "Audit Secret References",
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+  toolsets: ["cli","read"] as const,
+} as const
+
+export type SecretAuditInput = z.infer<typeof clawops_secret_auditSchema>
 
 // ── clawops_up ──────────────────────────────────────────────────────────────
 
@@ -318,6 +393,131 @@ export const clawops_gateway_restartAnnotations = {
 
 export type GatewayRestartInput = z.infer<typeof clawops_gateway_restartSchema>
 
+// ── clawops_gateway_update ──────────────────────────────────────────────────
+
+export const clawops_gateway_updateSchema = z.object({
+  stackName: z.string().optional().describe("Which stack's gateway to update. Omitted = the default stack in ~/.clawops/config.json"),
+  version: z.string().describe("A concrete OpenClaw version to move to, e.g. 2026.9.2. Moving tags are refused"),
+  yes: z.boolean().optional().default(false).describe("Skip the confirmation. Only when the user has already approved this specific update"),
+})
+
+export const clawops_gateway_updateDescription = "Move the gateway to a different OpenClaw version: pull the image and restart the gateway\non it. Every agent on the host restarts with it.\n\nUse when: the user asks to upgrade or downgrade OpenClaw on a running stack, naming a\nversion.\n\nDo NOT use when: the user has not named a concrete version — moving tags such as\n`latest` are refused, as the CLI refuses them. Do NOT use without a backup the user can\nreturn to: suggest clawops_backup_create first."
+
+export const clawops_gateway_updateAnnotations = {
+  title: "Update OpenClaw Version",
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: true,
+  openWorldHint: true,
+  toolsets: ["cli"] as const,
+} as const
+
+export type GatewayUpdateInput = z.infer<typeof clawops_gateway_updateSchema>
+
+// ── clawops_backup_create ───────────────────────────────────────────────────
+
+export const clawops_backup_createSchema = z.object({
+  stackName: z.string().optional().describe("Which stack to back up. Omitted = the default stack in ~/.clawops/config.json"),
+  out: z.string().optional().describe("Absolute local path to write the archive to. Omitted = a timestamped file under ~/.clawops/backups"),
+})
+
+export const clawops_backup_createDescription = "Take a backup of the gateway's state (config, database, sessions, transcripts and\ninstalled plugins) and download it to a local archive. Live state is not changed.\n\nUse when: the user asks for a backup, and before anything that replaces state: a\nversion update, a migration, a restore, or a plan that replaces the instance.\n\nDo NOT use when: the user wants to back up cloud infrastructure — Pulumi state and plans\ncover that, not this."
+
+export const clawops_backup_createAnnotations = {
+  title: "Back Up Gateway State",
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: true,
+  toolsets: ["cli"] as const,
+} as const
+
+export type BackupCreateInput = z.infer<typeof clawops_backup_createSchema>
+
+// ── clawops_backup_restore ──────────────────────────────────────────────────
+
+export const clawops_backup_restoreSchema = z.object({
+  stackName: z.string().optional().describe("Which stack to restore onto. Omitted = the default stack in ~/.clawops/config.json"),
+  file: z.string().describe("Absolute local path to the backup archive, as clawops_backup_create wrote it"),
+  activate: z.boolean().optional().default(false).describe("Put the restored state into service. Omitted = expand into a staging directory and touch nothing live"),
+  yes: z.boolean().optional().default(false).describe("Skip the confirmation. Only when the user has already approved this specific restore"),
+})
+
+export const clawops_backup_restoreDescription = "Verify a backup archive and expand it on the host beside the live state, never over it.\nWith activate: true, also put it into service: stop the gateway, swap the restored state\nin (keeping the state it replaces), restart, and roll back if the gateway does not answer.\n\nUse when: the user asks to restore or recover from a backup, naming the archive.\n\nDo NOT use when: the gateway is merely unhealthy — clawops_workflow_recover diagnoses that\nwithout discarding state. Restoring is time travel: everything since the backup is lost,\nand channel credentials may need relinking."
+
+export const clawops_backup_restoreAnnotations = {
+  title: "Restore Gateway State (DESTRUCTIVE with activate)",
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: true,
+  toolsets: ["cli"] as const,
+} as const
+
+export type BackupRestoreInput = z.infer<typeof clawops_backup_restoreSchema>
+
+// ── clawops_migrate ─────────────────────────────────────────────────────────
+
+export const clawops_migrateSchema = z.object({
+  stackName: z.string().optional().describe("Which stack to migrate. Omitted = the default stack in ~/.clawops/config.json"),
+  openclawVersion: z.string().optional().describe("The OpenClaw 2.x version to migrate to. Omitted = the version this clawops release defaults to"),
+  yes: z.boolean().optional().default(false).describe("Skip the confirmation. Only when the user has already approved this migration"),
+})
+
+export const clawops_migrateDescription = "Move a deployment from OpenClaw 1.x onto the 2.0 runtime contract: state ownership,\nconfig, and the gateway's run command, in the order a real migration showed works.\n\nUse when: a stack still runs OpenClaw 1.x and the user wants it on 2.x. clawops_doctor\nand clawops_gateway_status say which line a stack runs.\n\nDo NOT use when: the stack is already on 2.x — use clawops_gateway_update to change\nversions within 2.x. Take a backup first with clawops_backup_create."
+
+export const clawops_migrateAnnotations = {
+  title: "Migrate 1.x to 2.0 (DESTRUCTIVE)",
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: true,
+  toolsets: ["cli"] as const,
+} as const
+
+export type MigrateInput = z.infer<typeof clawops_migrateSchema>
+
+// ── clawops_stacks_delete ───────────────────────────────────────────────────
+
+export const clawops_stacks_deleteSchema = z.object({
+  name: z.string().describe("The stack to remove from config, as clawops_stacks_list reports it"),
+  force: z.boolean().optional().default(false).describe("Skip the safety checks: allow deleting the default stack, or one still deployed. Omitted = refuse both"),
+  yes: z.boolean().optional().default(false).describe("Skip the confirmation. Only when the user has already approved this deletion"),
+})
+
+export const clawops_stacks_deleteDescription = "Remove a stack from ~/.clawops/config.json. This forgets the stack; it does not tear\ndown its infrastructure, and it refuses a stack that is still deployed unless forced.\n\nUse when: the user wants to stop tracking a stack whose resources are already gone.\n\nDo NOT use when: the user wants the infrastructure removed — that is clawops_destroy,\nfirst. Forcing the delete of a deployed stack leaves resources running and billing that\nclawops can no longer see."
+
+export const clawops_stacks_deleteAnnotations = {
+  title: "Forget a Stack (DESTRUCTIVE)",
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: true,
+  openWorldHint: false,
+  toolsets: ["admin"] as const,
+} as const
+
+export type StacksDeleteInput = z.infer<typeof clawops_stacks_deleteSchema>
+
+// ── clawops_secret_delete ───────────────────────────────────────────────────
+
+export const clawops_secret_deleteSchema = z.object({
+  name: z.string().describe("The secret's name, as clawops_secret_list reports it"),
+  yes: z.boolean().optional().default(false).describe("Skip the confirmation. Only when the user has already approved this deletion"),
+})
+
+export const clawops_secret_deleteDescription = "Delete a locally stored secret by name. Warns when a stack still references it.\n\nUse when: the user asks to remove a secret they no longer use.\n\nDo NOT use when: the user wants to replace a value — ask them to run\n`clawops secret rotate <NAME>`; no tool takes a secret value (R6)."
+
+export const clawops_secret_deleteAnnotations = {
+  title: "Delete a Stored Secret (DESTRUCTIVE)",
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: true,
+  openWorldHint: false,
+  toolsets: ["cli"] as const,
+} as const
+
+export type SecretDeleteInput = z.infer<typeof clawops_secret_deleteSchema>
+
 // ── clawops_init ────────────────────────────────────────────────────────────
 
 export const clawops_initSchema = z.object({
@@ -438,6 +638,10 @@ export const TOOLSETS: Record<Toolset, string[]> = {
     'clawops_monitor',
     'clawops_config_get',
     'clawops_agents_list',
+    'clawops_agents_logs',
+    'clawops_gateway_status',
+    'clawops_secret_list',
+    'clawops_secret_audit',
     'clawops_up',
     'clawops_destroy',
     'clawops_apply',
@@ -446,6 +650,11 @@ export const TOOLSETS: Record<Toolset, string[]> = {
     'clawops_config_unset',
     'clawops_config_validate',
     'clawops_gateway_restart',
+    'clawops_gateway_update',
+    'clawops_backup_create',
+    'clawops_backup_restore',
+    'clawops_migrate',
+    'clawops_secret_delete',
     'clawops_init',
     'clawops_harden',
     'clawops_task_status',
@@ -462,6 +671,10 @@ export const TOOLSETS: Record<Toolset, string[]> = {
     'clawops_stacks_list',
     'clawops_config_get',
     'clawops_agents_list',
+    'clawops_agents_logs',
+    'clawops_gateway_status',
+    'clawops_secret_list',
+    'clawops_secret_audit',
     'clawops_plan',
     'clawops_config_validate',
     'clawops_workflow_recover',
@@ -469,5 +682,6 @@ export const TOOLSETS: Record<Toolset, string[]> = {
   ],
   admin: [
     'clawops_stacks_list',
+    'clawops_stacks_delete',
   ],
 }
