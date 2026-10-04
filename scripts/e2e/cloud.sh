@@ -5,6 +5,7 @@
 #
 #   E2E_INSTANCE_TYPE=<size>   deploy a size this subscription is actually offered
 #   E2E_DEPLOY_VIA=up|apply    which deploy path to exercise (default: apply)
+#   E2E_MCP=1                 also back up and restore over the MCP server; needs `pnpm build` first
 #
 # Deliberately manual and deliberately noisy about money. It provisions a VM, proves the 2.0
 # runtime contract on it, and destroys everything. Not wired into CI: a run costs real money,
@@ -252,4 +253,19 @@ if [ "$LOG_SOURCE" = "Logs: gateway" ]; then
   pass "logs read from the gateway"
 else
   fail "logs did not come from the gateway (saw: ${LOG_SOURCE:-no source line at all})"
+fi
+
+# Backup and restore through the MCP server, on this host. Opt-in because it adds a few
+# minutes; worth running on AWS above all, where every docker call goes through sudo.
+if [ "${E2E_MCP:-}" = "1" ]; then
+  echo
+  echo "── Backup and restore over MCP ─────────────────────────────────"
+  # Not built here: tsup cleans dist/ first, which pulls the server out from under anything
+  # else running from it (the local e2e suites do). Build before starting the run.
+  [ -f dist/cli.js ] || { fail "dist/cli.js is missing; run \`pnpm build\` before E2E_MCP=1"; exit 1; }
+  if node scripts/e2e/mcp-recovery-probe.mjs "$STACK"; then
+    pass "backup and restore over MCP"
+  else
+    fail "backup and restore over MCP"
+  fi
 fi

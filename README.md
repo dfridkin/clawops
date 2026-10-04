@@ -194,6 +194,27 @@ Either way, pass the arguments. `mcp serve` is what speaks the protocol, and an 
 is one that still reads clearly a year later. clawops does not strand a client that omits them:
 run with no command at all and a pipe on stdin — how every MCP client starts a server — and it
 starts `mcp serve`, saying so on stderr. Typed at a terminal, `clawops` still prints help.
+
+**Pass cloud credentials in `env`.** A client starts the server with the environment its config
+gives it, not your shell's, so an `AWS_PROFILE` exported in a terminal does not reach it, and
+every tool that reads a stack fails with "Could not read the state of stack". Name the profile,
+or the variables your state backend needs, in the server's `env` block:
+
+```json
+{
+  "mcpServers": {
+    "clawops": {
+      "command": "npx",
+      "args": ["-y", "@clawops/cli", "mcp", "serve"],
+      "env": { "AWS_PROFILE": "my-profile" }
+    }
+  }
+}
+```
+
+It holds a profile name, not a key: the credentials themselves stay where the cloud CLI keeps
+them (R6).
+
 Config file locations:
 
 | App | Path |
@@ -555,10 +576,10 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (2076 tests, ~13s)
+pnpm test                  # vitest (2085 tests, ~13s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
-pnpm test:e2e:local        # local provider bootstrap for real, in a systemd container
+pnpm test:e2e:local        # builds, then bootstrap, the host-touching MCP tools and a 1.x migration, in systemd containers
 pnpm typecheck             # tsc --noEmit
 pnpm lint                  # eslint src/ tests/ scripts/ (--max-warnings=0)
 pnpm gen:schemas           # regenerate src/providers/types.ts + src/mcp/tools/_generated.ts

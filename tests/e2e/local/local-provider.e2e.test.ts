@@ -42,6 +42,9 @@ describe.skipIf(!enabled)('local provider bootstrap against a systemd target', (
   let tokenAfterFirstRun: string
 
   beforeAll(async () => {
+    // localBootstrap records the stack under the config directory. Without this it wrote
+    // ~/.clawops/state/e2e-local.json into the developer's real config on every run.
+    process.env['CLAWOPS_HOME'] = mkdtempSync(path.join(tmpdir(), 'clawops-e2e-home-'))
     vm = await startVmTarget(OPENCLAW_VERSION)
     knownHostsPath = path.join(mkdtempSync(path.join(tmpdir(), 'clawops-e2e-kh-')), 'known_hosts')
   }, 300_000)

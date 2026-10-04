@@ -1,6 +1,7 @@
 // Maker plan generation — per SPEC.md §12.6 and spec/deploy-plan.schema.json.
 
 import { randomUUID } from 'node:crypto'
+import { pulumiCause } from '../errors/pulumi.js'
 import { buildContext, loadAdapterModule } from '../cli/context.js'
 import type { ProviderName } from '../providers/types.js'
 import { getConfig } from '../config/store.js'
@@ -255,7 +256,7 @@ export async function generatePlan(
   } catch (err) {
     if (err instanceof UsageError) throw err
     throw new StateError(
-      `Cannot open the state backend for stack "${stackName}": ${messageOf(err)}\n` +
+      `Cannot open the state backend for stack "${stackName}": ${pulumiCause(err)}\n` +
         'A plan is only as good as the state it was computed against, so this is not a plan ' +
         'clawops will write. Check the stateUrl in ~/.clawops/config.json, and that the ' +
         'bucket or container exists and your credentials can read it.',
@@ -347,22 +348,3 @@ function expandHome(p: string): string {
   return p.replace(/^~/, process.env['HOME'] ?? '~')
 }
 
-/**
- * The informative line of whatever was thrown.
- *
- * A Pulumi CommandError's message opens with "code: -2" and buries the cause several lines
- * down, in the captured stderr:
- *
- *   code: -2
- *    stdout:
- *    stderr: … error: could not list bucket: NoSuchBucket: The specified bucket does not exist
- *
- * Reporting the first line would hand the operator an exit code where the answer was available.
- */
-function messageOf(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err)
-  const lines = raw.split('\n').map((l) => l.trim()).filter((l) => l !== '')
-  const explained = lines.find((l) => /(^|\s)error:/i.test(l))
-  if (explained) return explained.replace(/^.*?error:\s*/i, '')
-  return lines[0] ?? raw
-}

@@ -10,7 +10,7 @@
 import type { ClawopsContext } from '../cli/context.js'
 import type { SshExecResult } from '../transport/ssh.js'
 import {
-  STATE_DIR_HOST_LINUX, CONFIG_FILENAME, CONTAINER_UID, GATEWAY_PORT, gatewayRunCommand,
+  STATE_DIR_HOST_LINUX, CONFIG_FILENAME, CONTAINER_UID, GATEWAY_PORT, gatewayRunCommand, GATEWAY_STOP_COMMAND,
 } from './runtime.js'
 import { probeCommand, interpretProbe } from './health.js'
 import { migrate, describeMigration, type MigrateSteps, type MigrateOutcome } from './migrate.js'
@@ -103,7 +103,9 @@ export function migrationSteps(
 
     removeSource: async () => {
       step('Stopping the 1.x container...')
-      await run('docker stop openclaw 2>/dev/null || true')
+      // Through the unit where there is one: 1.7.9 ran the gateway under systemd too, and a
+      // bare `docker stop` had it back within five seconds, mid-migration.
+      await run(GATEWAY_STOP_COMMAND)
       await run('docker rm   openclaw 2>/dev/null || true')
     },
 

@@ -20,7 +20,6 @@ export default defineCommand({
   },
   async run({ args }) {
     const { buildContext } = await import('../context.js')
-    const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
     const { acquireSession, drainPool } = await import('../../transport/pool.js')
 
     const [action, name] = (args._ ?? []) as string[]
@@ -48,17 +47,10 @@ export default defineCommand({
     }
 
     const ctx = buildContext(args)
-    const stack = await ctx.getStack()
-    const outputMap = await stack.outputs()
-    const outputs: Record<string, unknown> = Object.fromEntries(
-      Object.entries(outputMap).map(([k, v]) => [k, v.value]),
-    )
-    const base = extractBaseOutputs(outputs)
-    const conn = ctx.adapter.getConnectionInfo({
-      ...base,
-      privateKeyPath: ctx.config.ssh.keyPath,
-      knownHostsPath: ctx.config.ssh.knownHostsPath,
-    })
+    // resolveConn, not getStack(): the local provider has no Pulumi stack, and reading one
+    // made this command fail on every local stack while its MCP tool worked.
+    const { resolveConn } = await import('../../transport/conn.js')
+    const conn = await resolveConn(ctx)
 
     const abortController = new AbortController()
     process.on('SIGINT', () => abortController.abort())

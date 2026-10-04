@@ -121,7 +121,7 @@ function healthyHost(current = 'ghcr.io/openclaw/openclaw:2026.9.2'): FakeSshSes
     .respond(/docker pull/, { stdout: 'pulled' })
     .respond(/\{\{\.Config\.Image\}\}/, { stdout: current })
     .respond(/PortBindings/, { stdout: '{"18789/tcp":[{"HostIp":"127.0.0.1"}]}' })
-    .respond(/backup sqlite create/, { stdout: '{"ok":true,"snapshotPath":"/var/lib/clawops/openclaw/snapshots/s1"}' })
+    .respond(/backup sqlite create/, { stdout: '{"ok":true,"snapshotPath":"/home/node/.openclaw/snapshots/s1"}' })
     .respond(/database preflight/, { stdout: '{"targetVersion":15,"foundVersion":15,"status":"exact"}' })
     .respond(/startupz/, { stdout: '{"ok":true,"status":"started"}' })
 }
@@ -213,6 +213,12 @@ describe('handleGatewayUpdate', () => {
     expect(calls.find((c) => c.includes('docker pull'))).toContain('openclaw:2026.9.5')
     expect(at(/docker pull/)).toBeLessThan(at(/backup sqlite create/))
     expect(at(/backup sqlite create/)).toBeLessThan(at(/database preflight/))
+    // The snapshot runs in a container with the state mounted at /home/node/.openclaw, so its
+    // repository must be a path in there. The host path does not exist in the container, and
+    // every real update refused with "EACCES during mkdir" until the e2e ran one.
+    expect(calls.find((c) => c.includes('backup sqlite create'))).toContain('--repository /home/node/.openclaw/snapshots')
+    // ...and preflight reads the snapshot at the path the container reported.
+    expect(calls.find((c) => c.includes('database preflight'))).toContain('/home/node/.openclaw/snapshots/s1/database.sqlite')
     expect(at(/database preflight/)).toBeLessThan(at(/--name openclaw/))
     expect(calls.find((c) => c.includes('--name openclaw'))).toContain('127.0.0.1:18789')
     expect(at(/startupz/)).toBeGreaterThan(at(/--name openclaw/))

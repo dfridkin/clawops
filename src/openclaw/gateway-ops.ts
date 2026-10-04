@@ -12,7 +12,7 @@ import type { SshSession } from '../transport/ssh.js'
 import { inspectContainer } from './docker.js'
 import { IMAGE_INSPECT_CMD, imageForRestart, versionOf, GATEWAY_PORT } from './run-flags.js'
 import {
-  gatewayRunCommand, PUBLISH_INSPECT_CMD, publishForRestart, STATE_DIR_HOST_LINUX,
+  gatewayRunCommand, PUBLISH_INSPECT_CMD, publishForRestart, STATE_DIR_HOST_LINUX, STATE_DIR_CONTAINER,
 } from './runtime.js'
 import {
   snapshotCommand, snapshotPathFrom, preflightCommand, parsePreflight, judgePreflight,
@@ -139,13 +139,22 @@ export async function updateGateway(
   progress('Checking state compatibility...')
   const cur = imageForRestart((await execPrivileged(session, IMAGE_INSPECT_CMD, signal)).stdout)
   const previousVersion = cur.ok ? versionOf(cur.value) : undefined
-  const snapRepo = `${STATE_DIR_HOST_LINUX}/snapshots`
+  // The snapshot runs inside a container, so its repository is a path in the container: the
+  // state directory is mounted at STATE_DIR_CONTAINER. This passed the HOST path, which does
+  // not exist in there and which the container's user cannot create, so every update since
+  // WO-45 refused at this step with "EACCES during mkdir". Unit tests answer any command with
+  // success; the local MCP e2e is what ran it.
+  const snapRepo = `${STATE_DIR_CONTAINER}/snapshots`
   const snapOut = await execPrivileged(
     session,
     snapshotCommand(cur.ok ? cur.value : targetImage, STATE_DIR_HOST_LINUX, snapRepo),
     signal,
   )
   const snapPath = snapshotPathFrom(snapOut.stdout)
+  // Where an operator finds it: the same directory, seen from the host.
+  const hostSnapPath = snapPath?.startsWith(STATE_DIR_CONTAINER)
+    ? STATE_DIR_HOST_LINUX + snapPath.slice(STATE_DIR_CONTAINER.length)
+    : snapPath
 
   if (!snapPath) {
     // No snapshot means no compatibility check and no rollback point. Refuse rather than
@@ -156,7 +165,7 @@ export async function updateGateway(
       message:
         'Could not snapshot the state database before upgrading, so neither the ' +
         'compatibility check nor a rollback point is available.\n' +
-        (snapOut.stderr || snapOut.stdout).slice(0, 300),
+        (snapOut.stderr || snapOut.stdout).slice(0, 2000),
     }
   }
 
@@ -175,7 +184,7 @@ export async function updateGateway(
       ok: false,
       version,
       message: `Refusing to upgrade to ${version}: ${verdict.reason}`,
-      hint: `A snapshot of the current state was kept at ${snapPath}.`,
+      hint: `A snapshot of the current state was kept at ${hostSnapPath}.`,
     }
   }
   if (verdict.note) hooks.onNote?.(verdict.note)
@@ -191,7 +200,7 @@ export async function updateGateway(
       ok: false,
       version,
       message: `Start failed: ${runResult.stderr}`,
-      hint: `State snapshot from before the upgrade: ${snapPath}`,
+      hint: `State snapshot from before the upgrade: ${hostSnapPath}`,
     }
   }
 
@@ -224,7 +233,7 @@ export async function updateGateway(
         await execPrivileged(session, dockerRunCmd(v, publish), signal)
       },
     },
-    { version, previousVersion, snapshotPath: snapPath },
+    { version, previousVersion, snapshotPath: hostSnapPath ?? snapPath },
   )
 
   const message = describeOutcome(outcome, version)

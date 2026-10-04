@@ -211,6 +211,10 @@ ExecStop=/usr/bin/docker stop openclaw
 [Install]
 WantedBy=multi-user.target
 UNIT
+  # A restart, update or migration since the last bootstrap pins its run command in a drop-in
+  # (see gatewayRunCommand). This unit is the new source of truth; a stale drop-in would
+  # override its ExecStart and quietly keep the old image.
+  rm -f /etc/systemd/system/openclaw.service.d/clawops-run.conf
   systemctl daemon-reload
   systemctl enable openclaw
   systemctl restart openclaw

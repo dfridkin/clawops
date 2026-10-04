@@ -3,6 +3,7 @@
 
 import type { ClawopsContext } from '../cli/context.js'
 import { StateError } from '../errors/index.js'
+import { pulumiCause } from '../errors/pulumi.js'
 
 export interface ConnInfo {
   host: string
@@ -26,11 +27,22 @@ export async function resolveConn(ctx: ClawopsContext): Promise<ConnInfo> {
   }
 
   const { extractBaseOutputs } = await import('../pulumi/outputs.js')
-  const stack = await ctx.getStack()
-  const outputMap = await stack.outputs()
-  const outputs: Record<string, unknown> = Object.fromEntries(
-    Object.entries(outputMap).map(([k, v]) => [k, v.value]),
-  )
+  let outputs: Record<string, unknown>
+  try {
+    const stack = await ctx.getStack()
+    const outputMap = await stack.outputs()
+    outputs = Object.fromEntries(Object.entries(outputMap).map(([k, v]) => [k, v.value]))
+  } catch (err) {
+    // Pulumi reports a backend it cannot read as `code: -2` and a subprocess dump. Every tool
+    // and command that connects to a stack comes through here, so this is where it is said
+    // plainly. The usual cause is credentials missing from THIS process's environment — for
+    // an MCP server, its client config's env block, which does not inherit the shell's.
+    throw new StateError(
+      `Could not read the state of stack "${ctx.stackName}": ${pulumiCause(err)}. ` +
+        'Check that the credentials for its state backend are in this process\'s environment ' +
+        '(for an MCP server, the env block of its client config).',
+    )
+  }
   if (!outputs['publicIp']) {
     throw new StateError('Stack has no outputs — run `clawops up` first.')
   }
