@@ -238,8 +238,10 @@ clawops backup restore --file ~/.clawops/backups/my-vm-2026-05-13T14-35-00Z.tar.
 ```
 
 It verifies the archive and expands it into a **fresh staging directory**, never in place, and
-prints upstream's warnings verbatim. Restoring is time travel, and channel credentials need
-relinking afterwards. See [backup-restore.md](backup-restore.md).
+prints upstream's warnings verbatim. Add `--activate` to put it into service: the gateway
+stops, the restored state swaps in, and if the gateway does not come back the old state does.
+Restoring is time travel, and channel credentials need relinking afterwards. See
+[backup-restore.md](backup-restore.md).
 
 ---
 

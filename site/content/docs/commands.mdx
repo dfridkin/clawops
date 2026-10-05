@@ -49,7 +49,7 @@ description: Every clawops command, grouped by what you reach for it.
 | `gateway` | `status`, `restart`, `update [version]` |
 | `agents` | `list`, `logs <name>`: per-agent activity from the audit log. OpenClaw 2.0 has no per-agent restart |
 | `config` | `get`, `set`, `unset` on the gateway configuration |
-| `backup` | `create`, `restore`: restore expands into a staging directory, never in place |
+| `backup` | `create`, `restore`: restore expands into a staging directory, never in place; `--activate` swaps it in and rolls back if the gateway does not come up |
 
 ## Security
 

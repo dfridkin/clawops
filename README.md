@@ -604,6 +604,45 @@ Use `pnpm changeset` to record a release note before merging a `feat` or `fix`.
 
 ---
 
+## What's new in 2.2
+
+Recovery is a flag, and SSH failures say what failed.
+
+### Restore puts a backup into service
+
+- `clawops backup restore --file <archive> --activate` stops the gateway, swaps the restored
+  state in, restarts it, and checks that it answers. Without `--activate`, a restore still
+  verifies and expands into a staging directory and touches nothing live.
+- The state it replaces is kept, not deleted. If the gateway does not come up, clawops puts the
+  old state back and restarts again; the state that failed is kept as
+  `.failed-restore-<timestamp>`, as evidence.
+- The restored state lands on the host, beside the directory it replaces. Before, it stayed in
+  the container's `/tmp`, where the next `gateway restart` destroyed it.
+- Free space is checked before an archive is expanded.
+- `clawops backup --help` no longer says restore is unavailable. It has worked since 2.0.
+
+### SSH failures name the cause
+
+- A timeout says nothing came back, which on a clawops stack usually means the security group no
+  longer admits your address. The message prints the re-plan and apply that fix it.
+- A refused connection says the host is up and sshd is not. A rejected key names the key clawops
+  offered. A name that does not resolve, and a handshake with no algorithm in common, each say
+  what they are. ssh2's own words are kept in every message.
+- `clawops doctor --stack <name>` prints the same advice on its own line.
+
+### Fixes
+
+- Streaming Docker commands, such as a backup upload or a log follow, no longer reuse a sudo
+  decision learned from an unrelated command. On AWS, where the login user is not in the `docker`
+  group, a backup upload failed with "permission denied" after the backup had been taken.
+- The backup and upgrade-rollback guides describe `--activate` instead of a manual procedure, and
+  CI follows every in-repo Markdown link and anchor (`pnpm verify:docs`).
+- The local provider's bootstrap runs for real in its e2e suite, against a container with systemd
+  as PID 1, instead of being mocked (`pnpm test:e2e:local`, nightly and on PRs labelled `e2e`).
+- clawops.fyi carries structured data, an `/llms.txt`, a FAQ and a comparison page.
+
+---
+
 ## What's new in 2.1
 
 Private networking, hardening on every cloud, and two fixes to commands that could not start.
@@ -668,6 +707,17 @@ Private networking, hardening on every cloud, and two fixes to commands that cou
 - The Docker image builds. It had never been built, and did not: `npm pack --pack-destination`
   does not create its destination. `pnpm verify:docker` builds it and speaks MCP to the running
   container, both through its entrypoint and as a bare binary, in CI.
+
+### 2.1.2 and 2.1.3
+
+- Every MCP tool sends its description, and every one of its parameters documents itself. Clients
+  had been seeing 19 tools with a name, a schema and no description.
+- `clawops_init` registers a stack over MCP, so a client can bootstrap from nothing. It writes the
+  config and an SSH key and provisions nothing.
+- A client that cannot show a confirmation is told to ask the user and call again with
+  `yes: true`, instead of getting a `Client does not support form elicitation` crash.
+- The Docker image carries `ssh-keygen` and a CA bundle; without them it could not make a key or
+  reach any HTTPS endpoint.
 
 ---
 

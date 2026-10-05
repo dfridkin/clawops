@@ -56,7 +56,7 @@ not create or store (R6).
 | `clawops agents list/logs` | ✓ | ✓ | ✓ | ✓ |
 | `clawops gateway restart` | ✓ | ✓ | ✓ | ✓ |
 | `clawops backup create` | ✓ | ✓ | ✓ | ✓ |
-| `clawops backup restore` | — | — | — | — |
+| `clawops backup restore` (`--activate`) | ✓ | ✓ | ✓ | ✓ |
 | `clawops doctor` | ✓ | ✓ | ✓ | ✓ |
 
 ## Secrets and credentials

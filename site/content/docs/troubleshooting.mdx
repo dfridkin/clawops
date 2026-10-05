@@ -66,6 +66,21 @@ container to be running.
 clawops reads from the gateway where it can and `docker logs` otherwise, and says which it used.
 If the gateway is still starting, that is the difference.
 
+**SSH stops working on a stack that used to answer**
+clawops says which of these it is, and `clawops doctor --stack <name>` repeats the advice:
+
+- *Never answered* (a timeout): nothing came back, which is a firewall dropping packets. On a
+  clawops stack that is usually the security group: `--ssh-cidr auto` admits the address you
+  planned from, and home, office and VPN addresses change. Re-plan from where you are now with
+  `--ssh-cidr auto` and apply.
+- *Refused the connection*: the host is reachable and nothing is listening on the port. The
+  instance is up and sshd is not. Check `clawops status --stack <name>`.
+- *Rejected every authentication method*: the key clawops offered, which the message names, is
+  not installed on the host. Usually the instance was rebuilt outside clawops, or the key was
+  regenerated. Compare `ssh-keygen -y -f <key>` with the host's `authorized_keys`. Don't
+  regenerate the key; it's probably the one thing that is fine.
+- *Does not resolve*: the address recorded in `clawops stacks list` is stale.
+
 **Host key verification failed after redeploying**
 Clouds recycle addresses. `clawops destroy` forgets the old key, but if the instance was removed
 another way, delete the stale line from `~/.clawops/known_hosts`.

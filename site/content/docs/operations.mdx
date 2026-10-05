@@ -75,11 +75,14 @@ applying the previous plan, so the previous plan has to still exist.
 ## Backups
 
 ```bash
-clawops backup create          # archive state
-clawops backup list
-clawops backup validate <id>   # check it before you need it
-clawops backup restore <id>    # never in place: restores beside the current state
+clawops backup create --out <file>.tar.gz
+clawops backup restore --file <file>.tar.gz              # verify and expand beside the current state
+clawops backup restore --file <file>.tar.gz --activate   # ...then swap it in, rolling back on failure
 ```
+
+Without `--activate`, a restore touches nothing live. With it, clawops stops the gateway, moves
+the current state aside (it is kept, never deleted), swaps the restored state in, restarts, and
+puts the old state back if the gateway does not answer.
 
 A backup covers the OpenClaw state directory: config, the SQLite database, sessions, transcripts
 and installed plugins. It does **not** cover your cloud infrastructure. That is what the state
