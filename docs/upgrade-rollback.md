@@ -4,7 +4,7 @@ ClawOps supports two upgrade paths for OpenClaw. Choose based on the scope of th
 
 | Path | Command | Downtime | Use when |
 |---|---|---|---|
-| Gateway-only | `clawops gateway update` | ~60s | OpenClaw patch/minor version bump, no infra changes |
+| Gateway-only | `clawops gateway update <version>` | a restart (the image is pulled first) | A 2.x version change, no infra changes |
 | Plan/apply | `clawops plan` + `clawops apply` | ~5–15 min | New infra requirements, env vars, port changes, or first upgrade to a version listed in `spec/openclaw-versions.yaml` |
 
 When in doubt, use plan/apply. It is safer and leaves an auditable trail.
@@ -20,7 +20,7 @@ Before any upgrade:
 2. **Note the current image tag** (you will need this for rollback):
    ```bash
    clawops gateway status
-   # Image: ghcr.io/openclaw/openclaw:2026.4.5
+   # Image: ghcr.io/openclaw/openclaw:2026.9.2
    ```
 3. **Check agent state**. Confirm agents are healthy before you start:
    ```bash
@@ -29,28 +29,37 @@ Before any upgrade:
 
 ## Gateway-only upgrade
 
-Pulls the new Docker image and replaces the running container. Config is preserved, the container
-bind-mounts the state directory `/var/lib/clawops/openclaw`, which holds the config, the
-SQLite database and installed plugins. The upgrade replaces the container, not the state.
+Moves the gateway to another 2.x release. The container is replaced; the state is not. It lives
+in the bind-mounted state directory `/var/lib/clawops/openclaw`, which holds the config, the
+SQLite database and installed plugins.
 
 ```bash
-# Upgrade to stable (latest stable release)
+# The release this clawops recommends
 clawops gateway update
 
-# Upgrade to a specific version
-clawops gateway update 2026.5.0
-
-# Upgrade to dev channel
-clawops gateway update --channel dev
+# A specific release
+clawops gateway update 2026.9.3
 ```
 
-Sequence executed on the remote host:
-1. `docker pull ghcr.io/openclaw/openclaw:<version>`
-2. `docker stop openclaw && docker rm openclaw`
-3. `docker run -d --name openclaw --restart unless-stopped -p 127.0.0.1:18789:18789 -v /var/lib/clawops/openclaw:/home/node/.openclaw ghcr.io/openclaw/openclaw:<version> node openclaw.mjs gateway run --port 18789`
+Moving tags (`latest`, `stable`, `dev`) are refused: an upgrade you cannot name is one you cannot
+roll back to. Over MCP the same operation is `clawops_gateway_update`, which asks before it runs.
 
-Expect ~60 seconds of gateway unavailability between steps 2 and 3. Agents reconnect
-automatically when the gateway comes back up.
+What runs on the host, in order:
+
+1. `docker pull` the target image, while the current gateway keeps serving
+2. **Snapshot the state database** with the *current* release, into
+   `/var/lib/clawops/openclaw/snapshots/<id>` on the host
+3. **Preflight the snapshot with the *target* release**, which says whether it understands the
+   database. If it does not, the update is refused here, and nothing has been replaced
+4. Replace the gateway with the target image, keeping its publish scope (loopback, or every
+   interface if the stack was deployed that way). On a local-provider host this goes through the
+   `openclaw` systemd unit, see [the local provider](providers/local.md)
+5. Wait for `/startupz` to report `started`
+6. If it does not, run OpenClaw's one-shot repair and wait again; if that fails, **put the
+   previous release back** and say so. If even that does not start, the message names the
+   snapshot from step 2
+
+The downtime is the restart in step 4: the image is already on the host by then.
 
 ### Verify after gateway upgrade
 
@@ -106,10 +115,11 @@ previous version.
 If the upgrade was gateway-only, roll back by specifying the previous image tag:
 
 ```bash
-clawops gateway update 2026.4.5      # the version you noted in the pre-upgrade checklist
+clawops gateway update 2026.9.2      # the version you noted in the pre-upgrade checklist
 ```
 
-This takes the same ~60s as a forward upgrade.
+This runs the same checks as a forward upgrade. A failed upgrade usually needs no rollback at
+all: step 6 above already put the previous release back.
 
 ### Plan/apply rollback
 
@@ -132,8 +142,8 @@ back the software:
 
 Data rollback uses `clawops backup restore`, which delegates to OpenClaw 2.0's own restore:
 it verifies the archive and expands it into a fresh staging directory, never in place. Adding
-`--activate` then stops the gateway, puts the restored state in place — keeping the state it
-replaces — and restarts. See
+`--activate` then puts the restored state in place — keeping the state it replaces — and
+restarts the gateway on it. See
 [Adopting the restored state](backup-restore.md#adopting-the-restored-state):
 
 ```bash

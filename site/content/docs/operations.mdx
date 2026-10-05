@@ -51,7 +51,7 @@ Two paths, depending on whether the machine changes.
 
 ```bash
 clawops backup create
-clawops gateway update --version 2026.9.2
+clawops gateway update 2026.9.3
 clawops doctor --stack prod
 ```
 
@@ -80,9 +80,9 @@ clawops backup restore --file <file>.tar.gz              # verify and expand bes
 clawops backup restore --file <file>.tar.gz --activate   # ...then swap it in, rolling back on failure
 ```
 
-Without `--activate`, a restore touches nothing live. With it, clawops stops the gateway, moves
-the current state aside (it is kept, never deleted), swaps the restored state in, restarts, and
-puts the old state back if the gateway does not answer.
+Without `--activate`, a restore touches nothing live. With it, clawops moves the
+current state aside (it is kept, never deleted), swaps the restored state in, restarts the gateway
+on it, and puts the old state back if the gateway does not answer.
 
 A backup covers the OpenClaw state directory: config, the SQLite database, sessions, transcripts
 and installed plugins. It does **not** cover your cloud infrastructure. That is what the state

@@ -641,8 +641,8 @@ Recovery is a flag, agents can reach every command they need, and SSH failures s
 
 ### Restore puts a backup into service
 
-- `clawops backup restore --file <archive> --activate` stops the gateway, swaps the restored
-  state in, restarts it, and checks that it answers. Without `--activate`, a restore still
+- `clawops backup restore --file <archive> --activate` swaps the restored state in, restarts
+  the gateway on it, and checks that it answers. Without `--activate`, a restore still
   verifies and expands into a staging directory and touches nothing live.
 - The state it replaces is kept, not deleted. If the gateway does not come up, clawops puts the
   old state back and restarts again; the state that failed is kept as
@@ -671,7 +671,30 @@ Recovery is a flag, agents can reach every command they need, and SSH failures s
   what they are. ssh2's own words are kept in every message.
 - `clawops doctor --stack <name>` prints the same advice on its own line.
 
-### Fixes
+### Fixes found by running every tool against a real host
+
+The new tools were driven end to end over MCP against a systemd host, a 1.x deployment made by
+clawops 1.7.9, and AWS. That found defects the unit tests could not, several in the CLI too:
+
+- **`clawops gateway update` works.** Every update since the upgrade gate shipped refused before
+  touching anything, because the state snapshot was given a host path inside a container that
+  cannot create it.
+- **Local-provider hosts no longer race systemd.** The gateway runs there as the `openclaw` unit
+  with `Restart=always`, which undid a restart, an update, a migration or a restore about five
+  seconds after clawops made it. clawops now changes the gateway through the unit.
+- **`clawops gateway`, `agents`, `config` and `logs` work on local stacks.** Each failed with "The
+  local provider does not use Pulumi stacks" while its MCP tool worked.
+- **`clawops migrate` refuses a stack already on 2.x**, which it would have given a fresh minimal
+  config; **asks before it runs**, as `--yes` always claimed; and **pulls the 2.x image before
+  stopping 1.x**, so the downtime is a restart rather than a multi-gigabyte download.
+- **A secret name can no longer reach outside the secrets directory.** `clawops secret delete
+  ../config.json` deleted the clawops config.
+- **`clawops_gateway_restart` keeps a gateway published on every interface** where it was,
+  instead of moving it to loopback.
+- **A stack whose state cannot be read says why**, instead of Pulumi's `code: -2`, and names the
+  usual cause for an MCP server: credentials missing from its client config's `env` block.
+
+### Other fixes
 
 - Streaming Docker commands, such as a backup upload or a log follow, no longer reuse a sudo
   decision learned from an unrelated command. On AWS, where the login user is not in the `docker`
@@ -679,7 +702,9 @@ Recovery is a flag, agents can reach every command they need, and SSH failures s
 - The backup and upgrade-rollback guides describe `--activate` instead of a manual procedure, and
   CI follows every in-repo Markdown link and anchor (`pnpm verify:docs`).
 - The local provider's bootstrap runs for real in its e2e suite, against a container with systemd
-  as PID 1, instead of being mocked (`pnpm test:e2e:local`, nightly and on PRs labelled `e2e`).
+  as PID 1, instead of being mocked. The same suite now drives the host-touching MCP tools and a
+  1.x migration (`pnpm test:e2e:local`, nightly and on PRs labelled `e2e`), and
+  `E2E_MCP=1 pnpm test:cloud <cloud>` backs up and restores over MCP on a real cloud host.
 - clawops.fyi carries structured data, an `/llms.txt`, a FAQ and a comparison page.
 
 ---

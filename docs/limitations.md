@@ -151,8 +151,8 @@ not set up Prometheus, Grafana, or alert routing. This is planned for a future r
 
 **Restoring in place is not offered.** `clawops backup restore` verifies the archive and expands
 it into a staging directory beside the live state; writing an archive over a live state directory
-is how a backup becomes corruption. `--activate` then swaps it in — stop the gateway, move the
-current state aside, put the restored state in place, restart, and confirm it answers — and puts
+is how a backup becomes corruption. `--activate` then swaps it in — move the
+current state aside, put the restored state in place, restart the gateway, and confirm it answers — and puts
 the previous state back if it does not. Without `--activate` nothing is touched, and adopting the
 restore by hand remains possible. Provider plugins are not carried in an archive; re-run
 `clawops apply` afterwards to reinstall them.

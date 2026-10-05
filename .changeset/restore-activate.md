@@ -5,7 +5,7 @@
 **`clawops backup restore --activate` puts a restored backup into service.** Restoring verified an
 archive and then stopped, printing three manual steps whose middle one was a move over live state —
 performed by hand, over SSH, by someone who has just had an incident. `--activate` performs it:
-stop the gateway, swap the state in, restart, and confirm it answers.
+swap the state in, restart the gateway on it, and confirm it answers.
 
 **The state it replaces is kept, not deleted**, and if the gateway does not come up clawops puts
 it back and restarts again. A restore that destroys what it replaces is not an improvement on the
