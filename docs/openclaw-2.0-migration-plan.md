@@ -928,7 +928,7 @@ OpenClaw's default and what `--use-env` drives, so the catalog now configures th
 `clawhub.ai`. Installing channels during `apply` extends the deploy-time egress requirement to
 npm on the deployed host, which `docs/security/egress.md` already records.
 
-**WO-62. Clawops as a host agent** *(its own release, 2.2, ships alone, gated)*
+**WO-62. Clawops as a host agent** *(its own release, 2.2, ships alone, gated; now 2.3, and re-aligned after 2.2, see below)*
 
 > **2026-10-03:** 2.2.0 shipped restore `--activate` and the SSH diagnostics instead, so WO-62 is
 > now **2.3**. It still ships alone; none of the preconditions below exist in code yet.
@@ -1016,6 +1016,61 @@ changes what R6 means in practice even while complying with its wording.
 
 The honest summary: this is the feature most likely to produce a bad day for a user, and the
 only one where clawops' existing safety model does not apply. It ships alone, or not yet.
+
+### Re-alignment after 2.2 *(2026-10-05)*
+
+The preconditions above were written against 2.0. 2.2 changed what several of them have to
+cover. They still stand; this amends them. Nothing here is built yet.
+
+| What WO-62 assumed | What 2.2 made true |
+|---|---|
+| 8 destructive tools | **13**, and the new five act on the host the agent would run on: `clawops_gateway_update`, `clawops_backup_restore` with `activate`, `clawops_migrate`, `clawops_stacks_delete`, `clawops_secret_delete` |
+| Confirmation is a weak control over an agent | It is **none**. Since 2.1.3 a client without elicitation is told to call again with `yes: true`, so for an agent the confirmation is the agent's own next call |
+| Tools can be added as needed | The catalog is at the **R1 cap, 30 of 30** |
+| `--read-only` is the safe default | The read toolset is 15 tools, including logs and agent activity. It is non-destructive, which is not the same as non-disclosing |
+
+**Amended preconditions:**
+
+- **2. Self-targeting guard, widened.** Not only `destroy`. It refuses anything that changes the
+  host clawops runs on or forgets that host's stack: `gateway_restart`, `gateway_update`,
+  `backup_restore` with `activate`, `migrate`, `config_set` / `config_unset` (each restarts the
+  gateway), `harden`, `up` / `apply` / `destroy`, and `stacks_delete` of its own stack. A host
+  agent that restarts its gateway ends the conversation that asked it to.
+- **5. Audit shipped off-host, with a new reason.** A restore rewrites the gateway's state on the
+  host, sessions included. An injected agent with `backup_restore` can roll back its own trail.
+- **7. Default read-only, and `yes` is not honoured.** Per-tool opt-in is not enough while any
+  opted-in destructive tool accepts the model's own `yes: true`. In host-agent mode the server
+  ignores `yes`, and approval comes from somewhere the model cannot write. *What that is, is the
+  main open design decision.*
+
+**New preconditions:**
+
+- **8. A disclosure review of the read toolset.** An agent reachable from a chat channel can use
+  `clawops_logs_tail`, `clawops_agents_logs`, `clawops_config_get` and `clawops_monitor` to read
+  what other channels and users did. Each is checked for what it exposes before `--read-only`
+  becomes the host-agent default; any that leaks across channels is excluded or filtered.
+- **9. A tool budget.** WO-62 adds no tools, or it decides up front what to merge to make room
+  (for example `secret_list` with `secret_audit`). The R1 cap is not raised for it.
+
+**Proposed: two phases.** *(Open decision, not adopted.)* On a **local-provider** host there are
+no cloud credentials, so runaway spend, the narrow cloud identity and undeletable state
+(preconditions 1, 3 and 4) do not apply. 2.2 also made systemd the gateway's supervisor there, so
+a host agent running as its own unit survives a gateway restart. Phase 1 would ship local-only,
+behind preconditions 2, 5, 6, 7, 8 and 9. Phase 2 adds cloud, behind all nine.
+
+**Acceptance is an e2e test per precondition.** The 2.2 harness already drives the built server
+with a real MCP client against a systemd host at no cost. For example: a client without
+elicitation calls `clawops_gateway_update`, is refused, calls again with `yes: true`, and nothing
+changes. Each precondition is done when a test like that fails without it.
+
+**Precondition 1 does not wait on #25.** An instance-size allowlist and a cap on stacks need no
+decision about Infracost or hand-maintained pricing.
+
+**Related bug, fixed with precondition 7 in mind** ([#188](https://github.com/dfridkin/clawops/issues/188))**:** `clawops_up`, `clawops_config_set`,
+`clawops_config_unset`, `clawops_gateway_restart` and `clawops_workflow_deploy_app` always elicit
+and take no `yes`, so a client without elicitation is told to pass an input the tool then drops,
+and can never run them. Adding `yes` is the obvious fix and widens what a host agent can approve
+for itself, so the fix is designed together with precondition 7, not ahead of it.
 
 **WO-64. The committed `server.json` drifts from the released version** ✅ **done** *(S, was folded into
 WO-62; split out 2026-09-18 because it is an hour of work and WO-62 is now a gated release of its
