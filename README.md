@@ -576,7 +576,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (2087 tests, ~13s)
+pnpm test                  # vitest (2090 tests, ~13s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm test:e2e:local        # builds, then bootstrap, the host-touching MCP tools and a 1.x migration, in systemd containers

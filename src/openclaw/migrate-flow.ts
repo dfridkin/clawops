@@ -60,9 +60,16 @@ export async function prepareMigration(args: {
 /** The effects of each step, on a host reached through `run`. */
 export function migrationSteps(
   run: (cmd: string) => Promise<SshExecResult>,
-  opts: { targetImage: string; signal?: AbortSignal; onStep?: (text: string) => void },
+  opts: {
+    targetImage: string
+    signal?: AbortSignal
+    onStep?: (text: string) => void
+    /** Injectable for tests; the gate polls every two seconds for up to two minutes. */
+    sleep?: (ms: number) => Promise<void>
+  },
 ): MigrateSteps {
   const step = opts.onStep ?? (() => {})
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((res) => setTimeout(res, ms)))
   const archive = PREMIGRATION_ARCHIVE
   const configPath = `${STATE_DIR_HOST_LINUX}/${CONFIG_FILENAME}`
 
@@ -132,14 +139,22 @@ export function migrationSteps(
 
     gate: async () => {
       step('Waiting for the gateway to start...')
+      // Two budgets. A gateway that has not answered yet is still starting — the first 2.x
+      // start on 1.x state runs a schema migration, and on a slow host that takes longer than
+      // 30 seconds. Giving up then sent the second start into the middle of it, and a CI run
+      // showed the gateway never recovering. So silence gets two minutes. A gateway that
+      // answers but is not started is the expected "migration pending" first start, and after
+      // 30 seconds of that the second start is what it needs.
       let last: string | undefined
-      for (let i = 0; i < 15; i++) {
+      let answeredFor = 0
+      for (let i = 0; i < 60 && answeredFor < 15; i++) {
         if (opts.signal?.aborted) return { ok: false, reason: 'aborted' }
         const r = await run(probeCommand('started', GATEWAY_PORT))
         const v = interpretProbe('started', r.stdout)
         if (v.ok) return { ok: true }
         last = v.reason
-        await new Promise((res) => setTimeout(res, 2000))
+        if (r.stdout.trim() !== '') answeredFor++
+        await sleep(2000)
       }
       // "No response" is all a probe can say, and it is the same words for a gateway still
       // starting, one that exited, and one systemd is restart-looping. What the container and

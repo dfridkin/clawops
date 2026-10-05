@@ -14,3 +14,8 @@ It also pulls the 2.x image before stopping 1.x. The pull used to happen inside 
 the old gateway was down, so the downtime included downloading several gigabytes, and on a
 local-provider host the startup check could time out mid-download and report a migration that
 was still in progress as failed. A pull that fails now refuses before anything is stopped.
+
+And it waits for a slow first start instead of interrupting it. The first 2.x start on 1.x state
+migrates the state schema; on a slow host it had not answered after 30 seconds, and migrate's
+second start landed in the middle of that. A gateway that has not answered now gets two minutes,
+and a failed start reports the container's state and the gateway's last log lines.

@@ -21,7 +21,8 @@ would replace its working config. Use `clawops gateway update <version>` to move
    1.x kept everything inside the container
 4. Gives the state directory numeric ownership `1000:1000`, matching the container's user
 5. Writes a fresh, valid 2.0 config
-6. Starts 2.0 against the migrated state and waits for `/startupz`
+6. Starts 2.0 against the migrated state and waits for `/startupz`. The 2.0 gateway listens on
+   **loopback only**, where 1.x listened on every interface; reach it with `clawops tunnel`
 7. Restarts once more, because the first start reports a pending schema migration, and re-gates
 8. Compares device identity before and after
 
