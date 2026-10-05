@@ -101,6 +101,12 @@ export function migrationSteps(
       await run(`chown -R ${CONTAINER_UID}:${CONTAINER_UID} ${STATE_DIR_HOST_LINUX}`)
     },
 
+    pullTarget: async () => {
+      step(`Pulling ${opts.targetImage}...`)
+      const r = await run(`docker pull ${opts.targetImage}`)
+      return { ok: r.code === 0, detail: (r.stderr || r.stdout).trim().slice(0, 500) }
+    },
+
     removeSource: async () => {
       step('Stopping the 1.x container...')
       // Through the unit where there is one: 1.7.9 ran the gateway under systemd too, and a

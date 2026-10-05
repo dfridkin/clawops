@@ -23,6 +23,13 @@ import { compareVersions } from './versions.js'
 export interface MigrateSteps {
   /** Is a 1.x container running? Returns its image, or undefined. */
   inspectSource: () => Promise<string | undefined>
+  /**
+   * Pull the 2.x image while 1.x is still serving. Without it the pull happened inside the
+   * start, after 1.x was stopped: minutes of downtime, and on a systemd host — where
+   * `systemctl restart` returns before the pull does — a startup check that timed out on a
+   * migration that was still downloading.
+   */
+  pullTarget: () => Promise<{ ok: boolean; detail: string }>
   /** `openclaw backup create --verify` inside the RUNNING container. */
   backup: () => Promise<{ ok: boolean; detail: string }>
   /** Copy state out of the running container to the host state directory. */
@@ -104,6 +111,14 @@ export async function migrate(steps: MigrateSteps, opts: MigrateOptions = {}): P
 
   // Before anything is stopped or moved.
   const identityBefore = await steps.deviceId()
+
+  const pulled = await steps.pullTarget()
+  if (!pulled.ok) {
+    return {
+      kind: 'refused',
+      reason: `Could not pull the 2.x image, so nothing was stopped: ${pulled.detail}`,
+    }
+  }
 
   const backup = await steps.backup()
   if (!backup.ok) {

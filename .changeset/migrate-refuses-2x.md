@@ -9,3 +9,8 @@ stops before touching anything and points at `clawops gateway update` instead.
 
 It also asks for confirmation. `--yes` was documented as skipping the prompt, but there was no
 prompt: the migration simply ran. The question is the one `clawops_migrate` asks over MCP.
+
+It also pulls the 2.x image before stopping 1.x. The pull used to happen inside the start, after
+the old gateway was down, so the downtime included downloading several gigabytes, and on a
+local-provider host the startup check could time out mid-download and report a migration that
+was still in progress as failed. A pull that fails now refuses before anything is stopped.
