@@ -141,7 +141,16 @@ export function migrationSteps(
         last = v.reason
         await new Promise((res) => setTimeout(res, 2000))
       }
-      return { ok: false, reason: last ?? 'no response' }
+      // "No response" is all a probe can say, and it is the same words for a gateway still
+      // starting, one that exited, and one systemd is restart-looping. What the container and
+      // the gateway said is the difference, and the operator reading this is mid-migration.
+      const said = await run(
+        "echo \"container: $(docker ps -a --filter name=^openclaw$ --format '{{.Status}}' | head -1)\"; " +
+          "systemctl is-enabled openclaw >/dev/null 2>&1 && echo \"unit: $(systemctl is-active openclaw)\"; " +
+          'docker logs --tail 15 openclaw 2>&1 | tail -15',
+      )
+      const detail = said.stdout.trim()
+      return { ok: false, reason: (last ?? 'no response') + (detail ? `\n${detail}` : '') }
     },
 
     deviceId: async () => {

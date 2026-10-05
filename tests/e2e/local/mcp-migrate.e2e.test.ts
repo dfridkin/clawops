@@ -133,7 +133,7 @@ describe.skipIf(!enabled)('clawops_migrate against a deployment clawops 1.7.9 ma
         await new Promise((res) => setTimeout(res, 5_000))
       }
     }
-    expect(outcome).not.toMatch(/"status"\s*:\s*"failed"/)
+    expect(outcome, outcome).not.toMatch(/"status"\s*:\s*"failed"/)
 
     expect(await runningImage()).toBe(`ghcr.io/openclaw/openclaw:${TARGET_VERSION}`)
     const probe = await vm.inspect('curl -s --max-time 5 http://127.0.0.1:18789/startupz')
