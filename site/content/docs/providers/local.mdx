@@ -27,6 +27,12 @@ writes the default config and starts the container under systemd, and keeps stac
 
 Re-running `clawops up` is safe, the bootstrap is idempotent.
 
+The gateway belongs to systemd: it runs as the `openclaw` unit with `Restart=always`. Restarts,
+updates, migrations and restores change it through the unit, by writing the new run command to
+`/etc/systemd/system/openclaw.service.d/clawops-run.conf` and restarting. Re-running `clawops up`
+writes a fresh unit and removes that drop-in. If you edit the unit by hand, the drop-in still
+wins, so remove it as well.
+
 <Callout type="warn" title="plan and apply are cloud-only">
   There is no state backend to plan against, so use `clawops up` directly. `clawops plan` refuses
   the local provider rather than producing an artifact it cannot apply.

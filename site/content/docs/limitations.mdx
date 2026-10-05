@@ -17,9 +17,10 @@ multiple stacks and route between them yourself.
 **No TLS or domain automation.** The gateway runs on port 18789 without TLS termination. Reach it
 over `clawops tunnel`, or bring your own reverse proxy. Certificate and DNS automation is planned.
 
-**Not every CLI command has an MCP tool.** 14 of 24 are exposed. `ssh`, `secret`, `backup`
-and `migrate` have none, so an agent has to ask you to run those yourself, including a restore
-with `--activate`. Not yet scheduled for a release.
+**Two capabilities have no MCP tool, on purpose.** `ssh` would give an agent a root shell that
+bypasses every refusal and confirmation, and `secret set` / `rotate` would put a secret value in
+the conversation. An agent asks you to run those in a terminal. Everything else, including
+backup, restore with `--activate`, migrate and gateway updates, is a tool.
 
 **Tailscale: no private-only mode on local stacks, and no `doctor` check yet.** `clawops harden
 --tailscale` joins any stack to a tailnet and moves clawops onto that address. Closing the public

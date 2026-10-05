@@ -188,15 +188,14 @@ and a restart discarded every session.
 ### Update the gateway
 
 ```bash
-clawops gateway update                # pull and restart with 'stable' tag
-clawops gateway update 2026.4.5       # specific version
-clawops gateway update --channel dev  # dev channel
+clawops gateway update                # the release this clawops recommends
+clawops gateway update 2026.9.3       # a specific 2.x release
 ```
 
-Update sequence:
-1. `docker pull ghcr.io/openclaw/openclaw:<version>`
-2. `docker stop openclaw && docker rm openclaw`
-3. `docker run` with the new image, same port and config mount
+Moving tags (`latest`, `stable`, `dev`) are refused. The update pulls the image first, snapshots
+the state database and asks the target release whether it understands it, then replaces the
+gateway, waits for it to start, and puts the previous release back if it does not. See
+[upgrade-rollback.md](upgrade-rollback.md#gateway-only-upgrade) for each step.
 
 Expect ~60 seconds of downtime during the container swap. See
 [`docs/upgrade-rollback.md`](upgrade-rollback.md) for the full upgrade procedure including
@@ -235,8 +234,8 @@ clawops backup create --out /backups/openclaw-$(date +%Y%m%d).tar.gz
 
 `clawops backup restore` works on this line. OpenClaw 2.0 ships a real restore and clawops
 delegates to it: the archive is verified upstream and expanded into a **fresh staging
-directory**, never in place. `--activate` puts it into service: it stops the gateway, swaps the
-state in (keeping the state it replaces), restarts, and rolls back if the gateway does not answer.
+directory**, never in place. `--activate` puts it into service: it swaps the state in (keeping the state it
+replaces), restarts the gateway on it, and rolls back if the gateway does not answer.
 See [backup-restore.md](backup-restore.md).
 
 On the clawops 1.x line the command is unavailable, because `2026.7.1-2` has no restore

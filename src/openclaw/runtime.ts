@@ -207,23 +207,54 @@ export function gatewayRunArgs(spec: GatewayRunSpec): string {
     .join(' ')
 }
 
+/** Where a host that supervises the gateway with systemd keeps clawops' run command. */
+export const SYSTEMD_DROPIN = '/etc/systemd/system/openclaw.service.d/clawops-run.conf'
+
+/** True in a shell when the host runs the gateway as the `openclaw` systemd unit. */
+const UNDER_SYSTEMD = 'systemctl is-enabled openclaw >/dev/null 2>&1'
+
 /**
- * The full stop → rm → run chain used by every restart and bootstrap path.
+ * Replace the running gateway with this one: every restart, update, migration, rollback and
+ * restore goes through here.
  *
- * Meaningless for `supervisor: 'systemd'`, which supplies its own ExecStartPre lines;
- * that caller wants `gatewayRunArgs` instead.
+ * Two kinds of host. A cloud host runs the gateway as a detached container, so this is
+ * stop → rm → `docker run -d`. A local-provider Linux host runs it as the `openclaw` systemd
+ * unit, `Restart=always`, whose ExecStartPre removes any container called `openclaw` — so
+ * replacing the container behind systemd's back is a race clawops loses: systemd sees its
+ * process exit, and five seconds later removes the container clawops just started and runs
+ * the one its unit names, on the old image. A restart could be undone, an update reverted, a
+ * migration caught mid-start ("draining"). The local MCP e2e lost it under load.
+ *
+ * So on such a host the run command is given to systemd instead, as a drop-in that replaces
+ * ExecStart, and the unit is restarted. The drop-in is written by an unquoted shell string, so
+ * the env-file test expands when it is written, the same way the bootstrap writes the unit.
  */
 export function gatewayRunCommand(spec: GatewayRunSpec): string {
   const { pathPrefix = '' } = spec
-  return (
-    pathPrefix +
-    [
-      'docker stop openclaw 2>/dev/null || true',
-      'docker rm   openclaw 2>/dev/null || true',
-      gatewayRunArgs(spec),
-    ].join(' && ')
-  )
+  const detached = [
+    'docker stop openclaw 2>/dev/null || true',
+    'docker rm   openclaw 2>/dev/null || true',
+    gatewayRunArgs(spec),
+  ].join(' && ')
+  // macOS hosts carry a PATH prefix and have no systemd; they only ever take the docker path.
+  if (pathPrefix) return pathPrefix + detached
+
+  const execStart = gatewayRunArgs({ ...spec, supervisor: 'systemd' })
+  const viaSystemd = [
+    `mkdir -p ${SYSTEMD_DROPIN.replace(/\/[^/]+$/, '')}`,
+    `printf '%s\n' '[Service]' 'ExecStart=' "ExecStart=/usr/bin/${execStart}" > ${SYSTEMD_DROPIN}`,
+    'systemctl daemon-reload',
+    'systemctl restart openclaw',
+  ].join(' && ')
+  return `if ${UNDER_SYSTEMD}; then ${viaSystemd}; else ${detached}; fi`
 }
+
+/**
+ * Stop the gateway so it stays stopped. On a systemd host `docker stop` alone is undone five
+ * seconds later by `Restart=always`; the unit has to be stopped instead.
+ */
+export const GATEWAY_STOP_COMMAND =
+  `if ${UNDER_SYSTEMD}; then systemctl stop openclaw; fi; docker stop openclaw 2>/dev/null || true`
 
 /** Reads the host port bindings off the running container. */
 export const PUBLISH_INSPECT_CMD =

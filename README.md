@@ -194,6 +194,27 @@ Either way, pass the arguments. `mcp serve` is what speaks the protocol, and an 
 is one that still reads clearly a year later. clawops does not strand a client that omits them:
 run with no command at all and a pipe on stdin — how every MCP client starts a server — and it
 starts `mcp serve`, saying so on stderr. Typed at a terminal, `clawops` still prints help.
+
+**Pass cloud credentials in `env`.** A client starts the server with the environment its config
+gives it, not your shell's, so an `AWS_PROFILE` exported in a terminal does not reach it, and
+every tool that reads a stack fails with "Could not read the state of stack". Name the profile,
+or the variables your state backend needs, in the server's `env` block:
+
+```json
+{
+  "mcpServers": {
+    "clawops": {
+      "command": "npx",
+      "args": ["-y", "@clawops/cli", "mcp", "serve"],
+      "env": { "AWS_PROFILE": "my-profile" }
+    }
+  }
+}
+```
+
+It holds a profile name, not a key: the credentials themselves stay where the cloud CLI keeps
+them (R6).
+
 Config file locations:
 
 | App | Path |
@@ -355,6 +376,10 @@ Do not bind to a non-loopback address without additional authentication controls
 | `clawops_stacks_list` | admin | List all stacks and their state |
 | `clawops_config_get` | cli | Read a remote config value |
 | `clawops_agents_list` | cli | List running agents |
+| `clawops_agents_logs` | cli | One agent's recent activity, paginated |
+| `clawops_gateway_status` | cli | Whether the gateway container is running, and its image |
+| `clawops_secret_list` | cli | List stored secrets by name and status (never values) |
+| `clawops_secret_audit` | cli | Report missing secrets and unresolvable `$secret:` references |
 | `clawops_up` | cli | Provision or update a stack |
 | `clawops_destroy` | cli | Destroy a stack (elicits confirmation) |
 | `clawops_apply` | cli | Apply a plan file |
@@ -363,6 +388,12 @@ Do not bind to a non-loopback address without additional authentication controls
 | `clawops_config_unset` | cli | Remove a remote config key |
 | `clawops_config_validate` | cli | Validate the deployed config against the OpenClaw schema |
 | `clawops_gateway_restart` | cli | Restart the gateway (elicits confirmation) |
+| `clawops_gateway_update` | cli | Move the gateway to a concrete OpenClaw version (elicits confirmation) |
+| `clawops_backup_create` | cli | Back up gateway state to a local archive |
+| `clawops_backup_restore` | cli | Restore a backup to staging, or with `activate` into service (elicits confirmation) |
+| `clawops_migrate` | cli | Migrate a 1.x deployment onto the 2.0 runtime (elicits confirmation) |
+| `clawops_stacks_delete` | admin | Forget a stack in config; does not destroy infrastructure (elicits confirmation) |
+| `clawops_secret_delete` | cli | Delete a stored secret (elicits confirmation) |
 | `clawops_harden` | cli | Apply hardening modules; join or leave a tailnet (elicits confirmation) |
 | `clawops_init` | cli | Register a stack and write `~/.clawops/config.json` (no cloud resources) |
 | `clawops_workflow_deploy_app` | workflow | End-to-end deploy: plan → confirm → apply → status |
@@ -545,10 +576,10 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (1977 tests, ~13s)
+pnpm test                  # vitest (2090 tests, ~13s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
-pnpm test:e2e:local        # local provider bootstrap for real, in a systemd container
+pnpm test:e2e:local        # builds, then bootstrap, the host-touching MCP tools and a 1.x migration, in systemd containers
 pnpm typecheck             # tsc --noEmit
 pnpm lint                  # eslint src/ tests/ scripts/ (--max-warnings=0)
 pnpm gen:schemas           # regenerate src/providers/types.ts + src/mcp/tools/_generated.ts
@@ -606,12 +637,12 @@ Use `pnpm changeset` to record a release note before merging a `feat` or `fix`.
 
 ## What's new in 2.2
 
-Recovery is a flag, and SSH failures say what failed.
+Recovery is a flag, agents can reach every command they need, and SSH failures say what failed.
 
 ### Restore puts a backup into service
 
-- `clawops backup restore --file <archive> --activate` stops the gateway, swaps the restored
-  state in, restarts it, and checks that it answers. Without `--activate`, a restore still
+- `clawops backup restore --file <archive> --activate` swaps the restored state in, restarts
+  the gateway on it, and checks that it answers. Without `--activate`, a restore still
   verifies and expands into a staging directory and touches nothing live.
 - The state it replaces is kept, not deleted. If the gateway does not come up, clawops puts the
   old state back and restarts again; the state that failed is kept as
@@ -620,6 +651,16 @@ Recovery is a flag, and SSH failures say what failed.
   the container's `/tmp`, where the next `gateway restart` destroyed it.
 - Free space is checked before an archive is expanded.
 - `clawops backup --help` no longer says restore is unavailable. It has worked since 2.0.
+
+### Every command an agent needs is an MCP tool
+
+- Ten new tools bring the catalog to 30: backup create and restore (with `activate`), gateway
+  status and update, one agent's logs, migrate, stacks delete, and secret list, audit and
+  delete. Each calls the same code as its command, so both refuse the same things in the same
+  words.
+- `clawops ssh` and `clawops secret set` / `rotate` stay CLI-only on purpose: a root shell or a
+  secret value does not belong in an agent's hands or its transcript. The secret tools never
+  return values.
 
 ### SSH failures name the cause
 
@@ -630,7 +671,30 @@ Recovery is a flag, and SSH failures say what failed.
   what they are. ssh2's own words are kept in every message.
 - `clawops doctor --stack <name>` prints the same advice on its own line.
 
-### Fixes
+### Fixes found by running every tool against a real host
+
+The new tools were driven end to end over MCP against a systemd host, a 1.x deployment made by
+clawops 1.7.9, and AWS. That found defects the unit tests could not, several in the CLI too:
+
+- **`clawops gateway update` works.** Every update since the upgrade gate shipped refused before
+  touching anything, because the state snapshot was given a host path inside a container that
+  cannot create it.
+- **Local-provider hosts no longer race systemd.** The gateway runs there as the `openclaw` unit
+  with `Restart=always`, which undid a restart, an update, a migration or a restore about five
+  seconds after clawops made it. clawops now changes the gateway through the unit.
+- **`clawops gateway`, `agents`, `config` and `logs` work on local stacks.** Each failed with "The
+  local provider does not use Pulumi stacks" while its MCP tool worked.
+- **`clawops migrate` refuses a stack already on 2.x**, which it would have given a fresh minimal
+  config; **asks before it runs**, as `--yes` always claimed; and **pulls the 2.x image before
+  stopping 1.x**, so the downtime is a restart rather than a multi-gigabyte download.
+- **A secret name can no longer reach outside the secrets directory.** `clawops secret delete
+  ../config.json` deleted the clawops config.
+- **`clawops_gateway_restart` keeps a gateway published on every interface** where it was,
+  instead of moving it to loopback.
+- **A stack whose state cannot be read says why**, instead of Pulumi's `code: -2`, and names the
+  usual cause for an MCP server: credentials missing from its client config's `env` block.
+
+### Other fixes
 
 - Streaming Docker commands, such as a backup upload or a log follow, no longer reuse a sudo
   decision learned from an unrelated command. On AWS, where the login user is not in the `docker`
@@ -638,7 +702,9 @@ Recovery is a flag, and SSH failures say what failed.
 - The backup and upgrade-rollback guides describe `--activate` instead of a manual procedure, and
   CI follows every in-repo Markdown link and anchor (`pnpm verify:docs`).
 - The local provider's bootstrap runs for real in its e2e suite, against a container with systemd
-  as PID 1, instead of being mocked (`pnpm test:e2e:local`, nightly and on PRs labelled `e2e`).
+  as PID 1, instead of being mocked. The same suite now drives the host-touching MCP tools and a
+  1.x migration (`pnpm test:e2e:local`, nightly and on PRs labelled `e2e`), and
+  `E2E_MCP=1 pnpm test:cloud <cloud>` backs up and restores over MCP on a real cloud host.
 - clawops.fyi carries structured data, an `/llms.txt`, a FAQ and a comparison page.
 
 ---

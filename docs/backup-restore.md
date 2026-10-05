@@ -110,8 +110,11 @@ clawops backup restore --file /backups/openclaw-prod-20260908.tar.gz --activate
 clawops apply <plan>.json     # reinstalls provider plugins
 ```
 
-`--activate` stops the gateway, moves the current state aside — it is kept, never deleted —
-puts the restored state in place, restarts, and waits for the gateway to answer. If it does
+`--activate` moves the current state aside — it is kept, never deleted — puts the restored
+state in place, restarts the gateway on it, and waits for the gateway to answer. The gateway is
+not stopped first: until the restart, a few seconds later, it keeps running against the directory
+that was moved aside, so anything it writes in that window lands in the kept state, not the
+restored one. If it does
 not answer within three minutes, clawops puts the previous state back, restarts again, and
 keeps the state that would not run under `.failed-restore-<timestamp>`.
 

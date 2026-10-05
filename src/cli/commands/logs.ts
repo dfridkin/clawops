@@ -20,27 +20,10 @@ export default defineCommand({
   },
   async run({ args }) {
     const { buildContext } = await import('../context.js')
-    const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
     const { acquireSession, drainPool } = await import('../../transport/pool.js')
 
     const ctx = buildContext(args)
-    const stack = await ctx.getStack()
-
-    const outputMap = await stack.outputs()
-    const outputs: Record<string, unknown> = Object.fromEntries(
-      Object.entries(outputMap).map(([k, v]) => [k, v.value]),
-    )
-    if (!outputs['publicIp']) {
-      failure('Stack has no outputs. Run `clawops up` first.')
-      process.exit(4)
-    }
-
-    const base = extractBaseOutputs(outputs)
-    const conn = ctx.adapter.getConnectionInfo({
-      ...base,
-      privateKeyPath: ctx.config.ssh.keyPath,
-      knownHostsPath: ctx.config.ssh.knownHostsPath,
-    })
+    const conn = await connFor(ctx)
 
     const tailLines = typeof args.tail === 'string' ? parseInt(args.tail, 10) : 100
     const follow = Boolean(args.follow)
@@ -97,3 +80,29 @@ export default defineCommand({
     }
   },
 })
+
+/**
+ * Where to connect. The local provider has no Pulumi stack, and reading one made `clawops logs`
+ * fail on every local stack while clawops_logs_tail worked.
+ */
+async function connFor(ctx: import('../context.js').ClawopsContext) {
+  if (ctx.adapter.name === 'local') {
+    const { resolveConn } = await import('../../transport/conn.js')
+    return resolveConn(ctx)
+  }
+  const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
+  const stack = await ctx.getStack()
+  const outputMap = await stack.outputs()
+  const outputs: Record<string, unknown> = Object.fromEntries(
+    Object.entries(outputMap).map(([k, v]) => [k, v.value]),
+  )
+  if (!outputs['publicIp']) {
+    failure('Stack has no outputs. Run `clawops up` first.')
+    process.exit(4)
+  }
+  return ctx.adapter.getConnectionInfo({
+    ...extractBaseOutputs(outputs),
+    privateKeyPath: ctx.config.ssh.keyPath,
+    knownHostsPath: ctx.config.ssh.knownHostsPath,
+  })
+}

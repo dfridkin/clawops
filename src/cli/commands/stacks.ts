@@ -3,7 +3,7 @@ import process from 'node:process'
 import { success, failure, info, warn } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
 import { renderTable } from '../../output/table.js'
-import { requireConfig, setConfig } from '../../config/store.js'
+import { requireConfig } from '../../config/store.js'
 import { UsageError } from '../../errors/index.js'
 
 export default defineCommand({
@@ -65,61 +65,20 @@ export default defineCommand({
       process.exit(2)
     }
 
-    const config = requireConfig()
+    const { checkStackDelete, deleteStackFromConfig, forgetNotice } = await import('../../config/stack-delete.js')
+    const check = await checkStackDelete(name, { force: !!args.force })
 
-    if (!(name in config.stacks)) {
-      throw new UsageError(`Stack "${name}" not found in config.`)
-    }
-
-    const stackNames = Object.keys(config.stacks)
-    if (stackNames.length === 1) {
-      throw new UsageError(
-        `Cannot delete the only remaining stack "${name}". ` +
-          'Add another stack first or run `clawops destroy` to tear down resources.',
-      )
-    }
-
-    if (name === config.defaults.stack && !args.force) {
-      throw new UsageError(
-        `"${name}" is the default stack. Use --force to delete it ` +
-          '(clawops will switch the default to another stack).',
-      )
-    }
-
-    let isDeployed = false
-    if (!args.force) {
-      try {
-        const { buildContext } = await import('../context.js')
-        const ctx = buildContext({ stack: name })
-        if (ctx.adapter.name === 'local') {
-          isDeployed = !!ctx.localState
-        } else {
-          const stack = await ctx.getStack()
-          const outputMap = await stack.outputs()
-          const outputs = Object.fromEntries(
-            Object.entries(outputMap).map(([k, v]) => [k, (v as { value: unknown }).value]),
-          )
-          isDeployed = !!outputs['publicIp']
-        }
-      } catch {
-        warn(`Could not verify deployment status for "${name}" — proceeding anyway.`)
+    if (!check.ok) {
+      // Same refusals the clawops_stacks_delete tool gives; only the exit differs.
+      if (check.refusal === 'deployed') {
+        failure(check.reason)
+        process.exit(1)
       }
+      throw new UsageError(check.reason)
     }
+    for (const w of check.warnings) warn(w)
 
-    if (isDeployed) {
-      failure(
-        `Stack "${name}" is still deployed. ` +
-          `Run \`clawops down --stack ${name}\` first to destroy cloud resources, ` +
-          `or pass --force to remove from registry only.`,
-      )
-      process.exit(1)
-    }
-
-    warn(
-      `This removes "${name}" from clawops config only. ` +
-        'Cloud resources are NOT destroyed. ' +
-        'Run `clawops destroy --stack ' + name + '` first if you want to remove cloud resources.',
-    )
+    warn(forgetNotice(name))
 
     if (!args.yes) {
       const confirmed = await confirm(`Delete stack "${name}" from config?`)
@@ -129,22 +88,9 @@ export default defineCommand({
       }
     }
 
-    const updated = { ...config }
-    const newStacks = { ...config.stacks }
-    delete newStacks[name]
-    updated.stacks = newStacks
-
-    // If we're deleting the default, pick the first remaining stack
-    if (name === config.defaults.stack) {
-      updated.defaults = { ...config.defaults, stack: Object.keys(newStacks)[0]! }
-    }
-
-    setConfig(updated)
-    success(`Stack "${name}" removed from config.`)
-
-    if (name === config.defaults.stack) {
-      info(`Default stack switched to "${updated.defaults.stack}".`)
-    }
+    const deleted = deleteStackFromConfig(name)
+    success(deleted.message)
+    if (deleted.newDefaultMessage) info(deleted.newDefaultMessage)
   },
 })
 

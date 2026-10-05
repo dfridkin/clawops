@@ -93,13 +93,21 @@ know the proxy is there.
 TLS termination. Bring your own reverse proxy (nginx, Caddy, Cloudflare Tunnel) for HTTPS. TLS
 automation is tracked in the roadmap.
 
-**Not every CLI command has an MCP tool.** 14 of 24 commands are exposed. `ssh`,
-`secret`, `backup` and `migrate` have no tool; `gateway` has restart but not status or update,
-`agents` has list but not per-agent logs, and `stacks` has list but not delete. An agent driving
-clawops hits these as missing capabilities and has to ask the user to run a command themselves.
-That includes `backup restore --activate`, new in 2.2: recovery is CLI-only.
-`tests/mcp/parity.test.ts` holds the full list with a reason for each. Closing these gaps is not
-scheduled for a release yet; 2.2 did not close them.
+**Two capabilities have no MCP tool, on purpose.** Every other command an agent needs is a tool.
+`clawops ssh` runs an arbitrary command as root on the host, which would bypass every typed
+refusal and confirmation clawops has, and a prompt injection reaching an agent could reach it
+(T11 in the threat model). `clawops secret set` and `rotate` take a secret value, and a value
+passed as a tool argument lands in the client's transcript and the model's context (R6). An
+agent asks the user to run those in a terminal; the secret tools say so. `setup`, `tunnel` and
+`bug` are interactive or long-lived and have agent-shaped equivalents or none needed.
+`tests/mcp/parity.test.ts` holds the reason for each.
+
+**Long-running tools send no progress notifications.** `clawops_up`, `clawops_apply`,
+`clawops_destroy`, `clawops_gateway_update` and the backup tools record progress on a task that
+`clawops_task_status` can read, but the registry never passes a handler the request's progress
+token, so no `notifications/progress` reach the client, and only `clawops_migrate` returns a
+`taskId` early. A slow call looks like a hung one until it returns. R12 asks for both; fixing it is
+one change to the registry and every long-running handler.
 
 **Tailscale: no private-only mode on local stacks, and no `doctor` check yet.** `clawops harden
 --tailscale` joins any stack to a tailnet and moves clawops onto that address. Closing the public
@@ -143,8 +151,8 @@ not set up Prometheus, Grafana, or alert routing. This is planned for a future r
 
 **Restoring in place is not offered.** `clawops backup restore` verifies the archive and expands
 it into a staging directory beside the live state; writing an archive over a live state directory
-is how a backup becomes corruption. `--activate` then swaps it in — stop the gateway, move the
-current state aside, put the restored state in place, restart, and confirm it answers — and puts
+is how a backup becomes corruption. `--activate` then swaps it in — move the
+current state aside, put the restored state in place, restart the gateway, and confirm it answers — and puts
 the previous state back if it does not. Without `--activate` nothing is touched, and adopting the
 restore by hand remains possible. Provider plugins are not carried in an archive; re-run
 `clawops apply` afterwards to reinstall them.

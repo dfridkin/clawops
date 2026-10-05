@@ -18,9 +18,18 @@
 // Measured on 2026-09-09 migrating 2026.7.1-2 → 2026.9.2: `deviceId` is preserved and
 // `identity/` is emptied — relocation into SQLite, not loss.
 
+import { compareVersions } from './versions.js'
+
 export interface MigrateSteps {
   /** Is a 1.x container running? Returns its image, or undefined. */
   inspectSource: () => Promise<string | undefined>
+  /**
+   * Pull the 2.x image while 1.x is still serving. Without it the pull happened inside the
+   * start, after 1.x was stopped: minutes of downtime, and on a systemd host — where
+   * `systemctl restart` returns before the pull does — a startup check that timed out on a
+   * migration that was still downloading.
+   */
+  pullTarget: () => Promise<{ ok: boolean; detail: string }>
   /** `openclaw backup create --verify` inside the RUNNING container. */
   backup: () => Promise<{ ok: boolean; detail: string }>
   /** Copy state out of the running container to the host state directory. */
@@ -42,17 +51,53 @@ export interface MigrateSteps {
 export type MigrateOutcome =
   | { kind: 'migrated'; entries: string[]; identity: 'preserved' | 'changed' | 'unknown'; restarts: number }
   | { kind: 'nothing-to-migrate'; reason: string }
+  | { kind: 'already-current'; reason: string }
   | { kind: 'refused'; reason: string }
   | { kind: 'failed'; reason: string; backupDetail: string }
 
 /**
+ * The OpenClaw release an image reference names, or undefined when its tag is not a release
+ * (a moving tag such as `stable`, or no tag). Variant suffixes (`-slim`, `-browser`) are
+ * dropped; a numeric patch suffix (`-2`) is kept.
+ */
+export function imageVersion(image: string): string | undefined {
+  const last = image.slice(image.lastIndexOf('/') + 1)
+  const colon = last.indexOf(':')
+  if (colon < 0) return undefined
+  const m = /^(\d{4}\.\d+\.\d+(?:-\d+)?)(?:-[a-z]+)?$/.exec(last.slice(colon + 1))
+  return m?.[1]
+}
+
+export interface MigrateOptions {
+  /**
+   * The first release of the line being migrated TO. A source already at or past it is not a
+   * 1.x deployment, and is refused before anything runs: the sequence would back it up, stop
+   * it, and overwrite its working 2.x config with the synthesised minimal one.
+   */
+  targetLineMin?: string
+}
+
+/**
  * Run the migration.
  *
- * Refuses before touching anything if there is no verified backup: this replaces a working
- * deployment's container, and the state it extracts is the only copy.
+ * Refuses before touching anything if the source is already on the target line, or if there
+ * is no verified backup: this replaces a working deployment's container, and the state it
+ * extracts is the only copy.
  */
-export async function migrate(steps: MigrateSteps): Promise<MigrateOutcome> {
+export async function migrate(steps: MigrateSteps, opts: MigrateOptions = {}): Promise<MigrateOutcome> {
   const sourceImage = await steps.inspectSource()
+  if (sourceImage && opts.targetLineMin) {
+    const source = imageVersion(sourceImage)
+    if (source !== undefined && compareVersions(source, opts.targetLineMin) >= 0) {
+      return {
+        kind: 'already-current',
+        reason:
+          `This deployment already runs ${sourceImage}, which is OpenClaw ${opts.targetLineMin} ` +
+          'or later — there is no 1.x state to migrate, and migrating would replace its config. ' +
+          'To change versions within 2.x, use `clawops gateway update <version>`.',
+      }
+    }
+  }
   if (!sourceImage) {
     return {
       kind: 'nothing-to-migrate',
@@ -66,6 +111,14 @@ export async function migrate(steps: MigrateSteps): Promise<MigrateOutcome> {
 
   // Before anything is stopped or moved.
   const identityBefore = await steps.deviceId()
+
+  const pulled = await steps.pullTarget()
+  if (!pulled.ok) {
+    return {
+      kind: 'refused',
+      reason: `Could not pull the 2.x image, so nothing was stopped: ${pulled.detail}`,
+    }
+  }
 
   const backup = await steps.backup()
   if (!backup.ok) {
@@ -153,6 +206,8 @@ export function describeMigration(o: MigrateOutcome): string {
       return lines.join('\n')
     }
     case 'nothing-to-migrate':
+      return o.reason
+    case 'already-current':
       return o.reason
     case 'refused':
       return o.reason

@@ -81,6 +81,13 @@ clawops says which of these it is, and `clawops doctor --stack <name>` repeats t
   regenerate the key; it's probably the one thing that is fine.
 - *Does not resolve*: the address recorded in `clawops stacks list` is stale.
 
+**`Could not read the state of stack "<name>"`**
+clawops could not open the stack's state backend. The message carries the backend's own error.
+From a terminal it is usually expired credentials. From an MCP client it is usually that the
+server never got any: a client starts the server with the environment in its config, not your
+shell's, so put `AWS_PROFILE` (or what your backend reads) in the server's `env` block. See
+[MCP](/docs/mcp).
+
 **Host key verification failed after redeploying**
 Clouds recycle addresses. `clawops destroy` forgets the old key, but if the instance was removed
 another way, delete the stale line from `~/.clawops/known_hosts`.

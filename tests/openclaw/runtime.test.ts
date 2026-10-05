@@ -3,7 +3,9 @@
 // green, and one of those greps even locked in a command that could never run.
 
 import { describe, it, expect } from 'vitest'
-import { gatewayRunCommand, gatewayRunArgs, SECURITY_FLAGS } from '../../src/openclaw/runtime.js'
+import {
+  gatewayRunCommand, gatewayRunArgs, SECURITY_FLAGS, SYSTEMD_DROPIN, GATEWAY_STOP_COMMAND,
+} from '../../src/openclaw/runtime.js'
 
 const base = {
   image: 'ghcr.io/openclaw/openclaw:2026.9.2',
@@ -86,10 +88,49 @@ describe('gatewayRunArgs', () => {
 })
 
 describe('gatewayRunCommand', () => {
-  it('stops and removes before running', () => {
-    const cmd = gatewayRunCommand(base)
+  /** The branch a host without the systemd unit takes: cloud hosts, and macOS. */
+  function detachedBranch(cmd: string): string {
+    return cmd.slice(cmd.indexOf('; else ') + '; else '.length)
+  }
+  function systemdBranch(cmd: string): string {
+    return cmd.slice(cmd.indexOf('; then ') + '; then '.length, cmd.indexOf('; else '))
+  }
+
+  it('stops and removes before running, on a host without the systemd unit', () => {
+    const cmd = detachedBranch(gatewayRunCommand(base))
     expect(cmd.indexOf('docker stop openclaw')).toBeLessThan(cmd.indexOf('docker run'))
     expect(cmd.indexOf('docker rm')).toBeLessThan(cmd.indexOf('docker run'))
+    expect(cmd).toContain('docker run -d --restart unless-stopped')
+  })
+
+  it('hands the run command to systemd on a host that runs the gateway as its unit', () => {
+    // Replacing the container behind systemd's back loses a race: Restart=always and the
+    // unit's ExecStartPre remove clawops' container five seconds later and run the unit's own.
+    const cmd = gatewayRunCommand(base)
+    expect(cmd.startsWith('if systemctl is-enabled openclaw >/dev/null 2>&1; then ')).toBe(true)
+
+    const viaSystemd = systemdBranch(cmd)
+    // A drop-in that clears ExecStart and sets the new one: foreground, systemd restarts it.
+    expect(viaSystemd).toContain(SYSTEMD_DROPIN)
+    expect(viaSystemd).toContain("'ExecStart='")
+    expect(viaSystemd).toContain(`"ExecStart=/usr/bin/${gatewayRunArgs({ ...base, supervisor: 'systemd' })}"`)
+    expect(viaSystemd.indexOf('daemon-reload')).toBeLessThan(viaSystemd.indexOf('systemctl restart openclaw'))
+    // ...and nothing in that branch starts a container systemd does not own.
+    expect(viaSystemd).not.toContain('docker run -d')
+    expect(viaSystemd).not.toContain('docker stop')
+  })
+
+  it('carries the image and publish scope into the systemd drop-in', () => {
+    const cmd = systemdBranch(gatewayRunCommand({ ...base, image: 'ghcr.io/openclaw/openclaw:2026.9.3', publish: 'all' }))
+    expect(cmd).toContain('ghcr.io/openclaw/openclaw:2026.9.3')
+    expect(cmd).toContain('-p 18789:18789')
+    expect(cmd).not.toContain('127.0.0.1:18789')
+  })
+
+  it('stops a systemd-supervised gateway through its unit, so it stays stopped', () => {
+    expect(GATEWAY_STOP_COMMAND.indexOf('systemctl stop openclaw')).toBeLessThan(
+      GATEWAY_STOP_COMMAND.indexOf('docker stop openclaw'),
+    )
   })
 
   it('honours a PATH prefix for hosts where docker is not on a login PATH', () => {

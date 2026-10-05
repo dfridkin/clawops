@@ -10,6 +10,7 @@ import { migrate, describeMigration, type MigrateSteps } from '../../src/opencla
 function steps(over: Partial<MigrateSteps> = {}, log: string[] = []) {
   const base: MigrateSteps = {
     inspectSource: async () => { log.push('inspect'); return 'ghcr.io/openclaw/openclaw:2026.7.1-2' },
+    pullTarget: async () => { log.push('pull'); return { ok: true, detail: '' } },
     backup: async () => { log.push('backup'); return { ok: true, detail: '/tmp/b.tar.gz (verified)' } },
     extract: async () => { log.push('extract'); return { ok: true, entries: ['identity', 'state', 'workspace'] } },
     chown: async () => { log.push('chown') },
@@ -55,6 +56,26 @@ describe('migrate — the sequence', () => {
     if (out.kind === 'refused') expect(out.reason).toMatch(/verified backup/)
     // Nothing was touched.
     expect(log).not.toContain('extract')
+    expect(log).not.toContain('remove')
+  })
+
+  it('pulls the 2.x image while 1.x is still serving', async () => {
+    // Pulled inside the start, the download happened after 1.x was stopped: minutes of
+    // downtime, and on a systemd host a startup check that timed out mid-download. The local
+    // e2e found it on a host whose image cache was empty.
+    const { steps: s, log } = steps()
+    await migrate(s)
+    ranInOrder(log, 'pull', 'remove')
+  })
+
+  it('refuses before touching anything when the 2.x image cannot be pulled', async () => {
+    const { steps: s, log } = steps({
+      pullTarget: async () => { log.push('pull'); return { ok: false, detail: 'manifest unknown' } },
+    })
+    const out = await migrate(s)
+    expect(out.kind).toBe('refused')
+    if (out.kind === 'refused') expect(out.reason).toMatch(/manifest unknown/)
+    expect(log).not.toContain('backup')
     expect(log).not.toContain('remove')
   })
 

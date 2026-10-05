@@ -1,14 +1,14 @@
 # MCP Safety Modes
 
 clawops exposes its operations as an MCP server. By default the server enables all
-20 tools, including destructive ones like `clawops_destroy` and `clawops_up`. For
+30 tools, including destructive ones like `clawops_destroy` and `clawops_up`. For
 most agent integrations you should restrict the tool set.
 
 ## Three safety modes
 
 ### `--read-only` (recommended for most setups)
 
-Enables the **11 tools** in the curated `read` toolset, no writes, no infrastructure
+Enables the **15 tools** in the curated `read` toolset, no writes, no infrastructure
 changes:
 
 - `clawops_status`
@@ -17,6 +17,9 @@ changes:
 - `clawops_config_get`
 - `clawops_config_validate`. Validate the remote openclaw.json (read-only check)
 - `clawops_agents_list`
+- `clawops_agents_logs`, one agent's activity
+- `clawops_gateway_status`, whether the gateway container is running
+- `clawops_secret_list` and `clawops_secret_audit`, names and references only, never values
 - `clawops_plan`. Generate a deploy plan (no infra changes)
 - `clawops_task_status`, poll an in-progress task
 - `clawops_workflow_recover`. Investigate a stuck deployment (reads logs + status)
@@ -26,8 +29,8 @@ human review, and run recovery diagnostics, but cannot apply any changes.
 
 ### `--no-destructive`
 
-Enables the same **11 tools** as `--read-only` when used with default toolsets. The
-difference is the mechanism: `--no-destructive` filters the active toolset by
+Enables 17 tools with default toolsets: the read toolset plus `clawops_init` and
+`clawops_backup_create`, which write locally but destroy nothing. The mechanism differs too: `--no-destructive` filters the active toolset by
 removing any tool with `destructiveHint: true`, making it composable with
 `--toolsets` for custom configurations.
 
@@ -36,9 +39,11 @@ block.
 
 ### Default (all tools)
 
-Enables all **20 tools**, including the 8 destructive ones: `clawops_up`,
+Enables all **30 tools**, including the 13 destructive ones: `clawops_up`,
 `clawops_destroy`, `clawops_apply`, `clawops_config_set`, `clawops_config_unset`,
-`clawops_gateway_restart`, `clawops_harden`, `clawops_workflow_deploy_app`.
+`clawops_gateway_restart`, `clawops_gateway_update`, `clawops_harden`,
+`clawops_backup_restore`, `clawops_migrate`, `clawops_stacks_delete`, `clawops_secret_delete`,
+`clawops_workflow_deploy_app`.
 
 Destructive tools still require `yes: true` in the tool call, without it, the
 server issues a confirmation prompt. This is a safeguard against accidental

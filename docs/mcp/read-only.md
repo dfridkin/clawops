@@ -1,6 +1,6 @@
 # Read-Only Mode
 
-Running clawops in `--read-only` mode limits the MCP server to the **11 tools** in the
+Running clawops in `--read-only` mode limits the MCP server to the **15 tools** in the
 curated `read` toolset. The agent can answer questions, diagnose a deployment, generate
 plans for human review, and run recovery diagnostics, but cannot apply any changes.
 
@@ -16,6 +16,10 @@ plans for human review, and run recovery diagnostics, but cannot apply any chang
 | `clawops_config_get` | Read a value from the OpenClaw config |
 | `clawops_config_validate` | Validate the deployed config against the OpenClaw schema |
 | `clawops_agents_list` | List running agents and their status |
+| `clawops_agents_logs` | One agent's recent activity from the audit log |
+| `clawops_gateway_status` | Whether the gateway container is running, and its image |
+| `clawops_secret_list` | List stored secrets by name and status, never values |
+| `clawops_secret_audit` | Report missing secrets and unresolvable `$secret:` references |
 | `clawops_plan` | Generate a deploy plan JSON (no infrastructure changes) |
 | `clawops_task_status` | Poll the status of an in-progress background task |
 | `clawops_workflow_recover` | Investigate a stuck deployment (reads logs + status) |
@@ -95,14 +99,15 @@ In `~/.config/zed/settings.json`, under `context_servers`:
 
 If you want to allow the agent to generate plans and check task status but still
 block config writes and infrastructure changes, replace `--read-only` with
-`--no-destructive` in the args array. Both modes currently enable the same 11 tools; the
-difference is the mechanism. `--read-only` serves one fixed toolset, while
+`--no-destructive` in the args array. It enables 17 tools: the 15 read tools plus
+`clawops_init` and `clawops_backup_create`, which write locally and destroy nothing. The
+mechanism differs too. `--read-only` serves one fixed toolset, while
 `--no-destructive` filters `destructiveHint: true` out of whatever toolsets are active, so
 it is the one to combine with `--toolsets`.
 
 ## Upgrading to full access
 
-Remove the flag entirely to enable all 20 tools. Destructive tools will still
+Remove the flag entirely to enable all 30 tools. Destructive tools will still
 require `yes: true` in the call. The agent sees a confirmation prompt without it.
 
 See [mcp-safety.md](../security/mcp-safety.md) for a full description of each mode

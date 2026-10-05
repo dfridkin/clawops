@@ -22,11 +22,17 @@ Add to `~/.cursor/mcp.json`:
   "mcpServers": {
     "clawops": {
       "command": "npx",
-      "args": ["-y", "@clawops/cli", "mcp", "serve"]
+      "args": ["-y", "@clawops/cli", "mcp", "serve"],
+      "env": { "AWS_PROFILE": "my-profile" }
     }
   }
 }
 ```
+
+The `env` block matters. A client starts the server with the environment its config gives it,
+not your shell's, so a profile exported in a terminal never reaches it and every tool that reads
+a stack fails with "Could not read the state of stack". Name the profile there, or whatever your
+state backend reads. It is a profile name, not a key.
 
 ## Read-only mode
 

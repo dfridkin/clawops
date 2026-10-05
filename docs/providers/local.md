@@ -33,6 +33,19 @@ Instead it:
 
 Re-running `clawops up` is safe, the bootstrap script is idempotent.
 
+### The gateway belongs to systemd
+
+The gateway runs as the `openclaw` unit, `Restart=always`, and the unit removes any container
+called `openclaw` before it starts its own. So clawops never replaces the container behind
+systemd's back: a restart, `gateway update`, `migrate` or `backup restore --activate` writes the
+new run command to a drop-in, `/etc/systemd/system/openclaw.service.d/clawops-run.conf`, and
+restarts the unit. Before 2.2 they replaced the container directly, and systemd undid the change
+about five seconds later.
+
+The drop-in is what `systemctl cat openclaw` shows as the effective `ExecStart`. Re-running
+`clawops up` writes a fresh unit and removes the drop-in. If you edit the unit by hand, edit the
+drop-in too, or remove it, because it wins.
+
 ## Credentials
 
 There are no cloud credentials. The only credential is your SSH private key.

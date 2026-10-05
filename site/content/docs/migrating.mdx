@@ -8,16 +8,23 @@ npm install -g @clawops/cli
 clawops migrate --stack prod
 ```
 
+It asks before it starts; `--yes` skips the question. Over MCP, `clawops_migrate` asks the same
+question. A stack that already runs 2.x is refused before anything happens, because migrating
+would replace its working config. Use `clawops gateway update <version>` to move within 2.x.
+
 ## What it does
 
-1. Takes a **verified backup** inside the running container, and refuses to continue without one
-2. Extracts the state **from that running container**, stopping first would destroy it, since
+1. Pulls the 2.x image **while 1.x is still serving**, so the downtime is a restart rather than a
+   download of several gigabytes. If the pull fails, it stops there and nothing has changed
+2. Takes a **verified backup** inside the running container, and refuses to continue without one
+3. Extracts the state **from that running container**, stopping first would destroy it, since
    1.x kept everything inside the container
-3. Gives the state directory numeric ownership `1000:1000`, matching the container's user
-4. Writes a fresh, valid 2.0 config
-5. Starts 2.0 against the migrated state and waits for `/startupz`
-6. Restarts once more, because the first start reports a pending schema migration, and re-gates
-7. Compares device identity before and after
+4. Gives the state directory numeric ownership `1000:1000`, matching the container's user
+5. Writes a fresh, valid 2.0 config
+6. Starts 2.0 against the migrated state and waits for `/startupz`. The 2.0 gateway listens on
+   **loopback only**, where 1.x listened on every interface; reach it with `clawops tunnel`
+7. Restarts once more, because the first start reports a pending schema migration, and re-gates
+8. Compares device identity before and after
 
 ## Device identity is preserved
 

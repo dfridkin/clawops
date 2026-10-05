@@ -4,23 +4,17 @@ import { spinner, success, failure, info } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
 import { renderTable } from '../../output/table.js'
 import {
-  IMAGE_INSPECT_CMD, imageForRestart, versionOf, GATEWAY_PORT,
+  IMAGE_INSPECT_CMD, imageForRestart, versionOf,
 } from '../../openclaw/run-flags.js'
+import { PUBLISH_INSPECT_CMD, publishForRestart } from '../../openclaw/runtime.js'
 import {
-  gatewayRunCommand, PUBLISH_INSPECT_CMD, publishForRestart, STATE_DIR_HOST_LINUX,
-} from '../../openclaw/runtime.js'
+  dockerRunCmd, gatewayStatus, resolveUpdateVersion, updateGateway,
+} from '../../openclaw/gateway-ops.js'
 import { execPrivileged } from '../../transport/privileged.js'
+import { UsageError } from '../../errors/index.js'
 
-
-
-/** Shared docker stop → rm → run command. Exported for tests. */
-export function dockerRunCmd(version: string, publish: 'loopback' | 'all' = 'loopback'): string {
-  return gatewayRunCommand({
-    image: `ghcr.io/openclaw/openclaw:${version}`,
-    stateDir: STATE_DIR_HOST_LINUX,
-    publish,
-  })
-}
+/** Shared docker stop → rm → run command. Re-exported for tests; lives in the shared module. */
+export { dockerRunCmd }
 
 export default defineCommand({
   meta: {
@@ -34,7 +28,6 @@ export default defineCommand({
   },
   async run({ args }) {
     const { buildContext } = await import('../context.js')
-    const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
     const { acquireSession, drainPool } = await import('../../transport/pool.js')
 
     const [action, versionArg] = (args._ ?? []) as string[]
@@ -45,17 +38,10 @@ export default defineCommand({
     }
 
     const ctx = buildContext(args)
-    const stack = await ctx.getStack()
-    const outputMap = await stack.outputs()
-    const outputs: Record<string, unknown> = Object.fromEntries(
-      Object.entries(outputMap).map(([k, v]) => [k, v.value]),
-    )
-    const base = extractBaseOutputs(outputs)
-    const conn = ctx.adapter.getConnectionInfo({
-      ...base,
-      privateKeyPath: ctx.config.ssh.keyPath,
-      knownHostsPath: ctx.config.ssh.knownHostsPath,
-    })
+    // resolveConn, not getStack(): the local provider has no Pulumi stack, and reading one
+    // made this command fail on every local stack while its MCP tool worked.
+    const { resolveConn } = await import('../../transport/conn.js')
+    const conn = await resolveConn(ctx)
 
     const abortController = new AbortController()
     process.on('SIGINT', () => abortController.abort())
@@ -72,27 +58,14 @@ export default defineCommand({
 
     try {
       if (action === 'status') {
-        const { inspectContainer } = await import('../../openclaw/docker.js')
-        const inspected = await inspectContainer(
-          session,
-          'openclaw',
-          '{"status":"{{.State.Status}}","started":"{{.State.StartedAt}}","image":"{{.Config.Image}}"}',
-          abortController.signal,
-        )
-        type GatewayStatus = { status: string; started: string; image: string }
-        let status: GatewayStatus = { status: 'unknown', started: '', image: '' }
-        if (inspected.kind === 'ok') {
-          try {
-            status = JSON.parse(inspected.value) as GatewayStatus
-          } catch { /* keep default */ }
-        } else if (inspected.kind === 'missing') {
-          status = { status: 'not running', started: '', image: '' }
-        } else {
+        const inspected = await gatewayStatus(session, abortController.signal)
+        if (!inspected.ok) {
           // Reporting "not running" here would be a statement about the gateway, when the
           // truth is that clawops could not ask.
-          failure(`Could not ask docker about the gateway: ${inspected.detail}`)
+          failure(inspected.error)
           process.exit(1)
         }
+        const status = inspected.value
 
         if (args.json) {
           printJson(jsonOk(status))
@@ -144,141 +117,23 @@ export default defineCommand({
         // moving tag `stable`, handed straight to `docker pull` with no resolution and no
         // range check — exactly how an unsupported release reaches a deployment. Guarding
         // after the pull would be guarding after the damage.
-        const { guardOpenclawVersion, defaultOpenclawVersion } =
-          await import('../version-guard.js')
-        const requested = versionArg ?? args.channel
-        const version = requested
-          ? await guardOpenclawVersion(requested)
-          : await defaultOpenclawVersion()
+        const target = await resolveUpdateVersion(versionArg ?? args.channel)
+        if (!target.ok) throw new UsageError(target.error)
+        const version = target.value
 
         const spin = spinner(`Updating gateway to ${version}...`)
-        const targetImage = `ghcr.io/openclaw/openclaw:${version}`
-
-        const pullResult = await execPrivileged(session,
-          `docker pull ${targetImage}`,
-          abortController.signal,
-        )
-        if (pullResult.code !== 0) {
-          spin.stop()
-          failure(`Pull failed: ${pullResult.stderr}`)
-          process.exit(1)
-        }
-
-        // Snapshot, then ask the TARGET release whether it understands this database. The
-        // snapshot is not only a rollback point: preflight refuses a live database, because
-        // the schema version sits in the WAL until checkpointed.
-        spin.text = 'Checking state compatibility...'
-        const {
-          snapshotCommand, snapshotPathFrom, preflightCommand, parsePreflight, judgePreflight,
-        } = await import('../../openclaw/upgrade.js')
-
-        const cur = imageForRestart(
-          (await execPrivileged(session, IMAGE_INSPECT_CMD, abortController.signal)).stdout,
-        )
-        const snapRepo = `${STATE_DIR_HOST_LINUX}/snapshots`
-        const snapOut = await execPrivileged(
-          session,
-          snapshotCommand(cur.ok ? cur.value : targetImage, STATE_DIR_HOST_LINUX, snapRepo),
-          abortController.signal,
-        )
-        const snapPath = snapshotPathFrom(snapOut.stdout)
-
-        if (!snapPath) {
-          // No snapshot means no compatibility check and no rollback point. Refuse rather
-          // than replace a working container on the strength of a `docker run` exit code.
-          spin.stop()
-          failure(
-            'Could not snapshot the state database before upgrading, so neither the ' +
-              'compatibility check nor a rollback point is available.\n' +
-              (snapOut.stderr || snapOut.stdout).slice(0, 300),
-          )
-          process.exit(1)
-        }
-
-        const pre = await execPrivileged(
-          session,
-          preflightCommand(targetImage, STATE_DIR_HOST_LINUX, `${snapPath}/database.sqlite`),
-          abortController.signal,
-        )
-        const report = parsePreflight(pre.stdout)
-        const verdict = report
-          ? judgePreflight(report)
-          : { ok: false as const, reason: `preflight produced no readable report: ${pre.stderr.slice(0, 200)}` }
-
-        if (!verdict.ok) {
-          spin.stop()
-          failure(`Refusing to upgrade to ${version}: ${verdict.reason}`)
-          info(`A snapshot of the current state was kept at ${snapPath}.`)
-          process.exit(1)
-        }
-        if (verdict.ok && verdict.note) info(verdict.note)
-        spin.text = `Updating gateway to ${version}...`
-
-        // An update changes the version by request; it must not also change who can
-          // reach the gateway.
-          const pubU = await execPrivileged(session, PUBLISH_INSPECT_CMD, abortController.signal)
-          const runResult = await execPrivileged(
-            session,
-            dockerRunCmd(version, publishForRestart(pubU.stdout)),
-            abortController.signal,
-          )
-        if (runResult.code !== 0) {
-          spin.stop()
-          failure(`Start failed: ${runResult.stderr}`)
-          info(`State snapshot from before the upgrade: ${snapPath}`)
-          process.exit(1)
-        }
-
-        // `docker run` exiting 0 means the container was created. Whether the gateway
-        // STARTED is a different question, and it is the one that matters here — the
-        // container this replaced is already gone.
-        spin.text = 'Waiting for the gateway to start...'
-        const { probeCommand, interpretProbe } = await import('../../openclaw/health.js')
-        const { repairCommand, describeOutcome } = await import('../../openclaw/upgrade.js')
-        const publish = publishForRestart(pubU.stdout)
-
-        const gate = async (): Promise<{ ok: boolean; reason?: string }> => {
-          let last: string | undefined
-          for (let i = 0; i < 15; i++) {
-            if (abortController.signal.aborted) return { ok: false, reason: 'aborted' }
-            const r = await execPrivileged(
-              session, probeCommand('started', GATEWAY_PORT), abortController.signal,
-            )
-            const v = interpretProbe('started', r.stdout)
-            if (v.ok) return { ok: true }
-            last = v.reason
-            await new Promise((res) => setTimeout(res, 2000))
-          }
-          return { ok: false, reason: last ?? 'no response' }
-        }
-
-        const { resolveUpgrade } = await import('../../openclaw/upgrade.js')
-        const outcome = await resolveUpgrade(
-          {
-            gate,
-            repair: async () => {
-              spin.text = 'Gateway did not start; attempting one-shot repair...'
-              await execPrivileged(
-                session, repairCommand(targetImage, STATE_DIR_HOST_LINUX), abortController.signal,
-              )
-            },
-            run: async (v) => {
-              await execPrivileged(session, dockerRunCmd(v, publish), abortController.signal)
-            },
-          },
-          {
-            version,
-            previousVersion: cur.ok ? versionOf(cur.value) : undefined,
-            snapshotPath: snapPath,
-          },
-        )
-
+        const result = await updateGateway(session, version, {
+          signal: abortController.signal,
+          onProgress: (text) => { spin.text = text },
+          onNote: (text) => info(text),
+        })
         spin.stop()
-        const message = describeOutcome(outcome, version)
-        if (outcome.kind === 'started' || outcome.kind === 'repaired') {
-          success(message)
+
+        if (result.ok) {
+          success(result.message)
         } else {
-          failure(message)
+          failure(result.message)
+          if (result.hint) info(result.hint)
           process.exit(1)
         }
       }

@@ -131,3 +131,16 @@ describe('localBootstrap()', () => {
     expect(cmds.some((c) => c.includes('/startupz'))).toBe(false)
   })
 })
+
+describe('the rendered unit', () => {
+  it('drops the run-command override before enabling the unit it just wrote', async () => {
+    // Restarts, updates and migrations pin their run command in a systemd drop-in. A bootstrap
+    // that left one behind would have the new unit's ExecStart overridden by an older image.
+    const { renderScript } = await import('../../../src/providers/local/bootstrap.js')
+    const script = renderScript('2026.9.4')
+    const unitWritten = script.indexOf('ExecStart=/usr/bin/')
+    const dropped = script.indexOf('rm -f /etc/systemd/system/openclaw.service.d/clawops-run.conf')
+    expect(dropped).toBeGreaterThan(unitWritten)
+    expect(dropped).toBeLessThan(script.indexOf('systemctl daemon-reload', unitWritten))
+  })
+})
