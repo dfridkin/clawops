@@ -218,6 +218,22 @@ instruction from an operator's. WO-28's own design note specifies this server ru
 opt-in, and needs an ADR under `docs/decisions/` per R-meta-3, an instance role satisfies the
 letter of R6 (clawops stores no credentials) while changing the posture entirely.
 
+**What 2.2 changed (2026-10-05):**
+- The surface a wired agent reaches grew from 8 destructive tools to 13. The new five act on the
+  gateway's own host: version updates, restores that replace its state, migration, and deleting
+  stacks or secrets.
+- Confirmation does not constrain an agent at all. A client that cannot show a confirmation is
+  told to call again with `yes: true`, so the agent's next call is the approval. In host-agent
+  mode `yes` must not be honoured, and approval must come from outside the model's reach.
+- A restore can rewrite the gateway's state on the host, sessions included, so an injected
+  agent could roll back the record of what it did. Off-host audit is a precondition for that
+  reason too.
+- `--read-only` prevents destruction, not disclosure. Logs and agent activity can show an agent
+  in one channel what happened in another. The read toolset needs a disclosure review before it
+  is any agent's default.
+
+The WO-62 preconditions in `docs/openclaw-2.0-migration-plan.md` were amended to match.
+
 ## 4. Trust Boundaries
 
 ```
@@ -272,3 +288,4 @@ letter of R6 (clawops stores no credentials) while changing the posture entirely
 |---|---|---|
 | 2026-05-04 | Project author | Initial threat model |
 | 2026-09-10 | WO-61 | T5's bearer-token mitigation did not exist in code until 2.0; corrected. Added T11 for the gateway-agent deputy problem |
+| 2026-10-05 | WO-62 re-alignment | T11 updated for 2.2: 13 destructive tools, `yes: true` as self-approval, restore as evidence tampering, read-only is not non-disclosing |

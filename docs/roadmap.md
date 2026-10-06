@@ -49,6 +49,16 @@ break-glass operator, and default `--read-only`, are listed in full in
 [`openclaw-2.0-migration-plan.md`](openclaw-2.0-migration-plan.md). Several are worth building on
 their own merits.
 
+**Re-aligned after 2.2.** 2.2 grew the destructive tool surface from 8 to 13 and filled the
+catalog to its 30-tool cap, and since 2.1.3 an agent can approve a destructive call itself by
+passing `yes: true`. So the self-targeting guard now covers everything that changes the host
+clawops runs on, host-agent mode must ignore `yes`, and two preconditions are added: a disclosure
+review of the read toolset, and a tool budget. A two-phase delivery, local-provider hosts first,
+was considered and declined: 2.3 ships local and cloud together, and the operator approves
+destructive calls from their own machine (ADR 0014). Each precondition is accepted by an e2e test
+on the 2.2 harness.
+Details are in the plan, under *Re-alignment after 2.2*.
+
 ## Development milestones
 
 All core development milestones are complete as of v1.0.
