@@ -1036,12 +1036,16 @@ cover. They still stand; this amends them. Nothing here is built yet.
   `backup_restore` with `activate`, `migrate`, `config_set` / `config_unset` (each restarts the
   gateway), `harden`, `up` / `apply` / `destroy`, and `stacks_delete` of its own stack. A host
   agent that restarts its gateway ends the conversation that asked it to.
+  *Refined by ADR 0014:* with operator-signed approval, operations that change the host but leave
+  it running (restart, update, restore with `activate`, config, harden) need approval rather than
+  refusal. Operations that end the host or its stack (`destroy`, `down`, `stacks_delete`,
+  `migrate` of its own host) are refused whatever is approved.
 - **5. Audit shipped off-host, with a new reason.** A restore rewrites the gateway's state on the
   host, sessions included. An injected agent with `backup_restore` can roll back its own trail.
 - **7. Default read-only, and `yes` is not honoured.** Per-tool opt-in is not enough while any
   opted-in destructive tool accepts the model's own `yes: true`. In host-agent mode the server
-  ignores `yes`, and approval comes from somewhere the model cannot write. *What that is, is the
-  main open design decision.*
+  ignores `yes`, and approval comes from somewhere the model cannot write. **Decided
+  2026-10-05:** the operator approves from their own machine; see ADR 0014.
 
 **New preconditions:**
 
@@ -1052,11 +1056,11 @@ cover. They still stand; this amends them. Nothing here is built yet.
 - **9. A tool budget.** WO-62 adds no tools, or it decides up front what to merge to make room
   (for example `secret_list` with `secret_audit`). The R1 cap is not raised for it.
 
-**Proposed: two phases.** *(Open decision, not adopted.)* On a **local-provider** host there are
-no cloud credentials, so runaway spend, the narrow cloud identity and undeletable state
-(preconditions 1, 3 and 4) do not apply. 2.2 also made systemd the gateway's supervisor there, so
-a host agent running as its own unit survives a gateway restart. Phase 1 would ship local-only,
-behind preconditions 2, 5, 6, 7, 8 and 9. Phase 2 adds cloud, behind all nine.
+**One release, local and cloud together.** *(Decided 2026-10-05.)* A local-first split was
+considered: a local-provider host has no cloud credentials, so preconditions 1, 3 and 4 would not
+apply there. It was declined in favour of one design pass, so 2.3 ships both behind all nine
+preconditions. On a local host 1, 3 and 4 are satisfied trivially; the release still needs them
+for cloud.
 
 **Acceptance is an e2e test per precondition.** The 2.2 harness already drives the built server
 with a real MCP client against a systemd host at no cost. For example: a client without
