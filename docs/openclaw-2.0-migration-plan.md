@@ -1053,6 +1053,10 @@ cover. They still stand; this amends them. Nothing here is built yet.
   `clawops_logs_tail`, `clawops_agents_logs`, `clawops_config_get` and `clawops_monitor` to read
   what other channels and users did. Each is checked for what it exposes before `--read-only`
   becomes the host-agent default; any that leaks across channels is excluded or filtered.
+  *Input found 2026-10-09:* on the pinned 2026.9.2 image, `tools.agentToAgent` is **enabled by
+  default** ("omitted or empty allow permits every agent pair"), which lets one agent list, read
+  and search another's sessions. The schema clawops had captured said the opposite. The review
+  covers the gateway's own defaults as well as clawops' tools.
 - **9. A tool budget.** WO-62 adds no tools, or it decides up front what to merge to make room
   (for example `secret_list` with `secret_audit`). The R1 cap is not raised for it.
 
