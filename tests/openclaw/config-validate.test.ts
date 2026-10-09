@@ -21,6 +21,22 @@ describe('validateConfig', () => {
     expect(r.warnings).toEqual([])
   })
 
+  it('matches what the pinned image accepts, not an older capture', async () => {
+    // The committed schema was captured on 2026-09-06 from an image that was not the pinned
+    // 2026.9.2, and the weekly drift check that would have said so failed to file its issue for
+    // five weeks. On the real image, messages.suppressToolErrors is gone (additionalProperties
+    // is false, so the gateway refuses a config carrying it) and transcripts.autoStart entries
+    // accept whenOccupied.
+    const removed = await validateConfig({ ...VALID, messages: { suppressToolErrors: true } })
+    expect(removed.errors.join(' ')).toMatch(/suppressToolErrors/)
+
+    const added = await validateConfig({
+      ...VALID,
+      transcripts: { autoStart: [{ whenOccupied: true }] },
+    })
+    expect(added.errors.join(' ')).not.toMatch(/whenOccupied/)
+  })
+
   it('rejects a wrong type at any version', async () => {
     const r = await validateConfig({ ...VALID, gateway: { ...VALID.gateway, port: 'nope' } })
     expect(r.errors.join(' ')).toMatch(/gateway\.port/)

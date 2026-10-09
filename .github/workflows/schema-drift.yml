@@ -61,8 +61,16 @@ jobs:
         if: steps.diff.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # The label did not exist, so `gh issue create --label` failed every week from 2026-09-07
+        # and the drift it found was never reported. Create it if missing, and add to an open
+        # drift issue rather than filing a new one each Monday.
         run: |
-          gh issue create \
-            --title "OpenClaw config schema drifted" \
-            --label "openclaw-2.0" \
-            --body "$(printf 'The schema emitted by the pinned OpenClaw image no longer matches `spec/openclaw-2.0.config.schema.json`.\n\n%s\n\nRe-capture with:\n\n```\nbash scripts/openclaw/capture-schema.sh\n```\n\nRun: %s\n' "$(cat /tmp/summary.txt)" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
+          gh label create openclaw-2.0 --color 5319e7 \
+            --description "OpenClaw 2.x runtime contract" 2>/dev/null || true
+          BODY="$(printf 'The schema emitted by the pinned OpenClaw image no longer matches `spec/openclaw-2.0.config.schema.json`.\n\n%s\n\nRe-capture with:\n\n```\nbash scripts/openclaw/capture-schema.sh\n```\n\nRun: %s\n' "$(cat /tmp/summary.txt)" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
+          OPEN=$(gh issue list --state open --search '"OpenClaw config schema drifted" in:title' --json number -q '.[0].number')
+          if [ -n "$OPEN" ]; then
+            gh issue comment "$OPEN" --body "$BODY"
+          else
+            gh issue create --title "OpenClaw config schema drifted" --label "openclaw-2.0" --body "$BODY"
+          fi

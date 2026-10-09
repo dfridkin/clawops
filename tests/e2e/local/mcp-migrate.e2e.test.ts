@@ -47,12 +47,29 @@ describe.skipIf(!enabled)('clawops_migrate against a deployment clawops 1.7.9 ma
     return (await vm.inspect(`docker inspect openclaw --format '{{.Config.Image}}'`)).stdout.trim()
   }
 
+  /**
+   * Run clawops 1.7.9 through npx.
+   *
+   * npx resolves 1.7.9's dependency ranges afresh every run, so the install depends on the npm
+   * registry being consistent at that moment. On 2026-10-09 the nightly asked for express 5.3.0
+   * five minutes after it was published, when the registry listed it but served a 404 for its
+   * tarball. Install failures of that kind are retried; anything clawops itself says is not.
+   */
   function legacy(args: string[]): string {
-    return execFileSync('npx', ['-y', LEGACY_CLI, ...args], {
-      env: { ...process.env, CLAWOPS_HOME: clawopsHome, HOME: path.dirname(clawopsHome) },
-      encoding: 'utf-8',
-      timeout: 1_200_000,
-    })
+    const transient = /npm error (code E404|code ETIMEDOUT|code ECONNRESET|code EAI_AGAIN|code ETARGET)|npm error network/
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return execFileSync('npx', ['-y', LEGACY_CLI, ...args], {
+          env: { ...process.env, CLAWOPS_HOME: clawopsHome, HOME: path.dirname(clawopsHome) },
+          encoding: 'utf-8',
+          timeout: 1_200_000,
+        })
+      } catch (err) {
+        const said = String((err as { stderr?: string }).stderr ?? '')
+        if (attempt >= 3 || !transient.test(said)) throw err
+        execFileSync('sleep', ['60'])
+      }
+    }
   }
 
   beforeAll(async () => {
