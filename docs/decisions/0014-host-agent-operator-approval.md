@@ -3,7 +3,7 @@
 **Status:** Proposed
 **Date:** 2026-10-05
 **Deciders:** Project owner
-**Revisit:** before 2.3 ships, and again after the first quarter of host agents in use
+**Revisit:** before 2.4 ships, and again after the first quarter of host agents in use
 
 ## Context
 
@@ -21,7 +21,7 @@ Two facts from 2.2 shape this decision:
   makes the confirmation the agent's own next call.
 - **The catalog is full.** R1 caps it at 30 tools and 2.2 reached 30.
 
-Two decisions were taken on 2026-10-05: 2.3 ships **local and cloud together**, behind all nine
+Two decisions were taken on 2026-10-05: the host-agent release (then 2.3, now 2.4) ships **local and cloud together**, behind all nine
 preconditions; and destructive calls are **approved by the operator from their own machine**.
 
 ## Decision
@@ -92,9 +92,9 @@ problem this ADR solves. It goes in `NO_TOOL` in `tests/mcp/parity.test.ts` with
 
 ### 5. The other preconditions
 
-| # | Precondition | How 2.3 meets it |
+| # | Precondition | How 2.4 meets it |
 |---|---|---|
-| 1 | Spend ceiling, enforced | An instance-type allowlist and a stack cap in the deploy-plan schema, checked by `plan` and `apply` on every surface; on cloud, `agent install` refuses unless a provider budget with an enforcement action exists |
+| 1 | Spend ceiling, enforced | **Built in 2.3:** an instance-type allowlist and a stack cap in the operator's config (`policy`), not the plan, enforced by `plan`, `apply`, `up` and `init` on every surface. **Still to build:** on cloud, `agent install` refuses unless a provider budget with an enforcement action exists |
 | 2 | Self-targeting guard | §3 |
 | 3 | Narrow cloud identity | `agent install` creates a host role from a per-cloud template: no delete on resources tagged with its own stack, no instance types outside the allowlist. Local: no cloud identity exists |
 | 4 | State the host cannot delete | The host role reads and writes its own stack's state prefix and has no delete on the bucket. Local: no cloud state |
@@ -154,7 +154,7 @@ reach a human that does not go through the calling client.
 - **Elicitation answered by the client.** In host-agent mode the client is the agent. Rejected.
 - **A designated operator channel.** The approval would travel through the same gateway an
   injection arrives through, and binding a message to a person is the hard part. Rejected for
-  2.3; revisit if OpenClaw gains signed messages.
+  2.4; revisit if OpenClaw gains signed messages.
 - **No destructive tools on a host agent at all.** Simplest and safest, and rejected because it
   removes most of what WO-62 is for. It remains the default: nothing destructive is allowed
   unless `--allow` names it.

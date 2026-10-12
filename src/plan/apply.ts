@@ -65,6 +65,12 @@ export async function applyPlan(
   const { guardOpenclawVersion } = await import('../cli/version-guard.js')
   await guardOpenclawVersion(plan.spec.openclaw.version)
 
+  // And the spending policy, for the same reason: a plan written elsewhere, or edited after it
+  // was generated, has not been checked against this machine's policy.
+  const { enforceInstanceType } = await import('../config/policy.js')
+  const { getConfig } = await import('../config/store.js')
+  await enforceInstanceType(getConfig(), plan.spec.provider, plan.spec.instanceType)
+
   const ctx = buildContext({
     stack: plan.spec.stackName,
     provider: plan.spec.provider,

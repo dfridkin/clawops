@@ -7,7 +7,7 @@ There are two separate things called config, and keeping them apart saves confus
 
 | | Lives | Holds | Changed with |
 |---|---|---|---|
-| **clawops config** | `~/.clawops/config.json` on your machine | stacks, regions, state URLs, SSH paths | `clawops init`, edit directly |
+| **clawops config** | `~/.clawops/config.json` on your machine | stacks, regions, state URLs, SSH paths, spending limits | `clawops init`, `clawops setup`, edit directly |
 | **OpenClaw config** | on the deployed host | gateway, models, channels, agents | `clawops config set`, plan overlay |
 
 ## clawops config
@@ -38,6 +38,32 @@ profile to read at run time.
 <Callout type="warn" title="stateUrl is the only pointer to your state">
   Changing a registered stack's `stateUrl` orphans everything Pulumi knows about that deployment.
   `clawops init` refuses to overwrite a registered stack without `--force` for this reason.
+</Callout>
+
+### Spending limits
+
+An optional `policy` block limits what clawops will deploy from this machine:
+
+```jsonc
+"policy": {
+  "allowedInstanceTypes": { "aws": ["micro", "small"], "gcp": ["e2-small"] },
+  "maxStacks": 3
+}
+```
+
+- **`allowedInstanceTypes`**: per provider, the server sizes clawops may deploy. Use a clawops
+  size (`micro`, `small`, `medium`, `large`) or the provider's own type; `small` and `t3.small` are
+  the same entry on AWS. A provider with no entry is unrestricted.
+- **`maxStacks`**: how many deployments this config may hold. Absent means no cap.
+
+`clawops plan`, `clawops apply` and `clawops up` refuse a size outside the list, and `clawops init`
+refuses a new stack beyond the cap. The same checks apply to every MCP tool that deploys, with the
+same words. The easiest way to set them is `clawops setup`, which asks before the server-size
+question and then offers only the sizes you allowed.
+
+<Callout title="Why it lives here and not in the plan">
+  A plan is what you, or an agent, generate. A limit written into the plan would be set by
+  whoever it is meant to limit. No MCP tool can change this block.
 </Callout>
 
 ## OpenClaw config

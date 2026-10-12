@@ -109,9 +109,17 @@ the projected diff.
 
 1. Reads and parses the plan file.
 2. Validates it against `spec/deploy-plan.schema.json` (AJV). Exits with an error if invalid.
-3. Sets Pulumi stack config from the plan's `spec` fields (`instanceType`, `region`, `openclawVersion`).
-4. Calls `pulumi up` via the Pulumi Automation API.
-5. Reports the actual result: outputs, change summary, duration.
+3. Re-checks what must not be trusted from the plan: the OpenClaw version is in the supported
+   range, and the instance type is allowed by this machine's spending policy
+   (`~/.clawops/config.json → policy`). A plan generated elsewhere, or edited after `plan` wrote
+   it, is refused here rather than deployed.
+4. Sets Pulumi stack config from the plan's `spec` fields (`instanceType`, `region`, `openclawVersion`).
+5. Calls `pulumi up` via the Pulumi Automation API.
+6. Reports the actual result: outputs, change summary, duration.
+
+`clawops plan` checks the spending policy too, so a disallowed size is refused before there is a
+plan to approve. The policy lives in config, not in the plan, because the plan is what an agent
+writes; see the README's *Spending limits*.
 
 **`apply` does not replay a locked, provider-level execution plan.** It re-runs infrastructure
 reconciliation using the plan's parameters against the current live state. Pulumi will compute a

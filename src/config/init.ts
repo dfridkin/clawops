@@ -83,6 +83,10 @@ export async function initStack(opts: InitOptions): Promise<InitResult> {
     }
   }
 
+  const { stackCapRefusal } = await import('./policy.js')
+  const overCap = stackCapRefusal(existing, stackName)
+  if (overCap) return { ok: false, reason: overCap }
+
   const configDir = getConfigDir()
   mkdirSync(configDir, { recursive: true })
 

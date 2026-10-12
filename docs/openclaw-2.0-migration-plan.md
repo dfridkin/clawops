@@ -928,10 +928,13 @@ OpenClaw's default and what `--use-env` drives, so the catalog now configures th
 `clawhub.ai`. Installing channels during `apply` extends the deploy-time egress requirement to
 npm on the deployed host, which `docs/security/egress.md` already records.
 
-**WO-62. Clawops as a host agent** *(its own release, 2.2, ships alone, gated; now 2.3, and re-aligned after 2.2, see below)*
+**WO-62. Clawops as a host agent** *(its own release, 2.2, ships alone, gated; then 2.3, now **2.4**, and re-aligned after 2.2, see below)*
 
 > **2026-10-03:** 2.2.0 shipped restore `--activate` and the SSH diagnostics instead, so WO-62 is
 > now **2.3**. It still ships alone; none of the preconditions below exist in code yet.
+>
+> **2026-10-11:** 2.3.0 went to the spending limits (precondition 1, in part) and the backlog
+> fixes, so WO-62 is now **2.4**.
 
 For the gateway's AI to manage a stack unattended, clawops has to be installed and running on
 the gateway host. It was scoped as a fast follow after 2.0. That was wrong: it is not a feature
@@ -995,6 +998,11 @@ is reasonable to build, and several are useful on their own:
 1. **A spend ceiling that is not advisory.** An instance-size allowlist in the plan schema, a cap
    on stacks per account, and a required cloud-native budget with an enforcement action wired up
    before the host agent can be enabled. A budget *alert* is not a control.
+   *Corrected and partly built in 2.3 (2026-10-11):* the allowlist and the stack cap live in the
+   operator's `~/.clawops/config.json → policy`, **not in the plan schema**. A plan is what an
+   agent writes, so a limit carried in it would be set by the party it limits. `plan`, `apply`,
+   `up` and `init` enforce them on every surface; the wizard sets them. The provider budget with
+   an enforcement action is still to come, with `agent install`.
 2. **A self-targeting guard.** clawops must refuse an operation whose target stack is the one it
    is running on, and that refusal must live below the tool layer so it cannot be prompted away.
 3. **A separate, narrow cloud identity** for the host, not the deploying operator's. Denied
@@ -1062,7 +1070,7 @@ cover. They still stand; this amends them. Nothing here is built yet.
 
 **One release, local and cloud together.** *(Decided 2026-10-05.)* A local-first split was
 considered: a local-provider host has no cloud credentials, so preconditions 1, 3 and 4 would not
-apply there. It was declined in favour of one design pass, so 2.3 ships both behind all nine
+apply there. It was declined in favour of one design pass, so 2.4 ships both behind all nine
 preconditions. On a local host 1, 3 and 4 are satisfied trivially; the release still needs them
 for cloud.
 

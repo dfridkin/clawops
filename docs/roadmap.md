@@ -17,7 +17,8 @@ Remaining work falls into three groups:
 |---|---|---|
 | **Carried from the 1.x waves** | WO-34 (Tailscale), partly | Azure hardening landed in WO-32. Tailscale joins, repoints, goes private-only and reverts; the doctor check is still open |
 | **2.x, unscheduled** | WO-53 sandboxing, WO-54 config surface, WO-55 TLS and public origin, WO-56 observability, WO-57 fleet multi-tenancy | Planned for 2.1 and not in it; 2.1 shipped private networking and hardening instead. WO-55 gates Portals, Teams, Slack and Discord Activities |
-| **clawops 2.3: alone** | WO-62 host agent | Ships by itself, behind preconditions. See below. It was 2.2 until 2.2 went to restore and SSH fixes |
+| **clawops 2.3** | Spending limits (WO-62 precondition 1, in part), backlog fixes | Operator-set instance-type allowlist and stack cap, enforced on every surface |
+| **clawops 2.4: alone** | WO-62 host agent | Ships by itself, behind preconditions. See below. It was 2.2, then 2.3, as other work shipped first |
 | **Housekeeping** | WO-64 `server.json` drift | ✅ shipped. Bumped at version time, with a test that it agrees with `package.json` |
 
 ### WO-62 ships on its own, and only after its preconditions
@@ -54,7 +55,7 @@ catalog to its 30-tool cap, and since 2.1.3 an agent can approve a destructive c
 passing `yes: true`. So the self-targeting guard now covers everything that changes the host
 clawops runs on, host-agent mode must ignore `yes`, and two preconditions are added: a disclosure
 review of the read toolset, and a tool budget. A two-phase delivery, local-provider hosts first,
-was considered and declined: 2.3 ships local and cloud together, and the operator approves
+was considered and declined: 2.4 ships local and cloud together, and the operator approves
 destructive calls from their own machine (ADR 0014). Each precondition is accepted by an e2e test
 on the 2.2 harness.
 Details are in the plan, under *Re-alignment after 2.2*.

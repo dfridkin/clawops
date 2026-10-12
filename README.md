@@ -262,7 +262,7 @@ clawops down --yes          # Destroy local-provider stack
 
 | Command | Description |
 |---|---|
-| `setup` | First-run wizard: guided LLM, integrations, and deploy-plan generation |
+| `setup` | First-run wizard: guided LLM, integrations, spending limits, and deploy-plan generation |
 | `init` | Register a stack in `~/.clawops/config.json` without provisioning. Additive, existing stacks are kept; `--force` is needed only to overwrite one |
 | `up` | Provision or update stack (`--dry-run` for preview, `--gateway-port` for a non-default port) |
 | `down` | Destroy local-provider stack (requires `--yes`; `--dry-run` shows current outputs) |
@@ -442,6 +442,24 @@ Config lives at `~/.clawops/config.json` (override with `$CLAWOPS_HOME`).
 | Azure | `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` or `az login` |
 | Local | SSH host + key configured in `stacks[name].localOpts` |
 
+### Spending limits
+
+An optional `policy` block limits what clawops will deploy from this machine, whichever tool asks:
+
+```json
+"policy": {
+  "allowedInstanceTypes": { "aws": ["micro", "small"] },
+  "maxStacks": 3
+}
+```
+
+`plan`, `apply` and `up` refuse a server size outside `allowedInstanceTypes` for that provider
+(a clawops size or the provider's own type; `small` and `t3.small` are the same on AWS), and
+`init` refuses a new stack beyond `maxStacks`. Every MCP tool that deploys is held to the same
+limits, in the same words, and no tool can change them. `clawops setup` asks whether to set
+them, then offers only the sizes you allowed. The limit lives here rather than in the plan
+because a plan is what an agent writes.
+
 ---
 
 ## Known limitations
@@ -576,7 +594,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (2096 tests, ~13s)
+pnpm test                  # vitest (2115 tests, ~13s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm test:e2e:local        # builds, then bootstrap, the host-touching MCP tools and a 1.x migration, in systemd containers
@@ -632,6 +650,33 @@ docs / refactor / chore / test / perf / ci
 ```
 
 Use `pnpm changeset` to record a release note before merging a `feat` or `fix`.
+
+---
+
+## What's new in 2.3
+
+Spending limits that an agent cannot lift, and a run of fixes from the backlog.
+
+### Spending limits
+
+- An optional `policy` block in `~/.clawops/config.json` limits the server sizes clawops may
+  deploy on each provider and the number of deployments it may manage. `plan`, `apply` and `up`
+  refuse a size outside the list; `init` refuses a stack beyond the cap.
+- Every MCP tool that deploys is held to the same limits, in the same words, and no tool can
+  change them. Confirmation is something an agent can answer for itself; this is not.
+- `clawops setup` asks whether to set them, then offers only the sizes you allowed. See
+  [Spending limits](#spending-limits).
+
+### Fixes
+
+- **The setup wizard's plan asked the cloud for a machine called `small`.** It wrote the clawops
+  size where the provider's own type belongs. It now maps it, as `clawops plan` does.
+- **`clawops_workflow_recover` runs the stack's health checks, and recommends only real tools.** It
+  ran two of the four steps it described and finished by suggesting `clawops refresh`, which does
+  not exist.
+- **The MCP audit log redacts credential arguments.** `GOOGLE_APPLICATION_CREDENTIALS` was named
+  sensitive in `spec/errors.yaml` and logged in the clear. A test now fails when the spec and the
+  code disagree on an error class, its exit code, or a redaction pattern (#185).
 
 ---
 

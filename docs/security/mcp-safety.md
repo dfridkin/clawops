@@ -52,6 +52,14 @@ execution, not a security boundary.
 Use this in a controlled CI/CD context where the agent has explicit permission to
 manage infrastructure.
 
+### Spending limits apply in every mode
+
+An agent with full access still deploys only what `~/.clawops/config.json → policy` allows:
+`clawops_plan`, `clawops_apply`, `clawops_up` and `clawops_workflow_deploy_app` refuse a server
+size outside `allowedInstanceTypes`, and `clawops_init` refuses a stack beyond `maxStacks`. No
+tool can change the policy; the operator sets it with `clawops setup` or by editing the file.
+Unlike confirmation, which an agent can answer for itself, this is a limit the agent cannot lift.
+
 ## Choosing a mode
 
 | Context | Recommended mode |

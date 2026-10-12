@@ -163,12 +163,21 @@ async function resolveInstanceType(intent: GeneratePlanIntent): Promise<string> 
       `[clawops] note: "${requested}" is not a clawops size ` +
         `(${INSTANCE_ALIASES.join(', ')}), so it is passed to ${intent.provider} as written.\n`,
     )
-    return requested
   }
+  return nativeInstanceType(intent.provider, requested)
+}
+
+/**
+ * The provider-native type for a clawops size, or the value unchanged if it is already native.
+ * Everything that puts an instance type in a plan, or compares one, goes through this: the
+ * setup wizard built its plan by hand and wrote the size, which the cloud then rejected.
+ */
+export async function nativeInstanceType(provider: string, requested: string): Promise<string> {
+  if (!isInstanceAlias(requested)) return requested
   // The adapter module, not `buildContext().adapter`: the latter is a proxy whose synchronous
   // methods throw until something has loaded the module behind it, and nothing here needs a
   // stack. Reaching through the proxy failed at plan time with "Provider not yet loaded".
-  const adapter = await loadAdapterModule(intent.provider as ProviderName)
+  const adapter = await loadAdapterModule(provider as ProviderName)
   return adapter.normalizeInstanceType(requested)
 }
 
@@ -188,6 +197,9 @@ export async function generatePlan(
   const { version } = await import('../../package.json', { assert: { type: 'json' } })
   const config = getConfig()
   const instanceType = await resolveInstanceType(intent)
+  // The operator's spending policy, before a plan exists that someone could approve.
+  const { enforceInstanceType } = await import('../config/policy.js')
+  await enforceInstanceType(config, intent.provider, instanceType)
   const { guardOpenclawVersion, defaultOpenclawVersion } = await import('../cli/version-guard.js')
   const openclawVersion = await guardOpenclawVersion(
     intent.openclawVersion ?? (await defaultOpenclawVersion()),
