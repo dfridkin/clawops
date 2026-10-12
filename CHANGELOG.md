@@ -1,5 +1,49 @@
 # @clawops/cli
 
+## 2.3.0
+
+### Minor Changes
+
+- 83bb47a: **Spending limits: say which server sizes clawops may deploy, and how many deployments it may
+  manage.** An optional `policy` block in `~/.clawops/config.json`:
+
+  ```json
+  "policy": { "allowedInstanceTypes": { "aws": ["micro", "small"] }, "maxStacks": 3 }
+  ```
+
+  `clawops plan`, `apply` and `up` refuse a size outside the list for that provider, and `clawops
+init` refuses a new stack beyond the cap. Sizes are compared after mapping, so `small` and
+  `t3.small` are the same entry on AWS. Every MCP tool that deploys is held to the same limits in the
+  same words, and no tool can change them: until now nothing stopped an agent, or a retry loop,
+  from deploying any size the cloud offers, as many times as it liked.
+
+  `clawops setup` asks whether to set them before it asks for a server size, and then offers only
+  the sizes you allowed. The limit lives in config rather than in the deploy plan because a plan is
+  what an agent writes.
+
+### Patch Changes
+
+- 83bb47a: **The MCP audit log redacts credential arguments the spec already listed.** `spec/errors.yaml`
+  names `GOOGLE_APPLICATION_CREDENTIALS` as sensitive, but the audit log only redacted names
+  containing `token`, `secret`, `key`, `password`, `connectionString` or `authorization`, so an
+  argument with that name was written in the clear. Names containing `credential` are now redacted.
+
+  The spec also claimed that `pnpm gen:schemas` generated the error classes from it and that CI
+  checked them. Neither was true (#185). A test now fails if the spec and the code disagree on an
+  error class, its exit code, or a redaction pattern.
+
+- 83bb47a: **`clawops_workflow_recover` runs the stack's health checks, and recommends only tools that
+  exist.** It described four steps and ran two, status and logs, and finished by sending agents to
+  `clawops refresh`, a command clawops does not have. It now also runs the health checks
+  `clawops_doctor` runs for a stack and reports the ones that failed, and its next steps name the
+  tool for each kind of failure: restart, update, restore, re-run `up`, or plan and apply. The
+  combined report is held to the 8 KB output cap.
+- 83bb47a: **`clawops setup` writes the cloud's own instance type into the plan it builds.** The wizard
+  wrote the clawops size (`small`) where the plan needs the provider's type (`t3.small`,
+  `e2-standard-2`, `Standard_B2s`), and the cloud programs pass that field to the cloud unchanged, so
+  a deploy from the wizard's plan asked the cloud for a machine type called `small`. It now maps the
+  size the same way `clawops plan` does.
+
 ## 2.2.1
 
 ### Patch Changes
