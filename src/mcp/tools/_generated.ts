@@ -596,7 +596,7 @@ export const clawops_workflow_recoverSchema = z.object({
   stackName: z.string().optional().describe("Which stack to diagnose. Omitted = the default stack in ~/.clawops/config.json"),
 })
 
-export const clawops_workflow_recoverDescription = "Diagnostic workflow for an unhealthy stack. Internally: status check →\ngateway logs → agent logs → systemd service status → produces a structured\ndiagnostic report with suggested remediation.\n\nUse when: the user reports any \"not working\" symptom and you don't know\nwhere to start. Best entry point for troubleshooting.\n\nDo NOT use when: the user has already identified the problem and asks for\na specific fix."
+export const clawops_workflow_recoverDescription = "Diagnostic workflow for an unhealthy stack. Internally: what is deployed\n(clawops_status) → the stack's failed health checks (clawops_doctor) → the\ngateway's last 50 log lines (clawops_logs_tail) → a report with next steps that\nname the tool for each kind of failure. Changes nothing.\n\nUse when: the user reports any \"not working\" symptom and you don't know\nwhere to start. Best entry point for troubleshooting.\n\nDo NOT use when: the user has already identified the problem and asks for\na specific fix."
 
 export const clawops_workflow_recoverAnnotations = {
   title: "Recover/Diagnose Stack",

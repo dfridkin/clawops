@@ -139,6 +139,24 @@ describe('generatePlan()', () => {
     expect(plan.diff?.totalChanges).toBe(3)
   })
 
+  it('refuses a size the operator\'s spending policy does not allow, before any preview', async () => {
+    const { getConfig } = await import('../../src/config/store.js')
+    const base = vi.mocked(getConfig)()!
+    vi.mocked(getConfig).mockReturnValue({ ...base, policy: { allowedInstanceTypes: { aws: ['small'] } } })
+    try {
+      const { generatePlan } = await import('../../src/plan/generate.js')
+      const err = await generatePlan({ stackName: 'default', provider: 'aws', instanceType: 'large' })
+        .then(() => undefined, (e: Error) => e)
+      expect(err?.message).toContain('"t3.large" is not allowed on aws')
+      expect(mockPreview).not.toHaveBeenCalled()
+      // ...and one it does allow still plans.
+      const plan = await generatePlan({ stackName: 'default', provider: 'aws', instanceType: 'small' })
+      expect(plan.spec.instanceType).toBe('t3.small')
+    } finally {
+      vi.mocked(getConfig).mockReturnValue(base)
+    }
+  })
+
   it('applies the default size, normalised for the provider', async () => {
     const { generatePlan } = await import('../../src/plan/generate.js')
     const plan = await generatePlan({ stackName: 'default', provider: 'aws' })

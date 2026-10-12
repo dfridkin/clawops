@@ -19,6 +19,7 @@ import type { CloudProvider } from '../../providers/state-bucket.js'
 import type { ClawopsConfig } from '../../config/store.js'
 import { MCP_APPS, buildMcpEntry, writeAppConfigs } from '../mcp-apps.js'
 import { execPrivileged } from '../../transport/privileged.js'
+import { UsageError } from '../../errors/index.js'
 
 // Minimal typing shim for inquirer v9 (ships no bundled .d.ts).
 interface InquirerQuestion {
@@ -212,6 +213,29 @@ export default defineCommand({
       localSudoPassword = sudoPass
     }
 
+    // ── Spending limits ────────────────────────────────────────────────────────
+    //
+    // Which server sizes clawops may deploy, and how many deployments it may manage. Enforced by
+    // plan, apply and init on every surface; set here because the wizard is where most people
+    // meet clawops. No MCP tool can change it.
+    const { promptSpendingPolicy, allowedChoices, savePolicy } = await import('../setup-policy.js')
+    const { getConfig: readConfig } = await import('../../config/store.js')
+    const configBefore = readConfig()
+    const pendingPolicy = await promptSpendingPolicy({
+      provider: provider === 'local' ? undefined : provider,
+      choices: provider === 'local' ? [] : instanceChoices(provider),
+      current: configBefore?.policy,
+      stackCount: Object.keys(configBefore?.stacks ?? {}).length,
+      inquirer,
+    })
+    // On a first run there is no config file to save into yet; it is saved again once the
+    // deployment has been registered.
+    let policySaved = pendingPolicy ? await savePolicy(pendingPolicy) : true
+    const sizeChoices =
+      provider === 'local'
+        ? []
+        : await allowedChoices(provider, instanceChoices(provider), pendingPolicy ?? configBefore?.policy)
+
     // ── Step 3: Stack basics ───────────────────────────────────────────────────
     process.stdout.write('\n')
     const sshCidrDefault = provider === 'local' ? undefined : await detectSshCidrDefault()
@@ -252,7 +276,7 @@ export default defineCommand({
           type: 'list',
           name: 'instanceSize',
           message: 'Server size: (bigger = faster, but costs more per month)',
-          choices: instanceChoices(provider),
+          choices: sizeChoices,
         },
         stateBucketQuestion(provider as CloudProvider, scopeAccount),
         {
@@ -282,6 +306,15 @@ export default defineCommand({
         default: 'latest',
       },
     ])
+
+    // The stack cap, as soon as the name is known: the local path registers a stack only after
+    // it has bootstrapped the host, which is too late to refuse it.
+    {
+      const { stackCapRefusal } = await import('../../config/policy.js')
+      const { getConfig } = await import('../../config/store.js')
+      const overCap = stackCapRefusal(getConfig(), stackAnswers.stackName)
+      if (overCap) throw new UsageError(overCap)
+    }
 
     // ── Account preflight ──────────────────────────────────────────────────────
     //
@@ -522,6 +555,14 @@ export default defineCommand({
         process.exit(1)
       }
 
+      // The cloud's own name for the size, as generatePlan writes it. The wizard wrote the size
+      // itself ("small"), which the provider programs pass to the cloud unchanged.
+      const { nativeInstanceType } = await import('../../plan/generate.js')
+      const instanceType = await nativeInstanceType(provider, stackAnswers.instanceSize)
+      const { enforceInstanceType } = await import('../../config/policy.js')
+      const { getConfig: currentConfig } = await import('../../config/store.js')
+      await enforceInstanceType(currentConfig(), provider, instanceType)
+
       const plan = {
         apiVersion: 'clawops.dev/v1',
         kind: 'DeployPlan',
@@ -534,7 +575,7 @@ export default defineCommand({
           provider,
           region: stackAnswers.region,
           stackName: stackAnswers.stackName,
-          instanceType: stackAnswers.instanceSize,
+          instanceType,
           openclaw: {
             version: stackAnswers.openclawVersion,
             config: openclawConfigOverlay,
@@ -636,7 +677,20 @@ export default defineCommand({
     }
 
     // ── Step 10: Deploy ────────────────────────────────────────────────────────
-    if (dryRun) return
+    const finishPolicy = async (): Promise<void> => {
+      if (!pendingPolicy || policySaved) return
+      policySaved = await savePolicy(pendingPolicy)
+      if (!policySaved) {
+        warn(
+          'Spending limits were not saved: there is no ~/.clawops/config.json yet. ' +
+            'Run `clawops setup` again after your first deployment to set them.',
+        )
+      }
+    }
+    if (dryRun) {
+      await finishPolicy()
+      return
+    }
 
     if (provider === 'local') {
       const { deployNow } = await inquirer.prompt<{ deployNow: boolean }>([{
@@ -726,6 +780,7 @@ export default defineCommand({
         info(`\nTo deploy later:  clawops apply ${outputPath}`)
       }
     }
+    await finishPolicy()
   },
 })
 
@@ -757,6 +812,9 @@ async function runLocalDeploy(opts: LocalDeployOpts): Promise<void> {
 
   // Register stack in ~/.clawops/config.json
   const existing = getConfig()
+  const { stackCapRefusal } = await import('../../config/policy.js')
+  const overCap = stackCapRefusal(existing, opts.stackName)
+  if (overCap) throw new UsageError(overCap)
   const stackEntry = {
     provider: 'local' as const,
     stateUrl: 'file://~/.clawops/state',

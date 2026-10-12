@@ -9,6 +9,7 @@ import path from 'node:path'
 import process from 'node:process'
 import { z } from 'zod'
 import { UsageError, StateError } from '../errors/index.js'
+import { PolicySchema } from './policy-schema.js'
 
 const CredentialsRefSchema = z.object({
   source: z.enum(['env', 'cli-profile', 'file', 'instance-metadata']),
@@ -67,6 +68,8 @@ const ClawopsConfigSchema = z.object({
     knownHostsPath: z.string(),
   }),
   mcp: z.object({ auditLogPath: z.string() }).optional(),
+  /** The operator's spending policy; see ./policy.ts. */
+  policy: PolicySchema.optional(),
 })
 
 export type ClawopsConfig = z.infer<typeof ClawopsConfigSchema>

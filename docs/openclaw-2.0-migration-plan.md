@@ -928,10 +928,13 @@ OpenClaw's default and what `--use-env` drives, so the catalog now configures th
 `clawhub.ai`. Installing channels during `apply` extends the deploy-time egress requirement to
 npm on the deployed host, which `docs/security/egress.md` already records.
 
-**WO-62. Clawops as a host agent** *(its own release, 2.2, ships alone, gated; now 2.3, and re-aligned after 2.2, see below)*
+**WO-62. Clawops as a host agent** *(its own release, 2.2, ships alone, gated; then 2.3, now **2.4**, and re-aligned after 2.2, see below)*
 
 > **2026-10-03:** 2.2.0 shipped restore `--activate` and the SSH diagnostics instead, so WO-62 is
 > now **2.3**. It still ships alone; none of the preconditions below exist in code yet.
+>
+> **2026-10-11:** 2.3.0 went to the spending limits (precondition 1, in part) and the backlog
+> fixes, so WO-62 is now **2.4**.
 
 For the gateway's AI to manage a stack unattended, clawops has to be installed and running on
 the gateway host. It was scoped as a fast follow after 2.0. That was wrong: it is not a feature
@@ -995,6 +998,11 @@ is reasonable to build, and several are useful on their own:
 1. **A spend ceiling that is not advisory.** An instance-size allowlist in the plan schema, a cap
    on stacks per account, and a required cloud-native budget with an enforcement action wired up
    before the host agent can be enabled. A budget *alert* is not a control.
+   *Corrected and partly built in 2.3 (2026-10-11):* the allowlist and the stack cap live in the
+   operator's `~/.clawops/config.json → policy`, **not in the plan schema**. A plan is what an
+   agent writes, so a limit carried in it would be set by the party it limits. `plan`, `apply`,
+   `up` and `init` enforce them on every surface; the wizard sets them. The provider budget with
+   an enforcement action is still to come, with `agent install`.
 2. **A self-targeting guard.** clawops must refuse an operation whose target stack is the one it
    is running on, and that refusal must live below the tool layer so it cannot be prompted away.
 3. **A separate, narrow cloud identity** for the host, not the deploying operator's. Denied
@@ -1062,7 +1070,7 @@ cover. They still stand; this amends them. Nothing here is built yet.
 
 **One release, local and cloud together.** *(Decided 2026-10-05.)* A local-first split was
 considered: a local-provider host has no cloud credentials, so preconditions 1, 3 and 4 would not
-apply there. It was declined in favour of one design pass, so 2.3 ships both behind all nine
+apply there. It was declined in favour of one design pass, so 2.4 ships both behind all nine
 preconditions. On a local host 1, 3 and 4 are satisfied trivially; the release still needs them
 for cloud.
 
@@ -1328,20 +1336,20 @@ before marking that owner done.
 
 | Deferred item | Raised by | Owner | State |
 |---|---|---|---|
-| `logs.ts` assumes a systemd unit; use `openclaw logs` over RPC | WO-58 audit | **WO-44** | re-homed from WO-38 |
-| `clawops agents logs` has nothing correct to call; use `audit --agent` | SP-11 §8b | **WO-44** | re-homed from WO-38 |
-| `clawops backup restore` throws; 2.0 has a real restore | v1.7.5 | **WO-46** | open |
-| Port `18789` hardcoded in 9 files | WO-58 audit | **WO-48** | WO-42 closed without it, by design |
-| ClawHub egress at apply: `/audit-egress` + firewall notes | WO-43 | **WO-49** | open |
-| `integrations.yaml` unchecked against the 2.0 channel surface | WO-43 | **WO-60** | re-homed from WO-45 (wrong owner) |
-| `output:` blocks in `spec/mcp-tools.yaml` are descriptive only, no `outputSchema`, no `structuredContent` | WO-47 | **open** | needs a change to all 18 handlers; too big for an (S) |
-| `clawops_migrate` and `clawops_gateway_update` have no MCP tool | WO-47 | **open** | needs their effects extracted from `cli/commands/*.ts` first, or the handler duplicates them |
-| `clawops_workflow_recover` still reports "systemd service status" | WO-47 | WO-44 | same systemd assumption as `logs.ts`; it should call the diagnostics module |
+| `logs.ts` assumes a systemd unit; use `openclaw logs` over RPC | WO-58 audit | **WO-44** | ✅ done: `clawops logs` reads the gateway over RPC and says which source answered |
+| `clawops agents logs` has nothing correct to call; use `audit --agent` | SP-11 §8b | **WO-44** | ✅ done: `src/openclaw/agent-activity.ts` pages `openclaw audit` per agent |
+| `clawops backup restore` throws; 2.0 has a real restore | v1.7.5 | **WO-46** | ✅ done in 2.0; `--activate` added in 2.2 |
+| Port `18789` hardcoded in 9 files | WO-58 audit | **WO-48** | ✅ done: the remaining mentions in `src/` are comments |
+| ClawHub egress at apply: `/audit-egress` + firewall notes | WO-43 | **WO-49** | ✅ done: `docs/security/egress.md` |
+| `integrations.yaml` unchecked against the 2.0 channel surface | WO-43 | **WO-60** | ✅ done with the WO-60 catalog |
+| `output:` blocks in `spec/mcp-tools.yaml` are descriptive only, no `outputSchema`, no `structuredContent` | WO-47 | **open** | needs a change to all 30 handlers; too big for an (S) |
+| `clawops_migrate` and `clawops_gateway_update` have no MCP tool | WO-47 | **open** | ✅ done in 2.2 (#187), effects extracted into shared modules first |
+| `clawops_workflow_recover` still reports "systemd service status" | WO-47 | WO-44 | ✅ done after 2.2.1: it runs `clawops_doctor`'s health checks and names only real tools |
 | `clawops harden` cannot be told which ports to open | WO-48 | **open** | it reads the container instead, which is more honest but means a reverse-proxy port still has to be opened by hand |
-| clawops does not install channel plugins; the wizard prints the command instead | WO-60 | **WO-63** | scheduled, not just noted |
-| WhatsApp and Microsoft Teams have no `--use-env` path at all | WO-60 | **WO-63** | the flag is rejected outright, so no non-interactive setup exists |
-| Committed `server.json` shows `1.7.3`; CI rewrites the version before registering but never commits it | release | **WO-62** | registry itself is correct; sync at `changeset version` time and test it against `package.json` |
-| Plan fields `workspace`, `permissionMode`, `image.variant`, mounts | WO-42 | **WO-53** (2.1) | open |
+| clawops does not install channel plugins; the wizard prints the command instead | WO-60 | **WO-63** | ✅ done in WO-63 |
+| WhatsApp and Microsoft Teams have no `--use-env` path at all | WO-60 | **upstream** | the flag is rejected outright, so no non-interactive setup exists |
+| Committed `server.json` shows `1.7.3`; CI rewrites the version before registering but never commits it | release | **WO-62** | ✅ done in WO-64 |
+| Plan fields `workspace`, `permissionMode`, `image.variant`, mounts | WO-42 | **WO-53** (unscheduled) | open |
 | README *What's new in 2.0*: update per flow change, audit at the end | user request | **every WO**, audited by WO-49 | standing |
 | Pulumi `Gateway` component (G7) | WO-58 audit | WO-38 | ✅ deleted |
 | `monitor.ts` on the pre-2.0 config path; disk gauge on the wrong filesystem | WO-58 audit | WO-44 | ✅ fixed: the WO-39 claim was wrong |

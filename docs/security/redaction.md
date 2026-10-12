@@ -16,6 +16,10 @@ substrings has its value replaced with `"[REDACTED]"`:
 | `password` | `password`, `adminPassword` |
 | `connectionstring` | `connectionString`, `dbConnectionString` |
 | `authorization` | `authorization` (HTTP header forwarded as arg) |
+| `credential` | `GOOGLE_APPLICATION_CREDENTIALS`, `credentialsFile` (added after 2.2.1; it was in the spec and not enforced) |
+
+This list must cover every pattern in `spec/errors.yaml → redaction.patterns`;
+`tests/spec/errors.test.ts` fails if it does not.
 
 ## Exempt keys
 

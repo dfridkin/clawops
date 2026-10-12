@@ -24,8 +24,12 @@ export function getSessionId(): string {
   return _sessionId
 }
 
-/** Keys whose VALUES must be redacted (case-insensitive substring match). */
-const SENSITIVE_KEYS = ['token', 'secret', 'key', 'password', 'connectionstring', 'authorization']
+/**
+ * Keys whose VALUES must be redacted (case-insensitive substring match). Every pattern in
+ * `spec/errors.yaml → redaction.patterns` must be covered by one of these; a test enforces it.
+ * `credential` was missing, so GOOGLE_APPLICATION_CREDENTIALS reached the log in the clear.
+ */
+export const SENSITIVE_KEYS = ['token', 'secret', 'key', 'password', 'connectionstring', 'authorization', 'credential']
 /** Keys exempt from redaction even if they match a pattern. */
 const EXEMPT_KEYS = ['keyname', 'keypath', 'privateKeyPath', 'knownHostsPath']
 

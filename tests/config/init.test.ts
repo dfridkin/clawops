@@ -76,4 +76,19 @@ describe('initStack', () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.reason).toMatch(/host is required/)
   })
+
+  it('refuses a new stack beyond the spending policy\'s cap, and adds nothing', async () => {
+    const { initStack } = await import('../../src/config/init.js')
+    const { getConfig, setConfig } = await import('../../src/config/store.js')
+    expect((await initStack({ provider: 'aws', stateUrl: 's3://b/clawops', stackName: 'one' })).ok).toBe(true)
+    setConfig({ ...getConfig()!, policy: { maxStacks: 1 } })
+
+    const refused = await initStack({ provider: 'aws', stateUrl: 's3://b/clawops', stackName: 'two' })
+    expect(refused.ok).toBe(false)
+    if (!refused.ok) expect(refused.reason).toContain('policy.maxStacks')
+    expect(Object.keys(getConfig()!.stacks)).toEqual(['one'])
+    // The policy survives a later, allowed init of the same stack.
+    expect((await initStack({ provider: 'aws', stateUrl: 's3://b/clawops', stackName: 'one', force: true })).ok).toBe(true)
+    expect(getConfig()!.policy).toEqual({ maxStacks: 1 })
+  })
 })

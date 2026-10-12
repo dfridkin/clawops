@@ -10,8 +10,10 @@ vi.mock('../../src/transport/ssh.js', () => ({ connect: mockConnect }))
 const { mockWaitForGateway } = vi.hoisted(() => ({ mockWaitForGateway: vi.fn() }))
 vi.mock('../../src/openclaw/ready.js', () => ({ waitForGateway: mockWaitForGateway }))
 vi.mock('../../src/transport/wait.js', () => ({ waitForSsh: mockWaitForSsh }))
-vi.mock('../../src/cli/context.js', () => ({
+vi.mock('../../src/cli/context.js', async (importOriginal) => ({
   buildContext: vi.fn(),
+  // The real one: the spending policy maps sizes to native types through the adapter.
+  loadAdapterModule: (await importOriginal<typeof import('../../src/cli/context.js')>()).loadAdapterModule,
 }))
 
 vi.mock('../../src/config/store.js', () => ({
@@ -121,6 +123,23 @@ beforeEach(async () => {
 })
 
 describe('applyPlan()', () => {
+  it('refuses a plan whose size the spending policy does not allow, before touching the stack', async () => {
+    // A plan can be written elsewhere or edited after it was generated, so apply checks again.
+    const { getConfig } = await import('../../src/config/store.js')
+    const base = vi.mocked(getConfig)()!
+    vi.mocked(getConfig).mockReturnValue({ ...base, policy: { allowedInstanceTypes: { aws: ['micro'] } } })
+    try {
+      const { buildContext } = await import('../../src/cli/context.js')
+      vi.mocked(buildContext).mockClear()
+      const { applyPlan } = await import('../../src/plan/apply.js')
+      const err = await applyPlan(basePlan).then(() => undefined, (e: Error) => e)
+      expect(err?.message).toContain('is not allowed on aws')
+      expect(buildContext).not.toHaveBeenCalled()
+    } finally {
+      vi.mocked(getConfig).mockReturnValue(base)
+    }
+  })
+
   it('calls stack.up() and returns outputs and changeSummary', async () => {
     const { applyPlan } = await import('../../src/plan/apply.js')
     const result = await applyPlan(basePlan)
