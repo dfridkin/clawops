@@ -836,9 +836,10 @@ tools:
   - name: clawops_workflow_recover
     toolset: [workflow, read]
     description: |
-      Diagnostic workflow for an unhealthy stack. Internally: status check →
-      gateway logs → agent logs → systemd service status → produces a structured
-      diagnostic report with suggested remediation.
+      Diagnostic workflow for an unhealthy stack. Internally: what is deployed
+      (clawops_status) → the stack's failed health checks (clawops_doctor) → the
+      gateway's last 50 log lines (clawops_logs_tail) → a report with next steps that
+      name the tool for each kind of failure. Changes nothing.
 
       Use when: the user reports any "not working" symptom and you don't know
       where to start. Best entry point for troubleshooting.

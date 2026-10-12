@@ -22,7 +22,7 @@ plans for human review, and run recovery diagnostics, but cannot apply any chang
 | `clawops_secret_audit` | Report missing secrets and unresolvable `$secret:` references |
 | `clawops_plan` | Generate a deploy plan JSON (no infrastructure changes) |
 | `clawops_task_status` | Poll the status of an in-progress background task |
-| `clawops_workflow_recover` | Investigate a stuck deployment (reads logs + status) |
+| `clawops_workflow_recover` | Diagnose an unhealthy stack: status, failed health checks, recent logs |
 
 All write, restart, and infrastructure tools are disabled at server startup. The
 disabled tools are not registered. They never appear in the tool list sent to the

@@ -3,8 +3,13 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 const mockHandleStatus = vi.fn()
 const mockHandleLogsTail = vi.fn()
+const mockHandleDoctor = vi.fn()
 vi.mock('../../src/mcp/tools/cli/status.js', () => ({ handleStatus: mockHandleStatus }))
 vi.mock('../../src/mcp/tools/cli/logs.js', () => ({ handleLogsTail: mockHandleLogsTail }))
+vi.mock('../../src/mcp/tools/cli/doctor.js', () => ({ handleDoctor: mockHandleDoctor }))
+vi.mock('../../src/mcp/tools/_trim.js', () => ({
+  trimForMcp: (output: string) => ({ content: output, truncated: false }),
+}))
 
 const FAKE_SERVER = {} as McpServer
 
@@ -20,6 +25,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockHandleStatus.mockResolvedValue(okResult('{"publicIp":"1.2.3.4","status":"deployed"}'))
   mockHandleLogsTail.mockResolvedValue(okResult('log line 1\nlog line 2'))
+  mockHandleDoctor.mockResolvedValue(okResult('{"ok":false,"checks":[{"name":"Gateway","status":"fail"}]}'))
 })
 
 describe('handleWorkflowRecover', () => {
@@ -65,5 +71,26 @@ describe('handleWorkflowRecover', () => {
 
     const text = (result.content[0] as { type: 'text'; text: string }).text
     expect(text).toContain('my-stack')
+  })
+
+  it('runs the stack health checks, failures only, and reports them', async () => {
+    const { handleWorkflowRecover } = await import('../../src/mcp/tools/workflow/recover.js')
+    const result = await handleWorkflowRecover({ stackName: 'prod' }, FAKE_SERVER)
+    const text = (result.content[0] as { text: string }).text
+    expect(mockHandleDoctor).toHaveBeenCalledWith({ stackName: 'prod', failuresOnly: true }, FAKE_SERVER)
+    expect(text).toContain('### Failed health checks')
+    expect(text).toContain('"Gateway","status":"fail"')
+  })
+
+  it('never recommends a tool or command that does not exist', async () => {
+    // It used to end with "run `clawops refresh` from the CLI", which there is no such command.
+    const { handleWorkflowRecover } = await import('../../src/mcp/tools/workflow/recover.js')
+    const { TOOL_NAMES } = await import('../../src/mcp/tools/registry.js')
+    const result = await handleWorkflowRecover({ stackName: 'prod' }, FAKE_SERVER)
+    const text = (result.content[0] as { text: string }).text
+    const named = [...text.matchAll(/clawops_[a-z_]+/g)].map((m) => m[0])
+    expect(named.length).toBeGreaterThan(0)
+    expect(named.filter((n) => !TOOL_NAMES.includes(n))).toEqual([])
+    expect(text).not.toMatch(/clawops refresh/)
   })
 })

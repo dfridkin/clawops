@@ -397,7 +397,7 @@ Do not bind to a non-loopback address without additional authentication controls
 | `clawops_harden` | cli | Apply hardening modules; join or leave a tailnet (elicits confirmation) |
 | `clawops_init` | cli | Register a stack and write `~/.clawops/config.json` (no cloud resources) |
 | `clawops_workflow_deploy_app` | workflow | End-to-end deploy: plan → confirm → apply → status |
-| `clawops_workflow_recover` | workflow | Diagnostic workflow for an unhealthy stack |
+| `clawops_workflow_recover` | workflow | Diagnose an unhealthy stack: status, failed health checks, recent logs, and which tool fixes what |
 | `clawops_task_status` | cli | Poll a long-running task |
 
 Tools in the `read` toolset are also available in `--read-only` mode; the table's Toolset column shows the primary toolset. All other toolsets require full mode.
@@ -576,7 +576,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (2091 tests, ~13s)
+pnpm test                  # vitest (2096 tests, ~13s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm test:e2e:local        # builds, then bootstrap, the host-touching MCP tools and a 1.x migration, in systemd containers

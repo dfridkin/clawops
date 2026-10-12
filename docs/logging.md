@@ -1,5 +1,11 @@
 # Logging Specification
 
+> **Status: design, not built.** clawops does not depend on pino, and nothing below about pino,
+> `pino-pretty`, OTel log instrumentation or log levels describes running code. What exists today:
+> human-readable output from `src/output/human.ts`, written to stderr in MCP stdio mode (R15),
+> and the MCP audit log in `src/mcp/audit.ts`, one JSON line per tool call, to stderr and
+> `~/.clawops/mcp-audit.log`. ADR 0007 records the choice of pino; it has not been implemented.
+
 This document specifies clawops's logging behavior in implementation detail. ADR 0007 chose pino as the library; this doc fills in what fields, levels, and formatters are used where.
 
 ## Log Streams
@@ -184,6 +190,10 @@ If a contributor adds a stray `console.log`, the lint rule catches it AND `tests
 When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, the OTel pino instrumentation auto-attaches `traceId` and `spanId` to log records. No additional configuration needed. See `docs/telemetry.md`.
 
 ## Sensitive Field Redaction
+
+*As built:* `src/mcp/audit.ts` redacts the value of any argument whose name contains one of its
+`SENSITIVE_KEYS`, and `tests/spec/errors.test.ts` fails if a pattern in `spec/errors.yaml`
+`redaction.patterns` is not covered by them. The pino configuration below is the design:
 
 Pino's `redact` config strips known-sensitive keys at log time. The pattern list comes from `spec/errors.yaml` `redaction.patterns`:
 

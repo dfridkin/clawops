@@ -22,7 +22,7 @@ changes:
 - `clawops_secret_list` and `clawops_secret_audit`, names and references only, never values
 - `clawops_plan`. Generate a deploy plan (no infra changes)
 - `clawops_task_status`, poll an in-progress task
-- `clawops_workflow_recover`. Investigate a stuck deployment (reads logs + status)
+- `clawops_workflow_recover`. Diagnose an unhealthy stack: status, failed health checks, recent logs
 
 Use this when you want an AI assistant that can answer questions, generate plans for
 human review, and run recovery diagnostics, but cannot apply any changes.

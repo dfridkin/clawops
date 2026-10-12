@@ -1,6 +1,7 @@
 # Error Taxonomy — machine-readable companion to ADR 0005.
-# Used by `pnpm gen:schemas` to emit src/errors/_generated.ts.
-# Update via PR; CI verifies generated file matches.
+# Nothing is generated from this file. src/errors/index.ts is hand-written, and
+# tests/spec/errors.test.ts fails when the two disagree on a class or its exit code.
+# Change both in the same PR.
 
 version: 1
 
@@ -150,7 +151,8 @@ taxonomy:
     suggestedAction: "Operation cancelled by user."
 
 # Sensitive field patterns for redaction (R21).
-# Used by both pino logger config and src/mcp/audit.ts.
+# Enforced by src/mcp/audit.ts, whose SENSITIVE_KEYS must cover every pattern here;
+# tests/spec/errors.test.ts checks that it does.
 redaction:
   patterns:
     - authorization
