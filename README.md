@@ -638,6 +638,7 @@ Use `pnpm changeset` to record a release note before merging a `feat` or `fix`.
 ## What's new in 2.2
 
 Recovery is a flag, agents can reach every command they need, and SSH failures say what failed.
+2.2.1 follows with the fix below it.
 
 ### Restore puts a backup into service
 
@@ -706,6 +707,18 @@ clawops 1.7.9, and AWS. That found defects the unit tests could not, several in 
   1.x migration (`pnpm test:e2e:local`, nightly and on PRs labelled `e2e`), and
   `E2E_MCP=1 pnpm test:cloud <cloud>` backs up and restores over MCP on a real cloud host.
 - clawops.fyi carries structured data, an `/llms.txt`, a FAQ and a comparison page.
+
+### 2.2.1
+
+- **`clawops config validate` and `config set` check against the schema the pinned OpenClaw
+  release (2026.9.2) really has.** The schema clawops shipped had been captured from a different
+  build, and the weekly check that compares them found the drift every week and then failed to
+  report it, on a missing issue label. It reports now. In practice: `messages.suppressToolErrors`
+  is refused, as the gateway refuses it, and `transcripts.autoStart[].whenOccupied` is accepted.
+- **On OpenClaw 2026.9.2, agents can read each other's sessions by default.** Cross-agent session
+  access (`tools.agentToAgent`) and collector-mode subagents (`tools.swarm`) are on unless turned
+  off. If agents on one gateway should not see each other's sessions:
+  `clawops config set tools.agentToAgent.enabled false`, or give it an `allow` list.
 
 ---
 
