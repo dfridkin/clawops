@@ -1044,16 +1044,19 @@ cover. They still stand; this amends them. Nothing here is built yet.
   `backup_restore` with `activate`, `migrate`, `config_set` / `config_unset` (each restarts the
   gateway), `harden`, `up` / `apply` / `destroy`, and `stacks_delete` of its own stack. A host
   agent that restarts its gateway ends the conversation that asked it to.
-  *Refined by ADR 0014:* with operator-signed approval, operations that change the host but leave
-  it running (restart, update, restore with `activate`, config, harden) need approval rather than
-  refusal. Operations that end the host or its stack (`destroy`, `down`, `stacks_delete`,
-  `migrate` of its own host) are refused whatever is approved.
+  *Refined by ADR 0014 (accepted 2026-10-14):* in host-agent mode the destructive tools that
+  leave the host running (restart, update, restore with `activate`, config, harden) do not run.
+  If the operator allowed them, they return the CLI command for the operator to run on their own
+  machine. Operations that end the host or its stack (`destroy`, `down`, `stacks_delete`,
+  `migrate` of its own host) are refused outright, with no command offered.
 - **5. Audit shipped off-host, with a new reason.** A restore rewrites the gateway's state on the
   host, sessions included. An injected agent with `backup_restore` can roll back its own trail.
 - **7. Default read-only, and `yes` is not honoured.** Per-tool opt-in is not enough while any
   opted-in destructive tool accepts the model's own `yes: true`. In host-agent mode the server
   ignores `yes`, and approval comes from somewhere the model cannot write. **Decided
-  2026-10-05:** the operator approves from their own machine; see ADR 0014.
+  2026-10-05:** the operator approves from their own machine. **Revised 2026-10-14:** approval
+  is the operator running the command the agent handed off. There is no signing and no
+  notification service; see ADR 0014.
 
 **New preconditions:**
 
