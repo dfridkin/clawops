@@ -1068,6 +1068,16 @@ cover. They still stand; this amends them. Nothing here is built yet.
   default** ("omitted or empty allow permits every agent pair"), which lets one agent list, read
   and search another's sessions. The schema clawops had captured said the opposite. The review
   covers the gateway's own defaults as well as clawops' tools.
+  *Done 2026-10-16:* [`docs/security/host-agent-disclosure-review.md`](security/host-agent-disclosure-review.md).
+  The gateway log carries reply text from every session, so the host agent is made
+  **operator-only** rather than having its tools trimmed. `agent install` refuses unless:
+  - the agent is a dedicated, non-default agent
+  - it is bound only to the operator's direct peers
+  - those channels' DMs are not open
+  - agent-to-agent and session visibility keep other agents out
+
+  The tools stay complete. `config_get` redacts secret-named paths, and `secret_list` and
+  `secret_audit` are dropped because the host has no secret store. The read set is 13 tools.
 - **9. A tool budget.** WO-62 adds no tools, or it decides up front what to merge to make room
   (for example `secret_list` with `secret_audit`). The R1 cap is not raised for it.
 

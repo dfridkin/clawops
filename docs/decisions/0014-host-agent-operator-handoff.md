@@ -58,7 +58,8 @@ In host-agent mode:
 - **Elicitation is not consulted.** A confirmation answered by the gateway's client is answered by
   the same agent this mode exists to contain.
 - **The mode fixes the tool set**, and `--toolsets` does not change it. The agent gets:
-  - the read toolset as it stands after the disclosure review (precondition 8)
+  - the read toolset as it stands after the disclosure review (precondition 8), complete because
+    only the operator can reach the agent
   - the destructive tools the operator named with `--allow`, which hand off (§2)
 
   By default nothing destructive is listed.
@@ -136,7 +137,7 @@ problems.
 | 5 | Audit off-host | Every change is made from the operator's machine and audited there. The host's audit log records reads and handoffs, and `status` pulls the handoffs to the operator's machine (§3) |
 | 6 | Break-glass operator | The operator is the only party that can change the stack. `agent install` records who that is and refuses without it, and the docs say what they need and where |
 | 7 | Read-only default, `yes` not honoured | §1 |
-| 8 | Disclosure review | Done before the read set is fixed. Tools that expose other channels' activity are left out of host-agent mode or filtered |
+| 8 | Disclosure review | **Done 2026-10-16** ([review](../security/host-agent-disclosure-review.md)). The host agent is operator-only: `agent install --agent <id> --operator <channel>:<peer>` refuses unless the agent is dedicated and bound only to the operator, with no agent-to-agent reach. The tools stay complete; the read set is 13 |
 | 9 | Tool budget | No new tools. Host-agent behaviour is a server mode, and `agent install` is CLI-only (§6) |
 
 ### 6. CLI-only commands
