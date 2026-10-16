@@ -17,10 +17,12 @@ const serveCmd = defineCommand({
     'no-destructive': { type: 'boolean', description: 'Filter out destructive tools' },
     toolsets: { type: 'string', description: 'Comma-separated toolsets to enable' },
     inspector: { type: 'boolean', description: 'Enable MCP inspector' },
+    'host-agent': { type: 'boolean', description: 'Serve as a host agent: on the gateway host, for its own stack only, with destructive tools handed to the operator (ADR 0014). Installed by `clawops agent install`' },
   },
   async run({ args }) {
     const { serveMcp } = await import('../../mcp/server.js')
     await serveMcp({
+      hostAgent: Boolean(args['host-agent']),
       port: args.http ? Number(args.http) : undefined,
       bind: args.bind,
       token: args.token,

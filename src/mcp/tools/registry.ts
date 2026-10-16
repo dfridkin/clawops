@@ -48,6 +48,13 @@ import {
 } from './_generated.js'
 
 import type { McpServeOpts } from '../server.js'
+import { hostAgent, hostAgentStack } from '../../hostagent/mode.js'
+import type { HostAgentConfig } from '../../hostagent/config.js'
+import {
+  HANDOFF_TOOLS, SELF_TARGETING_TOOLS, SELF_TARGETING_REFUSAL, hostAgentToolNames,
+} from '../../hostagent/tools.js'
+import { buildHandoff, recordHandoff, handoffText } from '../../hostagent/handoff.js'
+import { UsageError } from '../../errors/index.js'
 
 // ── Handler imports ──────────────────────────────────────────────────────────
 import { handleStatus } from './cli/status.js'
@@ -138,6 +145,11 @@ export const TOOL_NAMES: readonly string[] = Object.keys(TOOL_REGISTRY)
 
 /** Resolve which tool names should be registered given the serve opts. */
 export function resolveEnabledTools(opts: McpServeOpts): string[] {
+  // Host-agent mode fixes the tool set; --read-only, --toolsets and --no-destructive do not
+  // change it (ADR 0014 §1).
+  const agent = hostAgent()
+  if (agent) return hostAgentToolNames(agent.allow)
+
   let names: string[]
 
   if (opts.readOnly) {
@@ -172,7 +184,9 @@ export function registerTools(server: McpServer, opts: McpServeOpts): void {
     if (!entry) continue
     const { schema, annotations, handler, description } = entry
     const { title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint } = annotations
-    const audited = withAudit(toolName, (input) => handler(input, server))
+    const agent = hostAgent()
+    const dispatch: AnyHandler = agent ? hostAgentDispatch(agent, toolName, handler) : handler
+    const audited = withAudit(toolName, (input) => dispatch(input, server))
     server.registerTool(
       toolName,
       {
@@ -186,4 +200,41 @@ export function registerTools(server: McpServer, opts: McpServeOpts): void {
       audited,
     )
   }
+}
+
+/**
+ * What a host agent's call does, decided below every tool handler (ADR 0014 §2 and §4).
+ *
+ * The stack is checked first, on every call: a host agent manages only its own. A
+ * self-targeting tool is refused with no command offered. A handoff tool returns the CLI
+ * command and never reaches its handler, so neither `yes` nor elicitation can make it run.
+ * Everything else is a read tool and runs as it does anywhere.
+ */
+export function hostAgentDispatch(agent: HostAgentConfig, toolName: string, handler: AnyHandler): AnyHandler {
+  return async (input, server) => {
+    const args = (input ?? {}) as Record<string, unknown>
+    let stack: string
+    try {
+      stack = hostAgentStack(agent, args['stackName'])
+    } catch (err) {
+      if (err instanceof UsageError) return refusal(err.message)
+      throw err
+    }
+
+    if (SELF_TARGETING_TOOLS.includes(toolName)) return refusal(SELF_TARGETING_REFUSAL)
+
+    if (HANDOFF_TOOLS.includes(toolName)) {
+      const handoff = buildHandoff(toolName, args, stack)
+      const recorded = recordHandoff(handoff)
+      return {
+        content: [{ type: 'text', text: handoffText(handoff, { yesIgnored: args['yes'] === true, recorded }) }],
+      }
+    }
+
+    return handler({ ...args, stackName: stack }, server)
+  }
+}
+
+function refusal(text: string): CallToolResult {
+  return { content: [{ type: 'text', text }], isError: true }
 }

@@ -281,7 +281,7 @@ clawops down --yes          # Destroy local-provider stack
 | `doctor` | Check the local machine; with `--stack`, the deployment's health too; with `--provider`, one cloud's credentials and account setup whether or not a stack exists; with `--instance-type`, account checks ask about that size rather than the provider default. `--json` for the report. Exits 1 on any failure |
 | `secret` | Manage secrets: `list`, `set`, `delete`, `rotate`, `audit` |
 | `monitor` | Live dashboard: gateway health, container stats, log tail, stack picker |
-| `mcp serve` | Start the embedded MCP server (stdio, or HTTP with `--http <port> --token <t>`) |
+| `mcp serve` | Start the embedded MCP server (stdio, or HTTP with `--http <port> --token <t>`). `--host-agent` serves a gateway host's own agent (ADR 0014) |
 | `mcp install` | Interactively wire clawops into AI editors |
 | `mcp wire` | Wire the gateway's AI as an MCP client of clawops (verifies the connection before saving) |
 | `help` | List all commands and global flags |

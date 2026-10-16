@@ -4,6 +4,7 @@
 import type { ClawopsContext } from '../cli/context.js'
 import { StateError } from '../errors/index.js'
 import { pulumiCause } from '../errors/pulumi.js'
+import { hostAgent } from '../hostagent/mode.js'
 
 export interface ConnInfo {
   host: string
@@ -13,7 +14,21 @@ export interface ConnInfo {
   knownHostsPath: string
 }
 
+/**
+ * The connection a host agent reports. Nothing dials it: the pool hands a host agent a local
+ * session whatever it is given. It exists so the tools that log or display a connection say
+ * where they ran.
+ */
+export const HOST_AGENT_CONN: ConnInfo = {
+  host: 'localhost',
+  port: 0,
+  user: 'clawops-agent',
+  privateKeyPath: '',
+  knownHostsPath: '',
+}
+
 export async function resolveConn(ctx: ClawopsContext): Promise<ConnInfo> {
+  if (hostAgent()) return HOST_AGENT_CONN
   if (ctx.adapter.name === 'local') {
     const state = ctx.localState
     if (!state) throw new StateError('Stack has no local state — run `clawops up` first.')

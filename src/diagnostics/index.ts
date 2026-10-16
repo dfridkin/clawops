@@ -87,10 +87,20 @@ export async function runDiagnostics(
   deps: DiagnosticsDeps = {},
 ): Promise<DiagnosticsReport> {
   const { getConfig, getConfigDir } = await import('../config/store.js')
-  const config = getConfig()
+  const { hostAgent } = await import('../hostagent/mode.js')
   const sections: Section[] = []
 
   sections.push({ title: 'Runtime', checks: await runtimeChecks(getConfigDir()) })
+
+  // A host agent has no clawops config, SSH key or cloud credentials to check, by design, so
+  // those sections would only report their absence as failures. It checks its own host.
+  const agent = hostAgent()
+  if (agent) {
+    await pushRemoteSections(sections, agent.stack, opts.signal, deps)
+    return summarise(sections)
+  }
+
+  const config = getConfig()
   sections.push({
     title: 'Config',
     checks: [
@@ -105,36 +115,43 @@ export async function runDiagnostics(
   const account = await accountChecks(config, opts.stack, opts.provider, opts.instanceType)
   if (account.length > 0) sections.push({ title: 'Cloud account', checks: account })
 
-  if (opts.stack) {
-    const open = deps.openSession ?? defaultOpenSession
-    let handle: Awaited<ReturnType<typeof defaultOpenSession>> | undefined
-    try {
-      handle = await open(opts.stack, opts.signal)
-    } catch (err) {
-      sections.push({
-        title: 'Remote health',
-        checks: [connectionCheck(messageOf(err))],
-      })
-    }
-    if (handle) {
-      try {
-        sections.push({
-          title: 'Remote health',
-          checks: await remoteChecks(handle.session, opts.signal),
-        })
-        sections.push({
-          title: 'Hardening',
-          checks: await hardeningChecks(handle.conn, opts.stack, opts.signal),
-        })
-      } finally {
-        handle.release()
-        const { drainPool } = await import('../transport/pool.js')
-        drainPool()
-      }
-    }
-  }
+  if (opts.stack) await pushRemoteSections(sections, opts.stack, opts.signal, deps)
 
   return summarise(sections)
+}
+
+async function pushRemoteSections(
+  sections: Section[],
+  stack: string,
+  signal: AbortSignal | undefined,
+  deps: DiagnosticsDeps,
+): Promise<void> {
+  const open = deps.openSession ?? defaultOpenSession
+  let handle: Awaited<ReturnType<typeof defaultOpenSession>> | undefined
+  try {
+    handle = await open(stack, signal)
+  } catch (err) {
+    sections.push({
+      title: 'Remote health',
+      checks: [connectionCheck(messageOf(err))],
+    })
+  }
+  if (handle) {
+    try {
+      sections.push({
+        title: 'Remote health',
+        checks: await remoteChecks(handle.session, signal),
+      })
+      sections.push({
+        title: 'Hardening',
+        checks: await hardeningChecks(handle.conn, stack, signal),
+      })
+    } finally {
+      handle.release()
+      const { drainPool } = await import('../transport/pool.js')
+      drainPool()
+    }
+  }
 }
 
 export function summarise(sections: Section[]): DiagnosticsReport {
@@ -509,6 +526,13 @@ async function defaultOpenSession(stack: string, signal?: AbortSignal) {
   const { buildContext } = await import('../cli/context.js')
   const { extractBaseOutputs } = await import('../pulumi/outputs.js')
   const { acquireSession } = await import('../transport/pool.js')
+  const { hostAgent } = await import('../hostagent/mode.js')
+
+  if (hostAgent()) {
+    const { HOST_AGENT_CONN } = await import('../transport/conn.js')
+    const { session, release } = await acquireSession({ ...HOST_AGENT_CONN, signal })
+    return { session, release, conn: HOST_AGENT_CONN }
+  }
 
   const config = getConfig()
   if (!config) throw new Error('no config — run `clawops init`')

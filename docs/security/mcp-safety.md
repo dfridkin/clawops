@@ -52,6 +52,27 @@ execution, not a security boundary.
 Use this in a controlled CI/CD context where the agent has explicit permission to
 manage infrastructure.
 
+### `--host-agent` (on the gateway host, coming in 2.4)
+
+A host agent is clawops running on the gateway host, so the gateway's own AI can look after its
+deployment ([ADR 0014](../decisions/0014-host-agent-operator-handoff.md)). It is a server mode,
+not a toolset, and it fixes the tool set: `--read-only`, `--no-destructive` and `--toolsets` are
+refused alongside it.
+
+- **Only its own stack.** It manages the host it runs on. A call naming any other stack is
+  refused before a tool runs. Its tools run locally, with no SSH, no Pulumi state, no clawops
+  config and no cloud credentials.
+- **12 read tools.** The read toolset except `clawops_plan`, `clawops_secret_list` and
+  `clawops_secret_audit`, which need the operator's machine. `clawops_config_get` hides strings
+  at secret-named paths, keeping `${VAR}` references and SecretRef objects visible.
+- **Destructive tools hand off.** Only those the operator allowed at install are listed, and
+  only `gateway_restart`, `gateway_update`, `backup_restore`, `config_set`, `config_unset` and
+  `harden` can be allowed. A call changes nothing: it returns the exact `clawops` command for the
+  operator to run on their own machine, with secrets replaced by `<value>`, and records it in
+  `handoffs.jsonl` on the host. `yes: true` and elicitation answers are ignored.
+- **Never self-targeting.** `clawops_destroy`, `clawops_stacks_delete` and `clawops_migrate`
+  cannot be allowed and are refused with no command offered.
+
 ### Spending limits apply in every mode
 
 An agent with full access still deploys only what `~/.clawops/config.json → policy` allows:

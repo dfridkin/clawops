@@ -7,8 +7,15 @@ import { getConfig } from '../../../config/store.js'
 import { checkStackDelete, deleteStackFromConfig, forgetNotice } from '../../../config/stack-delete.js'
 import { confirmDestructive } from '../_confirm.js'
 import { okText, errText } from '../_conn.js'
+import { hostAgent } from '../../../hostagent/mode.js'
 
 export async function handleStacksList(_input: StacksListInput, _server: McpServer): Promise<CallToolResult> {
+  // A host agent is one stack, the host it runs on; the operator's list is on their machine.
+  const agent = hostAgent()
+  if (agent) {
+    const stacks = [{ name: agent.stack, provider: agent.provider, isDefault: true, hostAgent: true }]
+    return { content: [{ type: 'text', text: JSON.stringify({ stacks }, null, 2) }] }
+  }
   const config = getConfig()
   if (!config) {
     return { content: [{ type: 'text', text: JSON.stringify({ stacks: [] }) }] }

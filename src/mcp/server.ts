@@ -8,6 +8,8 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { registerTools } from './tools/registry.js'
 import { registerResources } from './resources.js'
 import { registerPrompts } from './prompts.js'
+import { loadHostAgentConfig } from '../hostagent/config.js'
+import { enterHostAgentMode } from '../hostagent/mode.js'
 
 export interface McpServeOpts {
   port?: number
@@ -18,6 +20,8 @@ export interface McpServeOpts {
   noDestructive?: boolean
   toolsets?: string[]
   inspector?: boolean
+  /** Serve as a host agent (ADR 0014): its own stack, a fixed tool set, destructive calls handed off. */
+  hostAgent?: boolean
 }
 
 /**
@@ -74,6 +78,22 @@ export function bearerFrom(header: string | undefined): string | undefined {
 /** Start the MCP server. Uses HTTP when --http <port> is given, stdio otherwise. */
 export async function serveMcp(opts: McpServeOpts): Promise<void> {
   const { version } = await import('../../package.json', { assert: { type: 'json' } })
+
+  if (opts.hostAgent) {
+    if (opts.readOnly || opts.noDestructive || (opts.toolsets && opts.toolsets.length > 0)) {
+      throw new Error(
+        'A host agent\'s tool set is fixed when it is installed: its read tools, plus the ' +
+          'destructive tools the operator allowed, which hand off. Drop --read-only, ' +
+          '--no-destructive and --toolsets, or re-run `clawops agent install` to change it.',
+      )
+    }
+    const config = loadHostAgentConfig()
+    enterHostAgentMode(config)
+    process.stderr.write(
+      `[clawops] host agent for stack "${config.stack}" (agent ${config.agentId}); ` +
+        `handing off: ${config.allow.length > 0 ? config.allow.join(', ') : 'nothing'}\n`,
+    )
+  }
 
   const makeServer = (): McpServer => {
     const server = new McpServer({ name: 'clawops', version })

@@ -4,6 +4,8 @@
 
 import { connect, type SshConnectOpts, type SshSession } from './ssh.js'
 import { NetworkError } from '../errors/index.js'
+import { hostAgent } from '../hostagent/mode.js'
+import { localSession } from './local.js'
 
 const IDLE_TTL_MS = 5 * 60 * 1_000 // 5 minutes
 const MAX_PER_HOST = 4
@@ -57,6 +59,11 @@ function startCleanupTimer(): void {
 export async function acquireSession(
   opts: SshConnectOpts,
 ): Promise<{ session: SshSession; release(): void }> {
+  // A host agent never opens an SSH connection: the gateway is on this machine (ADR 0014).
+  // Deciding it here, where every tool and flow gets its session, means no call site can
+  // reach a remote host by building a connection of its own.
+  if (hostAgent()) return { session: localSession(), release() {} }
+
   const key = poolKey(opts)
   const entries = pool.get(key) ?? []
 

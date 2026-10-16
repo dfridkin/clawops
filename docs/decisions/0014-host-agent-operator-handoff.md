@@ -93,8 +93,9 @@ command that performs the same operation, for the operator to run on their own m
 
 > Needs the operator. Run on your machine: `clawops gateway restart --stack prod`
 
-The command is built from the tool's arguments by the same mapping the parity test already
-checks, so a handoff never names a flag the CLI lacks.
+The command is built from the tool's arguments (`src/hostagent/handoff.ts`), and
+`tests/hostagent/handoff.test.ts` checks every flag it emits against the CLI command's own
+definition, so a handoff never names a flag the CLI lacks.
 
 - **The agent tells the operator in its own conversation.** The operator is reached through the
   channel they are already using to talk to the gateway. No service, webhook or OpenClaw

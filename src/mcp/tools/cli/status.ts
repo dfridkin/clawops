@@ -6,9 +6,23 @@ import type { StatusInput } from '../_generated.js'
 import { buildContext } from '../../../cli/context.js'
 import { extractBaseOutputs } from '../../../pulumi/outputs.js'
 import { StateError } from '../../../errors/index.js'
+import { hostAgent } from '../../../hostagent/mode.js'
+import { pendingHandoffs } from '../../../hostagent/handoff.js'
 
 export async function handleStatus(input: StatusInput, _server: McpServer): Promise<CallToolResult> {
   const ctx = buildContext({ stack: input.stackName })
+
+  // A host agent reads no Pulumi state. It reports what it is, and what it has handed off;
+  // the gateway's own health is clawops_gateway_status and clawops_monitor.
+  const agent = hostAgent()
+  if (agent) {
+    return text(JSON.stringify({
+      stack: agent.stack,
+      provider: agent.provider,
+      hostAgent: { agentId: agent.agentId, operators: agent.operators, handsOff: agent.allow },
+      pendingHandoffs: pendingHandoffs().map((h) => ({ at: h.at, command: h.command })),
+    }, null, 2))
+  }
 
   if (ctx.adapter.name === 'local') {
     const state = ctx.localState

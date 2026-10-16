@@ -9,6 +9,8 @@ import { readLocalState, type LocalState } from '../providers/local/state.js'
 import { UsageError } from '../errors/index.js'
 import { getProvider } from '../providers/index.js'
 import '../providers/register.js'
+import { hostAgent, hostAgentStack, operatorOnlyMessage } from '../hostagent/mode.js'
+import type { HostAgentConfig } from '../hostagent/config.js'
 
 export interface ClawopsContext {
   config: ClawopsConfig
@@ -36,6 +38,9 @@ export interface ContextArgs {
  * Synchronously reads config; Pulumi workspace is created lazily via getStack().
  */
 export function buildContext(args: ContextArgs): ClawopsContext {
+  const agent = hostAgent()
+  if (agent) return hostAgentContext(agent, args)
+
   const config = requireConfig()
 
   const stackName =
@@ -104,6 +109,39 @@ export function buildContext(args: ContextArgs): ClawopsContext {
         configDir: getConfigDir(),
       })
       return stackCache
+    },
+  }
+}
+
+/**
+ * The context of a host agent: its own stack, and nothing to reach it with.
+ *
+ * A host agent has no ~/.clawops/config.json and must not need one. The config here is built
+ * from the host agent's own, names only its stack, and carries no state URL, credentials or SSH
+ * key, so a tool that went looking for them would find nothing to use. Connections never come
+ * from it either: resolveConn and the pool short-circuit in host-agent mode.
+ */
+function hostAgentContext(agent: HostAgentConfig, args: ContextArgs): ClawopsContext {
+  const stackName = hostAgentStack(agent, args.stack)
+  const config: ClawopsConfig = {
+    version: 1,
+    defaults: { stack: stackName, provider: agent.provider },
+    stacks: {
+      [stackName]: {
+        provider: agent.provider,
+        stateUrl: '',
+        credentialsRef: { source: 'instance-metadata' },
+      },
+    },
+    ssh: { keyPath: '', knownHostsPath: '' },
+  }
+  return {
+    config,
+    adapter: loadProvider(agent.provider as ProviderName),
+    stackName,
+    localState: undefined,
+    async getStack() {
+      throw new UsageError(operatorOnlyMessage('Reading Pulumi state'))
     },
   }
 }
