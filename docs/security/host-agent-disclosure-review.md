@@ -3,11 +3,16 @@
 **WO-62 precondition 8.** Date: 2026-10-16. Measured against `ghcr.io/openclaw/openclaw:2026.9.2`,
 the pinned release.
 
-A host agent ([ADR 0014](../decisions/0014-host-agent-operator-handoff.md)) is reachable from
-every channel the gateway is connected to. `--read-only` stops it from destroying anything. It
-does not stop it from *telling*: a user in one channel can ask it what happened in another. This
-review checks each tool in the `read` toolset for what it would show such a user, and decides
-which tools the host-agent mode keeps.
+A host agent ([ADR 0014](../decisions/0014-host-agent-operator-handoff.md)) runs inside a gateway
+that may be connected to many channels and many users. `--read-only` stops it from destroying
+anything. It does not stop it from *telling*: if anyone can talk to it, a user in one chat can
+ask it what happened in another. This review measures what the read tools would show, and
+decides how host-agent mode keeps that from crossing between users.
+
+**Decision (2026-10-16):** limit **who can reach the host agent**, not what its tools return. A
+host agent answers only the operator, who may see everything already. Its tools stay complete,
+so it has the full context to troubleshoot. Trimming tool output was considered and set aside
+(see *Alternatives*): the logs that leak are the same logs a troubleshooter needs.
 
 ## How it was measured
 
@@ -38,46 +43,84 @@ alone would overstate what the gateway logs.
   every DM shares one key, `agent:<id>:main`. The isolated scopes (`per-peer`,
   `per-channel-peer`) were not exercised. Their names suggest the key then identifies the peer.
 
-Both should be checked before 2.4 ships. Neither changes a verdict below, because both point the
-same way.
+Neither affects the guardrail below, which keeps other users away from the host agent whatever
+the logs contain. Both would matter for a host agent that others can reach (see *Alternatives*).
 
-## Verdicts
+## The guardrail: the host agent is operator-only
 
-| Tool | Exposes, in host-agent mode | Verdict |
-|---|---|---|
-| `clawops_status` | Stack and infrastructure state | **Keep** |
-| `clawops_doctor` | Health-check results | **Keep** |
-| `clawops_gateway_status` | Whether the container runs, and its image | **Keep** |
-| `clawops_stacks_list` | Stack names on the host, which is only its own stack | **Keep** |
-| `clawops_agents_list` | Agent IDs, workspace paths and binding counts. No content | **Keep** |
-| `clawops_plan` | Generates a plan; no deployment content | **Keep** |
-| `clawops_config_validate` | Schema errors by path | **Keep** |
-| `clawops_task_status` | Status of the agent's own tasks | **Keep** |
-| `clawops_monitor` | Container metrics, plus a tail of the container log, which includes replies from every session | **Filter:** no log lines in host-agent mode |
-| `clawops_workflow_recover` | Status and health checks, plus recent logs | **Filter:** no logs step in host-agent mode; the status and health checks stay |
-| `clawops_agents_logs` | Run metadata for **any** agent named, including session keys | **Filter:** only the agent configured at `agent install --agent <id>`, with `sessionKey` removed from records |
-| `clawops_logs_tail` | The gateway log: every session's reply text | **Exclude.** The reply lines carry no session key, so they cannot be filtered to the asking session |
-| `clawops_config_get` | All of `openclaw.json`, unredacted: literal keys, every agent's routing, and channel allowlists naming other users | **Exclude.** `config_validate` covers diagnosis. Redaction would have to be right about every plugin's key names to be safe |
-| `clawops_secret_list`, `clawops_secret_audit` | The clawops secret store. That store lives on the operator's machine, so on the host it is empty | **Exclude.** Nothing to show, and no reason to carry the surface |
+`clawops agent install --stack <name> --agent <id>` names the OpenClaw agent that gets the clawops
+tools. Before installing anything, it reads the gateway's `openclaw.json` and **refuses** unless
+all of the following hold:
 
-**The host-agent read set is 11 tools:**
-- 8 kept as they are
-- 3 filtered: `clawops_monitor`, `clawops_workflow_recover`, `clawops_agents_logs`
+1. **A dedicated agent.** `<id>` is not the default agent (`agents.entries.<id>.default`). The
+   default agent receives any traffic no binding claims, so it is reachable by anyone who can
+   message the gateway.
+2. **Bound only to the operator.** Every `bindings` entry routing to `<id>` names a channel and a
+   `peer` of kind `direct` whose ID the operator gave at install, with `--operator
+   <channel>:<peer-id>`, repeatable. A binding with no peer, or with a `group` or `channel`
+   peer, is refused, because it would route other people's messages to the host agent.
+3. **The channel will not let strangers in.** Each such channel's `dmPolicy` is `allowlist` or
+   `pairing`, not `open`, so an unknown sender cannot open a DM that a later binding change
+   would route to the agent.
+4. **No reach across agents.** Other agents cannot read the host agent's sessions, and it cannot
+   read theirs. Either `tools.agentToAgent.enabled` is `false`, or its `allow` list leaves `<id>`
+   out. `tools.sessions.visibility` must also be `agent` or `self`. On the pinned image
+   agent-to-agent access is **on by default** ("omitted or empty allow permits every agent
+   pair"), and transcripts are stored in full, so without this check another agent could relay
+   what the host agent saw.
 
-4 tools are excluded. Each filter is a host-agent-mode branch in the shared module that the tool
-already calls, so the CLI does not change. Each filter and exclusion gets an acceptance test in
-the 2.4 suite: a marker sent in one session must not appear in any host-agent tool result.
+The checks run again when the server starts in host-agent mode, and on every
+`clawops_status`. If the routing changes later, through `openclaw agents bind` or a config edit,
+the server refuses tool calls until the operator re-runs `agent install`. It does not keep
+serving under assumptions that no longer hold. `clawops harden` reports the same four checks as
+findings.
 
-## OpenClaw's own defaults
+## The read set in host-agent mode
 
-On this image `tools.agentToAgent` is **enabled by default**: "omitted or empty allow permits
-every agent pair". The setting lets one agent list, read and search another agent's sessions,
-and session transcripts are stored in full in each agent's SQLite store. This exposure comes from
-OpenClaw itself, not from a clawops tool, so filtering clawops tools does not close it.
+Because only the operator can reach the agent, the tools return what they return everywhere
+else.
 
-**For 2.4:** if more than one agent is configured, `clawops agent install` reports the setting
-and refuses unless `tools.agentToAgent.allow` is restricted, or the operator passes an explicit
-override. `clawops harden` gains the same check as a finding.
+| Tool | In host-agent mode |
+|---|---|
+| `clawops_status`, `clawops_doctor`, `clawops_gateway_status`, `clawops_stacks_list` | Unchanged |
+| `clawops_agents_list`, `clawops_agents_logs` | Unchanged: every agent, session keys included |
+| `clawops_logs_tail`, `clawops_monitor`, `clawops_workflow_recover` | Unchanged: full logs |
+| `clawops_plan`, `clawops_config_validate`, `clawops_task_status` | Unchanged |
+| `clawops_config_get` | **Values at secret-named paths are redacted.** This is not about other users: a literal key in `openclaw.json` would otherwise go into the model's context, its transcript and its provider. The operator reads the real values with the CLI |
+| `clawops_secret_list`, `clawops_secret_audit` | **Excluded.** The clawops secret store lives on the operator's machine, so on the host it is empty |
+
+**The read set is 13 tools.**
+
+**Acceptance tests in the 2.4 suite:**
+- `agent install` is refused for each of the four conditions when it fails. The test changes
+  one condition at a time, so a check satisfied by the absence of a binding cannot pass.
+- After an install, adding a group binding to the agent makes the next tool call refuse.
+- A marked literal key in `openclaw.json` does not appear in a host-agent `config_get` result.
+
+## What the guardrail does not cover
+
+- **Injection through content.** Logs and records hold text written by other users, and the
+  host agent reads them. An instruction hidden there can still steer the agent. It cannot make
+  anything destructive happen, because under ADR 0014 every destructive call is handed to the
+  operator to run.
+- **A compromised host or gateway.** Anything that can rewrite `openclaw.json` can reroute
+  traffic between the server's checks. T11 covers this.
+- **Data reaching the model provider.** Full logs go into the model's context and therefore to
+  its provider. That is a choice about the provider, the same one the operator makes for every
+  other agent on the gateway.
+
+## Alternatives
+
+- **Trim the tools** (the first version of this review): drop `logs_tail`, strip log lines from
+  `monitor` and `workflow_recover`, and limit `agents_logs` to the agent's own records. Set
+  aside because a host agent without the logs cannot troubleshoot. It would also have defended
+  a case, other users talking to the host agent, that the guardrail now rules out.
+- **Redact content, keep structure.** Scrub reply text from logs (in the JSON log it appears as
+  forwarded console entries), and replace session keys with stable pseudonyms. This becomes the
+  starting point if a host agent that other people can reach is ever wanted. That would be a
+  separate decision, and the scrubber would need measuring against real channel plugins first.
+- **Hand off the full view.** The agent returns `clawops logs --stack <name>` for the operator
+  to run. This remains available under ADR 0014, but it is no longer needed for disclosure.
 
 ## Findings outside host-agent mode
 
