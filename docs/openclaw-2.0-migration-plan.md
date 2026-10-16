@@ -1068,6 +1068,11 @@ cover. They still stand; this amends them. Nothing here is built yet.
   default** ("omitted or empty allow permits every agent pair"), which lets one agent list, read
   and search another's sessions. The schema clawops had captured said the opposite. The review
   covers the gateway's own defaults as well as clawops' tools.
+  *Done 2026-10-16:* [`docs/security/host-agent-disclosure-review.md`](security/host-agent-disclosure-review.md).
+  The gateway log carries every session's reply text. The host-agent read set is 11 tools:
+  `logs_tail`, `config_get`, `secret_list` and `secret_audit` are excluded, and `monitor`,
+  `workflow_recover` and `agents_logs` are filtered. `agent install` refuses an unrestricted
+  `tools.agentToAgent` when more than one agent is configured.
 - **9. A tool budget.** WO-62 adds no tools, or it decides up front what to merge to make room
   (for example `secret_list` with `secret_audit`). The R1 cap is not raised for it.
 

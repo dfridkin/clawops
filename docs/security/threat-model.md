@@ -290,3 +290,4 @@ The WO-62 preconditions in `docs/openclaw-2.0-migration-plan.md` were amended to
 | 2026-09-10 | WO-61 | T5's bearer-token mitigation did not exist in code until 2.0; corrected. Added T11 for the gateway-agent deputy problem |
 | 2026-10-05 | WO-62 re-alignment | T11 updated for 2.2: 13 destructive tools, `yes: true` as self-approval, restore as evidence tampering, read-only is not non-disclosing |
 | 2026-10-14 | ADR 0014 accepted | T11 mitigation for 2.4: host-agent destructive tools hand the operator a CLI command instead of running; self-targeting operations refused; host cloud identity read-only |
+| 2026-10-16 | WO-62 disclosure review | Measured on 2026.9.2. The gateway log carries reply text from every session, and the host-agent read set drops to 11 tools. Found that `config_set` values reach the audit log unredacted (T1) |
