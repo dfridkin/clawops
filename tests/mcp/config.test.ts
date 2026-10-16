@@ -206,6 +206,16 @@ describe('handleConfigValidate', () => {
 })
 
 describe('handleConfigSet', () => {
+  it('keeps a secret value out of the confirmation prompt', async () => {
+    const server = makeServer('decline')
+    const { handleConfigSet } = await import('../../src/mcp/tools/cli/config.js')
+    await handleConfigSet({ stackName: 'default', key: 'models.providers.openai.apiKey', value: 'sk-live-abc123', restart: false }, server)
+    const elicit = vi.mocked(server.server.elicitInput)
+    const asked = JSON.stringify(elicit.mock.calls[0]?.[0])
+    expect(asked).toContain('models.providers.openai.apiKey')
+    expect(asked).not.toContain('sk-live-abc123')
+  })
+
   it('returns cancelled when elicitation is declined', async () => {
     const { handleConfigSet } = await import('../../src/mcp/tools/cli/config.js')
     const result = await handleConfigSet({ stackName: 'default', key: 'gateway.port', value: '19000', restart: false }, makeServer('decline'))

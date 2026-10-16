@@ -127,7 +127,7 @@ else.
 Two issues turned up during the review. They apply to every deployment today, not only to a host
 agent.
 
-1. **The audit log records the value of `clawops_config_set` in plain text.**
+1. **The audit log records the value of `clawops_config_set` in plain text.** *Fixed in 2.3.1.*
    - The cause: `sanitize` in `src/mcp/audit.ts` redacts by argument *name*. `config_set` takes
      `key` (a config path) and `value`, so `key` matches the `key` pattern and is redacted, while
      the value is logged in clear.

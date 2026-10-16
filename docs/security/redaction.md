@@ -33,6 +33,26 @@ if they also match a sensitive pattern:
 | `privatekeypath` | Same rationale as keypath |
 | `knownhostspath` | Path to known_hosts file: not sensitive |
 
+## Config paths and values
+
+The config tools (`clawops_config_get`, `clawops_config_set`, `clawops_config_unset`) take `key`
+as a dotted path into `openclaw.json`. A path is not a secret, so it is logged as written.
+Whether `value` is redacted depends on the path, not on the argument's name:
+
+- **Path names a secret.** If any segment of the path matches a pattern above (and is not
+  exempt), the whole value is redacted. Examples: `models.providers.openai.apiKey`,
+  `gateway.auth.token`.
+- **Value is a JSON object.** A value such as `channels.telegram '{"botToken":"..."}'` is
+  sanitised field by field, using the same rules as a top-level argument object.
+- **Anything else** is logged as written.
+
+`clawops_config_set`'s confirmation prompt applies the same redaction.
+
+**Before 2.3.1** these values were matched by argument name. The path was redacted, because
+`key` matches the `key` pattern, and the value was logged in clear. An audit log written by an
+earlier version may contain config values set through MCP. Check it, and rotate any secret you
+find there.
+
 ## ARN replacement
 
 AWS ARN strings in argument values are replaced with `arn:aws:***:<region>:<account>:***` to reduce

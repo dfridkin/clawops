@@ -18,6 +18,7 @@ import {
   readRemoteConfig, atomicWriteConfig, restartGateway as restartGatewayShared,
 } from '../../../plan/remote-config.js'
 import { confirmDestructive } from '../_confirm.js'
+import { redactConfigValue } from '../../audit.js'
 
 
 export async function handleConfigGet(input: ConfigGetInput, _server: McpServer): Promise<CallToolResult> {
@@ -42,7 +43,7 @@ export async function handleConfigGet(input: ConfigGetInput, _server: McpServer)
 
 export async function handleConfigSet(input: ConfigSetInput, server: McpServer): Promise<CallToolResult> {
   const confirmation = await confirmDestructive(server, {
-    message: `Set ${input.key} = ${input.value} on stack "${input.stackName ?? 'default'}"?`,
+    message: `Set ${input.key} = ${redactConfigValue(input.key, input.value)} on stack "${input.stackName ?? 'default'}"?`,
     title: 'Confirm config change',
     what: 'changing gateway configuration',
   })
