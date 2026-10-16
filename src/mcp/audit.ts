@@ -35,7 +35,47 @@ const EXEMPT_KEYS = ['keyname', 'keypath', 'privateKeyPath', 'knownHostsPath']
 
 const ARN_RE = /arn:aws:[a-z0-9\-*]+:[a-z0-9\-]*:[0-9]*:[^\s,'"]+/gi
 
+function isSensitiveName(name: string): boolean {
+  const n = name.toLowerCase()
+  const exempt = EXEMPT_KEYS.some((e) => n === e.toLowerCase())
+  return !exempt && SENSITIVE_KEYS.some((s) => n.includes(s))
+}
+
+/** True when a dotted config path names a secret anywhere along it, e.g. `models.providers.openai.apiKey`. */
+export function isSecretPath(dotPath: string): boolean {
+  return dotPath.split('.').some(isSensitiveName)
+}
+
+/**
+ * A config value as it may be shown or logged. Hidden whole when its path names a secret; a JSON
+ * object (`config set channels.telegram '{"botToken":"..."}'`) is sanitized field by field.
+ */
+export function redactConfigValue(dotPath: string, value: string): string {
+  if (isSecretPath(dotPath)) return '[REDACTED]'
+  let parsed: unknown
+  try { parsed = JSON.parse(value) } catch { return value }
+  if (parsed === null || typeof parsed !== 'object') return value
+  return JSON.stringify(sanitizeValue(parsed))
+}
+
+function sanitizeValue(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(sanitizeValue)
+  if (v !== null && typeof v === 'object') return sanitize(v as Record<string, unknown>)
+  return v
+}
+
 export function sanitize(args: Record<string, unknown>): Record<string, unknown> {
+  // The config tools take `key` as a dotted *path*, and the secret is in `value`. Matched by
+  // name, `key` hit the `key` pattern and was redacted while `value` was logged in clear, so
+  // `config_set models.providers.openai.apiKey sk-...` wrote the API key to the audit log.
+  if (typeof args['key'] === 'string') {
+    const { key, value, ...rest } = args
+    const out: Record<string, unknown> = { ...sanitize(rest), key }
+    if (value !== undefined) {
+      out['value'] = typeof value === 'string' ? redactConfigValue(key as string, value) : '[REDACTED]'
+    }
+    return out
+  }
   const result: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(args)) {
     const kl = k.toLowerCase()

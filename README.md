@@ -14,7 +14,7 @@ and Cursor drive them through typed MCP tools with explicit safety controls.
 
 ---
 
-**What's new:** [2.0.1 and 2.0 release notes](#whats-new-in-201) below, and the full history
+**What's new:** [2.3.1 release notes](#whats-new-in-231) below, and the full history
 in [CHANGELOG.md](CHANGELOG.md).
 
 ---
@@ -652,6 +652,20 @@ docs / refactor / chore / test / perf / ci
 Use `pnpm changeset` to record a release note before merging a `feat` or `fix`.
 
 ---
+
+## What's new in 2.3.1
+
+A security fix. **Upgrade if you set gateway config through MCP.**
+
+- **Before:** `clawops_config_set` wrote the value you set to the audit log
+  (`~/.clawops/mcp-audit.log`) in clear and redacted the config path instead. Setting
+  `models.providers.openai.apiKey` through an agent therefore logged the API key. The
+  confirmation prompt showed the value too.
+- **Now:** the value is redacted whenever its path names a secret, and secret fields inside a
+  JSON object value are redacted one by one. Paths are logged as written. See
+  [redaction](docs/security/redaction.md#config-paths-and-values).
+- **Existing logs are not rewritten.** If you used `clawops_config_set` for a secret before
+  2.3.1, check your audit log and rotate that secret.
 
 ## What's new in 2.3
 

@@ -56,6 +56,10 @@ progress arrives as notifications.
 Tool calls are written to an audit log with arguments sanitised. `Authorization`, anything matching
 `*token*`, `*secret*` or `*key*`, passwords and connection strings are redacted before they are
 recorded.
+For `clawops_config_set`, the value is redacted when its config path names a secret, such as
+`models.providers.openai.apiKey`. Before 2.3.1 the path was redacted and the value was logged in
+clear. If you set a secret this way on an earlier version, check `~/.clawops/mcp-audit.log` and
+rotate that secret.
 
 ## Plan generation
 

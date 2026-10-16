@@ -230,3 +230,47 @@ describe('getSessionId', () => {
     expect(id1).toMatch(/^[0-9a-f-]{36}$/)
   })
 })
+
+describe('sanitize — config paths', () => {
+  // `key` on the config tools is a dotted path; the secret is in `value`. Matched by name, the
+  // path was redacted and the value logged in clear.
+  it('redacts the value of a secret path and keeps the path', async () => {
+    const { sanitize } = await import('../../src/mcp/audit.js')
+    const result = sanitize({ stackName: 'prod', key: 'models.providers.openai.apiKey', value: 'sk-live-abc123' })
+    expect(result).toEqual({ stackName: 'prod', key: 'models.providers.openai.apiKey', value: '[REDACTED]' })
+    expect(JSON.stringify(result)).not.toContain('sk-live-abc123')
+  })
+
+  it('redacts secret fields inside a JSON object value', async () => {
+    const { sanitize } = await import('../../src/mcp/audit.js')
+    const result = sanitize({ key: 'channels.telegram', value: '{"enabled":true,"botToken":"123:ABC"}' })
+    expect(result['key']).toBe('channels.telegram')
+    expect(JSON.parse(result['value'] as string)).toEqual({ enabled: true, botToken: '[REDACTED]' })
+  })
+
+  it('keeps an ordinary value', async () => {
+    const { sanitize } = await import('../../src/mcp/audit.js')
+    expect(sanitize({ key: 'gateway.auth.mode', value: 'token' })).toEqual({ key: 'gateway.auth.mode', value: 'token' })
+  })
+
+  it('keeps the path when there is no value (config_get, config_unset)', async () => {
+    const { sanitize } = await import('../../src/mcp/audit.js')
+    expect(sanitize({ key: 'gateway.port' })).toEqual({ key: 'gateway.port' })
+  })
+
+  it('still redacts other sensitive arguments alongside a path', async () => {
+    const { sanitize } = await import('../../src/mcp/audit.js')
+    expect(sanitize({ key: 'gateway.port', value: '1', accessToken: 'abc' })['accessToken']).toBe('[REDACTED]')
+  })
+})
+
+describe('withAudit — config_set end to end', () => {
+  it('never writes a secret config value to the audit log', async () => {
+    const { withAudit } = await import('../../src/mcp/audit.js')
+    const handler = withAudit('clawops_config_set', async () => ({ content: [{ type: 'text' as const, text: 'ok' }] }))
+    await handler({ key: 'models.providers.openai.apiKey', value: 'sk-live-abc123' })
+    const log = readFileSync(path.join(tempDir, 'mcp-audit.log'), 'utf-8')
+    expect(log).toContain('models.providers.openai.apiKey')
+    expect(log).not.toContain('sk-live-abc123')
+  })
+})
