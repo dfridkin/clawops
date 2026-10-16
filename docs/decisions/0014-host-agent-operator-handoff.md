@@ -1,7 +1,7 @@
 # ADR 0014, Host agent hands destructive work to the operator
 
 **Status:** Accepted
-**Date:** 2026-10-05, revised 2026-10-14
+**Date:** 2026-10-05, revised 2026-10-14 and 2026-10-16
 **Deciders:** Project owner
 **Revisit:** after the first quarter of host agents in use, if handing off proves too slow (see
 *Alternatives Considered*, signed approvals)
@@ -38,6 +38,24 @@ verified the signature and ran the call. Review on 2026-10-14 raised two problem
 The revision keeps the decision, that the operator approves from their own machine, and makes
 the approval the operator running the command.
 
+On 2026-10-16 the scope was narrowed. A host agent could have been given cloud access, to read
+Pulumi state and cloud logs, or to manage other deployments in a fleet. Both were set aside for
+2.4:
+
+- **Pulumi run output does not live on the host or in the state backend.** It is in
+  `~/.clawops/state/<stack>.last-run.json` on the operator's machine. Reading state would need
+  the state passphrase (ADR 0011) on the host. clawops has no tool that reads cloud logs today.
+- **Cloud-side faults are the ones a host agent cannot see anyway.** If the instance is stopped
+  or its network is broken, the agent is down or unreachable with it. What it can see from the
+  inside (gateway, container, config, disk, logs) is local.
+- **A fleet manager needs every host's SSH key**, which makes one chat-reachable gateway the
+  keyholder for the fleet. That is the case T11 describes. A fleet design gets its own ADR
+  (0015, planned for 2.5): host agents that each manage only themselves, queried over the
+  tailnet, with no shared keys.
+
+"Local and cloud together" therefore means a host agent runs on local and cloud stacks alike,
+and on both it manages only the host it runs on.
+
 ## Decision
 
 ### 1. Host-agent mode is a server mode, not a toolset
@@ -57,6 +75,10 @@ In host-agent mode:
   result.
 - **Elicitation is not consulted.** A confirmation answered by the gateway's client is answered by
   the same agent this mode exists to contain.
+- **Tools run on the host itself.** They read the gateway, its container, its config and its
+  logs directly, with no SSH and no Pulumi. The stack's name and outputs come from the unit's
+  configuration, written by `agent install`. The host agent makes no cloud API calls, and 2.4
+  gives it no cloud identity (see §5, precondition 3).
 - **The mode fixes the tool set**, and `--toolsets` does not change it. The agent gets:
   - the read toolset as it stands after the disclosure review (precondition 8), complete because
     only the operator can reach the agent
@@ -132,12 +154,12 @@ problems.
 |---|---|---|
 | 1 | Spend ceiling, enforced | **Built in 2.3:** an instance-type allowlist and a stack cap live in the operator's config (`policy`), not in the plan. The host cannot create resources (3), and a handed-off `up` or `apply` runs on the operator's machine under that policy |
 | 2 | Self-targeting guard | §4 |
-| 3 | Narrow cloud identity | `agent install` creates a host role from a per-cloud template. It can **read** its own stack's state and describe its own resources, and nothing else. Local: no cloud identity exists |
-| 4 | State the host cannot delete | Follows from 3: the role can read and cannot write. Local: no cloud state |
+| 3 | Narrow cloud identity | **None is added.** The host agent's tools are local and make no cloud calls, and its unit gets no credentials. The instance's existing identity (Bedrock invoke on AWS, Key Vault secrets on Azure, the compute service account on GCP) is not used by clawops-agent. It stays reachable by any process on the host, which T11 records |
+| 4 | State the host cannot delete | Follows from 3: the host holds no state credentials and no passphrase |
 | 5 | Audit off-host | Every change is made from the operator's machine and audited there. The host's audit log records reads and handoffs, and `status` pulls the handoffs to the operator's machine (§3) |
 | 6 | Break-glass operator | The operator is the only party that can change the stack. `agent install` records who that is and refuses without it, and the docs say what they need and where |
 | 7 | Read-only default, `yes` not honoured | §1 |
-| 8 | Disclosure review | **Done 2026-10-16** ([review](../security/host-agent-disclosure-review.md)). The host agent is operator-only: `agent install --agent <id> --operator <channel>:<peer>` refuses unless the agent is dedicated and bound only to the operator, with no agent-to-agent reach. The tools stay complete; the read set is 13 |
+| 8 | Disclosure review | **Done 2026-10-16** ([review](../security/host-agent-disclosure-review.md)). The host agent is operator-only: `agent install --agent <id> --operator <channel>:<peer>` refuses unless the agent is dedicated and bound only to the operator, with no agent-to-agent reach. The tools stay complete. The read set is 12: `clawops_plan` is left out because planning needs the operator's config and state |
 | 9 | Tool budget | No new tools. Host-agent behaviour is a server mode, and `agent install` is CLI-only (§6) |
 
 ### 6. CLI-only commands
@@ -160,18 +182,14 @@ it. At minimum:
   command is run.
 - `destroy` of the agent's own stack is refused with no command offered.
 - A tool not allowed at install time is not listed in `tools/list`.
-- On cloud, the host role's attempt to write state or change a resource is denied.
+- The host-agent unit's environment holds no cloud or state credentials, and no tool in its
+  `tools/list` reaches Pulumi.
 
 ## R-meta-3: the rules this bends
 
-**R6, credentials never in tool args.**
-- *How it is bent:* the letter holds, because no tool takes a credential. The intent does not
-  hold on cloud, because the host carries a standing identity that anything with execution there
-  can reach.
-- *Mitigation:* the identity is read-only and scoped to its own stack (preconditions 3 and 4), so
-  stealing it yields reads, not changes.
-- *Revisit:* if a provider offers per-call credentials that a remote operator can mint, use those
-  instead.
+**R6, credentials never in tool args.** No longer bent since the 2026-10-16 revision: the host
+agent holds no credentials. A fleet or cloud-reading host agent would bend it again, and ADR 0015
+must address it.
 
 **R19, elicitation before destruction.**
 - *How it is bent:* in host-agent mode a destructive tool neither asks nor runs, and `yes` is
@@ -188,16 +206,16 @@ it. At minimum:
   only propose one.
 - No new service, webhook, key exchange, network listener or tool. The notification is the
   conversation the agent is already in.
-- The cloud identity on the host is read-only, which makes preconditions 1, 3 and 4 much smaller
-  than in the first draft.
+- The host agent holds no cloud identity, which makes preconditions 1, 3 and 4 nearly free.
 - Running a handed-off command uses the CLI paths that already exist and are tested.
 
 **Negative:**
 - The operator must act from their machine, with their key and SSH access. On a private-only
   stack that means the tailnet. Signed approvals had the same requirement.
 - The gateway cannot maintain itself unattended. A restart it needs waits for a human.
-- Anything with root on the host can still read what the read-only identity can read. T11 says
-  so.
+- The host agent cannot diagnose faults outside its host, such as a stopped instance or a
+  security-group change. Those stay with the operator's clawops.
+- Anything with root on the host can still use the instance's existing identity. T11 says so.
 
 **Neutral:**
 - The same tool returns a handoff in host-agent mode and acts in every other mode. Tool
@@ -218,6 +236,10 @@ it. At minimum:
   approvals. Each adds something for the operator to configure or an integration with OpenClaw.
   The handoff makes them unnecessary, because the agent's conversation already reaches the
   operator.
+- **A read-only cloud role for the host** (the 2026-10-14 text). Set aside on 2026-10-16: no
+  tool would use it, and it would put a standing identity on the host. It can be added later
+  without redesign if cloud-side facts prove necessary.
+- **A host agent that manages a fleet.** Deferred to ADR 0015 (see *Context*).
 - **Elicitation answered by the client.** In host-agent mode the client is the agent. Rejected.
 - **No destructive tools on a host agent at all.** This remains the default: nothing destructive
   is listed unless `--allow` names it. A handoff costs nothing to allow, so it was preferred over
