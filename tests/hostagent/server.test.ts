@@ -15,6 +15,18 @@ import { registerTools, TOOL_REGISTRY_FOR_TESTS } from '../../src/mcp/tools/regi
 import { enterHostAgentMode, exitHostAgentModeForTests } from '../../src/hostagent/mode.js'
 import { HOST_AGENT_READ_TOOLS, HANDOFF_TOOLS } from '../../src/hostagent/tools.js'
 import type { HostAgentConfig } from '../../src/hostagent/config.js'
+import { setGatewayConfigReaderForTests } from '../../src/hostagent/live.js'
+import { CLAWOPS_TOOL_PATTERN } from '../../src/hostagent/guardrail.js'
+
+/** A gateway where only the operator reaches `ops`. */
+const GATEWAY_CONFIG = {
+  agents: { entries: { main: { default: true, tools: { deny: [CLAWOPS_TOOL_PATTERN] } }, ops: {} } },
+  bindings: [{ agentId: 'ops', match: { channel: 'telegram', peer: { kind: 'direct', id: '12345' } } }],
+  channels: { telegram: { dmPolicy: 'pairing' } },
+  tools: { agentToAgent: { enabled: false }, sessions: { visibility: 'agent' } },
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- test configs are edited freely to break one condition
+let gatewayConfig: Record<string, any>
 
 const AGENT: HostAgentConfig = {
   version: 1,
@@ -58,10 +70,13 @@ function handoffs(): Array<Record<string, unknown>> {
 beforeEach(() => {
   home = mkdtempSync(path.join(tmpdir(), 'clawops-agent-'))
   process.env['CLAWOPS_HOME'] = home
+  gatewayConfig = structuredClone(GATEWAY_CONFIG)
+  setGatewayConfigReaderForTests(async () => gatewayConfig)
 })
 
 afterEach(() => {
   exitHostAgentModeForTests()
+  setGatewayConfigReaderForTests()
   rmSync(home, { recursive: true, force: true })
   if (savedHome === undefined) delete process.env['CLAWOPS_HOME']
   else process.env['CLAWOPS_HOME'] = savedHome
@@ -167,6 +182,7 @@ describe('the self-targeting guard', () => {
     const { hostAgentDispatch } = await import('../../src/mcp/tools/registry.js')
     const handler = TOOL_REGISTRY_FOR_TESTS['clawops_destroy']!.handler
     let ran = false
+    enterHostAgentMode(AGENT)
     const dispatch = hostAgentDispatch(AGENT, 'clawops_destroy', async (i, s) => { ran = true; return handler(i, s) })
     const result = await dispatch({ stackName: 'prod', yes: true }, {} as McpServer)
     expect(result.isError).toBe(true)
@@ -187,5 +203,40 @@ describe('mcp serve --host-agent', () => {
     process.env['CLAWOPS_AGENT_CONFIG'] = path.join(home, 'absent.json')
     await expect(serveMcp({ hostAgent: true })).rejects.toThrow(/clawops agent install/)
     delete process.env['CLAWOPS_AGENT_CONFIG']
+  })
+})
+
+describe('the guardrail, checked on every call', () => {
+  it('refuses every call once routing changes after install, and serves again once it is fixed', async () => {
+    const client = await connect()
+    expect((await client.callTool({ name: 'clawops_stacks_list', arguments: {} })).isError).toBeFalsy()
+
+    // A group binding added after install, as `openclaw agents bind` would.
+    gatewayConfig.bindings.push({ agentId: 'ops', match: { channel: 'telegram', peer: { kind: 'group', id: '-100' } } })
+    for (const name of ['clawops_stacks_list', 'clawops_status', 'clawops_gateway_restart']) {
+      const result = await client.callTool({ name, arguments: {} })
+      expect(result.isError).toBe(true)
+      expect(textOf(result)).toContain('answers only its operator')
+    }
+    expect(handoffs()).toEqual([])
+
+    gatewayConfig.bindings.pop()
+    expect((await client.callTool({ name: 'clawops_stacks_list', arguments: {} })).isError).toBeFalsy()
+  })
+
+  it('refuses when a new agent is added without the deny', async () => {
+    const client = await connect()
+    gatewayConfig.agents.entries.newbie = {}
+    const result = await client.callTool({ name: 'clawops_logs_tail', arguments: {} })
+    expect(result.isError).toBe(true)
+    expect(textOf(result)).toContain('"newbie" can call clawops')
+  })
+
+  it('refuses when the gateway configuration cannot be read', async () => {
+    const client = await connect()
+    setGatewayConfigReaderForTests(async () => { throw new Error('permission denied') })
+    const result = await client.callTool({ name: 'clawops_stacks_list', arguments: {} })
+    expect(result.isError).toBe(true)
+    expect(textOf(result)).toContain('could not be read: permission denied')
   })
 })

@@ -54,6 +54,8 @@ import {
   HANDOFF_TOOLS, SELF_TARGETING_TOOLS, SELF_TARGETING_REFUSAL, hostAgentToolNames,
 } from '../../hostagent/tools.js'
 import { buildHandoff, recordHandoff, handoffText } from '../../hostagent/handoff.js'
+import { currentGuardrail } from '../../hostagent/live.js'
+import { guardrailRefusal } from '../../hostagent/guardrail.js'
 import { UsageError } from '../../errors/index.js'
 
 // ── Handler imports ──────────────────────────────────────────────────────────
@@ -205,7 +207,9 @@ export function registerTools(server: McpServer, opts: McpServeOpts): void {
 /**
  * What a host agent's call does, decided below every tool handler (ADR 0014 §2 and §4).
  *
- * The stack is checked first, on every call: a host agent manages only its own. A
+ * The operator-only guardrail is checked first, on every call, against openclaw.json as it is
+ * now: while anyone but the operator could reach this agent, nothing runs. Then the stack: a
+ * host agent manages only its own. A
  * self-targeting tool is refused with no command offered. A handoff tool returns the CLI
  * command and never reaches its handler, so neither `yes` nor elicitation can make it run.
  * Everything else is a read tool and runs as it does anywhere.
@@ -213,6 +217,10 @@ export function registerTools(server: McpServer, opts: McpServeOpts): void {
 export function hostAgentDispatch(agent: HostAgentConfig, toolName: string, handler: AnyHandler): AnyHandler {
   return async (input, server) => {
     const args = (input ?? {}) as Record<string, unknown>
+
+    const guard = await currentGuardrail(agent)
+    if (!guard.ok) return refusal(guardrailRefusal(guard.failures))
+
     let stack: string
     try {
       stack = hostAgentStack(agent, args['stackName'])
