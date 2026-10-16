@@ -85,11 +85,12 @@ else.
 | `clawops_status`, `clawops_doctor`, `clawops_gateway_status`, `clawops_stacks_list` | Unchanged |
 | `clawops_agents_list`, `clawops_agents_logs` | Unchanged: every agent, session keys included |
 | `clawops_logs_tail`, `clawops_monitor`, `clawops_workflow_recover` | Unchanged: full logs |
-| `clawops_plan`, `clawops_config_validate`, `clawops_task_status` | Unchanged |
+| `clawops_config_validate`, `clawops_task_status` | Unchanged |
+| `clawops_plan` | **Excluded.** Planning needs the operator's config and Pulumi state, which the host does not hold ([ADR 0014](../decisions/0014-host-agent-operator-handoff.md), revised 2026-10-16) |
 | `clawops_config_get` | **Values at secret-named paths are redacted.** This is not about other users: a literal key in `openclaw.json` would otherwise go into the model's context, its transcript and its provider. The operator reads the real values with the CLI |
 | `clawops_secret_list`, `clawops_secret_audit` | **Excluded.** The clawops secret store lives on the operator's machine, so on the host it is empty |
 
-**The read set is 13 tools.**
+**The read set is 12 tools.**
 
 **Acceptance tests in the 2.4 suite:**
 - `agent install` is refused for each of the four conditions when it fails. The test changes

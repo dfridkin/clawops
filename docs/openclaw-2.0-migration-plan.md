@@ -1077,7 +1077,7 @@ cover. They still stand; this amends them. Nothing here is built yet.
   - agent-to-agent and session visibility keep other agents out
 
   The tools stay complete. `config_get` redacts secret-named paths, and `secret_list` and
-  `secret_audit` are dropped because the host has no secret store. The read set is 13 tools.
+  `secret_audit` are dropped because the host has no secret store. The read set is 12 tools; `clawops_plan` is excluded because the host holds no Pulumi state (ADR 0014, revised 2026-10-16: local only, no cloud identity, fleet deferred to ADR 0015).
 - **9. A tool budget.** WO-62 adds no tools, or it decides up front what to merge to make room
   (for example `secret_list` with `secret_audit`). The R1 cap is not raised for it.
 
