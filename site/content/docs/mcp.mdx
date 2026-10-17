@@ -44,6 +44,13 @@ clawops mcp serve --read-only
 
 Only tools annotated read-only are exposed. Nothing can create, modify or destroy infrastructure.
 
+## On the gateway host
+
+`clawops agent install` (2.4) runs the MCP server on the gateway host for one OpenClaw agent only
+you can reach. Its read tools run locally, with no SSH, state or cloud credentials. A destructive
+tool you allowed returns the CLI command for you to run instead of acting, and `yes: true` is
+ignored. See [Operations](/docs/operations#host-agent).
+
 ## How the safety model works
 
 Every tool declares four hints. Read-only, destructive, idempotent, and open-world, rather than

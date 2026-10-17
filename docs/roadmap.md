@@ -4,12 +4,12 @@ This document tracks the public roadmap for clawops. Development milestones (M0�
 core implementation; adoption milestones (R1–R12) cover documentation, safety, operational
 maturity, and hardening.
 
-**Current state (2.3.1, published):** all development milestones are complete, and adoption waves
+**Current state (2.4.0):** all development milestones are complete, and adoption waves
 R1–R13 have shipped. Bug reporting (`clawops bug`) and the hardening MVP landed in the 1.7 line.
 2.0 moved clawops onto OpenClaw 2.x; 2.0.1 and 2.0.2 made cloud deploys work on all three clouds.
 2.1 added Tailscale private networking and hardening on every cloud. 2.2 made recovery a flag
 (`clawops backup restore --activate`), gave every command an agent needs an MCP tool, and made SSH
-failures say what failed. 2.3 added spending limits the operator sets and no tool can lift; 2.3.1 stops `config_set` values reaching the audit log in clear.
+failures say what failed. 2.3 added spending limits the operator sets and no tool can lift; 2.3.1 stops `config_set` values reaching the audit log in clear. 2.4 adds the host agent (WO-62): clawops on the gateway host, for one agent only the operator can reach, which reads its own host and hands every change back to the operator as a command.
 
 Remaining work falls into three groups:
 
@@ -18,7 +18,7 @@ Remaining work falls into three groups:
 | **Carried from the 1.x waves** | WO-34 (Tailscale), partly | Azure hardening landed in WO-32. Tailscale joins, repoints, goes private-only and reverts; the doctor check is still open |
 | **2.x, unscheduled** | WO-53 sandboxing, WO-54 config surface, WO-55 TLS and public origin, WO-56 observability, WO-57 fleet multi-tenancy | Planned for 2.1 and not in it; 2.1 shipped private networking and hardening instead. WO-55 gates Portals, Teams, Slack and Discord Activities |
 | **clawops 2.3** | Spending limits (WO-62 precondition 1, in part), backlog fixes | Operator-set instance-type allowlist and stack cap, enforced on every surface |
-| **clawops 2.4: alone** | WO-62 host agent | Ships by itself, behind preconditions. See below. It was 2.2, then 2.3, as other work shipped first |
+| **clawops 2.4: alone** | WO-62 host agent | ✅ shipped by itself, behind its preconditions (see below and [ADR 0014](decisions/0014-host-agent-operator-handoff.md)). It was 2.2, then 2.3, as other work shipped first |
 | **clawops 2.5 (proposed)** | Host-agent fleet (ADR 0015, to be written) | Host agents that each manage only themselves, queried over the tailnet, with no shared keys. Relates to WO-57 |
 | **Housekeeping** | WO-64 `server.json` drift | ✅ shipped. Bumped at version time, with a test that it agrees with `package.json` |
 
