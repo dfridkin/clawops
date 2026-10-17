@@ -325,6 +325,15 @@ describe('shielded VM', () => {
     })
   })
 
+  it('attaches no service account, so the host has no Google identity', async () => {
+    setConfig(BASE_CONFIG)
+    await runProgram()
+    const vm = created.find(r => r.type === 'gcp:compute/instance:Instance')
+    expect(vm?.inputs).toBeDefined()
+    expect(vm!.inputs).not.toHaveProperty('serviceAccount')
+    expect(vm!.inputs['allowStoppingForUpdate']).toBe(true)
+  })
+
   it('permits the stop the provider needs to change it on a live instance', async () => {
     setConfig(BASE_CONFIG)
     await runProgram()
