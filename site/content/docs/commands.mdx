@@ -36,7 +36,7 @@ description: Every clawops command, grouped by what you reach for it.
 | `destroy` | Destroy everything in a stack, irreversible |
 | `migrate` | Move an existing 1.x deployment onto the 2.0 runtime, keeping its state |
 | `stacks` | List or delete stacks |
-| `status` | Outputs, region, provisioned time |
+| `status` | Outputs, region, provisioned time, and any requests the stack's host agent left for you |
 
 ## Operating a deployment
 
@@ -55,6 +55,7 @@ description: Every clawops command, grouped by what you reach for it.
 
 | Command | Does |
 |---|---|
+| `agent` | `install`, `uninstall`: a host agent on the gateway host, for one agent only you can reach. See [Operations](/docs/operations#host-agent) |
 | `harden` | Apply hardening modules: ssh, ufw, fail2ban, unattended-upgrades, auditd. `--tailscale` moves the stack onto its tailnet address; `--tailscale-revert` moves it back |
 | `secret` | `list`, `set`, `delete`, `rotate`, `audit` |
 
