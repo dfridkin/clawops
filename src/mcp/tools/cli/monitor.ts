@@ -6,6 +6,8 @@ import type { MonitorInput } from '../_generated.js'
 import { buildContext } from '../../../cli/context.js'
 import { extractBaseOutputs } from '../../../pulumi/outputs.js'
 import { gatherSnapshot, formatUptime } from '../../../cli/commands/monitor.js'
+import { hostAgent } from '../../../hostagent/mode.js'
+import { HOST_AGENT_CONN } from '../../../transport/conn.js'
 
 export async function handleMonitor(input: MonitorInput, _server: McpServer): Promise<CallToolResult> {
   const { acquireSession, drainPool } = await import('../../../transport/pool.js')
@@ -15,7 +17,9 @@ export async function handleMonitor(input: MonitorInput, _server: McpServer): Pr
 
   let conn: { host: string; port: number; user: string; privateKeyPath: string; knownHostsPath: string }
 
-  if (ctx.adapter.name === 'local') {
+  if (hostAgent()) {
+    conn = HOST_AGENT_CONN
+  } else if (ctx.adapter.name === 'local') {
     if (!ctx.localState) {
       return text(JSON.stringify({ error: 'Stack is not bootstrapped. Run `clawops up` first.' }))
     }

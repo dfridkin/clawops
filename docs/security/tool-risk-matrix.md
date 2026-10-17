@@ -58,6 +58,18 @@ refusal and confirmation, and a prompt injection could reach it, see T11), and `
 set` / `rotate` (a secret value passed as a tool argument lands in the transcript, R6). The
 tools that refuse these say which command to ask the user to run.
 
+## Host-agent mode
+
+In `mcp serve --host-agent` ([ADR 0014](../decisions/0014-host-agent-operator-handoff.md)) the
+risk column changes meaning, because no destructive tool runs:
+
+| Tools | In host-agent mode |
+|---|---|
+| The read toolset except `clawops_plan`, `clawops_secret_list`, `clawops_secret_audit` (12) | Served. Local reads of the agent's own host; `clawops_config_get` redacts secret-named strings |
+| `clawops_gateway_restart`, `clawops_gateway_update`, `clawops_backup_restore`, `clawops_config_set`, `clawops_config_unset`, `clawops_harden` | Served only if allowed at install. **Hand off**: return the CLI command for the operator, change nothing |
+| `clawops_destroy`, `clawops_stacks_delete`, `clawops_migrate` | Never served; refused with no command (self-targeting) |
+| `clawops_up`, `clawops_apply`, `clawops_init`, `clawops_plan`, `clawops_workflow_deploy_app`, `clawops_backup_create`, `clawops_secret_*` | Never served: they need the operator's machine |
+
 ## Annotations
 
 Each tool's `readOnlyHint` and `destructiveHint` annotations are set in

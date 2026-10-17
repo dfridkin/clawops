@@ -58,6 +58,44 @@ export function redactConfigValue(dotPath: string, value: string): string {
   return JSON.stringify(sanitizeValue(parsed))
 }
 
+/** An environment reference such as `${OPENAI_API_KEY}`: names where a secret is, not what it is. */
+const ENV_REF_RE = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/
+
+/**
+ * A gateway config, or part of one, as a host agent's `config_get` returns it.
+ *
+ * OpenClaw accepts a literal API key in openclaw.json, and a host agent's tool results go into
+ * its model's context, its transcript and its provider. So every string at a secret-named path
+ * is hidden. What stays visible is what a troubleshooter needs: structure, non-string values
+ * (`maxTokens` is a number, not a token) and references — `${VAR}` strings and SecretRef
+ * objects — which say where a secret comes from without saying what it is.
+ */
+export function redactConfigTree(dotPath: string | undefined, value: unknown): unknown {
+  const atSecret = dotPath !== undefined && isSecretPath(dotPath)
+  return redactTree(value, atSecret)
+}
+
+/** OpenClaw's SecretRef shape, `{ source, provider?, id }`: a pointer to a secret, not a secret. */
+function isSecretRef(v: object): boolean {
+  const keys = Object.keys(v)
+  return keys.includes('source') && keys.includes('id') && keys.every((k) => ['source', 'provider', 'id'].includes(k))
+}
+
+function redactTree(v: unknown, atSecret: boolean): unknown {
+  if (typeof v === 'string') return atSecret && !ENV_REF_RE.test(v) ? '[REDACTED]' : v
+  if (atSecret && v !== null && typeof v === 'object' && !Array.isArray(v) && isSecretRef(v)) return v
+  if (Array.isArray(v)) return v.map((item) => redactTree(item, atSecret))
+  if (v !== null && typeof v === 'object') {
+    return Object.fromEntries(
+      Object.entries(v as Record<string, unknown>).map(([k, child]) => [
+        k,
+        redactTree(child, atSecret || isSensitiveName(k)),
+      ]),
+    )
+  }
+  return v
+}
+
 function sanitizeValue(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(sanitizeValue)
   if (v !== null && typeof v === 'object') return sanitize(v as Record<string, unknown>)

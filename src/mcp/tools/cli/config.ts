@@ -18,7 +18,8 @@ import {
   readRemoteConfig, atomicWriteConfig, restartGateway as restartGatewayShared,
 } from '../../../plan/remote-config.js'
 import { confirmDestructive } from '../_confirm.js'
-import { redactConfigValue } from '../../audit.js'
+import { redactConfigValue, redactConfigTree } from '../../audit.js'
+import { hostAgent } from '../../../hostagent/mode.js'
 
 
 export async function handleConfigGet(input: ConfigGetInput, _server: McpServer): Promise<CallToolResult> {
@@ -34,7 +35,9 @@ export async function handleConfigGet(input: ConfigGetInput, _server: McpServer)
       return errText((err as Error).message)
     }
     const value = input.key ? getPath(cfg, input.key) : cfg
-    return okText(JSON.stringify(value, null, 2))
+    // A host agent's results reach its model provider; the operator reads real values with the CLI.
+    const shown = hostAgent() ? redactConfigTree(input.key, value) : value
+    return okText(JSON.stringify(shown, null, 2))
   } finally {
     release()
     drainPool()
