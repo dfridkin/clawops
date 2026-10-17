@@ -13,7 +13,7 @@ import { redactConfigTree } from '../../src/mcp/audit.js'
 
 const AGENT: HostAgentConfig = {
   version: 1, stack: 'prod', provider: 'gcp', agentId: 'ops', operators: ['telegram:1'],
-  allow: [], installedAt: '2026-10-16T00:00:00.000Z',
+  allow: [], strict: false, installedAt: '2026-10-16T00:00:00.000Z',
 }
 
 const savedHome = process.env['CLAWOPS_HOME']

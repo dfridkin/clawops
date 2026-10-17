@@ -14,6 +14,11 @@ export interface GuardrailSubject {
   agentId: string
   /** `<channel>:<peer-id>`, as given to `agent install --operator`. */
   operators: readonly string[]
+  /**
+   * `agent install --strict`: another agent with command or file access in the gateway
+   * container fails the guardrail instead of being reported (condition 6).
+   */
+  strict?: boolean
 }
 
 export type GuardrailResult = { ok: true } | { ok: false; failures: string[] }
@@ -93,6 +98,104 @@ function otherRoutes(config: Obj, agentId: string): string[] {
   }
   walk(config, '')
   return found
+}
+
+/**
+ * Tools that act inside the gateway container, measured on the pinned image (2026.9.2). An agent
+ * with any of them can read `openclaw.json`, which holds the token the gateway uses to reach
+ * clawops, and the state directory, which holds every agent's transcripts. Neither the per-agent
+ * clawops deny nor session visibility stops that (see the disclosure review, condition 6).
+ *
+ * The file-transfer plugin's tools are listed by name because denying `group:fs` and
+ * `group:runtime` was measured to leave them, and `terminal` and `gateway`, offered.
+ */
+const CONTAINER_TOOLS: Record<string, string[]> = {
+  'run commands': ['exec', 'process', 'terminal'],
+  'read and write files': ['read', 'write', 'edit', 'apply_patch', 'file_fetch', 'file_write', 'dir_list', 'dir_fetch'],
+  'change the gateway configuration': ['gateway'],
+}
+
+/** Groups whose members were measured; any other group in an allow list is assumed to grant everything. */
+const KNOWN_GROUPS: Record<string, string[]> = {
+  'group:runtime': ['exec', 'process'],
+  'group:fs': ['read', 'write', 'edit', 'apply_patch'],
+  'group:openclaw': [],
+}
+
+/** Profiles measured to offer none of CONTAINER_TOOLS. Any other profile, or none, offers them. */
+const CONTAINED_PROFILES = new Set(['minimal', 'messaging'])
+
+function strings(v: unknown): string[] {
+  return arr(v).filter((p): p is string => typeof p === 'string')
+}
+
+/** Whether a tools.allow / alsoAllow / deny entry names this tool. */
+function entryCovers(entry: string, tool: string, unknownGroupCovers: boolean): boolean {
+  if (entry.startsWith('group:')) return KNOWN_GROUPS[entry]?.includes(tool) ?? unknownGroupCovers
+  return globMatch(entry, tool)
+}
+
+/** Whether one tool policy (`allow`, `alsoAllow`, `profile`) would offer this tool by itself. */
+function policyGrants(policy: Obj, tool: string): boolean {
+  if (strings(policy['alsoAllow']).some((a) => entryCovers(a, tool, true))) return true
+  if (Array.isArray(policy['allow'])) return strings(policy['allow']).some((a) => entryCovers(a, tool, true))
+  const profile = policy['profile']
+  return typeof profile === 'string' && !CONTAINED_PROFILES.has(profile)
+}
+
+/**
+ * Which container tools an agent may be offered, judged conservatively: a tool counts unless
+ * the agent's settings provably exclude it.
+ *
+ * - The base policy is the agent's `tools`, falling back to the gateway-wide `tools` for
+ *   `allow` and `profile`. Denies and alsoAllows from both apply.
+ * - `byProvider` and `toolsBySender` (per agent and gateway-wide, from the pinned schema) can
+ *   carry their own allow, alsoAllow and profile. Any of them granting a tool counts, whatever
+ *   the base deny says, since this is not proven to win over them.
+ */
+function containerToolsOf(config: Obj, entry: Obj | undefined): string[] {
+  const layers = [obj(entry?.['tools']), obj(config['tools'])].filter((l): l is Obj => l !== undefined)
+  const deny = layers.flatMap((l) => strings(l['deny']))
+  const alsoAllow = layers.flatMap((l) => strings(l['alsoAllow']))
+  const allowLayer = layers.find((l) => Array.isArray(l['allow']))
+  const allow = allowLayer ? strings(allowLayer['allow']) : undefined
+  const profile = layers.map((l) => l['profile']).find((p) => typeof p === 'string')
+  const overrides = layers.flatMap((l) =>
+    [l['byProvider'], l['toolsBySender']].flatMap((m) => Object.values(obj(m) ?? {}).map(obj)),
+  ).filter((o): o is Obj => o !== undefined)
+
+  return Object.values(CONTAINER_TOOLS).flat().filter((tool) => {
+    if (overrides.some((o) => policyGrants(o, tool))) return true
+    if (deny.some((d) => entryCovers(d, tool, false))) return false
+    if (alsoAllow.some((a) => entryCovers(a, tool, true))) return true
+    if (allow) return allow.some((a) => entryCovers(a, tool, true))
+    return !(typeof profile === 'string' && CONTAINED_PROFILES.has(profile))
+  })
+}
+
+/**
+ * Other agents that can act inside the gateway container (condition 6). Reported, and refused
+ * only under `strict`: most gateways' main agent has these tools, and such an agent can already
+ * read every transcript on disk without clawops. What it gains through the token is the host
+ * agent's read tools; destructive calls still hand off to the operator.
+ */
+export function containerReach(config: Obj, agentId: string): string[] {
+  const entries = obj(obj(config['agents'])?.['entries']) ?? {}
+  const out: string[] = []
+  for (const [id, entry] of Object.entries(entries)) {
+    if (id === agentId) continue
+    const tools = containerToolsOf(config, obj(entry))
+    if (tools.length === 0) continue
+    const can = Object.entries(CONTAINER_TOOLS)
+      .filter(([, names]) => names.some((n) => tools.includes(n)))
+      .map(([what]) => what)
+    out.push(
+      `Agent "${id}" can ${can.join(', ')} in the gateway container (${tools.join(', ')}). It can read ` +
+        `the clawops token from openclaw.json and call the host agent directly, and read the host ` +
+        `agent's transcripts on disk. Give it tools.profile "messaging", or a tools.allow list without these.`,
+    )
+  }
+  return out
 }
 
 export function checkGuardrail(config: Obj, subject: GuardrailSubject): GuardrailResult {
@@ -210,6 +313,9 @@ export function checkGuardrail(config: Obj, subject: GuardrailSubject): Guardrai
       failures.push(`Agent "${id}" can call clawops. Add "${CLAWOPS_TOOL_PATTERN}" to agents.entries.${id}.tools.deny.`)
     }
   }
+
+  // 6. Under --strict, no other agent can act inside the gateway container.
+  if (subject.strict) failures.push(...containerReach(config, agentId))
 
   return failures.length === 0 ? { ok: true } : { ok: false, failures }
 }

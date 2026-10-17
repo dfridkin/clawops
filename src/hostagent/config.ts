@@ -31,6 +31,8 @@ const HostAgentConfigSchema = z.object({
   operators: z.array(z.string().min(1)).min(1),
   /** Destructive tools the operator allowed. Each one hands off rather than running. */
   allow: z.array(z.string()),
+  /** `--strict`: refuse while another agent can act inside the gateway container (condition 6). */
+  strict: z.boolean().default(false),
   installedAt: z.string(),
 })
 

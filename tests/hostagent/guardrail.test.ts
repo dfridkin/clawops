@@ -3,7 +3,7 @@
 // all of it present and each case removes or changes exactly one thing.
 
 import { describe, it, expect } from 'vitest'
-import { checkGuardrail, CLAWOPS_TOOL_PATTERN } from '../../src/hostagent/guardrail.js'
+import { checkGuardrail, containerReach, CLAWOPS_TOOL_PATTERN } from '../../src/hostagent/guardrail.js'
 
 const SUBJECT = { agentId: 'ops', operators: ['telegram:12345'] }
 
@@ -105,5 +105,79 @@ describe('the operator-only guardrail', () => {
 
   it('refuses an empty config, rather than passing it for having nothing wrong', () => {
     expect(failuresOf({}).length).toBeGreaterThanOrEqual(3)
+  })
+})
+
+describe('other agents inside the gateway container (condition 6)', () => {
+  /** The passing config, with every other agent kept out of the container. */
+  function contained() {
+    const cfg = passing()
+    cfg.agents.entries.main.tools.profile = 'messaging'
+    cfg.agents.entries.helper.tools.allow = ['message', 'sessions_list']
+    return cfg
+  }
+  const STRICT = { ...SUBJECT, strict: true }
+
+  it('is reported but not refused by default, since most main agents have these tools', () => {
+    const cfg = passing()
+    expect(checkGuardrail(cfg, SUBJECT)).toEqual({ ok: true })
+    const reach = containerReach(cfg, 'ops')
+    expect(reach.join('\n')).toMatch(/"main" can run commands, read and write files, change the gateway configuration/)
+    expect(reach.join('\n')).toMatch(/"helper" can .*\(process, terminal,/)
+    expect(reach.join('\n')).not.toMatch(/"ops"/)
+  })
+
+  it('refuses under --strict', () => {
+    const r = checkGuardrail(passing(), STRICT)
+    expect(r.ok).toBe(false)
+    expect(r.ok ? '' : r.failures.join('\n')).toMatch(/clawops token/)
+  })
+
+  it('passes --strict when every other agent is contained', () => {
+    expect(containerReach(contained(), 'ops')).toEqual([])
+    expect(checkGuardrail(contained(), STRICT)).toEqual({ ok: true })
+  })
+
+  it('counts a deny of everything, and the minimal profile, as contained', () => {
+    const cfg = contained()
+    cfg.agents.entries.main.tools = { deny: ['*'] }
+    cfg.agents.entries.helper.tools = { profile: 'minimal', deny: [CLAWOPS_TOOL_PATTERN] }
+    expect(containerReach(cfg, 'ops')).toEqual([])
+  })
+
+  it('applies a gateway-wide profile to an agent that sets none', () => {
+    const cfg = contained()
+    delete cfg.agents.entries.main.tools.profile
+    cfg.tools.profile = 'messaging'
+    expect(containerReach(cfg, 'ops')).toEqual([])
+  })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test configs are edited freely to break one condition
+  const cases: Array<[string, (c: Record<string, any>) => void, RegExp]> = [
+    ['an agent adds exec back with alsoAllow', (c) => { c.agents.entries.main.tools.alsoAllow = ['exec'] }, /"main" can run commands in the gateway container \(exec\)/],
+    ['the gateway adds a file tool for every agent', (c) => { c.tools.alsoAllow = ['file_fetch'] }, /"main" can read and write files in the gateway container \(file_fetch\)/],
+    ['an agent uses the coding profile', (c) => { c.agents.entries.main.tools.profile = 'coding' }, /"main" can run commands/],
+    ['an allow list grants everything', (c) => { c.agents.entries.helper.tools.allow = ['*'] }, /"helper" can run commands/],
+    ['an allow list names a group nobody measured', (c) => { c.agents.entries.helper.tools.allow = ['group:plugins'] }, /"helper" can run commands/],
+    ['an allow list names the gateway tool', (c) => { c.agents.entries.helper.tools.allow = ['message', 'gateway'] }, /"helper" can change the gateway configuration in the gateway container \(gateway\)/],
+    ['denying the runtime and fs groups leaves the plugin file tools', (c) => {
+      c.agents.entries.main.tools = { deny: [CLAWOPS_TOOL_PATTERN, 'group:runtime', 'group:fs'] }
+    }, /"main" can run commands, read and write files, change the gateway configuration in the gateway container \(terminal, file_fetch, file_write, dir_list, dir_fetch, gateway\)/],
+    ['a per-provider override adds exec back', (c) => {
+      c.agents.entries.main.tools.byProvider = { openai: { alsoAllow: ['exec'] } }
+    }, /"main" can run commands in the gateway container \(exec\)/],
+    ['a per-sender override allows a file tool', (c) => {
+      c.tools.toolsBySender = { 'telegram:999': { allow: ['read'] } }
+    }, /"main" can read and write files in the gateway container \(read\)/],
+    ['a new agent arrives with no tool settings', (c) => { c.agents.entries.newcomer = { tools: { deny: [CLAWOPS_TOOL_PATTERN] } } }, /"newcomer" can run commands/],
+  ]
+
+  it.each(cases)('reports, and refuses under --strict, when %s', (_name, breakIt, expected) => {
+    const cfg = contained()
+    breakIt(cfg)
+    expect(containerReach(cfg, 'ops').join('\n')).toMatch(expected)
+    const r = checkGuardrail(cfg, STRICT)
+    expect(r.ok).toBe(false)
+    expect(checkGuardrail(cfg, SUBJECT)).toEqual({ ok: true })
   })
 })

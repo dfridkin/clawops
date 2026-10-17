@@ -72,6 +72,13 @@ refused alongside it.
   `handoffs.jsonl` on the host. `yes: true` and elicitation answers are ignored.
 - **Never self-targeting.** `clawops_destroy`, `clawops_stacks_delete` and `clawops_migrate`
   cannot be allowed and are refused with no command offered.
+- **Operator-only, re-checked on every call.** Every call is refused while `openclaw.json` lets
+  anyone but the operator reach the agent, or lets another agent call clawops
+  ([review](host-agent-disclosure-review.md)).
+- **Other agents in the gateway container are reported, not refused.** On a default deployment
+  every agent has `exec` and file tools in the container. Any of them can read the clawops token
+  from `openclaw.json` and the host agent's transcripts from disk. `clawops_status` names them;
+  install with `--strict` to refuse instead.
 
 ### Spending limits apply in every mode
 

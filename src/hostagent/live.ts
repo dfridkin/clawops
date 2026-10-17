@@ -7,7 +7,7 @@
 // condition fails. It is a local file read on the host.
 
 import type { HostAgentConfig } from './config.js'
-import { checkGuardrail, type GuardrailResult } from './guardrail.js'
+import { checkGuardrail, containerReach, type GuardrailResult } from './guardrail.js'
 
 export type GatewayConfigReader = () => Promise<Record<string, unknown>>
 
@@ -41,5 +41,17 @@ export async function currentGuardrail(agent: HostAgentConfig): Promise<Guardrai
       failures: [`The gateway configuration could not be read: ${err instanceof Error ? err.message : String(err)}`],
     }
   }
-  return checkGuardrail(config, { agentId: agent.agentId, operators: agent.operators })
+  return checkGuardrail(config, { agentId: agent.agentId, operators: agent.operators, strict: agent.strict })
+}
+
+/**
+ * Other agents that can act inside the gateway container (condition 6), for `clawops_status`.
+ * Empty when the configuration cannot be read: the guardrail has already refused in that case.
+ */
+export async function currentContainerReach(agent: HostAgentConfig): Promise<string[]> {
+  try {
+    return containerReach(await reader(), agent.agentId)
+  } catch {
+    return []
+  }
 }

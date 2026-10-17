@@ -35,6 +35,7 @@ const AGENT: HostAgentConfig = {
   agentId: 'ops',
   operators: ['telegram:12345'],
   allow: ['clawops_gateway_restart', 'clawops_gateway_update', 'clawops_config_set'],
+  strict: false,
   installedAt: '2026-10-16T00:00:00.000Z',
 }
 
@@ -238,5 +239,25 @@ describe('the guardrail, checked on every call', () => {
     const result = await client.callTool({ name: 'clawops_stacks_list', arguments: {} })
     expect(result.isError).toBe(true)
     expect(textOf(result)).toContain('could not be read: permission denied')
+  })
+
+  it('reports other agents with container access in status, and serves anyway by default', async () => {
+    const client = await connect()
+    const shown = JSON.parse(textOf(await client.callTool({ name: 'clawops_status', arguments: {} })))
+    expect(shown.otherAgentsInContainer.join('\n')).toMatch(/"main" can run commands/)
+
+    gatewayConfig.agents.entries.main.tools.profile = 'messaging'
+    const contained = JSON.parse(textOf(await client.callTool({ name: 'clawops_status', arguments: {} })))
+    expect(contained).not.toHaveProperty('otherAgentsInContainer')
+  })
+
+  it('refuses every call under --strict while another agent has container access', async () => {
+    const client = await connect({ ...AGENT, strict: true })
+    const refused = await client.callTool({ name: 'clawops_status', arguments: {} })
+    expect(refused.isError).toBe(true)
+    expect(textOf(refused)).toMatch(/"main" can run commands.*clawops token/s)
+
+    gatewayConfig.agents.entries.main.tools.profile = 'messaging'
+    expect((await client.callTool({ name: 'clawops_status', arguments: {} })).isError).toBeFalsy()
   })
 })
