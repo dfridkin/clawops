@@ -7,6 +7,8 @@ import { SENTINEL_DIR } from '../types.js'
 import {
   PUBLISH_INSPECT_CMD, publishForRestart, publishedGatewayPort,
 } from '../../openclaw/runtime.js'
+import { ufwAllowRule, listenFrom } from '../../hostagent/firewall.js'
+import { HOST_AGENT_CONFIG_PATH } from '../../hostagent/config.js'
 
 const SENTINEL = `${SENTINEL_DIR}/ufw.applied`
 
@@ -68,6 +70,15 @@ export function makeUfwModule(sshPort: number = 22): HardeningModule {
       } else {
         rules.push(`ufw allow ${gateway.port}/tcp comment "OpenClaw gateway"`)
         gatewayNote = `allow ${gateway.port}/tcp`
+      }
+
+      // The reset below drops every rule, the host agent's included, and its gateway would be
+      // cut off from it with nothing saying why. Re-add it when one is installed.
+      const { stdout: agentJson } = await exec(`sudo cat ${HOST_AGENT_CONFIG_PATH} 2>/dev/null || true`)
+      const agentListen = listenFrom(agentJson)
+      if (agentListen) {
+        rules.push(ufwAllowRule(agentListen))
+        gatewayNote += `; host agent allowed on docker0 to ${agentListen.address}:${agentListen.port}`
       }
 
       const script = [

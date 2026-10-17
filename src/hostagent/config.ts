@@ -33,6 +33,12 @@ const HostAgentConfigSchema = z.object({
   allow: z.array(z.string()),
   /** `--strict`: refuse while another agent can act inside the gateway container (condition 6). */
   strict: z.boolean().default(false),
+  /**
+   * Where the server listens: the Docker bridge's gateway address, which the gateway container
+   * reaches as host.docker.internal. Recorded so `harden`'s firewall reset keeps the rule that
+   * lets the container in, and so uninstall can remove it.
+   */
+  listen: z.object({ address: z.string().min(1), port: z.number().int().min(1).max(65535) }).optional(),
   installedAt: z.string(),
 })
 

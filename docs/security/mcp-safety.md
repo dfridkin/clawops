@@ -52,7 +52,7 @@ execution, not a security boundary.
 Use this in a controlled CI/CD context where the agent has explicit permission to
 manage infrastructure.
 
-### `--host-agent` (on the gateway host, coming in 2.4)
+### `--host-agent` (on the gateway host, 2.4)
 
 A host agent is clawops running on the gateway host, so the gateway's own AI can look after its
 deployment ([ADR 0014](../decisions/0014-host-agent-operator-handoff.md)). It is a server mode,

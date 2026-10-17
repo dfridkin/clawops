@@ -39,6 +39,9 @@ const NO_TOOL: Record<string, string> = {
   migrate: 'Covered by clawops_migrate.',
   gateway: 'Covered by clawops_gateway_status, clawops_gateway_restart and clawops_gateway_update.',
   agents: 'Covered by clawops_agents_list and clawops_agents_logs.',
+  agent:
+    'Installing a host agent is the operator choosing what an agent may do, so no agent can do ' +
+    'it (ADR 0014 §6). Uninstalling stays with the operator for the same reason.',
   stacks: 'Covered by clawops_stacks_list and clawops_stacks_delete.',
   logs: 'Covered by clawops_logs_tail. Following a stream is not tool-shaped.',
   config: 'Covered by clawops_config_get/set/unset/validate.',
