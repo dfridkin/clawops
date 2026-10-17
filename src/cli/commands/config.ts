@@ -1,20 +1,12 @@
 import { defineCommand } from 'citty'
-import {
-  gatewayRunCommand, STATE_DIR_HOST_LINUX, configPathForOS,
-} from '../../openclaw/runtime.js'
+import { configPathForOS } from '../../openclaw/runtime.js'
 import process from 'node:process'
 import { success, failure, warn, info } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
-import { execPrivileged } from '../../transport/privileged.js'
 
 // One definition, in runtime.ts. This file used to carry its own copy of the path,
 // as did gateway.ts and monitor.ts — the same drift WO-38 ended for the run command.
 const OPENCLAW_CONFIG = configPathForOS('Linux')
-
-/** docker stop + rm + run with the given full image reference and config mount. */
-export function dockerRunCmd(image: string): string {
-  return gatewayRunCommand({ image, stateDir: STATE_DIR_HOST_LINUX })
-}
 
 /** Read a nested value from obj using dot-notation key. */
 function getPath(obj: Record<string, unknown>, dotKey: string): unknown {
@@ -169,15 +161,16 @@ export default defineCommand({
 
       if (args.restart) {
         info('Restarting gateway...')
-        // Read current image version to preserve it
-        const imgResult = await execPrivileged(session, 
-          `docker inspect openclaw --format '{{.Config.Image}}' 2>/dev/null || echo 'ghcr.io/openclaw/openclaw:stable'`,
-          abortController.signal,
-        )
-        const image = imgResult.stdout.trim()
-        const restartResult = await execPrivileged(session, dockerRunCmd(image), abortController.signal)
-        if (restartResult.code !== 0) {
-          failure(`Restart failed: ${restartResult.stderr}`)
+        // The shared restart, as `clawops gateway restart` and clawops_config_set use: the same
+        // version, the same publish scope, then wait for the gateway to answer. This path had
+        // its own run command, with none of that: a gateway deployed with --publish-gateway all
+        // came back on loopback only, a failed inspect restarted it on the moving `stable` tag,
+        // and success was reported before the gateway had started.
+        const { restartGateway } = await import('../../plan/remote-config.js')
+        try {
+          await restartGateway(session, abortController.signal)
+        } catch (err) {
+          failure((err as Error).message)
           process.exit(1)
         }
         success('Gateway restarted.')

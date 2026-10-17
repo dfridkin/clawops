@@ -136,8 +136,10 @@ describe('config command', () => {
         session.onExec(handler)
         if (cmd.includes('uname')) return { stdout: 'Linux', stderr: '', code: 0 }
         if (cmd.includes('cat ')) return { stdout: SAMPLE_CONFIG, stderr: '', code: 0 }
-        if (cmd.includes('PortBindings')) return { stdout: '{"18789/tcp":[{"HostIp":"127.0.0.1"}]}', stderr: '', code: 0 }
+        // A gateway deployed with --publish-gateway all: every interface.
+        if (cmd.includes('PortBindings')) return { stdout: '{"18789/tcp":[{"HostIp":"0.0.0.0"}]}', stderr: '', code: 0 }
         if (cmd.includes('docker inspect')) return { stdout: 'ghcr.io/openclaw/openclaw:2026.9.2', stderr: '', code: 0 }
+        if (cmd.includes('startupz')) return { stdout: '{"ok":true,"status":"started"}', stderr: '', code: 0 }
         return { stdout: '', stderr: '', code: 0 }
       })
 
@@ -148,7 +150,14 @@ describe('config command', () => {
       const cmd = await getCmd()
       await (cmd.run as AnyRunFn)({ args: { _: ['set', 'gateway.auth.mode', 'none'], stack: undefined, restart: true, json: false } })
 
-      expect(execCommands.some((c) => c.includes('docker run')), 'expected a restart').toBe(true)
+      // The shared restart: same version, same publish scope, then wait for the gateway. This
+      // path had its own run command, which brought the gateway back on loopback only.
+      const run = execCommands.find((c) => c.includes('docker run'))
+      expect(run, 'expected a restart').toBeDefined()
+      expect(run).toContain('ghcr.io/openclaw/openclaw:2026.9.2')
+      expect(run).toContain('-p 18789:18789')
+      expect(run).not.toContain('127.0.0.1:18789')
+      expect(execCommands.findIndex((c) => c.includes('startupz'))).toBeGreaterThan(execCommands.indexOf(run!))
     })
   })
 
