@@ -158,7 +158,9 @@ describe('config command', () => {
       expect(run).toContain('-p 18789:18789')
       expect(run).not.toContain('127.0.0.1:18789')
       expect(execCommands.findIndex((c) => c.includes('startupz'))).toBeGreaterThan(execCommands.indexOf(run!))
-    })
+    // The shared restart loads remote-config's module graph afresh after resetModules. Alone
+    // that takes about 2s; under the full parallel suite it passed the 5s default.
+    }, 20_000)
   })
 
   describe('unset', () => {
