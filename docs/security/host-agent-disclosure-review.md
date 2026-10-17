@@ -52,28 +52,50 @@ the logs contain. Both would matter for a host agent that others can reach (see 
 tools. Before installing anything, it reads the gateway's `openclaw.json` and **refuses** unless
 all of the following hold:
 
-1. **A dedicated agent.** `<id>` is not the default agent (`agents.entries.<id>.default`). The
-   default agent receives any traffic no binding claims, so it is reachable by anyone who can
-   message the gateway.
-2. **Bound only to the operator.** Every `bindings` entry routing to `<id>` names a channel and a
-   `peer` of kind `direct` whose ID the operator gave at install, with `--operator
-   <channel>:<peer-id>`, repeatable. A binding with no peer, or with a `group` or `channel`
-   peer, is refused, because it would route other people's messages to the host agent.
-3. **The channel will not let strangers in.** Each such channel's `dmPolicy` is `allowlist` or
-   `pairing`, not `open`, so an unknown sender cannot open a DM that a later binding change
-   would route to the agent.
+1. **A dedicated agent.** `<id>` is not the default agent. The default agent receives any
+   traffic no binding claims, so it is reachable by anyone who can message the gateway. On the
+   pinned image (`resolveDefaultAgentId`) the default is the one entry marked `default`, or else
+   the only agent. If several agents exist and none is marked, there is no default and an
+   unclaimed message fails to route. The check counts any `default: true` marker, and being the
+   only agent.
+   - **Nothing else routes to it.** Bindings are not the only way traffic reaches an agent.
+     Telegram topics, `hooks.mappings`, the IMAP plugin, `talk`, `acp.defaultAgent` and
+     `agents.defaults.systemAgent` each name an agent, and several carry messages from other
+     people. Any `agentId`, `defaultAgent` or `defaultAgentId` outside `bindings` that names
+     `<id>` fails the check.
+2. **Bound only to the operator.** At least one binding routes to `<id>`, and every one of them
+   names a channel and a `peer` of kind `direct` whose ID the operator gave at install, with
+   `--operator <channel>:<peer-id>`, repeatable. A binding with no peer, a `group` or `channel`
+   peer, a wildcard peer ID or an ACP binding is refused, because it would route other people's
+   messages to the host agent.
+3. **The channel will not let strangers in.** Each such channel's `dmPolicy`, or its account's
+   when the binding names an `accountId`, is set explicitly to `allowlist`, `pairing` or
+   `disabled`, not `open`. That way an unknown sender cannot open a DM that a later binding
+   change would route to the agent. An unset policy is refused even where the channel's default
+   is `pairing`, so the guarantee does not rest on a default that a release could change.
 4. **No reach across agents.** Other agents cannot read the host agent's sessions, and it cannot
    read theirs. Either `tools.agentToAgent.enabled` is `false`, or its `allow` list leaves `<id>`
    out. `tools.sessions.visibility` must also be `agent` or `self`. On the pinned image
    agent-to-agent access is **on by default** ("omitted or empty allow permits every agent
    pair"), and transcripts are stored in full, so without this check another agent could relay
    what the host agent saw.
+5. **No other agent can call clawops** ([SP-13](../spikes/SP-13-host-agent-mcp-scoping.md)).
+   - **Every other agent must be denied.** OpenClaw offers every MCP tool to every agent by
+     default. Each other agent in `agents.entries` must carry a `tools.deny` entry covering every
+     clawops name, the bridge's `prompts_*` and `resources_*` tools included. `clawops__*` does
+     this.
+   - **A gateway-wide deny is refused.** A `tools.deny` that blocks clawops for everyone cannot be
+     reopened for one agent.
 
-The checks run again when the server starts in host-agent mode, and on every
-`clawops_status`. If the routing changes later, through `openclaw agents bind` or a config edit,
-the server refuses tool calls until the operator re-runs `agent install`. It does not keep
-serving under assumptions that no longer hold. `clawops harden` reports the same four checks as
-findings.
+**The checks run on every tool call**, against `openclaw.json` as it is at that moment. This
+matters because OpenClaw's layout fails open:
+- An agent added later gets the clawops tools unless it is denied too.
+- A binding added with `openclaw agents bind` takes effect without a restart.
+- The server cannot tell which agent is calling.
+
+So while any condition fails, every call is refused, `clawops_status` included, and the refusal
+lists what failed. An unreadable configuration counts as failing. The server resumes on its own
+once the configuration is fixed. The checks live in `src/hostagent/guardrail.ts`.
 
 ## The read set in host-agent mode
 
@@ -93,9 +115,11 @@ else.
 **The read set is 12 tools.**
 
 **Acceptance tests in the 2.4 suite:**
-- `agent install` is refused for each of the four conditions when it fails. The test changes
-  one condition at a time, so a check satisfied by the absence of a binding cannot pass.
-- After an install, adding a group binding to the agent makes the next tool call refuse.
+- The guardrail refuses for each condition when it fails (`tests/hostagent/guardrail.test.ts`).
+  The test changes one condition at a time, so a check satisfied by the absence of a binding
+  cannot pass. `agent install` runs the same check.
+- After an install, adding a group binding to the agent makes the next tool call refuse, and so
+  does adding an agent without the deny.
 - A marked literal key in `openclaw.json` does not appear in a host-agent `config_get` result.
 
 ## What the guardrail does not cover
