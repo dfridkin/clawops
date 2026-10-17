@@ -31,6 +31,7 @@ can drive deployments deterministically.
 - `pnpm gen:schemas`    emit `src/providers/types.ts` and `src/mcp/tools/_generated.ts` from `spec/`
 - `pnpm gen:schemas --check`   CI check that committed generated files match spec
 - `pnpm verify:mcp`     drive the built MCP server over stdio: tool list, annotations, elicitation, stdout purity
+- `pnpm verify:host-agent`  run the built host agent from a directory with no node_modules and call every tool
 - `pnpm verify:docker`  build the Glama image and run the same protocol probe against the container
 - `pnpm changeset`      record a release note (see `/release` skill)
 
