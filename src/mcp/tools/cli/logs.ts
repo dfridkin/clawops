@@ -23,10 +23,12 @@ export async function handleLogsTail(input: LogsTailInput, _server: McpServer): 
 
     // Same choice the CLI makes, from the same module — these two hand-rolled the identical
     // journalctl-or-docker chain and would have drifted apart the moment one was fixed.
+    // The probe's exit code is its answer (#128); it prints nothing. This read stdout for 'ok',
+    // which the probe stopped printing, so it fell back to container output on every host.
     const probe = since
-      ? { stdout: '' }
+      ? { code: 1 }
       : await execPrivileged(session, GATEWAY_LOGS_PROBE)
-    const choice = chooseLogSource({ since, gatewayReachable: probe.stdout.trim() === 'ok' })
+    const choice = chooseLogSource({ since, gatewayReachable: probe.code === 0 })
     const opts = { tail: tailLines, follow: false, since, json: choice.source === 'gateway' }
     const command =
       choice.source === 'gateway' ? gatewayLogsCommand(opts) : containerLogsCommand(opts)

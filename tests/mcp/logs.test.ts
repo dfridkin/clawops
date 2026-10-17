@@ -37,14 +37,17 @@ function gatewayUp(stdout: string, code = 0): FakeSshSession {
   // pattern has to come after the general one or the general one swallows it.
   return new FakeSshSession()
     .respond(/openclaw logs/, { stdout, stderr: code === 0 ? '' : 'err', code })
-    .respond(/openclaw logs --limit 1 >/, { stdout: 'ok' })
+    // What the probe really prints: nothing. Since #128 its exit code is the answer; this fake
+    // used to print 'ok', the old probe's output, and so passed a handler that never once read
+    // the gateway on a real host.
+    .respond(/openclaw logs --limit 1 >/, { stdout: '', code: 0 })
 }
 
 /** A host whose gateway is not answering, so only container output is available. */
 function gatewayDown(stdout: string, code = 0): FakeSshSession {
   return new FakeSshSession()
     .respond(/docker logs/, { stdout, stderr: code === 0 ? '' : 'err', code })
-    .respond(/openclaw logs --limit 1 >/, { stdout: 'no' })
+    .respond(/openclaw logs --limit 1 >/, { stdout: '', stderr: 'gateway connect failed', code: 1 })
 }
 
 beforeEach(async () => {
