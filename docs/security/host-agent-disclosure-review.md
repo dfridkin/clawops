@@ -97,6 +97,64 @@ So while any condition fails, every call is refused, `clawops_status` included, 
 lists what failed. An unreadable configuration counts as failing. The server resumes on its own
 once the configuration is fixed. The checks live in `src/hostagent/guardrail.ts`.
 
+## Condition 6: other agents inside the gateway container
+
+Conditions 1–5 control who can **message** the host agent and which agents the gateway's tool
+bridge offers clawops to. They do not control what other agents can do **inside the gateway
+container**, and on a default deployment that is enough to get around both.
+
+**Measured on 2026.9.2** (2026-10-16), with the gateway configured as `clawops up` leaves it and a
+fake model logging the tools each request offered:
+
+- **An agent with no tool settings is offered everything,** including `exec`, `process`,
+  `terminal`, `read`, `write`, `edit`, `apply_patch`, the file-transfer plugin's `file_fetch`,
+  `file_write`, `dir_list` and `dir_fetch`, and `gateway`.
+- **Sandboxing is off by default** (`agents.defaults.sandbox.mode` resolves to `"off"`). An `exec`
+  call ran in the gateway container as uid 1000, the gateway's own user. It listed the state
+  directory, every agent's transcripts included, and printed `openclaw.json`.
+- **What removes these tools:**
+
+  | Setting | Container tools offered |
+  |---|---|
+  | `tools.profile: "messaging"` or `"minimal"` | none |
+  | An explicit `tools.allow` list | only those listed |
+  | `tools.deny: ["group:runtime", "group:fs"]` | `terminal`, `file_fetch`, `file_write`, `dir_list`, `dir_fetch`, `gateway` remain |
+  | `"messaging"` plus `alsoAllow: ["exec"]` | `exec` |
+
+**What follows.** An agent with these tools can:
+- **Read the clawops token.** The gateway stores it in `openclaw.json`. With it, the agent can
+  call the host agent over HTTP directly, past the condition 5 deny, and the server cannot tell
+  that caller from the host agent.
+- **Read the host agent's transcripts from disk,** past `tools.sessions.visibility`.
+
+What it does **not** gain is any change to the stack. Every destructive call still hands off to
+the operator. Through the token it reaches the host agent's read tools, which on top of what the
+container already shows add host-level reads: systemd, firewall and SSH configuration, Docker
+state.
+
+**What clawops does about it.** Because most gateways' main agent has `exec`, and requiring
+otherwise would break them, condition 6 is **reported, not refused**, unless the operator installs
+with `--strict`:
+- **Default.** `agent install` lists every other agent that can run commands, read or write
+  files, or change the gateway configuration in the container, and `clawops_status` reports them
+  as `otherAgentsInContainer`.
+- **`--strict`.** Any such agent fails the guardrail like conditions 1–5, re-checked on every
+  call.
+
+**How it is judged.** An agent counts unless its settings provably exclude each tool:
+- **A deny removes a tool.** `group:runtime` and `group:fs` count only for the members measured
+  above.
+- **What adds tools back.** An `alsoAllow`, an `allow` list, or a profile other than `minimal` or
+  `messaging`, at the agent or gateway level.
+- **Overrides count as grants.** A `byProvider` or `toolsBySender` override that grants a tool
+  counts, since nothing measured shows the base deny winning over it.
+- **Unknown groups count as everything.** An `allow` entry naming a group not measured is
+  assumed to grant everything.
+
+**The proper fix** is sandboxing other agents (`sandbox.mode: "all"`), which runs their tools in
+separate containers. That needs Docker access from inside the gateway container, which clawops
+does not provision. It is deferred to 2.5 with ADR 0015.
+
 ## The read set in host-agent mode
 
 Because only the operator can reach the agent, the tools return what they return everywhere
@@ -128,6 +186,8 @@ else.
   host agent reads them. An instruction hidden there can still steer the agent. It cannot make
   anything destructive happen, because under ADR 0014 every destructive call is handed to the
   operator to run.
+- **Other agents inside the gateway container**, unless installed with `--strict`. See
+  condition 6.
 - **A compromised host or gateway.** Anything that can rewrite `openclaw.json` can reroute
   traffic between the server's checks. T11 covers this.
 - **Data reaching the model provider.** Full logs go into the model's context and therefore to

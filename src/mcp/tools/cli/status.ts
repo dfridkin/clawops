@@ -8,6 +8,7 @@ import { extractBaseOutputs } from '../../../pulumi/outputs.js'
 import { StateError } from '../../../errors/index.js'
 import { hostAgent } from '../../../hostagent/mode.js'
 import { pendingHandoffs } from '../../../hostagent/handoff.js'
+import { currentContainerReach } from '../../../hostagent/live.js'
 
 export async function handleStatus(input: StatusInput, _server: McpServer): Promise<CallToolResult> {
   const ctx = buildContext({ stack: input.stackName })
@@ -16,11 +17,15 @@ export async function handleStatus(input: StatusInput, _server: McpServer): Prom
   // the gateway's own health is clawops_gateway_status and clawops_monitor.
   const agent = hostAgent()
   if (agent) {
+    // Reported here so the agent can tell its operator. Under --strict these refuse instead,
+    // and this call would not have run.
+    const reach = await currentContainerReach(agent)
     return text(JSON.stringify({
       stack: agent.stack,
       provider: agent.provider,
-      hostAgent: { agentId: agent.agentId, operators: agent.operators, handsOff: agent.allow },
+      hostAgent: { agentId: agent.agentId, operators: agent.operators, handsOff: agent.allow, strict: agent.strict },
       pendingHandoffs: pendingHandoffs().map((h) => ({ at: h.at, command: h.command })),
+      ...(reach.length > 0 ? { otherAgentsInContainer: reach } : {}),
     }, null, 2))
   }
 
