@@ -6,6 +6,7 @@ import process from 'node:process'
 import { success, failure, warn, info } from '../../output/human.js'
 import { printJson, jsonOk } from '../../output/json.js'
 import { execPrivileged } from '../../transport/privileged.js'
+import { clearHostHandoffs } from '../../hostagent/operator.js'
 
 // One definition, in runtime.ts. This file used to carry its own copy of the path,
 // as did gateway.ts and monitor.ts — the same drift WO-38 ended for the run command.
@@ -182,6 +183,15 @@ export default defineCommand({
         }
         success('Gateway restarted.')
       }
+
+      // A request from the stack's host agent for this exact change is now done (ADR 0014 §3).
+      await clearHostHandoffs(
+        session,
+        action === 'set' ? 'clawops_config_set' : 'clawops_config_unset',
+        { key, value, restart: Boolean(args.restart) },
+        ctx.stackName,
+        abortController.signal,
+      )
     } finally {
       release()
       drainPool()

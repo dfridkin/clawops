@@ -22,6 +22,7 @@ import {
 } from '../../../openclaw/backup-flows.js'
 import { makeProgressEmitter, startTask, updateTask } from '../../progress.js'
 import { resolveConn, okText, errText } from '../_conn.js'
+import { clearHostHandoffs } from '../../../hostagent/operator.js'
 import { trimForMcp } from '../_trim.js'
 import { confirmDestructive } from '../_confirm.js'
 
@@ -160,6 +161,7 @@ export async function handleBackupRestore(input: BackupRestoreInput, server: Mcp
       )
       const text = lines.join('\n')
       updateTask(taskId, 'completed', text)
+      await clearHostHandoffs(session, 'clawops_backup_restore', { file: input.file, activate: false }, ctx.stackName, ac.signal)
       return capped(text, ctx.stackName)
     }
 
@@ -178,6 +180,7 @@ export async function handleBackupRestore(input: BackupRestoreInput, server: Mcp
     lines.push('', ACTIVATED, ...activatedLines(outcome.preserved))
     const text = lines.join('\n')
     updateTask(taskId, 'completed', text)
+    await clearHostHandoffs(session, 'clawops_backup_restore', { file: input.file, activate: true }, ctx.stackName, ac.signal)
     return capped(text, ctx.stackName)
   } catch (err) {
     return fail(`Restore failed: ${err instanceof Error ? err.message : String(err)}`)

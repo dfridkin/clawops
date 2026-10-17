@@ -69,7 +69,10 @@ refused alongside it.
   only `gateway_restart`, `gateway_update`, `backup_restore`, `config_set`, `config_unset` and
   `harden` can be allowed. A call changes nothing: it returns the exact `clawops` command for the
   operator to run on their own machine, with secrets replaced by `<value>`, and records it in
-  `handoffs.jsonl` on the host. `yes: true` and elicitation answers are ignored.
+  `handoffs.jsonl` on the host. `yes: true` and elicitation answers are ignored. The operator's
+  `clawops status` and `clawops_status` show what is pending, and running the command clears
+  it. The agent can write that file, so it can forge a request or hide one of its own; it
+  cannot make one run.
 - **Never self-targeting.** `clawops_destroy`, `clawops_stacks_delete` and `clawops_migrate`
   cannot be allowed and are refused with no command offered.
 - **Operator-only, re-checked on every call.** Every call is refused while `openclaw.json` lets

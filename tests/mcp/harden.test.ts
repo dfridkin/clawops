@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   revertTailnet: vi.fn(),
   cutOverToTailnet: vi.fn(),
   connectionFor: vi.fn(),
+  clearHardenRequest: vi.fn(),
   runHardening: vi.fn(),
   resolveModules: vi.fn(),
   makeTailscaleModule: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock('../../src/harden/flows.js', () => ({
   revertTailnet: h.revertTailnet,
   cutOverToTailnet: h.cutOverToTailnet,
   connectionFor: h.connectionFor,
+  clearHardenRequest: h.clearHardenRequest,
 }))
 vi.mock('../../src/harden/index.js', () => ({
   MODULE_CATALOG: [],
@@ -79,6 +81,10 @@ describe('clawops_harden', () => {
     const r = await handleHarden(input({ stackName: 'prod', yes: true }), serverThat('accept'))
     expect(h.runHardening).toHaveBeenCalledWith(CONN, expect.objectContaining({ modules: [MODULE] }))
     expect(text(r)).toContain('1 module applied')
+    // The run the stack's host agent may have asked for is done (ADR 0014 §3).
+    expect(h.clearHardenRequest).toHaveBeenCalledWith(
+      expect.anything(), { options: undefined, dryRun: false, tailscale: false },
+    )
   })
 
   it('confirms before changing a live host (R19)', async () => {
@@ -103,6 +109,7 @@ describe('clawops_harden', () => {
     const r = await handleHarden(input({ stackName: 'prod', yes: true }), serverThat('accept'))
     expect(r.isError).toBe(true)
     expect(text(r)).toContain('sshd refused to reload')
+    expect(h.clearHardenRequest).not.toHaveBeenCalled()
   })
 
   describe('the tailnet flows', () => {

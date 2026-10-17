@@ -184,6 +184,26 @@ describe.skipIf(!enabled)('clawops agent install on a real host', () => {
     expect((await vm.inspect('cat /var/lib/clawops-agent/handoffs.jsonl')).stdout).toContain('gateway restart')
   }, 600_000)
 
+  it('shows the operator the request in `status`, and clears it once they run the command', async () => {
+    const shown = clawops('status', '--stack', STACK)
+    expect(shown.code, shown.out).toBe(0)
+    expect(shown.out).toContain(`${STACK} has 1 request from its agent:\n    clawops gateway restart --stack ${STACK}`)
+    const json = clawops('status', '--stack', STACK, '--json')
+    expect(JSON.parse(json.out.trim().split('\n')[0]!).data.pendingHandoffs).toHaveLength(1)
+
+    const ran = clawops('gateway', 'restart', '--stack', STACK)
+    expect(ran.code, ran.out).toBe(0)
+    await gatewayReady()
+
+    const after = clawops('status', '--stack', STACK, '--json')
+    const data = JSON.parse(after.out.trim().split('\n')[0]!).data
+    expect(data.pendingHandoffs, after.out).toBeUndefined()
+    expect(data.pendingHandoffsError, after.out).toBeUndefined()
+    // The host agent's own status agrees: the clear is in the file both read.
+    const [own] = await callTools([{ name: 'clawops_status' }])
+    expect(JSON.parse(own!.text).pendingHandoffs).toEqual([])
+  }, 600_000)
+
   it('refuses every call once a group is bound to the agent, and serves again once it is removed', async () => {
     const direct = { agentId: 'ops', match: { channel: 'telegram', peer: { kind: 'direct', id: '12345' } } }
     await setConfig('bindings', [direct, { agentId: 'ops', match: { channel: 'telegram', peer: { kind: 'group', id: '-100' } } }])

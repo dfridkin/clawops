@@ -183,6 +183,21 @@ entries, and only then installs.
   gateway reaches it as `host.docker.internal`.
 - **Firewall.** A ufw rule is added where ufw is active, and `clawops harden` keeps it.
 
+**Requests it leaves you.** A handoff is also recorded on the host, in case the agent drops the
+message. `clawops status` reads them over SSH and prints them under the table, ready to copy:
+
+```
+prod has 1 request from its agent:
+    clawops gateway restart --stack prod
+Each one clears when you run it, or after 7 days.
+```
+
+A request clears when you run that exact command (secret values aside, which the request leaves
+as `<value>`), from the CLI or through your own agent's tools. `status --json` and
+`clawops_status` report them as `pendingHandoffs`. A host that cannot be asked gets a note
+rather than silence, and `status` waits up to 10 seconds for it. The agent can write the file,
+so it could forge a request; the banner shows the full command, so you still decide.
+
 **If it starts refusing.** The host agent re-reads `openclaw.json` on every call and refuses
 while any condition fails, for example after an agent is added without the deny, or a group is
 bound to it. The refusal lists what to fix. It serves again once the configuration is fixed;

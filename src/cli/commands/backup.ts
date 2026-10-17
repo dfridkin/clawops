@@ -2,6 +2,7 @@ import { defineCommand } from 'citty'
 import process from 'node:process'
 import { success, failure, info, spinner, warn } from '../../output/human.js'
 import { UsageError } from '../../errors/index.js'
+import { clearHostHandoffs } from '../../hostagent/operator.js'
 
 export default defineCommand({
   meta: {
@@ -137,6 +138,7 @@ export default defineCommand({
           info('      drop-in state directory — moving the bundle itself stops the gateway)')
           info('  3. clawops gateway restart')
           for (const line of flows.PLUGINS_NOT_CARRIED) info(line)
+          await clearHostHandoffs(session, 'clawops_backup_restore', { file, activate: false }, ctx.stackName, abortController.signal)
           return
         }
 
@@ -172,6 +174,7 @@ export default defineCommand({
         }
 
         success(flows.ACTIVATED)
+        await clearHostHandoffs(session, 'clawops_backup_restore', { file, activate: true }, ctx.stackName, abortController.signal)
         for (const line of flows.activatedLines(outcome.preserved)) info(line)
       }
     } finally {

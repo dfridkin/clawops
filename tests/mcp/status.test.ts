@@ -6,6 +6,13 @@ import { MINIMAL_CONFIG } from '../helpers/config.js'
 vi.mock('../../src/cli/context.js', () => ({ buildContext: vi.fn() }))
 vi.mock('../../src/config/store.js', () => ({ getConfig: vi.fn() }))
 
+// Requests from the stack's host agent are read over SSH; faked so no test dials a host.
+const h = vi.hoisted(() => ({ pendingOnHost: vi.fn() }))
+vi.mock('../../src/hostagent/operator.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/hostagent/operator.js')>()),
+  pendingOnHost: h.pendingOnHost,
+}))
+
 const FAKE_SERVER = {} as McpServer
 
 async function getMocks() {
@@ -16,6 +23,7 @@ async function getMocks() {
 
 beforeEach(async () => {
   vi.clearAllMocks()
+  h.pendingOnHost.mockResolvedValue({ ok: true, value: [] })
 })
 
 describe('handleStatus — cloud path', () => {
@@ -107,5 +115,36 @@ describe('handleStacksList', () => {
     expect(parsed.stacks).toHaveLength(1)
     expect(parsed.stacks[0].name).toBe('prod')
     expect(parsed.stacks[0].isDefault).toBe(true)
+  })
+})
+
+describe('handleStatus — requests from the host agent (ADR 0014 §3)', () => {
+  const request = {
+    id: '1', at: '2026-10-17T10:00:00.000Z', tool: 'clawops_gateway_restart', stack: 'default',
+    command: 'clawops gateway restart --stack default', needsValue: false,
+  }
+
+  async function status() {
+    const { buildContext } = await getMocks()
+    buildContext.mockReturnValue(makeFakeContext())
+    const { handleStatus } = await import('../../src/mcp/tools/cli/status.js')
+    const result = await handleStatus({ stackName: 'default' }, FAKE_SERVER)
+    return JSON.parse((result.content[0] as { type: 'text'; text: string }).text)
+  }
+
+  it('reports them, so the operator\'s own agent sees what `status` shows', async () => {
+    h.pendingOnHost.mockResolvedValue({ ok: true, value: [request] })
+    expect((await status()).pendingHandoffs).toEqual([{ at: request.at, command: request.command }])
+  })
+
+  it('leaves the field out when there are none', async () => {
+    expect(await status()).not.toHaveProperty('pendingHandoffs')
+  })
+
+  it('says when the host could not be asked', async () => {
+    h.pendingOnHost.mockResolvedValue({ ok: false, error: 'connect ETIMEDOUT' })
+    expect((await status()).pendingHandoffsError).toBe(
+      'Could not check the host for requests from its agent: connect ETIMEDOUT',
+    )
   })
 })

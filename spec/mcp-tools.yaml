@@ -42,10 +42,13 @@ tools:
     toolset: [cli, read]
     description: |
       Get what is deployed for a clawops-managed stack: public IP, gateway URL,
-      SSH user, or that nothing is deployed yet. Reads stack outputs; does not
-      contact the host.
+      SSH user, or that nothing is deployed yet. Reads stack outputs, and asks
+      the host only for requests its host agent left for the operator
+      (pendingHandoffs): each is a clawops command to show the user as it is.
+      A request clears when that command is run, or after 7 days.
 
-      Use when: the user asks what exists for a stack, or where to reach it.
+      Use when: the user asks what exists for a stack, where to reach it, or
+      whether its agent is waiting on them.
 
       Do NOT use when: the user asks whether the gateway is actually WORKING —
       that needs the host, so use clawops_doctor. Also not for live logs (use
@@ -61,8 +64,9 @@ tools:
         type: string
         optional: true
         description: Stack name. Defaults to active stack from config.
-    # What the handler returns: the stack's deployment outputs. Health, version and agent
-    # count are NOT here — they need the host, and asking for them is clawops_doctor.
+    # What the handler returns: the stack's deployment outputs, and the host agent's pending
+    # requests (ADR 0014 §3). Health, version and agent count are NOT here — asking for them
+    # is clawops_doctor.
     output:
       stack: { type: string }
       publicIp: { type: string }
@@ -70,6 +74,8 @@ tools:
       sshUser: { type: string }
       status: { type: enum, values: [not bootstrapped, not deployed] }
       region: { type: string }
+      pendingHandoffs: { type: array, description: "{at, command} per request; absent when none" }
+      pendingHandoffsError: { type: string, description: "Present when the host could not be asked" }
 
   - name: clawops_doctor
     toolset: [cli, read]

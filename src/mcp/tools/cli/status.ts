@@ -9,6 +9,7 @@ import { StateError } from '../../../errors/index.js'
 import { hostAgent } from '../../../hostagent/mode.js'
 import { pendingHandoffs } from '../../../hostagent/handoff.js'
 import { currentContainerReach } from '../../../hostagent/live.js'
+import { CHECK_FAILED, handoffSummary, pendingOnHost } from '../../../hostagent/operator.js'
 
 export async function handleStatus(input: StatusInput, _server: McpServer): Promise<CallToolResult> {
   const ctx = buildContext({ stack: input.stackName })
@@ -24,7 +25,7 @@ export async function handleStatus(input: StatusInput, _server: McpServer): Prom
       stack: agent.stack,
       provider: agent.provider,
       hostAgent: { agentId: agent.agentId, operators: agent.operators, handsOff: agent.allow, strict: agent.strict },
-      pendingHandoffs: pendingHandoffs().map((h) => ({ at: h.at, command: h.command })),
+      pendingHandoffs: pendingHandoffs().map(handoffSummary),
       ...(reach.length > 0 ? { otherAgentsInContainer: reach } : {}),
     }, null, 2))
   }
@@ -34,7 +35,7 @@ export async function handleStatus(input: StatusInput, _server: McpServer): Prom
     if (!state) {
       return text(JSON.stringify({ stack: ctx.stackName, status: 'not bootstrapped' }, null, 2))
     }
-    return text(JSON.stringify({ stack: ctx.stackName, ...state }, null, 2))
+    return text(JSON.stringify({ stack: ctx.stackName, ...state, ...(await handoffs(ctx)) }, null, 2))
   }
 
   const stack = await ctx.getStack()
@@ -49,13 +50,24 @@ export async function handleStatus(input: StatusInput, _server: McpServer): Prom
 
   try {
     const base = extractBaseOutputs(outputs)
-    return text(JSON.stringify({ stack: ctx.stackName, ...base }, null, 2))
+    return text(JSON.stringify({ stack: ctx.stackName, ...base, ...(await handoffs(ctx)) }, null, 2))
   } catch (err) {
     if (err instanceof StateError) {
       return text(JSON.stringify({ stack: ctx.stackName, status: 'not deployed', detail: err.message }, null, 2))
     }
     throw err
   }
+}
+
+/**
+ * Requests from the stack's host agent (ADR 0014 §3), so the operator's own agent sees what
+ * `clawops status` shows them. Absent when there are none; a host that could not be asked is
+ * said so rather than reported as having none.
+ */
+async function handoffs(ctx: ReturnType<typeof buildContext>): Promise<Record<string, unknown>> {
+  const read = await pendingOnHost(ctx)
+  if (!read.ok) return { pendingHandoffsError: `${CHECK_FAILED}: ${read.error}` }
+  return read.value.length > 0 ? { pendingHandoffs: read.value.map(handoffSummary) } : {}
 }
 
 function text(t: string): CallToolResult {
