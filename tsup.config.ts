@@ -42,7 +42,13 @@ export default defineConfig([
     outExtension: () => ({ js: '.mjs' }),
     splitting: true,
     define: { __CLI_VERSION__: JSON.stringify(version) },
-    noExternal: [/.*/],
+    // Everything is inlined except native addons. ssh2 tries
+    // `require('./crypto/build/Release/sshcrypto.node')` inside a try and falls back to
+    // JavaScript, and the host agent never opens SSH. Left to tsup's native-module plugin, an
+    // addon that was never compiled fails the build: the Docker build has no Python for
+    // node-gyp. tsup's external plugin runs before that one, so it has to claim them there.
+    noExternal: [/^(?!.*\.node$)/],
+    external: [/\.node$/],
     // Set on esbuild itself: tsup's noExternal wins over its own `external`.
     esbuildOptions(o) {
       o.external = ['*.node', '@pulumi/*', '@aws-sdk/*', '@smithy/*', 'google-auth-library', 'inquirer', 'cpu-features']
