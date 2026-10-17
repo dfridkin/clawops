@@ -52,6 +52,11 @@ async function rpc(method,params,id){
   return js
 }
 
+/** The JSON document in a command's output: pretty-printed, and with stderr after it. */
+function jsonOf(out: string): { data: Record<string, unknown> } {
+  return JSON.parse(out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1))
+}
+
 describe.skipIf(!enabled)('clawops agent install on a real host', () => {
   let vm: VmTarget
   let home: string
@@ -123,17 +128,14 @@ describe.skipIf(!enabled)('clawops agent install on a real host', () => {
     const up = clawops('up', '--stack', STACK, '--openclaw-version', VERSION)
     expect(up.code, up.out).toBe(0)
 
-    // An operator-only agent, configured the way the docs tell an operator to.
-    for (const cmd of [
-      'agents add ops --non-interactive --workspace /home/node/.openclaw/workspace-ops',
-      `config set bindings '[{"agentId":"ops","match":{"channel":"telegram","peer":{"kind":"direct","id":"12345"}}}]' --strict-json`,
-      `config set channels.telegram '{"enabled":false,"dmPolicy":"pairing"}' --strict-json`,
-      'config set tools.agentToAgent.enabled false --strict-json',
-      'config set tools.sessions.visibility \'"agent"\' --strict-json',
-    ]) {
-      const r = await oc(cmd)
-      expect(r.exitCode, `${cmd}\n${r.stdout}`).toBe(0)
-    }
+    // An operator-only agent, configured the way the docs tell an operator to. Each key is read
+    // back: the channel write restarts the gateway, and a write in that window is lost.
+    const add = await oc('agents add ops --non-interactive --workspace /home/node/.openclaw/workspace-ops')
+    expect(add.exitCode, add.stdout).toBe(0)
+    await setConfig('bindings', [{ agentId: 'ops', match: { channel: 'telegram', peer: { kind: 'direct', id: '12345' } } }])
+    await setConfig('channels.telegram', { enabled: false, dmPolicy: 'pairing' })
+    await setConfig('tools.agentToAgent.enabled', false)
+    await setConfig('tools.sessions.visibility', 'agent')
     const cfg = JSON.parse((await vm.inspect('cat /var/lib/clawops/openclaw/openclaw.json')).stdout)
     expect(cfg.tools).toMatchObject({ agentToAgent: { enabled: false }, sessions: { visibility: 'agent' } })
     expect(cfg.agents.entries ?? cfg.agents.list).toBeTruthy()
@@ -182,6 +184,26 @@ describe.skipIf(!enabled)('clawops agent install on a real host', () => {
     expect(by['clawops_gateway_restart']!.text).toContain(`clawops gateway restart --stack ${STACK}`)
     // The handoff was recorded where the sandbox lets it write, and nothing restarted.
     expect((await vm.inspect('cat /var/lib/clawops-agent/handoffs.jsonl')).stdout).toContain('gateway restart')
+  }, 600_000)
+
+  it('shows the operator the request in `status`, and clears it once they run the command', async () => {
+    const shown = clawops('status', '--stack', STACK)
+    expect(shown.code, shown.out).toBe(0)
+    expect(shown.out).toContain(`${STACK} has 1 request from its agent:\n    clawops gateway restart --stack ${STACK}`)
+    const json = clawops('status', '--stack', STACK, '--json')
+    expect(jsonOf(json.out).data.pendingHandoffs).toHaveLength(1)
+
+    const ran = clawops('gateway', 'restart', '--stack', STACK)
+    expect(ran.code, ran.out).toBe(0)
+    await gatewayReady()
+
+    const after = clawops('status', '--stack', STACK, '--json')
+    const data = jsonOf(after.out).data
+    expect(data.pendingHandoffs, after.out).toBeUndefined()
+    expect(data.pendingHandoffsError, after.out).toBeUndefined()
+    // The host agent's own status agrees: the clear is in the file both read.
+    const [own] = await callTools([{ name: 'clawops_status' }])
+    expect(JSON.parse(own!.text).pendingHandoffs).toEqual([])
   }, 600_000)
 
   it('refuses every call once a group is bound to the agent, and serves again once it is removed', async () => {

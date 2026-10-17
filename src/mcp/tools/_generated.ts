@@ -12,7 +12,7 @@ export const clawops_statusSchema = z.object({
   stackName: z.string().optional().describe("Stack name. Defaults to active stack from config."),
 })
 
-export const clawops_statusDescription = "Get what is deployed for a clawops-managed stack: public IP, gateway URL,\nSSH user, or that nothing is deployed yet. Reads stack outputs; does not\ncontact the host.\n\nUse when: the user asks what exists for a stack, or where to reach it.\n\nDo NOT use when: the user asks whether the gateway is actually WORKING —\nthat needs the host, so use clawops_doctor. Also not for live logs (use\nclawops_logs_tail) or config values (use clawops_config_get)."
+export const clawops_statusDescription = "Get what is deployed for a clawops-managed stack: public IP, gateway URL,\nSSH user, or that nothing is deployed yet. Reads stack outputs, and asks\nthe host only for requests its host agent left for the operator\n(pendingHandoffs): each is a clawops command to show the user as it is.\nA request clears when that command is run, or after 7 days.\n\nUse when: the user asks what exists for a stack, where to reach it, or\nwhether its agent is waiting on them.\n\nDo NOT use when: the user asks whether the gateway is actually WORKING —\nthat needs the host, so use clawops_doctor. Also not for live logs (use\nclawops_logs_tail) or config values (use clawops_config_get)."
 
 export const clawops_statusAnnotations = {
   title: "Get Stack Status",

@@ -183,3 +183,20 @@ export async function connectionFor(
 function expandHome(p: string): string {
   return p.replace(/^~/, process.env['HOME'] ?? '~')
 }
+
+/**
+ * A request from the stack's host agent for this exact `harden` run is now done (ADR 0014 §3).
+ * The connection is resolved again: a tailnet cutover or revert has just changed it. Best
+ * effort: an unanswered request lapses after 7 days.
+ */
+export async function clearHardenRequest(ctx: ClawopsContext, input: Record<string, unknown>): Promise<void> {
+  const { getConfig } = await import('../config/store.js')
+  const { clearOnConn } = await import('../hostagent/operator.js')
+  const config = getConfig()
+  if (!config) return
+  try {
+    await clearOnConn(await connectionFor(ctx, config), 'clawops_harden', input, ctx.stackName)
+  } catch {
+    // As above.
+  }
+}

@@ -8,7 +8,7 @@ plans for human review, and run recovery diagnostics, but cannot apply any chang
 
 | Tool | What it does |
 |---|---|
-| `clawops_status` | Show what is deployed for a stack, outputs, not health |
+| `clawops_status` | Show what is deployed for a stack, outputs, not health, and requests its host agent left for the operator |
 | `clawops_doctor` | Diagnose the local machine and, with a stack, the deployment |
 | `clawops_logs_tail` | Stream recent container logs |
 | `clawops_monitor` | Sample gateway and host metrics |

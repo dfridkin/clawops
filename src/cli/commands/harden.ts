@@ -22,6 +22,7 @@ export default defineCommand({
     const { MODULE_CATALOG, resolveModules, runHardening, formatHardenSummary } = await import('../../harden/index.js')
     const { buildContext } = await import('../context.js')
     const { getConfig } = await import('../../config/store.js')
+    const { clearHardenRequest } = await import('../../harden/flows.js')
 
     // ── --list ────────────────────────────────────────────────────────────────
     if (args.list) {
@@ -63,6 +64,7 @@ export default defineCommand({
       if (!outcome.ok) { failure(outcome.reason); process.exit(1) }
       if ('noop' in outcome) info(outcome.message)
       else success(outcome.message)
+      await clearHardenRequest(ctx, { tailscaleRevert: true })
       return
     }
 
@@ -150,6 +152,9 @@ export default defineCommand({
           durationMs: r.durationMs,
         })),
       }))
+      if (!results.some((r) => r.error)) {
+        await clearHardenRequest(ctx, { options: args.options, dryRun: args['dry-run'], tailscale: args.tailscale })
+      }
       return
     }
 
@@ -176,5 +181,8 @@ export default defineCommand({
       if (!outcome.ok) { failure(outcome.reason); process.exit(1) }
       success(outcome.message)
     }
+
+    await clearHardenRequest(ctx, { options: args.options, dryRun: args['dry-run'], tailscale: args.tailscale })
   },
 })
+

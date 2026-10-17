@@ -267,7 +267,7 @@ clawops down --yes          # Destroy local-provider stack
 | `up` | Provision or update stack (`--dry-run` for preview, `--gateway-port` for a non-default port) |
 | `down` | Destroy local-provider stack (requires `--yes`; `--dry-run` shows current outputs) |
 | `destroy` | Destroy cloud-provider stack with confirmation prompt (`--dry-run` shows current outputs) |
-| `status` | Show stack outputs: IP, gateway URL, region, provisioned time |
+| `status` | Show stack outputs: IP, gateway URL, region, provisioned time, and any requests the stack's host agent left for you |
 | `plan` | Generate a deploy-plan JSON artifact (dry-run safe). `--ssh-cidr <list\|auto>` and `--gateway-cidr` decide who may connect; `--publish-gateway loopback\|all` decides what is listening; `--private-only` closes public access on a stack reached over its tailnet |
 | `apply` | Apply a previously reviewed plan file (`--dry-run` validates and shows diff without applying) |
 | `ssh` | Interactive SSH session or run a remote command |

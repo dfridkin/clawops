@@ -14,6 +14,7 @@ import type { ConfigGetInput, ConfigSetInput, ConfigUnsetInput, ConfigValidateIn
 import { buildContext } from '../../../cli/context.js'
 import { acquireSession, drainPool } from '../../../transport/pool.js'
 import { resolveConn, okText, errText } from '../_conn.js'
+import { clearHostHandoffs } from '../../../hostagent/operator.js'
 import {
   readRemoteConfig, atomicWriteConfig, restartGateway as restartGatewayShared,
 } from '../../../plan/remote-config.js'
@@ -85,6 +86,7 @@ export async function handleConfigSet(input: ConfigSetInput, server: McpServer):
         return errText(`Gateway restart failed: ${(err as Error).message}`)
       }
     }
+    await clearHostHandoffs(session, 'clawops_config_set', input, ctx.stackName, ac.signal)
     return okText(`Config set: ${input.key}${note}`)
   } finally {
     release()
@@ -131,6 +133,7 @@ export async function handleConfigUnset(input: ConfigUnsetInput, server: McpServ
         return errText(`Gateway restart failed: ${(err as Error).message}`)
       }
     }
+    await clearHostHandoffs(session, 'clawops_config_unset', input, ctx.stackName, ac.signal)
     return okText(`Config key removed: ${input.key}${note}`)
   } finally {
     release()

@@ -12,6 +12,7 @@ import {
 } from '../../openclaw/gateway-ops.js'
 import { execPrivileged } from '../../transport/privileged.js'
 import { UsageError } from '../../errors/index.js'
+import { clearHostHandoffs } from '../../hostagent/operator.js'
 
 /** Shared docker stop → rm → run command. Re-exported for tests; lives in the shared module. */
 export { dockerRunCmd }
@@ -108,6 +109,7 @@ export default defineCommand({
           process.exit(1)
         }
         success(`Gateway restarted (${version}).`)
+        await clearHostHandoffs(session, 'clawops_gateway_restart', {}, ctx.stackName, abortController.signal)
       } else {
         // update
         //
@@ -131,6 +133,7 @@ export default defineCommand({
 
         if (result.ok) {
           success(result.message)
+          await clearHostHandoffs(session, 'clawops_gateway_update', { version }, ctx.stackName, abortController.signal)
         } else {
           failure(result.message)
           if (result.hint) info(result.hint)

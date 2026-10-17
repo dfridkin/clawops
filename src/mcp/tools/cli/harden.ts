@@ -47,11 +47,12 @@ export async function handleHarden(input: HardenInput, server: McpServer): Promi
     }
   }
 
-  const { revertTailnet, cutOverToTailnet, connectionFor } = await import('../../../harden/flows.js')
+  const { revertTailnet, cutOverToTailnet, connectionFor, clearHardenRequest } = await import('../../../harden/flows.js')
 
   // Revert is its own errand: it runs over the public address and touches no modules.
   if (input.tailscaleRevert) {
     const outcome = await revertTailnet(ctx, config)
+    if (outcome.ok) await clearHardenRequest(ctx, { tailscaleRevert: true })
     return outcome.ok ? okText(outcome.message) : errText(outcome.reason)
   }
 
@@ -111,6 +112,10 @@ export async function handleHarden(input: HardenInput, server: McpServer): Promi
     )
   }
 
+  if (failed.length === 0) {
+    await clearHardenRequest(ctx, { options: input.options, dryRun: input.dryRun, tailscale: input.tailscale })
+  }
   const { content } = trimForMcp(lines.join('\n'), ctx.stackName)
   return failed.length > 0 ? errText(content) : okText(content)
 }
+

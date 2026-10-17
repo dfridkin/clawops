@@ -2,6 +2,11 @@ import { defineCommand } from 'citty'
 import process from 'node:process'
 import { renderTable } from '../../output/table.js'
 import { printJson, jsonOk } from '../../output/json.js'
+import { info } from '../../output/human.js'
+import type { ClawopsContext } from '../context.js'
+import {
+  CHECK_FAILED, handoffBanner, handoffSummary, type HandoffsRead,
+} from '../../hostagent/operator.js'
 
 export default defineCommand({
   meta: {
@@ -23,7 +28,7 @@ export default defineCommand({
 
       if (Boolean(args.json)) {
         if (state) {
-          printJson(jsonOk({ stack: ctx.stackName, ...state }))
+          printJson(jsonOk({ stack: ctx.stackName, ...state, ...handoffsJson(await handoffs(ctx)) }))
         } else {
           printJson(jsonOk({ stack: ctx.stackName, status: 'not bootstrapped' }))
         }
@@ -42,6 +47,7 @@ export default defineCommand({
       }
 
       process.stdout.write('\n' + renderTable(['Field', 'Value'], rows) + '\n\n')
+      if (state) printBanner(ctx.stackName, await handoffs(ctx))
       return
     }
 
@@ -54,8 +60,10 @@ export default defineCommand({
       Object.entries(outputMap).map(([k, v]) => [k, v.value]),
     )
 
+    const deployed = Boolean(outputs['publicIp'])
+
     if (Boolean(args.json)) {
-      printJson(jsonOk({ stack: ctx.stackName, ...outputs }))
+      printJson(jsonOk({ stack: ctx.stackName, ...outputs, ...(deployed ? handoffsJson(await handoffs(ctx)) : {}) }))
       return
     }
 
@@ -75,5 +83,29 @@ export default defineCommand({
     }
 
     process.stdout.write('\n' + renderTable(['Field', 'Value'], rows) + '\n\n')
+    if (deployed) printBanner(ctx.stackName, await handoffs(ctx))
   },
 })
+
+/** Requests from the stack's host agent (ADR 0014 §3), read over SSH. */
+async function handoffs(ctx: ClawopsContext): Promise<HandoffsRead> {
+  const { pendingOnHost } = await import('../../hostagent/operator.js')
+  return pendingOnHost(ctx)
+}
+
+function handoffsJson(read: HandoffsRead): Record<string, unknown> {
+  if (!read.ok) return { pendingHandoffsError: `${CHECK_FAILED}: ${read.error}` }
+  return read.value.length > 0 ? { pendingHandoffs: read.value.map(handoffSummary) } : {}
+}
+
+/**
+ * Printed after the table, where the operator already looks. A host that could not be asked
+ * gets a note: silence there would read as "no requests".
+ */
+function printBanner(stack: string, read: HandoffsRead): void {
+  if (!read.ok) {
+    info(`${CHECK_FAILED}: ${read.error}`)
+    return
+  }
+  if (read.value.length > 0) process.stdout.write(handoffBanner(stack, read.value) + '\n\n')
+}

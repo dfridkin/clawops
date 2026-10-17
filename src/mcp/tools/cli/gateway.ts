@@ -11,6 +11,7 @@ import { buildContext } from '../../../cli/context.js'
 import { acquireSession, drainPool } from '../../../transport/pool.js'
 import { resolveConn, okText, errText } from '../_conn.js'
 import { restartGateway } from '../../../plan/remote-config.js'
+import { clearHostHandoffs } from '../../../hostagent/operator.js'
 import { confirmDestructive } from '../_confirm.js'
 import { trimForMcp } from '../_trim.js'
 import { makeProgressEmitter, startTask, updateTask } from '../../progress.js'
@@ -38,6 +39,7 @@ export async function handleGatewayRestart(input: GatewayRestartInput, server: M
     // v1.7.5 version fix, then the publish scope — so restarting a gateway deployed with
     // --publish-gateway all quietly took it off the public interface.
     await restartGateway(session)
+    await clearHostHandoffs(session, 'clawops_gateway_restart', {}, ctx.stackName)
     return okText('Gateway restarted.')
   } catch (e) {
     return errText((e as Error).message)
@@ -116,6 +118,7 @@ export async function handleGatewayUpdate(input: GatewayUpdateInput, server: Mcp
       const text = [result.message, ...(result.ok ? [] : result.hint ? [result.hint] : []), ...notes]
         .join('\n')
       updateTask(taskId, result.ok ? 'completed' : 'failed', result.ok ? text : undefined, result.ok ? undefined : text)
+      if (result.ok) await clearHostHandoffs(session, 'clawops_gateway_update', { version }, ctx.stackName)
       const { content } = trimForMcp(text, ctx.stackName)
       return result.ok ? okText(content) : errText(content)
     } catch (e) {
