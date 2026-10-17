@@ -234,6 +234,14 @@ letter of R6 (clawops stores no credentials) while changing the posture entirely
 
 The WO-62 preconditions in `docs/openclaw-2.0-migration-plan.md` were amended to match.
 
+**Host identities (2.4):** whatever runs on a gateway host can use the host's own cloud identity
+through the metadata service, with no credential stored anywhere. clawops gives each host only
+what it uses: on AWS, an instance profile for SSM and Bedrock invoke; on Azure, a managed
+identity that reads its own Key Vault. GCP hosts used to run as the project's default compute
+service account with the `cloud-platform` scope, which on most projects holds Editor. From 2.4
+they have no service account, since nothing on the host calls a Google API. An existing stack
+loses it on its next `clawops up`, which stops and starts the VM.
+
 ## 4. Trust Boundaries
 
 ```
@@ -292,3 +300,4 @@ The WO-62 preconditions in `docs/openclaw-2.0-migration-plan.md` were amended to
 | 2026-10-14 | ADR 0014 accepted | T11 mitigation for 2.4: host-agent destructive tools hand the operator a CLI command instead of running; self-targeting operations refused; host cloud identity read-only |
 | 2026-10-16 | WO-62 disclosure review | Measured on 2026.9.2. The gateway log carries reply text from every session, so the host agent is made operator-only (enforced by `agent install`) rather than having its tools trimmed. Found that `config_set` values reach the audit log unredacted (T1) |
 | 2026-10-16 | ADR 0014 scope | Host agent narrowed to its own host, local tools only, no cloud identity added. Noted that every cloud host already carries an instance identity any process can use; on GCP it is the default compute service account with the `cloud-platform` scope (T11). Fleet management deferred to ADR 0015 |
+| 2026-10-16 | 2.4 GCP host identity | GCP hosts no longer run as the default compute service account with the `cloud-platform` scope; they have no service account (T11) |

@@ -139,9 +139,12 @@ export const gcpProgram: PulumiFn = async () => {
       'ssh-keys': `clawops:${sshPublicKey}`,
       'startup-script': makeStartupScript({ openclawVersion, os: 'debian', publishGateway, gatewayPort }),
     },
-    serviceAccount: {
-      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-    },
+    // No service account. Left as the default, the VM ran as the project's default compute
+    // service account with the cloud-platform scope, which on most projects holds Editor: any
+    // process on the host, the gateway's agent included, could mint a token for it from the
+    // metadata server and act on the whole project (T11). Nothing on the host calls a Google
+    // API, so it gets no identity at all. Like the Shielded VM settings, removing it from a
+    // live instance is a stop-and-start update.
   })
 
   return {

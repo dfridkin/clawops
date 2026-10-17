@@ -96,6 +96,7 @@ auditd, lynis and sysctl. Tailscale is a ninth, off by default. These are the ad
 | Threat detection opt-in | ✓ (GuardDuty) | Planned | ✓ (Defender, check-only) | — |
 | Boot integrity | — | ✓ (Shielded VM, check-only) | — | — |
 | Identity-based SSH posture | — | ✓ (OS Login, check-only) | — | — |
+| Least-privilege host identity | ✓ (SSM + Bedrock invoke) | ✓ (none attached) | ✓ (own Key Vault only) | — |
 | Disk encryption posture | — | — | ✓ (check-only) | — |
 | Tailscale membership | ✓ | ✓ | ✓ | ✓ |
 

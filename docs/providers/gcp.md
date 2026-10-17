@@ -116,6 +116,10 @@ When you run `clawops up`, the GCP adapter provisions:
 - **Static external IP** (regional)
 - **Compute Engine VM**. Debian 12, tagged `clawops`, running OpenClaw via Docker
 - Startup script creates a `clawops` system user and installs Docker if absent
+- **No service account** on the VM. Nothing on the host calls a Google API, so it has no
+  Google identity: a process on it cannot get a token from the metadata server. Before 2.4
+  the VM ran as the project's default compute service account with the `cloud-platform`
+  scope; the next `clawops up` on an older stack removes it, stopping and starting the VM
 
 The exact resource graph is visible via `clawops plan`.
 
@@ -235,7 +239,7 @@ flowchart TD
     ADDR["gcp:compute:Address\nstatic external IP"]
 
     subgraph COMPUTE["Compute"]
-        VM["gcp:compute:Instance\nDebian 12, 20 GB disk\ntags: clawops\nserviceAccount: cloud-platform scope"]
+        VM["gcp:compute:Instance\nDebian 12, 20 GB disk\ntags: clawops\nno service account"]
         META["instance metadata\nssh-keys: clawops:sshPublicKey\nstartup-script: bootstrap.sh"]
         VM --- META
     end
