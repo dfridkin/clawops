@@ -71,6 +71,7 @@
     "graph": "node scripts/dev/graph.mjs",
     "verify:pack": "node scripts/dev/verify-pack.mjs",
     "verify:mcp": "node scripts/dev/mcp-probe.mjs",
+    "verify:host-agent": "node scripts/dev/host-agent-probe.mjs",
     "verify:docker": "node scripts/dev/verify-docker.mjs",
     "verify:docs": "node scripts/dev/check-doc-links.mjs",
     "version:packages": "changeset version && node scripts/sync-server-json.mjs",
