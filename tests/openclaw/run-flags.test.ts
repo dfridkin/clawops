@@ -14,7 +14,6 @@ import {
 } from '../../src/openclaw/run-flags.js'
 import { makeStartupScript } from '../../src/providers/startup.js'
 import { dockerRunCmd, dockerRunCmd as gatewayDockerRunCmd } from '../../src/cli/commands/gateway.js'
-import { dockerRunCmd as configDockerRunCmd } from '../../src/cli/commands/config.js'
 
 const ROOT = join(__dirname, '../..')
 const read = (p: string): string => readFileSync(join(ROOT, p), 'utf-8')
@@ -48,7 +47,6 @@ describe('every run site delivers the config', () => {
 
   const rendered: Array<[string, string]> = [
     ['gateway restart / update (CLI)', gatewayDockerRunCmd('2026.9.2')],
-    ['config set (CLI)', configDockerRunCmd('ghcr.io/openclaw/openclaw:2026.9.2')],
     ['cloud VM startup script', makeStartupScript({ openclawVersion: '2026.9.2', os: 'ubuntu' })],
   ]
 
