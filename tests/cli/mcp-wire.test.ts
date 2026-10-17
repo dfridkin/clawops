@@ -172,3 +172,43 @@ describe('wireGatewayMcp', () => {
     expect(GATEWAY_MCP_NAME).toBe('clawops')
   })
 })
+
+describe('wireGatewayMcp when the save restarts the gateway', () => {
+  // Measured on 2026.9.2 under the systemd unit: a config write can make the gateway restart,
+  // and the `docker exec` that made it is killed with the container (137). The entry was saved.
+  function restartingHost(saved: boolean): FakeSshSession {
+    let added = false
+    return freshHost()
+      .respond(/mcp add (?!--help)/, () => { added = saved; return { stdout: '', stderr: '', code: 137 } })
+      .respond(/mcp show/, () => (added ? { stdout: '{"url":"x"}', stderr: '', code: 0 } : { stdout: '', stderr: 'No MCP server named', code: 1 }))
+      .respond(/docker exec openclaw true/, { code: 0 })
+  }
+
+  it('reports wired when the entry was saved before the restart', async () => {
+    const session = restartingHost(true)
+    expect((await wireGatewayMcp(session, SIGNAL, { pollMs: 1 })).status).toBe('wired')
+    const calls = session.execCalls()
+    expect(calls.findIndex((c) => c.includes('docker exec openclaw true'))).toBeGreaterThan(calls.findIndex(isAdd))
+  })
+
+  it('adds again when the restart killed it before it saved', async () => {
+    let adds = 0
+    let saved = false
+    const session = freshHost()
+      .respond(/mcp add (?!--help)/, () => {
+        adds++
+        if (adds === 1) return { stdout: '', stderr: '', code: 137 }
+        saved = true
+        return { stdout: 'Saved', stderr: '', code: 0 }
+      })
+      .respond(/mcp show/, () => (saved ? { stdout: '{}', stderr: '', code: 0 } : { stdout: '', stderr: 'none', code: 1 }))
+      .respond(/docker exec openclaw true/, { code: 0 })
+    expect((await wireGatewayMcp(session, SIGNAL, { pollMs: 1 })).status).toBe('wired')
+    expect(adds).toBe(2)
+  })
+
+  it('reports the failure when the gateway keeps restarting', async () => {
+    const result = await wireGatewayMcp(restartingHost(false), SIGNAL, { pollMs: 1 })
+    expect(result.status).toBe('probe-failed')
+  })
+})

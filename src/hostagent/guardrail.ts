@@ -38,7 +38,7 @@ const GATEWAY_TOOL_NAMES: readonly string[] = [
   'prompts_list', 'prompts_get', 'resources_list', 'resources_read',
 ].map((t) => `clawops__${t}`)
 
-function deniesClawops(patterns: readonly string[]): boolean {
+export function deniesClawops(patterns: readonly string[]): boolean {
   return GATEWAY_TOOL_NAMES.every((name) => patterns.some((p) => globMatch(p, name)))
 }
 
@@ -326,6 +326,6 @@ export function guardrailRefusal(failures: readonly string[]): string {
     'Refused. This host agent answers only its operator, and the gateway configuration no longer ' +
       'guarantees that:',
     ...failures.map((f) => `- ${f}`),
-    'Nothing ran. The operator fixes the configuration and re-runs `clawops agent install` from their machine.',
+    'Nothing ran. Once the operator fixes the gateway configuration, the host agent serves again on its own; nothing needs reinstalling.',
   ].join('\n')
 }

@@ -149,6 +149,50 @@ everything. The scope difference matters on a host running several agents.
 
 If no agents are running, `clawops agents list` prints `No agents running.`
 
+## Host agent
+
+A host agent is clawops on the gateway host, serving one OpenClaw agent that only you can reach
+([ADR 0014](decisions/0014-host-agent-operator-handoff.md)). It can read everything the read
+tools read about its own host. It changes nothing: a destructive call it is allowed returns the
+`clawops` command for you to run on your machine.
+
+```bash
+# The agent must exist, must not be the default, and must be bound only to your direct messages
+docker exec openclaw openclaw agents add ops          # on the host, or with `clawops ssh`
+clawops agent install --stack prod --agent ops --operator telegram:12345 \
+  --allow clawops_gateway_restart,clawops_config_set
+
+clawops agent uninstall --stack prod                  # --purge also removes its audit log
+```
+
+**What install checks, before writing anything** (the disclosure review lists each condition):
+- **A dedicated agent.** It is not the default agent, and nothing but your direct-message
+  bindings routes to it.
+- **Its channel.** `dmPolicy` is set explicitly, to `pairing`, `allowlist` or `disabled`.
+- **No reach across agents.** Agent-to-agent access leaves it out, and session visibility is
+  `agent` or `self`.
+
+It then adds `clawops__*` to every other agent's `tools.deny`, checks the gateway kept those
+entries, and only then installs.
+
+**What lands on the host:**
+- **Files.** A pinned Node runtime, checksum-verified on the host, and the operator's own
+  clawops build, under `/opt/clawops-agent`. Configuration goes in `/etc/clawops-agent`, with
+  the token root-only. State goes in `/var/lib/clawops-agent`.
+- **The service.** `clawops-agent.service` listens only on the Docker bridge address, and the
+  gateway reaches it as `host.docker.internal`.
+- **Firewall.** A ufw rule is added where ufw is active, and `clawops harden` keeps it.
+
+**If it starts refusing.** The host agent re-reads `openclaw.json` on every call and refuses
+while any condition fails, for example after an agent is added without the deny, or a group is
+bound to it. The refusal lists what to fix. It serves again once the configuration is fixed;
+there is nothing to reinstall.
+
+**Other agents in the gateway container.** On a default deployment every agent can run commands
+and read files there, so it can read the host agent's token and transcripts. Install lists those
+agents. Give them `tools.profile: "messaging"` or a `tools.allow` list, or install with
+`--strict` to refuse while any remain.
+
 ## Gateway management
 
 The OpenClaw gateway is a Docker container (`openclaw`) running on the remote host.

@@ -36,6 +36,8 @@ export interface WireOpts {
   token?: string
   /** Replace an existing entry rather than refusing. */
   rewire?: boolean
+  /** Between checks for the container after a restart. Tests shorten it. */
+  pollMs?: number
 }
 
 export type WireResult =
@@ -70,6 +72,20 @@ async function supportsMcpAdd(session: SshSession, signal: AbortSignal): Promise
   return help.code === 0
 }
 
+/**
+ * A gateway restart kills any `docker exec` running in the container (137 or 143). Measured on
+ * 2026.9.2: writing a channel's settings restarts the gateway about two seconds later, and the
+ * container is recreated, down for around ten seconds. Wait until it takes commands again.
+ */
+async function afterRestart(session: SshSession, signal: AbortSignal, pollMs: number): Promise<void> {
+  for (let i = 0; i < Math.ceil(180_000 / pollMs); i++) {
+    if ((await execPrivileged(session, 'docker exec openclaw true', signal)).code === 0) return
+    await new Promise((r) => setTimeout(r, pollMs))
+  }
+}
+
+const KILLED = new Set([137, 143])
+
 export async function wireGatewayMcp(
   session: SshSession,
   signal: AbortSignal,
@@ -102,7 +118,17 @@ export async function wireGatewayMcp(
     ...(opts.token ? [`--header ${shellQuote(`Authorization=Bearer ${opts.token}`)}`] : []),
   ].join(' ')
 
-  const added = await execPrivileged(session, `${OC} add ${GATEWAY_MCP_NAME} ${flags}`, signal)
+  const pollMs = opts.pollMs ?? 2000
+  let added = await execPrivileged(session, `${OC} add ${GATEWAY_MCP_NAME} ${flags}`, signal)
+  for (let attempt = 0; attempt < 3 && KILLED.has(added.code); attempt++) {
+    // Killed by a gateway restart, its own save's or one already under way. `show` says
+    // whether the save happened; if it did not, add again now the gateway is back.
+    await afterRestart(session, signal, pollMs)
+    const saved = await execPrivileged(session, `${OC} show ${GATEWAY_MCP_NAME}`, signal)
+    added = saved.code === 0
+      ? { ...added, code: 0 }
+      : await execPrivileged(session, `${OC} add ${GATEWAY_MCP_NAME} ${flags}`, signal)
+  }
   if (added.code !== 0) {
     // The probe output names the actual failure — an unreachable host, a refused
     // connection, a 401. Passed through rather than summarised: clawops cannot tell which
@@ -116,7 +142,8 @@ export async function wireGatewayMcp(
 
   // Cheaper and less disruptive than a gateway restart, which is what this used to do:
   // agents pick up the new config on their next runtime build.
-  await execPrivileged(session, `${OC} reload`, signal)
+  const reloaded = await execPrivileged(session, `${OC} reload`, signal)
+  if (KILLED.has(reloaded.code)) await afterRestart(session, signal, pollMs)
 
   return { status: 'wired', rewired: alreadyWired, url }
 }

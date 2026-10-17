@@ -275,6 +275,8 @@ clawops down --yes          # Destroy local-provider stack
 | `tunnel` | Local port-forward to gateway UI over SSH |
 | `config` | Get/set remote OpenClaw config values (`--dry-run` shows would-write JSON) |
 | `agents` | List OpenClaw agents, or stream one agent's logs |
+| `agent install` | Install a host agent on a stack's gateway host, for one OpenClaw agent only the operator can reach (`--agent`, `--operator <channel>:<peer>`, `--allow` handoff tools, `--strict`). Refuses unless the gateway's routing allows only the operator; denies clawops to every other agent |
+| `agent uninstall` | Remove the host agent and unwire the gateway (`--purge` also removes its audit log) |
 | `gateway` | Restart the OpenClaw gateway service |
 | `backup` | Create and restore OpenClaw state backups (`restore` expands into a staging directory, never in place; `--activate` swaps it in and rolls back if the gateway does not come up) |
 | `stacks` | List named stacks and their state |

@@ -93,14 +93,23 @@ know the proxy is there.
 TLS termination. Bring your own reverse proxy (nginx, Caddy, Cloudflare Tunnel) for HTTPS. TLS
 automation is tracked in the roadmap.
 
-**Two capabilities have no MCP tool, on purpose.** Every other command an agent needs is a tool.
+**Three capabilities have no MCP tool, on purpose.** Every other command an agent needs is a tool.
 `clawops ssh` runs an arbitrary command as root on the host, which would bypass every typed
 refusal and confirmation clawops has, and a prompt injection reaching an agent could reach it
 (T11 in the threat model). `clawops secret set` and `rotate` take a secret value, and a value
 passed as a tool argument lands in the client's transcript and the model's context (R6). An
-agent asks the user to run those in a terminal; the secret tools say so. `setup`, `tunnel` and
+agent asks the user to run those in a terminal; the secret tools say so. `clawops agent install`
+and `uninstall` decide what a host agent may do, so no agent can run them (ADR 0014 §6). `setup`, `tunnel` and
 `bug` are interactive or long-lived and have agent-shaped equivalents or none needed.
 `tests/mcp/parity.test.ts` holds the reason for each.
+
+**A host agent is operator-only for messages, not inside the gateway container.** `clawops agent
+install` refuses unless only the operator can message the agent, and the host agent re-checks that
+on every call. On a default deployment, though, every other agent can run commands and read files
+inside the gateway container. Any of them can read the token the gateway uses to reach the host
+agent, and the host agent's transcripts on disk. Install and `clawops_status` name those agents;
+`--strict` refuses while any exist. Sandboxing them is planned for 2.5 (ADR 0015). Destructive
+calls are not affected: they hand off to the operator either way.
 
 **Long-running tools send no progress notifications.** `clawops_up`, `clawops_apply`,
 `clawops_destroy`, `clawops_gateway_update` and the backup tools record progress on a task that
