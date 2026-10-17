@@ -29,6 +29,11 @@ doesn't yet report tailnet status.
 
 ## Scope
 
+**A host agent is operator-only for messages, not inside the gateway container.** On a default
+deployment every OpenClaw agent can run commands and read files in the gateway container, which
+holds the host agent's token and transcripts. `clawops agent install` names those agents; restrict
+their tools, or install with `--strict` to refuse while any remain.
+
 **clawops manages the host, not your agent.** It provisions and operates the infrastructure OpenClaw
 runs on. Authoring agents, skills and prompts is OpenClaw's job.
 

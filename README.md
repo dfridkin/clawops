@@ -14,7 +14,7 @@ and Cursor drive them through typed MCP tools with explicit safety controls.
 
 ---
 
-**What's new:** [2.3.1 release notes](#whats-new-in-231) below, and the full history
+**What's new:** [2.4 release notes](#whats-new-in-24) below, and the full history
 in [CHANGELOG.md](CHANGELOG.md).
 
 ---
@@ -654,6 +654,57 @@ docs / refactor / chore / test / perf / ci
 Use `pnpm changeset` to record a release note before merging a `feat` or `fix`.
 
 ---
+
+## What's new in 2.4
+
+A host agent: clawops on the gateway host, for one OpenClaw agent that only you can reach. It
+reads everything about its own host and changes nothing. A destructive request comes back to
+you as the exact command to run ([ADR 0014](docs/decisions/0014-host-agent-operator-handoff.md)).
+**Upgrade note for GCP:** the next `clawops up` stops and starts the VM (see below).
+
+### Host agent
+
+- **`clawops agent install --stack prod --agent ops --operator telegram:12345`**
+  - **Checks first.** It refuses before writing anything unless the gateway's routing lets only
+    you reach that agent.
+  - **Denies the rest.** It removes clawops from every other agent and checks that the gateway
+    kept those entries.
+  - **Then installs** a pinned, checksum-verified Node runtime and your own clawops build. It
+    runs as `clawops-agent.service` on the Docker bridge, and the gateway is wired to it.
+  - **Uninstalling** is `clawops agent uninstall`.
+- **It reads, and hands off.** 12 read tools run locally, with no SSH, Pulumi state or cloud
+  credentials on the host. The destructive tools you name with `--allow` change nothing.
+  Instead, each returns the `clawops` command for you to run on your machine, where it asks
+  for confirmation as usual. `yes: true` is ignored. `clawops_destroy`, `clawops_stacks_delete`
+  and `clawops_migrate` are refused outright.
+- **Pending requests show in `clawops status`**, ready to copy. Running the command clears its
+  request, and requests left alone lapse after 7 days. `clawops_status` reports them too.
+- **Re-checked on every call.** If the gateway's configuration changes so that anyone else can
+  reach the agent, every call is refused until it is fixed. A group binding or a new agent
+  without the deny are examples. Nothing needs reinstalling.
+- **Other agents in the gateway container.** On a default deployment every agent can run
+  commands and read files there, including the host agent's token and transcripts. Install and
+  `clawops_status` name those agents; `--strict` refuses while any remain. See
+  [operations](docs/operations.md#host-agent) and the
+  [disclosure review](docs/security/host-agent-disclosure-review.md).
+
+### GCP hosts have no service account
+
+The VM ran as the project's default compute service account. That account has the
+`cloud-platform` scope and, on most projects, the Editor role, so any process on the host could
+act on the whole project. Nothing on the host calls a Google API, so the VM now has none. On an
+existing stack, the next `clawops up` removes it. That stops and starts the VM; the boot disk is
+untouched.
+
+### Fixes
+
+- **`clawops_logs_tail` reads the gateway's own logs again.** Since 2.0.1 it had fallen back to
+  container output on every host, saying the gateway was not answering when it was. `clawops logs`
+  was not affected.
+- **`clawops config set|unset --restart` restarts the gateway the way `gateway restart` does.**
+  Its own restart brought a gateway published on every interface back on loopback only. It also
+  fell back to the moving `stable` tag when it could not read the image, and reported success
+  before the gateway had started.
 
 ## What's new in 2.3.1
 

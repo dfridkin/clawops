@@ -104,6 +104,28 @@ clawops config set <key> <value> --dry-run   # see the diff first
 Config changes are validated against OpenClaw's own schema before they are written, so a bad
 value is refused rather than restarting the gateway into a broken state.
 
+## Host agent
+
+New in 2.4. clawops on the gateway host, serving one OpenClaw agent that only you can reach. It
+reads everything about its own host and changes nothing: a destructive request comes back to you
+as the `clawops` command to run.
+
+```bash
+docker exec openclaw openclaw agents add ops        # on the host: a dedicated agent
+clawops agent install --stack prod --agent ops --operator telegram:12345 \
+  --allow clawops_gateway_restart
+clawops status --stack prod                         # shows what the agent asked you to run
+clawops agent uninstall --stack prod
+```
+
+Install refuses, before writing anything, unless the gateway's routing lets only you reach that
+agent. The agent must not be the default, must be bound only to your direct messages, and must
+not be reachable from other agents. It denies clawops to every other agent, and the host agent
+re-checks all of it on every call. Other agents can still run commands inside the gateway
+container on a default deployment; install names them, and `--strict` refuses while any remain.
+
+A request shows in `clawops status` until you run that command, or for 7 days.
+
 ## Hardening
 
 ```bash
