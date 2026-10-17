@@ -59,6 +59,12 @@ jobs:
       - name: Verify the MCP server over the protocol
         run: pnpm build && pnpm verify:mcp
 
+      # The host agent ships without node_modules (tsup.config.ts). Run that build from a
+      # directory with none, and call every tool it serves, so a cloud SDK import reaching
+      # host-agent mode fails here rather than on someone's gateway host.
+      - name: Verify the host agent runs without node_modules
+        run: pnpm verify:host-agent
+
       - name: Upload coverage
         uses: codecov/codecov-action@v6
         with:

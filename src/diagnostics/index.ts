@@ -90,15 +90,18 @@ export async function runDiagnostics(
   const { hostAgent } = await import('../hostagent/mode.js')
   const sections: Section[] = []
 
-  sections.push({ title: 'Runtime', checks: await runtimeChecks(getConfigDir()) })
-
-  // A host agent has no clawops config, SSH key or cloud credentials to check, by design, so
-  // those sections would only report their absence as failures. It checks its own host.
+  // A host agent has no clawops config, SSH key, cloud credentials or Pulumi to check, by
+  // design, so those checks would only report their absence as failures. It checks its own
+  // host. The Pulumi checks are skipped rather than run and ignored: the host agent ships
+  // without the Pulumi SDK (tsup.config.ts), so importing it there fails.
   const agent = hostAgent()
   if (agent) {
+    sections.push({ title: 'Runtime', checks: [nodeCheck()] })
     await pushRemoteSections(sections, agent.stack, opts.signal, deps)
     return summarise(sections)
   }
+
+  sections.push({ title: 'Runtime', checks: await runtimeChecks(getConfigDir()) })
 
   const config = getConfig()
   sections.push({
@@ -162,19 +165,20 @@ export function summarise(sections: Section[]): DiagnosticsReport {
 
 // ── Local checks ──────────────────────────────────────────────────────────────
 
-async function runtimeChecks(configDir: string): Promise<Check[]> {
-  const checks: Check[] = []
+function nodeCheck(): Check {
   const nodeMajor = parseInt(process.version.slice(1).split('.')[0] ?? '0', 10)
-  checks.push(
-    nodeMajor >= 22
-      ? { name: 'Node.js', status: 'pass', detail: process.version }
-      : {
-          name: 'Node.js',
-          status: 'fail',
-          detail: `${process.version} (requires >=22)`,
-          remedy: 'install Node.js 22 or later',
-        },
-  )
+  return nodeMajor >= 22
+    ? { name: 'Node.js', status: 'pass', detail: process.version }
+    : {
+        name: 'Node.js',
+        status: 'fail',
+        detail: `${process.version} (requires >=22)`,
+        remedy: 'install Node.js 22 or later',
+      }
+}
+
+async function runtimeChecks(configDir: string): Promise<Check[]> {
+  const checks: Check[] = [nodeCheck()]
 
   const pulumiHome = path.join(configDir, '.pulumi')
   try {
