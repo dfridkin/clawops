@@ -1,5 +1,21 @@
 # @clawops/cli
 
+## 2.4.0
+
+### Minor Changes
+
+- e6ceff0: GCP hosts no longer run as the project's default compute service account. That account carries the `cloud-platform` scope and, on most projects, the Editor role, so any process on the host could act on the whole project. Nothing on the host calls a Google API, so the VM now has no service account. On an existing stack the next `clawops up` removes it, which stops and starts the VM; the boot disk is untouched.
+- fbd119a: A host agent now reports other agents that can run commands, read or write files, or change the gateway configuration inside the gateway container. On a default deployment every agent can, and any of them could read the clawops token from `openclaw.json` and the host agent's transcripts from disk. `clawops_status` lists them as `otherAgentsInContainer`. A host agent installed with `--strict` refuses every call while any exist.
+- 8528d91: A host agent refuses every call unless only its operator can reach it. Checked against `openclaw.json` on each call: the agent is not the gateway's default and nothing but the operator's direct-message bindings routes to it, those channels' DM policy is explicitly `pairing` or `allowlist`, agent-to-agent access and session visibility cannot reach it, and every other agent is denied the clawops tools.
+- 1fa364a: `clawops agent install` puts a host agent on a stack's gateway host: clawops serving one OpenClaw agent that only the operator can reach. It refuses before writing anything unless the gateway's routing allows only the operator. It then denies clawops to every other agent and checks the gateway kept those entries. Only then does it install a pinned, checksum-verified Node runtime and the operator's own clawops build, start `clawops-agent.service` on the Docker bridge, and wire the gateway to it. `--allow` names the destructive tools the agent may hand off; `--strict` also refuses while any other agent can act inside the gateway container. `clawops agent uninstall` removes it. `clawops harden` now keeps the host agent's firewall rule when it resets ufw.
+- 50510cc: `clawops mcp serve --host-agent` runs clawops on the gateway host for its own stack (ADR 0014). Tools run locally with no SSH, Pulumi state or cloud credentials; the tool set is fixed to 12 read tools plus the destructive tools the operator allowed, and each of those returns the `clawops` command for the operator to run instead of acting. Calls naming another stack, and self-targeting tools, are refused.
+- 52a4f67: `clawops status` and `clawops_status` show the requests a stack's host agent left for you, with each command ready to copy. A request clears when you run that command, from the CLI or through your own agent, or after 7 days. A host that cannot be asked gets a note rather than silence (ADR 0014 §3).
+
+### Patch Changes
+
+- f3b719a: `clawops config set|unset --restart` restarts the gateway the way `clawops gateway restart` and `clawops_config_set` do. It had its own restart, which brought a gateway deployed with `--publish-gateway all` back on loopback only, fell back to the moving `stable` tag when it could not read the running image, and reported success before the gateway had started.
+- 62b0fb1: `clawops_logs_tail` now reads the gateway's own logs. Since 2.0.1 it had fallen back to container output on every host, saying "the gateway is not answering" when it was: the probe it runs reports through its exit code, and the tool was still looking for `ok` on stdout. `clawops logs` was not affected.
+
 ## 2.3.1
 
 ### Patch Changes
