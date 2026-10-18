@@ -1392,7 +1392,7 @@ async function maybeWireGatewayMcp(opts: {
 
   const { connect } = await import('../../transport/ssh.js')
   const { getConfigDir } = await import('../../config/store.js')
-  const { wireGatewayMcp } = await import('../mcp-wire.js')
+  const { wireGatewayMcp, describeExposure } = await import('../mcp-wire.js')
 
   const knownHostsPath = path.join(getConfigDir(), 'known_hosts')
   const spin = spinner('Wiring gateway MCP client...')
@@ -1417,6 +1417,8 @@ async function maybeWireGatewayMcp(opts: {
       spin.succeed(result.rewired ? 'Gateway MCP client re-wired.' : 'Gateway MCP client wired.')
       success('The gateway\'s AI can now run clawops commands.')
       info('Try asking it: "check if my stack is healthy"')
+      const [first, ...rest] = await describeExposure(session, opts.signal)
+      if (first) { warn(first); rest.forEach((l) => info(l)) }
     }
   } catch (err) {
     spin.fail('Failed to wire gateway MCP client.')

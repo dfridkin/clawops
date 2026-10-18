@@ -343,11 +343,17 @@ The OpenClaw gateway runs its own AI agent. Once wired, that agent can call claw
 instead of guessing at infrastructure state:
 
 ```bash
-clawops mcp wire --stack prod   # write MCP client entry into gateway config + restart
+clawops mcp wire --stack prod   # openclaw mcp add, which connects before it saves
 ```
 
-Requires OpenClaw ≥ 2026.4 on the gateway. The `clawops setup` wizard offers this step
-automatically after a successful deploy.
+Requires OpenClaw 2026.7.1-2 or later on the gateway. The `clawops setup` wizard offers this
+step after a successful deploy.
+
+**Every agent on the gateway gets every clawops tool**, including the default agent, which
+answers anyone who can message the gateway. OpenClaw's MCP servers are gateway-wide. After
+wiring, `mcp wire` names each agent that can now call clawops. To keep one away, add
+`"clawops__*"` to its `agents.entries.<id>.tools.deny`. For an agent that hands destructive
+changes back to you instead of making them, use `clawops agent install`.
 
 ### Stdio mode (Claude Code / Cursor / VS Code)
 

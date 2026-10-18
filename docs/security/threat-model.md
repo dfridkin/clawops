@@ -208,6 +208,9 @@ surface that creates and destroys infrastructure.
 - Wiring is opt-in and off by default in the wizard
 - `openclaw mcp add` probes before saving, so a wiring that does not work is reported as
   failed rather than as success
+- `mcp wire` and the wizard name every agent the wiring exposes (2.4.1). OpenClaw offers a
+  gateway's MCP servers to every agent, the default one included, unless a per-agent
+  `tools.deny` covers `clawops__*` (SP-13 finding 2)
 
 **Residual risk:** An operator who runs the server with full credentials and wires it in has
 given the gateway's AI those capabilities, and clawops cannot distinguish an injected

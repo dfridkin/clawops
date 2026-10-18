@@ -8,7 +8,7 @@ vi.mock('../../src/transport/pool.js', () => ({
   acquireSession: vi.fn(),
   drainPool: vi.fn(),
 }))
-vi.mock('../../src/cli/mcp-wire.js', () => ({ wireGatewayMcp: vi.fn() }))
+vi.mock('../../src/cli/mcp-wire.js', () => ({ wireGatewayMcp: vi.fn(), describeExposure: vi.fn(async () => []) }))
 
 vi.mock('node:fs', async (importOriginal) => {
   const orig = await importOriginal<typeof import('node:fs')>()
@@ -100,11 +100,12 @@ describe('mcp wire subcommand', () => {
   async function getMocks() {
     const { buildContext } = await import('../../src/cli/context.js')
     const { acquireSession } = await import('../../src/transport/pool.js')
-    const { wireGatewayMcp } = await import('../../src/cli/mcp-wire.js')
+    const { wireGatewayMcp, describeExposure } = await import('../../src/cli/mcp-wire.js')
     return {
       buildContext: vi.mocked(buildContext),
       acquireSession: vi.mocked(acquireSession),
       wireGatewayMcp: vi.mocked(wireGatewayMcp),
+      describeExposure: vi.mocked(describeExposure),
     }
   }
 
@@ -137,6 +138,26 @@ describe('mcp wire subcommand', () => {
     })
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("gateway's AI"))
     expect(release).toHaveBeenCalled()
+  })
+
+  it('says which agents can now call clawops once wired', async () => {
+    const mocks = await getMocks()
+    mocks.buildContext.mockReturnValue(makeLocalCtx() as unknown as ReturnType<typeof mocks.buildContext>)
+    const session = makeSession()
+    mocks.acquireSession.mockResolvedValue({ session, release: vi.fn() } as never)
+    mocks.wireGatewayMcp.mockResolvedValue({ status: 'wired', rewired: false, url: 'http://h:18790/' })
+    mocks.describeExposure.mockResolvedValueOnce(['"main" can now call every clawops tool.', 'To keep an agent away…'])
+    const out: string[] = []
+    vi.spyOn(console, 'log').mockImplementation((...a) => { out.push(a.join(' ')) })
+    vi.spyOn(console, 'warn').mockImplementation((...a) => { out.push(a.join(' ')) })
+    vi.spyOn(console, 'error').mockImplementation((...a) => { out.push(a.join(' ')) })
+
+    const wire = await getWire()
+    await wire.run({ args: { stack: 'default' } })
+
+    expect(mocks.describeExposure).toHaveBeenCalledWith(session, expect.any(AbortSignal))
+    expect(out.join('\n')).toContain('"main" can now call every clawops tool.')
+    expect(out.join('\n')).toContain('To keep an agent away')
   })
 
   it('shows re-wire message when entry already existed', async () => {
