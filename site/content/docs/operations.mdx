@@ -135,7 +135,8 @@ clawops harden --dry-run
 
 Eight modules run on every provider; AWS adds a security-group audit, SSM readiness, VPC flow
 logs and GuardDuty. `harden` reads the container's actual port bindings and opens only what the
-deployment really publishes.
+deployment really publishes. On a stack with a host agent, it keeps the agent's firewall rule
+when it resets ufw.
 
 ## Tearing it down
 

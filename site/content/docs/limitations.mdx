@@ -17,9 +17,10 @@ multiple stacks and route between them yourself.
 **No TLS or domain automation.** The gateway runs on port 18789 without TLS termination. Reach it
 over `clawops tunnel`, or bring your own reverse proxy. Certificate and DNS automation is planned.
 
-**Two capabilities have no MCP tool, on purpose.** `ssh` would give an agent a root shell that
-bypasses every refusal and confirmation, and `secret set` / `rotate` would put a secret value in
-the conversation. An agent asks you to run those in a terminal. Everything else, including
+**Three capabilities have no MCP tool, on purpose.** `ssh` would give an agent a root shell that
+bypasses every refusal and confirmation, `secret set` / `rotate` would put a secret value in
+the conversation, and `agent install` / `uninstall` decide what a host agent may do, which no
+agent should decide for itself. An agent asks you to run those in a terminal. Everything else, including
 backup, restore with `--activate`, migrate and gateway updates, is a tool.
 
 **Tailscale: no private-only mode on local stacks, and no `doctor` check yet.** `clawops harden

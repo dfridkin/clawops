@@ -17,6 +17,7 @@ deployment that provisions cleanly and then does not work.
 | `clawhub.ai` | **during `apply`**, not at boot | installing model-provider plugins |
 | `registry.npmjs.org` | **during `apply`**, when the config names a channel | installing channel plugins |
 | `169.254.169.254` (link-local) | AWS only, when Bedrock is enabled | IMDSv2 region lookup |
+| `nodejs.org` | `clawops agent install`, unless the pinned runtime is already installed | the host agent's Node runtime, checked against a pinned SHA-256 before it is unpacked |
 
 ## From your machine
 
