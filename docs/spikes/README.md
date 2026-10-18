@@ -53,4 +53,4 @@ must be re-checked on real Tailscale before ADR 0015 is accepted; each write-up 
 |---|---|
 | [SP-14](SP-14-tailnet-caller-identity.md) | LocalAPI `whois` names the calling node and its tags, unprivileged, in kernel and userspace mode, failing closed. **A local process is identified as its own host**, so self must be refused |
 | [SP-15](SP-15-tailnet-peer-limits.md) | A tag-to-tag rule confines the port, but the default policy is allow-all, a refused tag exits 0, and **an open connection outlives its revocation** |
-| SP-16 | Can the calling host drop container traffic to a peer's port while its host agent's own calls pass? Not run |
+| [SP-16](SP-16-container-egress.md) | A container on the gateway's bridge **passes as its host**. `DOCKER-USER` never sees it; mangle `PREROUTING` plus a uid-owner `OUTPUT` rule close it and survive restarts, not reboots. Host socket: `/run/tailscale/tailscaled.sock`, 0666 in 0755 dirs on Debian 12 and Ubuntu 24.04, whois works unprivileged |

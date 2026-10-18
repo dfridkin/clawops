@@ -1,6 +1,6 @@
 # ADR 0015, Host agents read each other over the tailnet
 
-**Status:** Proposed. Waiting on SP-16 and the real-Tailscale re-check (see *Verification*)
+**Status:** Proposed. Waiting on the real-Tailscale re-check (see *Verification*)
 **Date:** 2026-10-17
 **Deciders:** Project owner
 **Revisit:** if Tailscale grants carry an app capability clawops can check in place of a tag, or if
@@ -61,6 +61,10 @@ clawops agent install --stack us ... --peer eu=eu-gw                     # us ma
   `tailscale status --json` `Self.Tags`. A refused tag exits 0 and leaves the node untagged
   (SP-15 finding 2), so the exit code proves nothing. It refuses with the reason when the tag is
   absent.
+- The host agent asks tailscaled at `/run/tailscale/tailscaled.sock`, as its own unprivileged
+  user. On Debian 12 and Ubuntu 24.04 the socket is 0666 in 0755 directories, and tailscaled
+  answers `whois` from any user while refusing writes (SP-14 finding 3, SP-16). Install checks the
+  agent's user can reach it.
 
 ### 2. Every request is checked against the caller's tailnet identity
 
@@ -107,8 +111,19 @@ The case found by combining the spikes is closed on the calling side:
 - **The operator-only guardrail must pass first.** A peer query is a tool call, so the host agent
   checks its whole guardrail before forwarding it. The peer cannot see that check; it relies on
   the operator having installed every tagged host this way.
-- **A firewall rule backs it up**, if SP-16 shows one works: forwarded traffic from Docker bridges
-  to the tailnet's peer port is dropped, and only the host agent's user may open it from the host.
+- **Firewall rules back it up** ([SP-16](../spikes/SP-16-container-egress.md)). The obvious rule,
+  in `DOCKER-USER`, matched nothing: Tailscale's `ts-forward` chain accepts traffic leaving on
+  `tailscale0` before Docker's chain runs. Two rules together close it, each with an IPv6 twin:
+  - mangle `PREROUTING` drops traffic from `docker0` and `br-+` to the tailnet prefix on the peer
+    port, which covers the default bridge the gateway runs on and user-defined bridges;
+  - `OUTPUT` rejects the peer port on `tailscale0` for every uid but the host agent's, which covers
+    other host processes and `--network host` containers.
+
+  Both survived Docker and tailscaled restarts; a `FORWARD` rule did not. Neither survives a
+  reboot, so the host agent's unit applies them at start. **The host agent checks they are present
+  before every peer query and refuses when they are not.** The peer port is fixed, so the rules
+  can name it. A container started as the agent's uid with `--network host` passes the owner
+  rule, but starting containers already needs root.
 
 This leaves the case where root on a tagged host is compromised. Root can query every peer as that
 host, which is no more than root can already read through the host's own agent. It cannot change a
@@ -208,14 +223,12 @@ own host's records to every peer's. It still cannot change anything, on its host
 
 Before this ADR is accepted:
 
-- **SP-16, container egress.** Can a rule on the calling host drop traffic from the gateway
-  container to a peer's port over `tailscale0` while the host agent's own calls pass? Measured on a
-  systemd target with the real gateway image.
+- **SP-16's re-check list.** Docker CE (the spike had Ubuntu's `docker.io`), the nftables
+  backends of Docker and tailscaled, whether `ufw reload` or `clawops harden`'s ufw reset removes
+  the mangle rules, a bridge with IPv6 enabled, and the rules reapplied after a reboot on a real VM.
 - **The SP-15 re-check list, on real Tailscale.** How `tagOwners` is enforced, existing tags when it
   changes, `whois` for a tagged node (`tagged-devices`), whether user rules match self-tagged nodes,
   netmap pruning and propagation time.
-- **A host install's socket.** SP-14 measured the container image. The path and directory mode
-  tailscaled uses on Ubuntu, Debian and the local provider's hosts.
 
 When built, e2e tests on the systemd harness, each one breaking one condition alone:
 
@@ -230,7 +243,7 @@ When built, e2e tests on the systemd harness, each one breaking one condition al
 ## References
 
 - [ADR 0014](0014-host-agent-operator-handoff.md), host agent and handoffs
-- [SP-14](../spikes/SP-14-tailnet-caller-identity.md), [SP-15](../spikes/SP-15-tailnet-peer-limits.md)
+- [SP-14](../spikes/SP-14-tailnet-caller-identity.md), [SP-15](../spikes/SP-15-tailnet-peer-limits.md), [SP-16](../spikes/SP-16-container-egress.md)
 - [Disclosure review](../security/host-agent-disclosure-review.md), condition 6
 - `docs/security/threat-model.md` T11
 - WO-34 (Tailscale), WO-57 (OpenClaw Fleet cells, a different thing: tenants on one host)
