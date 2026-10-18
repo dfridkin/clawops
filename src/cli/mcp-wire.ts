@@ -4,6 +4,7 @@
 import type { SshSession } from '../transport/ssh.js'
 import { execPrivileged } from '../transport/privileged.js'
 import { MCP_HTTP_PORT } from '../mcp/server.js'
+import { CLAWOPS_TOOL_PATTERN, deniesClawops } from '../hostagent/guardrail.js'
 
 /**
  * The name the entry is stored under in the gateway's `mcp.servers`.
@@ -146,4 +147,65 @@ export async function wireGatewayMcp(
   if (KILLED.has(reloaded.code)) await afterRestart(session, signal, pollMs)
 
   return { status: 'wired', rewired: alreadyWired, url }
+}
+
+type Obj = Record<string, unknown>
+const obj = (v: unknown): Obj | undefined =>
+  v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Obj) : undefined
+const denyOf = (tools: unknown): string[] =>
+  (Array.isArray(obj(tools)?.['deny']) ? (obj(tools)!['deny'] as unknown[]) : [])
+    .filter((p): p is string => typeof p === 'string')
+
+export interface ExposedAgent {
+  /** Undefined for a gateway with no agent roster, which runs one unnamed agent. */
+  id?: string
+  /** Answers traffic no binding claims, so anyone who can message the gateway reaches it. */
+  isDefault: boolean
+}
+
+/**
+ * The agents a wired gateway offers clawops's tools to (SP-13 finding 2).
+ *
+ * `mcp.servers` is gateway-wide: every agent is offered every clawops tool unless a deny covering
+ * `clawops__*` removes them. A gateway-wide deny removes them from every agent, and cannot be
+ * reopened for one (finding 4). The default agent is judged as the guardrail judges it: marked
+ * `default`, or the only agent.
+ */
+export function exposedAgents(config: Obj): ExposedAgent[] {
+  if (deniesClawops(denyOf(config['tools']))) return []
+  const entries = obj(obj(config['agents'])?.['entries']) ?? {}
+  const ids = Object.keys(entries)
+  if (ids.length === 0) return [{ isDefault: true }]
+  return ids
+    .filter((id) => !deniesClawops(denyOf(obj(entries[id])?.['tools'])))
+    .map((id) => ({ id, isDefault: obj(entries[id])?.['default'] === true || ids.length === 1 }))
+}
+
+/** What `mcp wire` and the setup wizard say about who can now call clawops. */
+export function exposureLines(agents: readonly ExposedAgent[]): string[] {
+  if (agents.length === 0) return []
+  const name = (a: ExposedAgent): string =>
+    (a.id ? `"${a.id}"` : 'the gateway\'s agent') +
+    (a.isDefault ? ' (the default agent: anyone who can message the gateway reaches it)' : '')
+  return [
+    agents.length === 1
+      ? `${name(agents[0]!)} can now call every clawops tool, the destructive ones included.`
+      : `These ${agents.length} agents can now call every clawops tool, the destructive ones included:`,
+    ...(agents.length === 1 ? [] : agents.map((a) => `  ${name(a)}`)),
+    `To keep an agent away from clawops, add "${CLAWOPS_TOOL_PATTERN}" to its agents.entries.<id>.tools.deny.`,
+    'For an agent that hands destructive changes back to you instead, see `clawops agent install`.',
+  ]
+}
+
+/** Reads the gateway's config and says who can now call clawops. Never fails the wiring. */
+export async function describeExposure(session: SshSession, signal?: AbortSignal): Promise<string[]> {
+  try {
+    const { readRemoteConfig } = await import('../plan/remote-config.js')
+    return exposureLines(exposedAgents(await readRemoteConfig(session, signal)))
+  } catch {
+    return [
+      'Could not read the gateway\'s config to say which agents can now call clawops.',
+      `Every agent can, unless its tools.deny covers "${CLAWOPS_TOOL_PATTERN}".`,
+    ]
+  }
 }
