@@ -1,6 +1,6 @@
 # ADR 0015, Host agents read each other over the tailnet
 
-**Status:** Proposed. Waiting on SP-16's re-check (see *Verification*)
+**Status:** Proposed. Waiting on a reboot on a real VM (see *Verification*)
 **Date:** 2026-10-17
 **Deciders:** Project owner
 **Revisit:** if Tailscale grants carry an app capability clawops can check in place of a tag, or if
@@ -115,17 +115,25 @@ The case found by combining the spikes is closed on the calling side:
   the operator having installed every tagged host this way.
 - **Firewall rules back it up** ([SP-16](../spikes/SP-16-container-egress.md)). The obvious rule,
   in `DOCKER-USER`, matched nothing: Tailscale's `ts-forward` chain accepts traffic leaving on
-  `tailscale0` before Docker's chain runs. Two rules together close it, each with an IPv6 twin:
-  - mangle `PREROUTING` drops traffic from `docker0` and `br-+` to the tailnet prefix on the peer
-    port, which covers the default bridge the gateway runs on and user-defined bridges;
-  - `OUTPUT` rejects the peer port on `tailscale0` for every uid but the host agent's, which covers
-    other host processes and `--network host` containers.
+  `tailscale0` before Docker's chain runs. Two rules together close it, as one nftables table of
+  clawops's own (`inet clawops_peer`), so each covers IPv4 and IPv6:
+  - a `prerouting` chain at mangle priority drops traffic from `docker0` and `br-*` to the tailnet
+    prefixes on the peer port, which covers the default bridge the gateway runs on and
+    user-defined bridges;
+  - an `output` chain rejects the peer port on `tailscale0` for every uid but the host agent's
+    (`meta skuid`), which covers other host processes and `--network host` containers.
 
-  Both survived Docker and tailscaled restarts; a `FORWARD` rule did not. Neither survives a
-  reboot, so the host agent's unit applies them at start. **The host agent checks they are present
-  before every peer query and refuses when they are not.** The peer port is fixed, so the rules
-  can name it. A container started as the agent's uid with `--network host` passes the owner
-  rule, but starting containers already needs root.
+  A table of its own, not `iptables` rules, because tailscaled in nftables mode writes native rules
+  into iptables-nft's `mangle PREROUTING`, after which `iptables` can no longer list or change that
+  chain (SP-16 finding 8). In a separate table a `drop` is final whatever any other table accepts,
+  and Docker, tailscaled and ufw leave it alone. It held on all four combinations of iptables and
+  nftables backends for Docker CE and tailscaled, with IPv6 bridges, across restarts of Docker,
+  tailscaled and ufw (SP-16 findings 6–10). Nothing persists it across a reboot, so the host
+  agent's unit applies it at start. **The host agent checks it is present before every peer query
+  and refuses when it is not.** The peer port is fixed, so the rules can name it. A container
+  started as the agent's uid with `--network host` passes the owner rule, but starting containers
+  already needs root. A peer query's timeout allows for the first connection after tailscaled
+  restarts, which took over 4 s in SP-16.
 
 This leaves the case where root on a tagged host is compromised. Root can query every peer as that
 host, which is no more than root can already read through the host's own agent. It cannot change a
@@ -230,9 +238,10 @@ own host's records to every peer's. It still cannot change anything, on its host
 
 Before this ADR is accepted:
 
-- **SP-16's re-check list.** Docker CE (the spike had Ubuntu's `docker.io`), the nftables
-  backends of Docker and tailscaled, whether `ufw reload` or `clawops harden`'s ufw reset removes
-  the mangle rules, a bridge with IPv6 enabled, and the rules reapplied after a reboot on a real VM.
+- **A reboot on a real VM.** SP-16 re-checked Docker CE, both nftables backends, ufw and IPv6
+  bridges on 2026-10-18 (findings 6–11). Its reboot was a restart of a systemd container, which
+  starts from empty netfilter state but doesn't load kernel modules or follow a cloud image's boot
+  order. Also to confirm: whether `nft` is installed by default on the images the bootstrap targets.
 - ~~The SP-15 re-check list, on real Tailscale.~~ Done 2026-10-18 (SP-15, *Re-checked on real
   Tailscale*). No change to the design. Not run: a node that tags itself with `--advertise-tags`,
   which needs an interactive login.

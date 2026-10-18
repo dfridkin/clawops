@@ -1,6 +1,6 @@
 # SP-16. Can a host keep its gateway container off a peer's agent port?
 
-**Status:** COMPLETE. 2026-10-17. Local Docker only.
+**Status:** COMPLETE. 2026-10-17, re-checked 2026-10-18 (findings 6–11). Local Docker only.
 - **Outer environment:** Docker Desktop 29.6.2, linux/arm64, kernel 6.12.76-linuxkit.
 - **Control server:** Headscale v0.27.1.
 - **Peer node:** `tailscale/tailscale:v1.88.3`, kernel mode.
@@ -165,7 +165,8 @@ Measured on Debian 12 and Ubuntu 24.04.5, installed with `install.sh` (tailscale
 
 ## Consequences for ADR 0015
 
-1. **§4's firewall layer works, but not with the rule the ADR named.**
+1. **§4's firewall layer works, but not with the rule the ADR named.** (Superseded in part by
+   findings 8 and 9: write the same two rules as a native nftables table, not with `iptables`.)
    - "Forwarded traffic from Docker bridges is dropped" needs a mangle `PREROUTING` rule (`-i docker0` and `-i br-+`, destination the tailnet prefix, the peer port). `DOCKER-USER` is bypassed by `ts-forward`'s ACCEPT, and a rule at the top of `FORWARD` disappears whenever Docker restarts.
    - Pair it with an `OUTPUT` rule, for iptables and ip6tables, that rejects the peer port on `tailscale0` for every uid but the host agent's. That stops other host processes and `--network host` containers.
 2. **Write the rules, check them on every peer query, and re-apply them at boot.** They survive Docker and tailscaled restarts, but not a reboot. The host agent can verify they are present before forwarding a peer query, and refuse the query when they are not, as it re-checks the guardrail.
@@ -174,16 +175,116 @@ Measured on Debian 12 and Ubuntu 24.04.5, installed with `install.sh` (tailscale
 5. **IPv6:** the rules need v6 twins. Bridges are v4-only by default, but host processes reached the peer over v6.
 6. **The host-socket blocker is closed.** `/run/tailscale/tailscaled.sock` is open to an unprivileged user on Debian 12 and Ubuntu 24.04, reads only. `agent install` should still check the path and mode rather than assume them.
 
-## What transfers, and what to re-check
+## Re-checked 2026-10-18: Docker CE, nftables, ufw, IPv6 bridges, reboot
 
-- **Should transfer:**
-  - the chain order (`ts-forward` before `DOCKER-USER`) and `ts-forward`'s trailing ACCEPT, which are tailscaled's own;
-  - Docker rebuilding `FORWARD` on restart;
-  - the mangle and `OUTPUT` survival;
-  - the socket path, modes and read/write split, which come from tailscaled's systemd unit and LocalAPI.
-- **Re-check:**
-  - **Docker CE** from Docker's repository, which the bootstrap installs, instead of Ubuntu's `docker.io`. Both were 29.x here.
-  - **Docker's nftables firewall backend**, if enabled, and **tailscaled's nftables mode** (`--netfilter-mode` / `TS_DEBUG_FIREWALL_MODE=nftables`). The chain names and ordering would differ.
-  - **ufw on the host**, as `clawops harden` sets up: whether `ufw reload` or `ufw reset` flushes the mangle rules. harden already keeps the host agent's own rule across a reset.
-  - **Docker with IPv6 enabled** on a bridge.
-  - **A real VM**, not a privileged container on Docker Desktop: rule survival across a reboot, and the oneshot unit that re-applies the rules.
+Same outer environment, Headscale and peer (now with Headscale's embedded DERP/STUN server, see the
+harness note below). The host is the same systemd target with **Docker CE 29.9.1** and
+**containerd.io 2.4.2** installed from `download.docker.com` exactly as
+`src/providers/local/bootstrap.sh.tmpl` does it, tailscaled 1.104.1 from `install.sh`, ufw set up
+with `clawops harden`'s sequence (`ufw --force reset`, deny incoming, allow outgoing, allow 22,
+`ufw --force enable`), and the agent uid 999.
+
+### 6. Docker CE behaves like `docker.io`
+
+With the iptables rules from finding 3, the probe table, the `systemctl restart docker` and
+`systemctl restart tailscaled` results and the chain order all matched findings 3 and 4 exactly.
+
+### 7. ufw leaves both kinds of rule alone
+
+After harden's sequence, `ufw reload`, a second `ufw --force reset`, `ufw disable` + `enable` and
+`systemctl restart ufw`, the mangle `PREROUTING` and `OUTPUT` rules were all still present
+(`mangle=2+2 output=1+1`) and still blocking. ufw only rebuilds its own `ufw-*` chains and the
+jumps to them. The native table in finding 9 also survived `ufw reload` in all four runs below.
+
+### 8. In tailscaled's nftables mode, the iptables rules can no longer be managed
+
+With `TS_DEBUG_FIREWALL_MODE=nftables` (log: `firewallmode="nft-forced"`), tailscaled writes
+native nftables rules into the same `ip mangle PREROUTING` chain iptables-nft uses. From then on:
+
+```
+iptables v1.8.10 (nf_tables): chain `PREROUTING' in table `mangle' is incompatible, use 'nft' tool.
+```
+
+The rules already there kept dropping (their counters rose), but `iptables -S`, `-C`, `-I` and
+`-D` all failed on that chain. A host agent that verifies its rules with `iptables` before each
+peer query would refuse every query, and couldn't repair or remove them.
+
+### 9. A native nftables table works in every combination
+
+The rules as one table of clawops's own, which neither Docker, tailscaled nor ufw touches:
+
+```nft
+table inet clawops_peer {
+  chain pre {
+    type filter hook prerouting priority mangle; policy accept;
+    iifname { "docker0", "br-*" } ip  daddr 100.64.0.0/10        tcp dport 18792 counter drop
+    iifname { "docker0", "br-*" } ip6 daddr fd7a:115c:a1e0::/48 tcp dport 18792 counter drop
+  }
+  chain out {
+    type filter hook output priority filter; policy accept;
+    oifname "tailscale0" tcp dport 18792 meta skuid != 999 counter reject with tcp reset
+  }
+}
+```
+
+In nftables every base chain on a hook gives its own verdict, and a `drop` in any of them is
+final. So `ts-forward`'s `accept` (finding 2), in another table, can't overrule it, whichever
+backend tailscaled and Docker use.
+
+Each combination ran on a **fresh host**, Docker's IPv6 on (`"ipv6": true`, a ULA
+`fixed-cidr-v6`, and the user bridge created with `--ipv6`), and the table installed by a oneshot
+unit (`After=docker.service tailscaled.service`, `RemainAfterExit=yes`). A probe that failed was
+retried twice, so a lone warm-up timeout doesn't count as a block:
+
+| tailscaled / Docker firewall backend | Baseline, no table | Table from the unit | After reboot | After restarting Docker and tailscaled, then `ufw reload` |
+|---|---|---|---|---|
+| iptables / iptables | everything passes | **only the agent uid passes** (v4 and v6) | same | same |
+| iptables / nftables | everything passes | same | same | same |
+| nftables / iptables | everything passes | same | same | same |
+| nftables / nftables | everything passes | same | same | same |
+
+"Only the agent uid passes" means: blocked for containers on the default and a user-defined
+bridge over v4 and v6, for a `--network host` container, and for another uid over v4 and v6.
+
+"Reboot" is `docker restart` of the systemd host. That gives the host a fresh network namespace,
+with no netfilter state, and a full systemd boot, so it shows the unit putting the table back
+before anything is probed. It doesn't exercise a real kernel's module loading or a cloud image's
+boot order.
+
+### 10. With IPv6 on, bridged containers do reach the peer over v6
+
+In every baseline above, both bridges reached the peer at `[fd7a:115c:a1e0::3]:18792` (Docker masquerades ULA
+traffic by default), where with IPv6 off they had no route (finding 1). The v6 rule matched and
+blocked them in every run.
+
+### 11. Docker's nftables backend needs forwarding turned on first
+
+With `"firewall-backend": "nftables"` and IPv6 on, a fresh host's Docker didn't start:
+
+```
+failed to start daemon: Error initializing network controller: error creating default "bridge" network:
+IPv6 global forwarding is disabled: check your host's firewalling and set sysctls
+net.ipv6.conf.all.forwarding=1 and net.ipv6.conf.default.forwarding=1
+```
+
+Docker's iptables backend sets forwarding itself; the nftables one doesn't. That's a property of
+Docker's backend, not of these rules. The runs above set the three sysctls in
+`/etc/sysctl.d/` for the nftables-Docker hosts.
+
+### Harness notes
+
+- **The first connection after tailscaled restarts can take longer than 4 s.** The agent's probe
+  sometimes timed out once and passed on the retry, in every backend. SP-14 saw the same stall
+  before a direct path came up. A peer query's timeout has to allow for it.
+- **An unreachable placeholder DERP region breaks tailscaled 1.104.1.** Each failed netcheck makes
+  it rebind (`last netcheck reported send error. Rebinding.`) about every 3 s, and the WireGuard
+  session never settles. Headscale's embedded DERP server, used only for STUN here, fixed it.
+- **Restarting Headscale stranded the 1.88.3 peer.** After one failed noise dial it switched to
+  `forcing port 443 dial` and never reconnected to `:8080`; the peer had to be rejoined.
+
+## What remains
+
+- **A real VM.** The reboot above was a container restart. Kernel module loading (`nf_tables`,
+  `skuid` matching) and a cloud image's boot order are untested.
+- **Whether `nft` is installed by default** on the images the bootstrap targets. This host had it
+  because the spike installed `nftables`. If it's missing, `agent install` has to install it.
