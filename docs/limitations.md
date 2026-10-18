@@ -108,7 +108,7 @@ install` refuses unless only the operator can message the agent, and the host ag
 on every call. On a default deployment, though, every other agent can run commands and read files
 inside the gateway container. Any of them can read the token the gateway uses to reach the host
 agent, and the host agent's transcripts on disk. Install and `clawops_status` name those agents;
-`--strict` refuses while any exist. Sandboxing them is planned for 2.5 (ADR 0015). Destructive
+`--strict` refuses while any exist. Sandboxing them gets its own ADR, with WO-53. Destructive
 calls are not affected: they hand off to the operator either way.
 
 **Long-running tools send no progress notifications.** `clawops_up`, `clawops_apply`,

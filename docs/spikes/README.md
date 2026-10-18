@@ -43,3 +43,14 @@ the plan are **not** valid on Docker Desktop.
 
 **Two P0s refuted, four new gaps found (G25, G26, plugin-gated providers, plugin/runtime skew),
 one version floor moved.**
+
+## Host-agent fleet (ADR 0015), 2026-10-17
+
+Measured on Headscale 0.27.1 with Tailscale 1.88.3 nodes in local Docker. The control-plane results
+must be re-checked on real Tailscale before ADR 0015 is accepted; each write-up lists what.
+
+| Spike | Outcome |
+|---|---|
+| [SP-14](SP-14-tailnet-caller-identity.md) | LocalAPI `whois` names the calling node and its tags, unprivileged, in kernel and userspace mode, failing closed. **A local process is identified as its own host**, so self must be refused |
+| [SP-15](SP-15-tailnet-peer-limits.md) | A tag-to-tag rule confines the port, but the default policy is allow-all, a refused tag exits 0, and **an open connection outlives its revocation** |
+| SP-16 | Can the calling host drop container traffic to a peer's port while its host agent's own calls pass? Not run |

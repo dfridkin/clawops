@@ -153,7 +153,7 @@ with `--strict`:
 
 **The proper fix** is sandboxing other agents (`sandbox.mode: "all"`), which runs their tools in
 separate containers. That needs Docker access from inside the gateway container, which clawops
-does not provision. It is deferred to 2.5 with ADR 0015.
+does not provision. It gets its own ADR, with WO-53. [ADR 0015](../decisions/0015-host-agent-fleet.md), the fleet, requires `--strict` on any host that queries peers until then.
 
 ## The read set in host-agent mode
 
