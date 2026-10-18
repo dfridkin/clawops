@@ -1,10 +1,10 @@
 // MCP resources — per SPEC.md §7.3.
 
 import { readFileSync } from 'node:fs'
-import path from 'node:path'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { getConfig, getConfigDir } from '../config/store.js'
+import { getConfig } from '../config/store.js'
+import { lastRunPath } from './tools/_trim.js'
 
 export function registerResources(server: McpServer): void {
   // ── clawops://current-context ───────────────────────────────────────────────
@@ -62,10 +62,11 @@ export function registerResources(server: McpServer): void {
     new ResourceTemplate('clawops://stacks/{name}/last-run', { list: undefined }),
     { description: 'Full Pulumi output from the last up/destroy run for a stack' },
     async (uri, { name }) => {
-      const stackName = Array.isArray(name) ? name[0] : name
-      const filePath = path.join(getConfigDir(), 'state', `${stackName}.last-run.json`)
+      const stackName = String(Array.isArray(name) ? name[0] : name)
+      const filePath = lastRunPath(stackName)
       let text: string
       try {
+        if (!filePath) throw new Error('not a stack name')
         const raw = readFileSync(filePath, 'utf-8')
         const parsed = JSON.parse(raw) as { output?: string }
         text = parsed.output ?? '(no output recorded)'
