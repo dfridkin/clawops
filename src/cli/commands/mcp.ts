@@ -120,7 +120,7 @@ const wireCmd = defineCommand({
     const { buildContext } = await import('../context.js')
     const { acquireSession, drainPool } = await import('../../transport/pool.js')
     const { extractBaseOutputs } = await import('../../pulumi/outputs.js')
-    const { wireGatewayMcp } = await import('../mcp-wire.js')
+    const { wireGatewayMcp, describeExposure } = await import('../mcp-wire.js')
     const { MCP_HTTP_PORT } = await import('../../mcp/server.js')
 
     const ac = new AbortController()
@@ -199,6 +199,8 @@ const wireCmd = defineCommand({
       )
       success('The gateway\'s AI can now run clawops commands.')
       info('Try asking it: "check if my stack is healthy"')
+      const [first, ...rest] = await describeExposure(session, ac.signal)
+      if (first) { warn(first); rest.forEach((l) => info(l)) }
       warn('The MCP server exposes destructive tools. Keep it bound where only the gateway can reach it.')
     } catch (err) {
       spin.fail('Failed to wire gateway MCP client.')

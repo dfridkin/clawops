@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { FakeSshSession } from '../helpers/ssh.js'
 import {
   wireGatewayMcp, defaultGatewayMcpUrl, GATEWAY_MCP_NAME,
+  exposedAgents, exposureLines, describeExposure,
 } from '../../src/cli/mcp-wire.js'
 
 // WO-28 wrote `gateway.mcpClients.clawops` and reported success. That key does not exist in
@@ -210,5 +211,68 @@ describe('wireGatewayMcp when the save restarts the gateway', () => {
   it('reports the failure when the gateway keeps restarting', async () => {
     const result = await wireGatewayMcp(restartingHost(false), SIGNAL, { pollMs: 1 })
     expect(result.status).toBe('probe-failed')
+  })
+})
+
+// SP-13 finding 2: `mcp.servers` is gateway-wide, so wiring offers clawops to every agent
+// unless a deny removes it. Each case breaks one thing alone.
+describe('exposedAgents', () => {
+  const DENY = { tools: { deny: ['clawops__*'] } }
+
+  it('names every agent with no deny, and marks the default', () => {
+    const config = { agents: { entries: { main: { default: true }, ops: {}, third: DENY } } }
+    expect(exposedAgents(config)).toEqual([
+      { id: 'main', isDefault: true },
+      { id: 'ops', isDefault: false },
+    ])
+  })
+
+  it('counts the only agent as the default', () => {
+    expect(exposedAgents({ agents: { entries: { solo: {} } } })).toEqual([{ id: 'solo', isDefault: true }])
+  })
+
+  it('treats a gateway with no roster as one exposed agent, not none', () => {
+    expect(exposedAgents({})).toEqual([{ isDefault: true }])
+  })
+
+  it('a gateway-wide deny removes clawops from every agent', () => {
+    expect(exposedAgents({ tools: { deny: ['clawops__*'] }, agents: { entries: { main: {} } } })).toEqual([])
+  })
+
+  it('a deny that leaves a bridge tool reachable does not count', () => {
+    const partial = { tools: { deny: ['clawops__clawops_*'] } }
+    expect(exposedAgents({ agents: { entries: { main: partial, ops: DENY } } })).toEqual([{ id: 'main', isDefault: false }])
+  })
+})
+
+describe('exposureLines', () => {
+  it('says nothing when no agent is exposed', () => {
+    expect(exposureLines([])).toEqual([])
+  })
+
+  it('lists each agent, says who reaches the default, and how to deny', () => {
+    const text = exposureLines([{ id: 'main', isDefault: true }, { id: 'ops', isDefault: false }]).join('\n')
+    expect(text).toContain('These 2 agents can now call every clawops tool')
+    expect(text).toContain('"main" (the default agent: anyone who can message the gateway reaches it)')
+    expect(text).toContain('"ops"')
+    expect(text).toContain('"clawops__*"')
+    expect(text).toContain('clawops agent install')
+  })
+})
+
+describe('describeExposure', () => {
+  it('reads the gateway config', async () => {
+    const session = new FakeSshSession()
+      .respond(/uname -s/, { stdout: 'Linux\n', code: 0 })
+      .respond(/cat .*openclaw\.json/, { stdout: JSON.stringify({ agents: { entries: { main: {} } } }), code: 0 })
+    expect((await describeExposure(session as never, SIGNAL))[0]).toContain('"main" (the default agent')
+  })
+
+  it('still warns when the config cannot be read', async () => {
+    const session = new FakeSshSession()
+      .respond(/uname -s/, { stdout: 'Linux\n', code: 0 })
+      .respond(/cat /, { stderr: 'Permission denied', code: 1 })
+    const lines = await describeExposure(session as never, SIGNAL)
+    expect(lines.join(' ')).toContain('Every agent can')
   })
 })
