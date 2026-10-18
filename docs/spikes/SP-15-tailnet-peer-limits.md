@@ -1,6 +1,7 @@
 # SP-15. Tailnet peer limits: can tags and policy confine who reaches a host agent?
 
-**Status:** COMPLETE, on Headscale only. 2026-10-17. Local Docker (Docker Desktop, arm64), no cloud,
+**Status:** COMPLETE. Headscale 2026-10-17; re-checked on real Tailscale 2026-10-18 (see the
+last section). The Headscale run: local Docker (Docker Desktop, arm64), no cloud,
 no Tailscale account. Control server **Headscale v0.27.1** (`headscale/headscale:0.27.1`);
 nodes **Tailscale v1.88.3** (`tailscale/tailscale:v1.88.3`), kernel mode (`--tun=tailscale0`,
 `NET_ADMIN`, `/dev/net/tun`), `--state=mem:`. Listeners were busybox `nc -l` on the destination
@@ -8,8 +9,7 @@ node; probes were `timeout 5 nc <ip> <port> </dev/null`.
 
 Headscale implements the policy language itself. Every finding about **what the policy permits**
 is a Headscale finding; the packet filter that **enforces** it is Tailscale's own
-(`tailscaled` on the destination), and so is `whois`. See *What must be re-verified on real
-Tailscale*.
+(`tailscaled` on the destination), and so is `whois`. See *Re-checked on real Tailscale*.
 
 Nodes:
 
@@ -68,7 +68,7 @@ Policy:
 - **Anyone with an untagged key of a user named in `tagOwners` can make a node a peer.** With
   `admin@` owning the tag, `sp15-d` tagged itself and reached the agent port. The tag is only as
   narrow as `tagOwners`.
-- **A refused tag isn't an error.** `tailscale up` exits 0 and the node simply joins untagged.
+- **On Headscale, a refused tag isn't an error.** `tailscale up` exits 0 and the node simply joins untagged.
   Anything that installs a peer must read back `Self.Tags`, not trust the exit code.
 - **Revoking ownership removes self-advertised tags, not forced ones.** After the reload `sp15-d`
   lost its tag. `sp15-a` and `sp15-b`, tagged by their pre-auth key, kept theirs, even though no
@@ -163,12 +163,15 @@ every device reach the agent port.
 2. **Never authenticate a peer by user.** `UserProfile` can name the operator for a tagged node
    (4). The check is on tags only, and an untagged caller is refused even if it is the operator's
    own device. The operator's own calls keep coming over SSH, as in ADR 0014.
-3. **Install must read tags back.** A refused tag returns exit 0 (2). `agent install --peer` checks
+3. **Install must read tags back.** On Headscale a refused tag returns exit 0 (2); on Tailscale it
+   fails with exit 1, but a bare `tailscale up` on a running node still exits 0 with nothing
+   changed. `agent install --peer` checks
    `tailscale status --json` `Self.Tags` on the host, and refuses with the reason if the tag isn't
    there.
 4. **Prefer tagged auth keys to `--advertise-tags`.** Self-advertised tags come and go with
    `tagOwners` (2). On Headscale they also leave the node matching its user's rules (4).
-5. **Revocation needs the agent's help.** A removed rule leaves open connections working (3). The
+5. **Revocation needs the agent's help.** A removed rule leaves open connections working (3)
+   while the two nodes stay peers. The
    host agent should therefore re-run `whois` per request, not per connection. It should also cap
    how long one HTTP connection may live, so that dropping a tag or rule takes effect within a
    bounded time.
@@ -180,25 +183,48 @@ every device reach the agent port.
    It should also say that a tailnet still on the default allow-all policy makes the tag check
    the only barrier.
 
-## What must be re-verified on real Tailscale
+## Re-checked on real Tailscale
 
-Headscale reimplements the coordination server, so these results hold for it and not
-automatically for Tailscale's:
+2026-10-18, on a throwaway tailnet of the project owner's (`tailbdc720.ts.net`), control server
+`controlplane.tailscale.com`, the same Tailscale v1.88.3 nodes in local Docker. Policies were set
+through the API (`POST /api/v2/tailnet/-/acl`), in the `grants` syntax, and the original
+allow-all policy was restored byte-for-byte afterwards. Devices, keys and the API token were
+deleted at the end.
 
-- **`tagOwners` enforcement.** On Tailscale, does an untagged key of a user *not* in `tagOwners`
-  fail `--advertise-tags`, or does it also exit 0 untagged? Does the admin console refuse to
-  create a tagged key for a tag the creator doesn't own (Headscale's CLI didn't)?
-- **What happens to existing tags when `tagOwners` changes.** Headscale drops self-advertised tags
-  and keeps key-forced ones.
-- **`whois` for a tagged node.** On Tailscale a tagged node should show the `tagged-devices`
-  pseudo-user rather than its creator. Confirm, because finding 4's advice holds either way, but
-  the ADR should cite the real output.
-- **Whether a user's ACL rule matches its self-tagged nodes.** That it does is a Headscale
-  inconsistency (4); on Tailscale a tagged node should lose its user identity entirely.
-- **Netmap pruning.** Does Tailscale also hide a node from devices with no rule toward it (1)?
-- **Propagation time.** Confirm the 1–3 s for new connections (3) on the real control plane.
+| Node | Joined with | Tags |
+|---|---|---|
+| `sprt-a` (listeners on 7777, 7778), `sprt-b` | reusable key tagged `tag:clawops-agent` | `tag:clawops-agent` |
+| `sprt-s3` | reusable key tagged `tag:clawops-spike`, created by the same admin | `tag:clawops-spike` |
+| `sprt-u3` | untagged key created through the API (a device of `dfridkin@github`) | none |
 
-These two should carry over unchanged, but are worth one confirming run:
-- **Enforcement points:** the destination's packet filter, and established TCP connections
-  surviving a policy change (3). Both are `tailscaled` behaviour, not the control server's.
-- **The allow-all default (5).**
+Every Headscale finding held except the three marked **differs**.
+
+| Question | Real Tailscale |
+|---|---|
+| Allow-all default (5) | Holds. Under the default policy every node reached both ports. |
+| Tagged-key creation for a tag nobody owns (2) | **Differs.** `POST /keys` with `tags: ["tag:sprt-unowned"]`: `requested tags [tag:sprt-unowned] are invalid or not permitted`. Headscale's CLI minted the key. |
+| A tagged key joining with `--advertise-tags` for a tag outside the key (2) | **Differs.** The `tag:clawops-spike` key with `--advertise-tags=tag:clawops-agent`: `backend error: requested tags [tag:clawops-agent] are invalid or not permitted`, **exit 1**, node not joined. Headscale exited 0 and joined untagged. |
+| An untagged user key with `--advertise-tags` (2) | Not joined by the key alone. With an unowned tag *and* with a tag the user owns, `tailscale up` printed a login URL and waited for a browser login. A self-tagged node therefore needs the user's interactive login, so it wasn't measured further. |
+| `tailscale up --advertise-tags=…` on a running node, no key | Exit 0, no output. The node re-registered and sat in `NeedsLogin`; its tags at the control server were unchanged. |
+| `whois` for a tagged node (4) | **Differs.** `UserProfile {LoginName: tagged-devices, ID: 3561806748535406}`, and `Node.User` is the same pseudo-user, for every tagged node. Headscale named the creating user. An untagged node shows its user (`dfridkin@github`). `CapMap` was `None` under plain grants. |
+| Do user rules match a tagged node? (4) | No. With `{"src": ["dfridkin@github"], "dst": ["tag:clawops-agent"], "ip": ["tcp:7777"]}`, `sprt-u3` reached `sprt-a:7777`; `sprt-s3`, created with that user's key but tagged, did not. (The self-tagged case is the one not run, see above.) |
+| Ports scoped at the destination (1) | Holds. Under tag-to-tag `tcp:7777` plus the user rule: `sprt-b` and `sprt-u3` reached 7777 and not 7778; `sprt-s3` reached neither. |
+| Netmap pruning (1) | Holds. `sprt-s3`, with no rule in either direction, had an empty peer list, and neither `sprt-a` nor `sprt-b` listed it. |
+| Propagation (3) | A new connection was refused **1.5 s** after the policy `POST` returned 200, and **1 s** in a second run. |
+| An open connection after revocation (3) | Depends on whether the peer stays in the netmap. See below. |
+| Existing tags when `tagOwners` drops the tag (2) | Key-forced tags kept: all `tag:clawops-spike` nodes still had the tag, at the control server and in `Self.Tags`. The **key** stopped working: a new join failed with `backend error: key tagged with non-existent tag: tag:clawops-spike`, exit 1. |
+
+**Open connections.** Two runs, each with `sprt-s3` streaming one line a second to `sprt-a:7777`
+through `nc -e cat`:
+
+- The policy dropped every rule naming `tag:clawops-spike`. The echoes stopped **at the change**
+  (last line one second before the `POST`), because `sprt-s3` left `sprt-a`'s netmap and the
+  WireGuard peer went with it.
+- The policy kept `tag:clawops-spike` → `tag:clawops-agent` on `tcp:7778` and removed 7777. New 7777
+  connections were refused within 1 s; the open one was **still echoing 20 s later**. So the
+  Headscale finding holds whenever the two nodes remain peers for any reason.
+
+**What this changes for ADR 0015:** nothing in the design. Tags-only authorisation, re-checking on
+every request and the connection cap all stand. On Tailscale a refused tag is an error rather than
+a silent success, and `UserProfile` can't name the operator for a tagged node. Both make the
+Headscale case the stricter one to design for, since a clawops host agent may sit on either.

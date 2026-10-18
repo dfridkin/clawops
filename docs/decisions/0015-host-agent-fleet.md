@@ -1,6 +1,6 @@
 # ADR 0015, Host agents read each other over the tailnet
 
-**Status:** Proposed. Waiting on the real-Tailscale re-check (see *Verification*)
+**Status:** Proposed. Waiting on SP-16's re-check (see *Verification*)
 **Date:** 2026-10-17
 **Deciders:** Project owner
 **Revisit:** if Tailscale grants carry an app capability clawops can check in place of a tag, or if
@@ -34,7 +34,9 @@ nodes, in local Docker:
 - **[SP-15](../spikes/SP-15-tailnet-peer-limits.md): policy narrows who reaches the port, but is not
   the check.** A tag-to-tag rule confines the agent port, and untagged devices do not even see the
   host. But the default policy allows everything, a tag is only as narrow as `tagOwners`, a refused
-  tag fails silently, and an open TCP connection outlives its revocation.
+  tag fails silently on Headscale, and an open TCP connection outlives its revocation while the two
+  nodes stay peers. Re-checked on real Tailscale, which is stricter on two points: it refuses an
+  unowned tag with an error, and `whois` reports a tagged node as the `tagged-devices` pseudo-user.
 
 Combining them shows one more case. On a default deployment every other agent in host A's gateway
 container can run commands (condition 6). A connection one of them opens to host B leaves host A
@@ -156,7 +158,10 @@ design assumes:
 
 - **`tagOwners` names only the operator.** A tag is as narrow as its owners (SP-15 finding 2).
 - **Tagged auth keys, not `--advertise-tags`.** Advertised tags come and go with `tagOwners`, and
-  on Headscale a self-tagged node also matches its user's rules (SP-15 finding 4).
+  on Headscale a self-tagged node also matches its user's rules (SP-15 finding 4). On Tailscale a
+  key can't self-tag a node at all; `--advertise-tags` with an untagged key waits for a browser
+  login. Dropping a tag from `tagOwners` keeps it on existing nodes but stops its keys joining new
+  ones, so removing a host from the fleet means untagging or deleting its node.
 - **The operator's devices need their own rule.** The tag-to-tag rule alone cuts off SSH from the
   operator's laptop (SP-15 finding 1).
 - **On the default allow-all policy, the tag check is the only barrier.** `doctor` says so when it
@@ -213,11 +218,13 @@ own host's records to every peer's. It still cannot change anything, on its host
   every host could then act as every other, forever, until rotated by hand.
 - **One fleet manager holding every host's SSH key.** The T11 case. Rejected in ADR 0014.
 - **Authorising peers by tailnet user.** Headscale reports the creating user even for tagged nodes,
-  so the operator's own laptop would pass as a peer (SP-15 finding 4).
+  so the operator's own laptop would pass as a peer (SP-15 finding 4). Tailscale reports
+  `tagged-devices` instead, but a check that is safe on only one control server isn't safe.
 - **Trusting the tailnet policy alone.** The default policy allows everything and an open connection
   outlives its revocation (SP-15 findings 3 and 5).
 - **Tailscale app capabilities (grants) instead of tags.** Finer than a tag, and possibly the better
-  credential. Not measured: Headscale returned no `CapMap`. Revisit on a real tailnet.
+  credential. Not measured: neither Headscale nor Tailscale under plain grants returned a `CapMap`,
+  and an app-capability grant wasn't tried. Revisit.
 
 ## Verification
 
@@ -226,9 +233,9 @@ Before this ADR is accepted:
 - **SP-16's re-check list.** Docker CE (the spike had Ubuntu's `docker.io`), the nftables
   backends of Docker and tailscaled, whether `ufw reload` or `clawops harden`'s ufw reset removes
   the mangle rules, a bridge with IPv6 enabled, and the rules reapplied after a reboot on a real VM.
-- **The SP-15 re-check list, on real Tailscale.** How `tagOwners` is enforced, existing tags when it
-  changes, `whois` for a tagged node (`tagged-devices`), whether user rules match self-tagged nodes,
-  netmap pruning and propagation time.
+- ~~The SP-15 re-check list, on real Tailscale.~~ Done 2026-10-18 (SP-15, *Re-checked on real
+  Tailscale*). No change to the design. Not run: a node that tags itself with `--advertise-tags`,
+  which needs an interactive login.
 
 When built, e2e tests on the systemd harness, each one breaking one condition alone:
 
