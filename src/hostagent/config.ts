@@ -39,6 +39,18 @@ const HostAgentConfigSchema = z.object({
    * lets the container in, and so uninstall can remove it.
    */
   listen: z.object({ address: z.string().min(1), port: z.number().int().min(1).max(65535) }).optional(),
+  /**
+   * Fleet membership (ADR 0015), present only when install was given `--serve-peers` or `--peer`.
+   * `peerUid` is the uid the firewall table lets reach peers, so the host agent can check the
+   * table it finds is the one install loaded.
+   */
+  fleet: z.object({
+    /** `--serve-peers`: the tag a caller must carry. Absent on a host that only queries peers. */
+    serves: z.string().min(1).optional(),
+    /** `--peer`: the only hosts this one may query, by stack and tailnet name. */
+    peers: z.array(z.object({ stack: z.string().min(1), node: z.string().min(1) })),
+    peerUid: z.number().int().positive(),
+  }).optional(),
   installedAt: z.string(),
 })
 

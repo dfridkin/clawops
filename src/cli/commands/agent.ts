@@ -34,6 +34,8 @@ const installCmd = defineCommand({
     allow: { type: 'string', description: 'Destructive tools the agent may hand off to you, comma-separated: clawops_gateway_restart, clawops_gateway_update, clawops_backup_restore, clawops_config_set, clawops_config_unset, clawops_harden' },
     strict: { type: 'boolean', description: 'Refuse while any other agent can run commands or read files in the gateway container (otherwise reported)' },
     port: { type: 'string', description: 'Port the host agent listens on, on the Docker bridge (default 18790)' },
+    'serve-peers': { type: 'string', description: 'Join a fleet and answer peer host agents carrying this tailnet tag, e.g. tag:clawops-agent. The host must carry the tag (ADR 0015)' },
+    peer: { type: 'string', description: 'A peer this host agent may query, as <stack>=<tailnet name>. Repeatable, or comma-separated. Requires --strict (ADR 0015)' },
     json: { type: 'boolean', description: 'Emit structured JSON output' },
   },
   async run({ args }) {
@@ -54,6 +56,8 @@ const installCmd = defineCommand({
         allow: listArg(args.allow),
         strict: Boolean(args.strict),
         port: args.port ? Number(args.port) : undefined,
+        servePeers: args['serve-peers'] ? String(args['serve-peers']) : undefined,
+        peers: listArg(args.peer),
       }, { step: (m) => { if (spin) spin.text = m } }, ac.signal)
 
       if (args.json) {
@@ -70,6 +74,11 @@ const installCmd = defineCommand({
       }
       spin?.succeed(`Host agent installed for "${String(args.agent)}" on ${ctx.stackName}, and the gateway reached it.`)
       if (result.deniedAdded.length > 0) info(`Denied clawops to: ${result.deniedAdded.join(', ')}`)
+      if (result.fleet) {
+        info('Fleet firewall table loaded, and loaded again at every boot before Docker starts.')
+        if (result.fleet.serves) info(`Fleet tag: ${result.fleet.serves}`)
+        if (result.fleet.peers.length > 0) info(`Peers: ${result.fleet.peers.map((p) => `${p.stack} (${p.node})`).join(', ')}`)
+      }
       for (const f of result.afterWire) warn(f)
       if (result.reach.length > 0) {
         warn('Other agents can act inside the gateway container, and so can reach what the host agent can:')

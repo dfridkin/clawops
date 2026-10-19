@@ -15,6 +15,7 @@ import {
   nodeInstallScript, NODE_RUNTIME, AGENT_ROOT, type InstallOpts, type InstallDeps,
 } from '../../src/hostagent/install.js'
 import { CLAWOPS_TOOL_PATTERN } from '../../src/hostagent/guardrail.js'
+import { peerTable } from '../../src/hostagent/peer-firewall.js'
 import { makeUfwModule } from '../../src/harden/modules/ufw.js'
 
 const TOKEN = 'tok-9f3a-REDACT-ME'
@@ -37,12 +38,15 @@ function gateway(): Record<string, any> {
 interface Call { cmd: string; stdin?: string }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- gateway configs are edited freely
-function fakeHost(cfg: Record<string, any>, over: { persistDenies?: boolean; ufwActive?: boolean; answers?: boolean; restartOnWrite?: boolean } = {}) {
+function fakeHost(cfg: Record<string, any>, over: { persistDenies?: boolean; ufwActive?: boolean; answers?: boolean; restartOnWrite?: boolean; tailscale?: string; nftListing?: string } = {}) {
   const calls: Call[] = []
   const killed = new Set<string>()
   const ok = (stdout = ''): SshExecResult => ({ stdout, stderr: '', code: 0 })
   function respond(cmd: string): SshExecResult {
     if (cmd === 'uname -s') return ok('Linux\n')
+    if (cmd.startsWith('tailscale status --json')) return ok(over.tailscale ?? '')
+    if (cmd.includes('id -u clawops-peer')) return ok('998\n')
+    if (cmd.includes('nft list table inet clawops_peer')) return ok(over.nftListing ?? peerListing(998))
     if (cmd === 'sudo -n true') return ok()
     if (/cat \/var\/lib\/clawops\/openclaw\/openclaw\.json/.test(cmd)) return ok(JSON.stringify(cfg))
     const set = /config set 'agents\.entries\.([^.]+)\.tools\.deny' '([^']+)' --strict-json/.exec(cmd)
@@ -89,6 +93,23 @@ function deps(wired: { ok: true } | { ok: false; error: string } = { ok: true })
 }
 
 const io = { step: () => {} }
+
+/** What `nft list` prints for the table install loads, written out from that table. */
+function peerListing(uid: number): string {
+  return peerTable(uid).split('\n').filter((l) => !/^(#|table inet clawops_peer$|delete )/.test(l))
+    .map((l) => l.replace(' counter ', ' counter packets 0 bytes 0 ')).join('\n')
+}
+
+const TAILNET_TAGGED = JSON.stringify({ BackendState: 'Running', Self: { Tags: ['tag:clawops-agent'] } })
+const FLEET: InstallOpts = { ...OPTS, strict: true, servePeers: 'tag:clawops-agent', peers: ['us=us-gw'] }
+
+/** A gateway on which no other agent can act in the container, so --strict passes. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- gateway configs are edited freely
+function strictGateway(): Record<string, any> {
+  const cfg = gateway()
+  for (const id of ['main', 'helper']) cfg.agents.entries[id].tools = { ...cfg.agents.entries[id].tools, profile: 'messaging' }
+  return cfg
+}
 const indexOf = (calls: Call[], re: RegExp) => calls.findIndex((c) => re.test(c.cmd))
 const INSTALLS = /node-v22|bin\/node -e|systemctl|agent\.env|clawops-agent\.service/
 
@@ -217,6 +238,55 @@ describe('agent install on the host', () => {
   })
 })
 
+describe('agent install for a fleet member', () => {
+  it('refuses an untagged host before writing anything', async () => {
+    const { session, calls } = fakeHost(strictGateway(), { tailscale: JSON.stringify({ BackendState: 'Running', Self: {} }) })
+    const r = await installHostAgent(session, FLEET, io, undefined, deps())
+    expect(r).toEqual({ ok: false, stage: 'host', failures: [expect.stringMatching(/does not carry tag:clawops-agent/)] })
+    expect(calls.some((c) => /config set|nft|useradd/.test(c.cmd) || INSTALLS.test(c.cmd))).toBe(false)
+  })
+
+  it('refuses a host that is not on the tailnet', async () => {
+    const { session } = fakeHost(strictGateway(), { tailscale: '' })
+    const r = await installHostAgent(session, FLEET, io, undefined, deps())
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.failures[0]).toMatch(/did not answer `tailscale status --json`/)
+  })
+
+  it('loads the table and checks it before the agent starts, and records the uid it lets through', async () => {
+    const { session, calls } = fakeHost(strictGateway(), { tailscale: TAILNET_TAGGED })
+    const r = await installHostAgent(session, FLEET, io, undefined, deps())
+    expect(r.ok, JSON.stringify(r)).toBe(true)
+    if (!r.ok) return
+    expect(r.fleet).toEqual({ serves: 'tag:clawops-agent', peers: [{ stack: 'us', node: 'us-gw' }] })
+
+    const order = [/id -u clawops-peer/, /peer-fw\.nft\.new/, /clawops-peer-fw\.service\.new/, /nft -f/, /nft list table/, /agent\.json\.new/, /systemctl restart clawops-agent/]
+      .map((re) => indexOf(calls, re))
+    expect(order.every((i) => i >= 0), JSON.stringify(order)).toBe(true)
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
+
+    const rules = calls.find((c) => /peer-fw\.nft\.new/.test(c.cmd))!
+    expect(rules.stdin).toContain('meta skuid != 998')
+    const agentJson = calls.find((c) => /agent\.json\.new/.test(c.cmd))!
+    expect(JSON.parse(agentJson.stdin!).fleet).toEqual({ serves: 'tag:clawops-agent', peers: [{ stack: 'us', node: 'us-gw' }], peerUid: 998 })
+  })
+
+  it('does not start the agent when the loaded table is not the one it wrote', async () => {
+    const { session, calls } = fakeHost(strictGateway(), { tailscale: TAILNET_TAGGED, nftListing: peerListing(1001) })
+    const r = await installHostAgent(session, FLEET, io, undefined, deps())
+    expect(r).toEqual({ ok: false, stage: 'install', failures: [expect.stringMatching(/Fleet firewall: .*out chain/)] })
+    expect(calls.some((c) => /systemctl restart clawops-agent/.test(c.cmd))).toBe(false)
+  })
+
+  it('touches neither the tailnet nor nftables on a host outside a fleet', async () => {
+    const { session, calls } = fakeHost(gateway())
+    const r = await installHostAgent(session, OPTS, io, undefined, deps())
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.fleet).toBeUndefined()
+    expect(calls.some((c) => /tailscale|nft|clawops-peer/.test(c.cmd))).toBe(false)
+  })
+})
+
 describe('what install puts on the host', () => {
   it('has a unit that reads the token from its EnvironmentFile and writes only its state', () => {
     const unit = unitFile({ address: '172.17.0.1', port: 18790 })
@@ -298,7 +368,7 @@ describe('what install puts on the host', () => {
 })
 
 describe('agent uninstall', () => {
-  function host(agentJson: string, ufw: string) {
+  function host(agentJson: string, ufw: string, fleet = false) {
     const calls: string[] = []
     const session = {
       async exec(cmd: string): Promise<SshExecResult> {
@@ -306,6 +376,7 @@ describe('agent uninstall', () => {
         if (cmd.includes('mcp show clawops')) return { stdout: 'clawops', stderr: '', code: 0 }
         if (cmd.includes('cat /etc/clawops-agent/agent.json')) return { stdout: agentJson, stderr: '', code: 0 }
         if (cmd.includes('ufw status')) return { stdout: ufw, stderr: '', code: 0 }
+        if (cmd.includes('test -e /etc/systemd/system/clawops-peer-fw.service')) return { stdout: fleet ? 'yes\n' : 'no\n', stderr: '', code: 0 }
         return { stdout: '', stderr: '', code: 0 }
       },
     } as unknown as SshSession
@@ -323,6 +394,14 @@ describe('agent uninstall', () => {
     expect(rm).toContain('/opt/clawops-agent')
     expect(rm).not.toContain('/var/lib/clawops-agent')
     expect(r.kept.join('\n')).toMatch(/audit log/)
+  })
+
+  it('removes the fleet table and its unit where install loaded them', async () => {
+    const { session, calls } = host(JSON_WITH_LISTEN, 'Status: inactive\n', true)
+    const r = await uninstallHostAgent(session, { purge: false }, io)
+    expect(r.failures).toEqual([])
+    expect(r.removed.join('\n')).toMatch(/fleet firewall table/)
+    expect(calls.some((c) => c.includes('nft delete table inet clawops_peer'))).toBe(true)
   })
 
   it('removes the state directory only with --purge', async () => {

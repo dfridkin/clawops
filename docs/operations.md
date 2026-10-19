@@ -208,6 +208,16 @@ and read files there, so it can read the host agent's token and transcripts. Ins
 agents. Give them `tools.profile: "messaging"` or a `tools.allow` list, or install with
 `--strict` to refuse while any remain.
 
+**Fleet membership (2.5, in progress).** `--serve-peers <tag>` and `--peer <stack>=<tailnet
+name>` make the host a fleet member ([ADR 0015](decisions/0015-host-agent-fleet.md),
+[WO-67](fleet-plan.md)). Install refuses unless the host is on the tailnet and, for
+`--serve-peers`, carries the tag; `--peer` also needs `--strict`. On a fleet member install
+loads the nftables table `inet clawops_peer` and reads it back. The table keeps containers and
+other users off port 18800 on the tailnet, and `clawops-peer-fw.service` loads it again at
+every boot, before Docker. Install adds `nftables` if the host lacks it, and the `clawops-peer`
+user. `agent uninstall` removes all of it. Nothing serves or queries peers yet: that is WO-67
+parts B and C.
+
 ## Gateway management
 
 The OpenClaw gateway is a Docker container (`openclaw`) running on the remote host.
