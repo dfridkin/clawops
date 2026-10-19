@@ -41,6 +41,7 @@ From the deployed host:
 | `clawhub.ai` | during `apply`, installing model-provider plugins |
 | `registry.npmjs.org` | during `apply`, when config names a channel |
 | `169.254.169.254` | AWS with Bedrock only: IMDSv2 region lookup |
+| `nodejs.org` | `clawops agent install`, unless the pinned Node runtime is already there; checked against a pinned checksum |
 
 From your machine: your cloud provider's APIs and your state backend during stack operations, and
 `ifconfig.me` only when you use `auto` to resolve your public IP.
@@ -68,6 +69,31 @@ clawops mcp serve                    # everything
 `--read-only` stops clawops making changes. It does **not** sandbox the agent's other tools, and
 it has no effect on anything the agent can reach outside clawops.
 
+**Confirmation does not stop an agent.** An agent can answer a confirmation, or pass `yes: true`,
+itself. For an agent reachable from a chat channel, that makes every mode above a choice of what
+it may do, not a check on whether it should.
+
+**A host agent never acts** (2.4). `clawops agent install` runs clawops on the gateway host in a
+fourth mode, for one OpenClaw agent that only you can message. Its tools read the host it runs
+on, with no SSH, Pulumi state or cloud credentials. A destructive tool you allowed returns the
+`clawops` command for you to run on your machine; `yes: true` is ignored; destroying its own
+stack is refused outright. It re-checks on every call that only you can reach it. See
+[Operations](/docs/operations#host-agent).
+
+**Wiring clawops into a gateway reaches every agent on it**, unless each one denies
+`clawops__*`. See [MCP](/docs/mcp#wiring-the-gateways-own-ai).
+
+## The host's own cloud identity
+
+clawops adds no credentials to a deployed host, but a cloud host can carry an identity that any
+process on it can use:
+
+| Cloud | Identity on the host |
+|---|---|
+| AWS | an instance role with SSM's managed-instance policy, plus `bedrock:InvokeModel` when Bedrock is enabled |
+| Azure | a system-assigned managed identity, which reads the stack's Key Vault secrets when Key Vault is enabled |
+| GCP | none since 2.4; before, the default compute service account with `cloud-platform` |
+
 ## Logs and the audit trail
 
 Every MCP tool call is logged with its name, sanitised arguments, duration and result.
@@ -85,7 +111,7 @@ in place and its limits.
 
 <Cards>
   <Card title="Threat model" href="https://github.com/dfridkin/clawops/blob/main/docs/security/threat-model.md">
-    Assets, actors, and seven scenarios with mitigations.
+    Assets, actors, and eleven scenarios with mitigations.
   </Card>
   <Card title="Tool risk matrix" href="https://github.com/dfridkin/clawops/blob/main/docs/security/tool-risk-matrix.md">
     Every MCP tool by risk level and annotation.

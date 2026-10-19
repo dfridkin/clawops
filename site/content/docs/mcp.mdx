@@ -44,6 +44,26 @@ clawops mcp serve --read-only
 
 Only tools annotated read-only are exposed. Nothing can create, modify or destroy infrastructure.
 
+## Wiring the gateway's own AI
+
+`clawops mcp wire` lets the OpenClaw gateway's agents call clawops. You run the server where the
+gateway can reach it, and the gateway connects before it saves the entry:
+
+```bash
+clawops mcp serve --http 18790 --bind 0.0.0.0 --token "$(openssl rand -hex 16)"
+clawops mcp wire --stack prod --token <same token>
+```
+
+<Callout type="warn" title="Every agent on the gateway gets every clawops tool">
+  OpenClaw's MCP servers are gateway-wide, so wiring offers clawops to all agents, including the
+  default agent that anyone who can message the gateway reaches. From 2.4.1 `mcp wire` names each
+  one. To keep an agent away, add `"clawops__*"` to its `agents.entries.<id>.tools.deny`. For an
+  agent that hands destructive changes back to you instead of making them, use a host agent
+  (below).
+</Callout>
+
+Requires OpenClaw 2026.7.1-2 or later on the gateway.
+
 ## On the gateway host
 
 `clawops agent install` (2.4) runs the MCP server on the gateway host for one OpenClaw agent only
@@ -57,8 +77,9 @@ Every tool declares four hints. Read-only, destructive, idempotent, and open-wor
 relying on defaults. Destructive tools require explicit confirmation unless the caller passes
 `yes: true`.
 
-Long-running operations do not block: anything over a minute returns a task id immediately, and
-progress arrives as notifications.
+Long-running tools record their progress on a task that `clawops_task_status` reads. They do not
+yet send progress notifications, and only `clawops_migrate` returns its task id before it
+finishes, so a slow call looks hung until it returns.
 
 Tool calls are written to an audit log with arguments sanitised. `Authorization`, anything matching
 `*token*`, `*secret*` or `*key*`, passwords and connection strings are redacted before they are
