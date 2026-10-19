@@ -43,3 +43,15 @@ the plan are **not** valid on Docker Desktop.
 
 **Two P0s refuted, four new gaps found (G25, G26, plugin-gated providers, plugin/runtime skew),
 one version floor moved.**
+
+## Host-agent fleet (ADR 0015), 2026-10-17
+
+Measured on Headscale 0.27.1 with Tailscale 1.88.3 nodes in local Docker. SP-15's control-plane
+results were re-checked on real Tailscale on 2026-10-18; they held, and Tailscale was stricter on
+two points (a refused tag is an error, and a tagged node's `whois` user is `tagged-devices`).
+
+| Spike | Outcome |
+|---|---|
+| [SP-14](SP-14-tailnet-caller-identity.md) | LocalAPI `whois` names the calling node and its tags, unprivileged, in kernel and userspace mode, failing closed. **A local process is identified as its own host**, so self must be refused |
+| [SP-15](SP-15-tailnet-peer-limits.md) | A tag-to-tag rule confines the port, but the default policy is allow-all, a refused tag exits 0 (Headscale; Tailscale exits 1), and **an open connection outlives its revocation** while the nodes stay peers |
+| [SP-16](SP-16-container-egress.md) | A container on the gateway's bridge **passes as its host**. `DOCKER-USER` never sees it; a drop on the bridges plus a uid-owner reject on `tailscale0` close it. Re-checked 2026-10-18: as **a native nftables table** they hold on every iptables/nftables mix of Docker CE and tailscaled, with IPv6 bridges, through ufw, and a boot-time unit restores them after a real reboot of Ubuntu 22.04 and Debian 12 VMs (nft 1.0.2 needs one rule per interface; Debian lacks `nft`); as `iptables` rules they can't be managed once tailscaled runs in nftables mode. Host socket: `/run/tailscale/tailscaled.sock`, 0666 in 0755 dirs on Debian 12 and Ubuntu 24.04, whois works unprivileged |
