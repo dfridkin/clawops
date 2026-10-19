@@ -1,6 +1,6 @@
 # ADR 0015, Host agents read each other over the tailnet
 
-**Status:** Proposed. The re-checks in *Verification* are done; acceptance is the owner's call
+**Status:** Accepted 2026-10-18
 **Date:** 2026-10-17
 **Deciders:** Project owner
 **Revisit:** if Tailscale grants carry an app capability clawops can check in place of a tag, or if
