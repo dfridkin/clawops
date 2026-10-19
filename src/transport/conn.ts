@@ -27,11 +27,15 @@ export const HOST_AGENT_CONN: ConnInfo = {
   knownHostsPath: '',
 }
 
+/** The two answers for a stack with no host to connect to. fleet-status.ts tells them apart from a failure. */
+export const NO_LOCAL_STATE = 'Stack has no local state — run `clawops up` first.'
+export const NO_OUTPUTS = 'Stack has no outputs — run `clawops up` first.'
+
 export async function resolveConn(ctx: ClawopsContext): Promise<ConnInfo> {
   if (hostAgent()) return HOST_AGENT_CONN
   if (ctx.adapter.name === 'local') {
     const state = ctx.localState
-    if (!state) throw new StateError('Stack has no local state — run `clawops up` first.')
+    if (!state) throw new StateError(NO_LOCAL_STATE)
     return {
       host: state.sshHost,
       port: state.sshPort,
@@ -59,7 +63,7 @@ export async function resolveConn(ctx: ClawopsContext): Promise<ConnInfo> {
     )
   }
   if (!outputs['publicIp']) {
-    throw new StateError('Stack has no outputs — run `clawops up` first.')
+    throw new StateError(NO_OUTPUTS)
   }
   const base = extractBaseOutputs(outputs)
   return ctx.adapter.getConnectionInfo({

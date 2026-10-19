@@ -195,15 +195,31 @@ tools:
       Use when: the user wants an overview of their deployments, asks "what
       stacks do I have", or wants to compare stacks before an operation.
 
+      With fleet: true, also reads every stack's host over SSH and reports its host
+      agent: whether one is installed and running, which OpenClaw agent it serves, and,
+      on a fleet member (ADR 0015), its tag, its peers, its firewall table and its tailnet
+      state. Peers that cannot work are reported on the host that names them: a peer with
+      no host agent, one that does not serve peers, one that answers a tag this host does
+      not carry, or one reached by a name it does not have on the tailnet. Same reading as
+      `clawops fleet status`. Changes nothing.
+
+      Use when: the user wants an overview of their deployments, asks "what
+      stacks do I have", or wants to compare stacks before an operation. With
+      fleet: true, when they ask which host agents are running, whether the fleet
+      is healthy, or why one host agent cannot reach another.
+
       Do NOT use when: the user named a specific stack — use clawops_status
-      directly with that name.
+      directly with that name. Do NOT pass fleet: true just to list stacks: it
+      connects to every host and takes up to 30 s for one that does not answer.
     annotations:
       title: List Stacks
       readOnlyHint: true
       destructiveHint: false
       idempotentHint: true
-      openWorldHint: false
-    input: {}
+      openWorldHint: true
+    input:
+      fleet: { type: boolean, optional: true, default: false, description: "Also read each stack's host agent and fleet membership over SSH. Off by default: without it nothing leaves this machine" }
+      stackNames: { type: string, optional: true, description: "With fleet: true, read only these stacks, comma-separated. Omitted = every stack in ~/.clawops/config.json" }
     output:
       stacks:
         type: array
@@ -214,6 +230,9 @@ tools:
             provider: { type: enum, values: [aws, gcp, azure, local] }
             region: { type: string }
             health: { type: enum, values: [healthy, degraded, down, unknown] }
+      fleet:
+        type: object
+        description: Present with fleet true. FleetStatus in src/hostagent/fleet-status.ts — hosts (stack, state ok|problems|none|unreachable, service, agentId, strict, fleet, problems), agents, members
 
   - name: clawops_config_get
     toolset: [cli, read]

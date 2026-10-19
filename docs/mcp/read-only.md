@@ -12,7 +12,7 @@ plans for human review, and run recovery diagnostics, but cannot apply any chang
 | `clawops_doctor` | Diagnose the local machine and, with a stack, the deployment |
 | `clawops_logs_tail` | Stream recent container logs |
 | `clawops_monitor` | Sample gateway and host metrics |
-| `clawops_stacks_list` | List known stacks and their last-known state |
+| `clawops_stacks_list` | List known stacks and their last-known state; with `fleet: true`, reads each host's agent over SSH |
 | `clawops_config_get` | Read a value from the OpenClaw config |
 | `clawops_config_validate` | Validate the deployed config against the OpenClaw schema |
 | `clawops_agents_list` | List running agents and their status |

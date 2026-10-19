@@ -88,16 +88,19 @@ export type MonitorInput = z.infer<typeof clawops_monitorSchema>
 
 // ── clawops_stacks_list ─────────────────────────────────────────────────────
 
-export const clawops_stacks_listSchema = z.object({})
+export const clawops_stacks_listSchema = z.object({
+  fleet: z.boolean().optional().default(false).describe("Also read each stack's host agent and fleet membership over SSH. Off by default: without it nothing leaves this machine"),
+  stackNames: z.string().optional().describe("With fleet: true, read only these stacks, comma-separated. Omitted = every stack in ~/.clawops/config.json"),
+})
 
-export const clawops_stacks_listDescription = "List all clawops-managed stacks across all configured providers.\n\nUse when: the user wants an overview of their deployments, asks \"what\nstacks do I have\", or wants to compare stacks before an operation.\n\nDo NOT use when: the user named a specific stack — use clawops_status\ndirectly with that name."
+export const clawops_stacks_listDescription = "List all clawops-managed stacks across all configured providers.\n\nUse when: the user wants an overview of their deployments, asks \"what\nstacks do I have\", or wants to compare stacks before an operation.\n\nWith fleet: true, also reads every stack's host over SSH and reports its host\nagent: whether one is installed and running, which OpenClaw agent it serves, and,\non a fleet member (ADR 0015), its tag, its peers, its firewall table and its tailnet\nstate. Peers that cannot work are reported on the host that names them: a peer with\nno host agent, one that does not serve peers, one that answers a tag this host does\nnot carry, or one reached by a name it does not have on the tailnet. Same reading as\n`clawops fleet status`. Changes nothing.\n\nUse when: the user wants an overview of their deployments, asks \"what\nstacks do I have\", or wants to compare stacks before an operation. With\nfleet: true, when they ask which host agents are running, whether the fleet\nis healthy, or why one host agent cannot reach another.\n\nDo NOT use when: the user named a specific stack — use clawops_status\ndirectly with that name. Do NOT pass fleet: true just to list stacks: it\nconnects to every host and takes up to 30 s for one that does not answer."
 
 export const clawops_stacks_listAnnotations = {
   title: "List Stacks",
   readOnlyHint: true,
   destructiveHint: false,
   idempotentHint: true,
-  openWorldHint: false,
+  openWorldHint: true,
   toolsets: ["admin","read"] as const,
 } as const
 

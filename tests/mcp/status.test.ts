@@ -91,7 +91,7 @@ describe('handleStacksList', () => {
     getConfig.mockReturnValue(null)
 
     const { handleStacksList } = await import('../../src/mcp/tools/cli/stacks.js')
-    const result = await handleStacksList({}, FAKE_SERVER)
+    const result = await handleStacksList({ fleet: false }, FAKE_SERVER)
 
     const text = (result.content[0] as { type: 'text'; text: string }).text
     expect(JSON.parse(text).stacks).toEqual([])
@@ -108,7 +108,7 @@ describe('handleStacksList', () => {
     })
 
     const { handleStacksList } = await import('../../src/mcp/tools/cli/stacks.js')
-    const result = await handleStacksList({}, FAKE_SERVER)
+    const result = await handleStacksList({ fleet: false }, FAKE_SERVER)
 
     const text = (result.content[0] as { type: 'text'; text: string }).text
     const parsed = JSON.parse(text)

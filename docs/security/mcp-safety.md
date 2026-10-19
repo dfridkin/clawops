@@ -13,7 +13,7 @@ changes:
 
 - `clawops_status`
 - `clawops_logs_tail`
-- `clawops_stacks_list`
+- `clawops_stacks_list`; with `fleet: true` it connects to every stack's host to read its host agent, and changes nothing
 - `clawops_config_get`
 - `clawops_config_validate`. Validate the remote openclaw.json (read-only check)
 - `clawops_agents_list`

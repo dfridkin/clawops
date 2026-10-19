@@ -216,7 +216,32 @@ loads the nftables table `inet clawops_peer` and reads it back. The table keeps 
 other users off port 18800 on the tailnet, and `clawops-peer-fw.service` loads it again at
 every boot, before Docker. Install adds `nftables` if the host lacks it, and the `clawops-peer`
 user. `agent uninstall` removes all of it. Nothing serves or queries peers yet: that is WO-67
-parts B and C.
+parts C and D.
+
+### Fleet status
+
+```bash
+clawops fleet status              # every stack in ~/.clawops/config.json
+clawops fleet status --stack us,eu
+```
+
+Reads each stack's host over SSH, four at a time, and lists its host agent: whether one is
+installed, whether its service runs, which OpenClaw agent it serves and whether it was installed
+with `--strict`. On a fleet member it adds the tag it serves, its peers, whether the firewall
+table is exactly the one install loaded, whether the boot unit will load it again, and the host's
+tailnet state and name. Nothing on any host changes.
+
+It then checks the hosts against each other, and reports each problem on the host that names the
+peer: a peer with no host agent, one installed without `--serve-peers`, one that answers a tag the
+caller does not carry, and one reached by a name it does not have on the tailnet. A peer that is
+not in your config, or did not answer, is not judged.
+
+A stack with nothing deployed, because it was never brought up or was torn down, is listed as
+"not deployed" and is not a problem. A host that does not answer within 30 s, or whose state
+backend cannot be read, is reported as unreachable, and the rest are still read.
+Reading needs passwordless sudo for the SSH user, as install does. The command exits 1 when any
+host has a problem or did not answer, so a script can tell. Agents get the same reading from
+`clawops_stacks_list` with `fleet: true`; a host agent refuses it, since it reads only its own host.
 
 ## Gateway management
 
