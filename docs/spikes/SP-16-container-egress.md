@@ -1,6 +1,7 @@
 # SP-16. Can a host keep its gateway container off a peer's agent port?
 
-**Status:** COMPLETE. 2026-10-17, re-checked 2026-10-18 (findings 6–11). Local Docker only.
+**Status:** COMPLETE. 2026-10-17, re-checked 2026-10-18 in local Docker (findings 6–11) and on two
+AWS VMs (finding 12).
 - **Outer environment:** Docker Desktop 29.6.2, linux/arm64, kernel 6.12.76-linuxkit.
 - **Control server:** Headscale v0.27.1.
 - **Peer node:** `tailscale/tailscale:v1.88.3`, kernel mode.
@@ -217,8 +218,10 @@ The rules as one table of clawops's own, which neither Docker, tailscaled nor uf
 table inet clawops_peer {
   chain pre {
     type filter hook prerouting priority mangle; policy accept;
-    iifname { "docker0", "br-*" } ip  daddr 100.64.0.0/10        tcp dport 18792 counter drop
-    iifname { "docker0", "br-*" } ip6 daddr fd7a:115c:a1e0::/48 tcp dport 18792 counter drop
+    iifname "docker0" ip  daddr 100.64.0.0/10        tcp dport 18792 counter drop
+    iifname "br-*"    ip  daddr 100.64.0.0/10        tcp dport 18792 counter drop
+    iifname "docker0" ip6 daddr fd7a:115c:a1e0::/48 tcp dport 18792 counter drop
+    iifname "br-*"    ip6 daddr fd7a:115c:a1e0::/48 tcp dport 18792 counter drop
   }
   chain out {
     type filter hook output priority filter; policy accept;
@@ -230,6 +233,10 @@ table inet clawops_peer {
 In nftables every base chain on a hook gives its own verdict, and a `drop` in any of them is
 final. So `ts-forward`'s `accept` (finding 2), in another table, can't overrule it, whichever
 backend tailscaled and Docker use.
+
+The local runs wrote the two `pre` rules as one each, with a set (`iifname { "docker0", "br-*" }`).
+nft 1.0.2 on Ubuntu 22.04 rejects a wildcard inside a set (finding 12), so the table above uses
+one rule per interface. The VMs ran this form.
 
 Each combination ran on a **fresh host**, Docker's IPv6 on (`"ipv6": true`, a ULA
 `fixed-cidr-v6`, and the user bridge created with `--ipv6`), and the table installed by a oneshot
@@ -282,9 +289,61 @@ Docker's backend, not of these rules. The runs above set the three sysctls in
 - **Restarting Headscale stranded the 1.88.3 peer.** After one failed noise dial it switched to
   `forcing port 443 dial` and never reconnected to `:8080`; the peer had to be rejoined.
 
+## Re-checked on real VMs, 2026-10-18
+
+Two AWS `t3.small` spot instances in us-east-1, one for each image the bootstrap targets:
+**Ubuntu 22.04.5** (the AWS and Azure image, kernel 6.8.0-1066-aws) and **Debian 12** (the GCP
+image, kernel 6.1.0-54-cloud-amd64). Each got Docker CE 29.9.1 from `get.docker.com`, tailscaled
+1.104.1 from `install.sh`, harden's ufw sequence, Docker's IPv6 on, and a user-defined `--ipv6`
+bridge. Headscale 0.27.1 (embedded DERP) and the 1.88.3 peer ran as containers on each host, on a
+bridge of their own with `--restart unless-stopped` and persistent state, so they came back after
+the reboot. Ubuntu ran tailscaled in nftables mode with Docker's iptables backend; Debian ran
+tailscaled's default (`ipt-default`) with Docker's nftables backend. The table went in through
+the same oneshot unit as finding 9. Both instances were terminated afterwards, along with their
+security group and key pair.
+
+### 12. The table survives a real reboot, but needs one rule per interface on nft 1.0.2
+
+**What the images ship:**
+
+| | Ubuntu 22.04 | Debian 12 |
+|---|---|---|
+| `nft` | **installed** (nftables 1.0.2) | **missing**: `nftables` isn't installed |
+| `iptables` | 1.8.7, nf_tables backend | 1.8.9, nf_tables backend |
+| ufw | installed | missing (harden installs it) |
+| `nf_tables` module before anything ran | not loaded | not loaded |
+
+So `agent install` has to install `nftables` on Debian. Neither image needs the module loaded
+by hand: the first `nft` or iptables-nft call loads it.
+
+**nft 1.0.2 rejects a wildcard in a set.** On Ubuntu 22.04 the unit failed with
+`Error: Byteorder mismatch: expected big endian, got host endian` at `iifname { "docker0", "br-*" }`,
+and nothing was applied. nftables 1.0.6 (Debian 12) and the newer version in the local runs accept it.
+Because nothing was applied, the host was wide open while the unit sat `failed`. That is why the
+agent has to check the table is present, not just that the unit ran. One rule per
+interface works on both.
+
+**Results**, with the table from finding 9, and probes retried as before:
+
+| | Ubuntu 22.04: tailscaled nft, Docker iptables | Debian 12: tailscaled iptables, Docker nftables |
+|---|---|---|
+| Baseline, no table | everything passes | everything passes |
+| Table from the unit | **only the agent uid passes** (v4 and v6) | same |
+| After `systemctl reboot` | same | same |
+
+After the reboot the unit was `active` and the table present on both hosts, within about 10 s of
+boot. `systemd-analyze critical-chain` put it after `docker.service` (finished at 14.0 s on Ubuntu,
+9.5 s on Debian) and it took 22–43 ms. The rule counters rose on every blocked probe. The
+agent's uid was 1001 on Ubuntu, not 999, because uid 999 was already taken. The rule takes the
+agent's real uid, not a fixed one.
+
 ## What remains
 
-- **A real VM.** The reboot above was a container restart. Kernel module loading (`nf_tables`,
-  `skuid` matching) and a cloud image's boot order are untested.
-- **Whether `nft` is installed by default** on the images the bootstrap targets. This host had it
-  because the spike installed `nftables`. If it's missing, `agent install` has to install it.
+Nothing that blocks ADR 0015, but the unit's ordering has to change. With
+`After=docker.service`, as in these runs, Docker starts the containers it restarts (the gateway
+among them) before the table exists. The gap was short here, but a container could reach a peer
+in it, and the host agent's check doesn't help: it guards the agent's own queries, not a container
+connecting directly. `iifname` and `oifname` match by name, so the table loads fine before
+`docker0`, the `br-*` bridges or `tailscale0` exist. The unit should run
+`Before=docker.service tailscaled.service`. That ordering wasn't run on the VMs. The e2e tests
+should check it.

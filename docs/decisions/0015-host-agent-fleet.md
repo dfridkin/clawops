@@ -1,6 +1,6 @@
 # ADR 0015, Host agents read each other over the tailnet
 
-**Status:** Proposed. Waiting on a reboot on a real VM (see *Verification*)
+**Status:** Proposed. The re-checks in *Verification* are done; acceptance is the owner's call
 **Date:** 2026-10-17
 **Deciders:** Project owner
 **Revisit:** if Tailscale grants carry an app capability clawops can check in place of a tag, or if
@@ -128,8 +128,12 @@ The case found by combining the spikes is closed on the calling side:
   chain (SP-16 finding 8). In a separate table a `drop` is final whatever any other table accepts,
   and Docker, tailscaled and ufw leave it alone. It held on all four combinations of iptables and
   nftables backends for Docker CE and tailscaled, with IPv6 bridges, across restarts of Docker,
-  tailscaled and ufw (SP-16 findings 6–10). Nothing persists it across a reboot, so the host
-  agent's unit applies it at start. **The host agent checks it is present before every peer query
+  tailscaled and ufw (SP-16 findings 6–10), and after a real reboot of Ubuntu 22.04 and Debian 12
+  VMs (finding 12). Nothing persists it across a reboot, so a oneshot unit applies it at boot,
+  ordered `Before=docker.service tailscaled.service`: Docker starts the containers it restarts as
+  soon as it is up, and the table matches interfaces by name, so it doesn't need them to exist yet.
+  Each `pre` rule names one interface pattern, because nft 1.0.2 on Ubuntu 22.04 rejects a
+  wildcard inside a set. `agent install` installs `nftables`, which Debian 12's cloud image lacks. **The host agent checks it is present before every peer query
   and refuses when it is not.** The peer port is fixed, so the rules can name it. A container
   started as the agent's uid with `--network host` passes the owner rule, but starting containers
   already needs root. A peer query's timeout allows for the first connection after tailscaled
@@ -238,10 +242,9 @@ own host's records to every peer's. It still cannot change anything, on its host
 
 Before this ADR is accepted:
 
-- **A reboot on a real VM.** SP-16 re-checked Docker CE, both nftables backends, ufw and IPv6
-  bridges on 2026-10-18 (findings 6–11). Its reboot was a restart of a systemd container, which
-  starts from empty netfilter state but doesn't load kernel modules or follow a cloud image's boot
-  order. Also to confirm: whether `nft` is installed by default on the images the bootstrap targets.
+- ~~A reboot on a real VM.~~ Done 2026-10-18 on AWS, Ubuntu 22.04 and Debian 12 (SP-16 finding 12).
+  It changed three details in §4 and nothing in the design: the rule form, installing `nftables`,
+  and ordering the unit before Docker.
 - ~~The SP-15 re-check list, on real Tailscale.~~ Done 2026-10-18 (SP-15, *Re-checked on real
   Tailscale*). No change to the design. Not run: a node that tags itself with `--advertise-tags`,
   which needs an interactive login.
@@ -255,6 +258,8 @@ When built, e2e tests on the systemd harness, each one breaking one condition al
 - A host agent with `--peer` refuses peer queries while another agent can run commands in its
   container.
 - Untagging a peer refuses its next request, and a held connection ends within the cap.
+- After a reboot, a gateway container with a restart policy can't reach a peer at any point, and
+  the host agent refuses peer queries while the table is missing.
 
 ## References
 
