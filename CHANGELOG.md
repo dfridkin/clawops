@@ -1,5 +1,12 @@
 # @clawops/cli
 
+## 2.4.1
+
+### Patch Changes
+
+- 0cbf8f9: The `clawops://stacks/{name}/last-run` resource refuses a name that is not a stack name. It used to join the name from the URI into a path, so `../` could read a `*.last-run.json` file outside `~/.clawops/state`.
+- 1c934c5: `clawops mcp wire` and the setup wizard now name every gateway agent that can call clawops once wired, the default agent included, and say how to deny one. OpenClaw offers a gateway's MCP servers to every agent unless that agent's `tools.deny` covers `clawops__*`.
+
 ## 2.4.0
 
 ### Minor Changes
