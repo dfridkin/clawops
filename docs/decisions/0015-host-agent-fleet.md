@@ -139,6 +139,11 @@ The case found by combining the spikes is closed on the calling side:
   already needs root. A peer query's timeout allows for the first connection after tailscaled
   restarts, which took over 4 s in SP-16.
 
+  *Implementation note, WO-67 part A (2026-10-18):* the peer port is 18800, and the owner rule lets
+  through a dedicated `clawops-peer` user rather than the host agent's uid. The host agent runs
+  as root, as every `--network host` container does, so a rule naming root would let those
+  through. Peer queries run as `clawops-peer` ([fleet plan](../fleet-plan.md)).
+
 This leaves the case where root on a tagged host is compromised. Root can query every peer as that
 host, which is no more than root can already read through the host's own agent. It cannot change a
 peer.

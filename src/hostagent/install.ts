@@ -9,6 +9,7 @@
 //   /etc/clawops-agent/agent.env    the bearer token, root-only
 //   /var/lib/clawops-agent/         CLAWOPS_HOME: audit log, handoffs, tasks
 //   clawops-agent.service           the server, on the Docker bridge address only
+//   clawops-peer-fw.service         fleet members only: the firewall table (peer-firewall.ts)
 //
 // Nothing is installed from npm on the host. The bundle is the operator's clawops at the
 // operator's version, so what the agent runs is what the operator reviewed.
@@ -41,6 +42,11 @@ import { MCP_HTTP_PORT } from '../mcp/server.js'
 import { GATEWAY_PORT } from '../openclaw/run-flags.js'
 import { PUBLISH_INSPECT_CMD, publishedGatewayPort } from '../openclaw/runtime.js'
 import { ufwAllowRule, ufwDeleteRule, listenFrom, HOST_AGENT_UFW_COMMENT } from './firewall.js'
+import { validateFleetOpts, parsePeer, checkTailnet, type FleetPeer } from './fleet.js'
+import {
+  peerTable, peerFirewallUnit, peerFirewallPrepareScript, peerFirewallLoadScript, peerFirewallRemoveScript,
+  checkPeerTable, PEER_FW_RULES_PATH, PEER_FW_UNIT_PATH, PEER_TABLE_LIST_CMD, PEER_TABLE,
+} from './peer-firewall.js'
 
 export const AGENT_ROOT = '/opt/clawops-agent'
 export const AGENT_ETC = path.posix.dirname(HOST_AGENT_CONFIG_PATH)
@@ -69,6 +75,10 @@ export interface InstallOpts {
   allow: string[]
   strict: boolean
   port?: number
+  /** `--serve-peers <tag>` (ADR 0015). */
+  servePeers?: string
+  /** `--peer <stack>=<tailnet name>`, as given. */
+  peers?: string[]
 }
 
 export interface InstallIo {
@@ -76,7 +86,7 @@ export interface InstallIo {
 }
 
 export type InstallResult =
-  | { ok: true; deniedAdded: string[]; reach: string[]; url: string; afterWire: string[] }
+  | { ok: true; deniedAdded: string[]; reach: string[]; url: string; afterWire: string[]; fleet?: { serves?: string; peers: FleetPeer[] } }
   | { ok: false; stage: 'input' | 'host' | 'guardrail' | 'verify' | 'install' | 'start' | 'wire'; failures: string[] }
 
 // ── Pure parts ───────────────────────────────────────────────────────────────
@@ -103,6 +113,7 @@ export function validateInstallOpts(opts: InstallOpts): string[] {
   if (opts.port !== undefined && (!Number.isInteger(opts.port) || opts.port < 1024 || opts.port > 65535)) {
     errors.push(`--port ${opts.port} is not a port between 1024 and 65535.`)
   }
+  errors.push(...validateFleetOpts({ stack: opts.stack, strict: opts.strict, servePeers: opts.servePeers, peers: opts.peers ?? [] }))
   return errors
 }
 
@@ -346,6 +357,14 @@ export async function installHostAgent(
   if (sudo.code !== 0) {
     return { ok: false, stage: 'host', failures: ['Installing needs passwordless sudo for the SSH user on the host.'] }
   }
+  const peers = (opts.peers ?? []).map((p) => parsePeer(p)!)
+  const inFleet = opts.servePeers !== undefined || peers.length > 0
+  if (inFleet) {
+    io.step('Checking this host is on the tailnet')
+    const status = await session.exec('tailscale status --json 2>/dev/null || true', signal)
+    const tailnet = checkTailnet(status.stdout, opts.servePeers)
+    if (!tailnet.ok) return { ok: false, stage: 'host', failures: [tailnet.reason] }
+  }
 
   // 1. The guardrail, against the configuration as install would leave it.
   io.step('Checking that only the operator can reach the agent')
@@ -392,6 +411,17 @@ export async function installHostAgent(
     return { ok: false, stage: 'install', failures: [`Could not read the Docker bridge address: ${errText(bridge)}`] }
   }
   const listen = { address, port }
+
+  // The firewall table, before the agent starts: on a fleet host it is what keeps every other
+  // container and user from querying peers as this host (ADR 0015 §4).
+  let peerUid: number | undefined
+  if (inFleet) {
+    io.step('Installing the fleet firewall table')
+    const fw = await installPeerFirewall(session, signal)
+    if (!fw.ok) return { ok: false, stage: 'install', failures: [fw.failure] }
+    peerUid = fw.uid
+  }
+
   const config: HostAgentConfig = {
     version: 1,
     stack: opts.stack,
@@ -401,6 +431,9 @@ export async function installHostAgent(
     allow: opts.allow,
     strict: opts.strict,
     listen,
+    ...(peerUid !== undefined
+      ? { fleet: { ...(opts.servePeers !== undefined ? { serves: opts.servePeers } : {}), peers, peerUid } }
+      : {}),
     installedAt: (deps.now ?? (() => new Date()))().toISOString(),
   }
   const token = (deps.token ?? (() => randomBytes(32).toString('hex')))()
@@ -461,7 +494,38 @@ export async function installHostAgent(
     reach: opts.strict ? [] : containerReach(final, opts.agentId),
     url,
     afterWire: finalCheck.ok ? [] : finalCheck.failures,
+    ...(inFleet ? { fleet: { ...(opts.servePeers !== undefined ? { serves: opts.servePeers } : {}), peers } } : {}),
   }
+}
+
+/**
+ * The fleet firewall table and its unit (peer-firewall.ts): nftables where missing, the peer
+ * client's user, the rules file, the unit, then the table loaded and read back. Nothing here
+ * depends on the gateway, so the e2e suite runs it on a host without one.
+ */
+export async function installPeerFirewall(session: SshSession, signal?: AbortSignal): Promise<{ ok: true; uid: number } | { ok: false; failure: string }> {
+  const prep = await asRoot(session, peerFirewallPrepareScript(), signal)
+  const uid = Number(prep.stdout.trim().split('\n').at(-1))
+  if (prep.code !== 0 || !Number.isInteger(uid) || uid <= 0) return { ok: false, failure: `Fleet firewall: ${errText(prep)}` }
+  for (const [file, contents] of [[PEER_FW_RULES_PATH, peerTable(uid)], [PEER_FW_UNIT_PATH, peerFirewallUnit()]] as const) {
+    const r = await writeRootFile(session, file, '0644', contents, signal)
+    if (r.code !== 0) return { ok: false, failure: `${file}: ${errText(r)}` }
+  }
+  const load = await asRoot(session, peerFirewallLoadScript(), signal)
+  if (load.code !== 0) return { ok: false, failure: `Fleet firewall: ${errText(load)}` }
+  // Read back: what the kernel holds is what counts, not what nft was given.
+  const listed = await asRoot(session, PEER_TABLE_LIST_CMD, signal)
+  const table = checkPeerTable(listed.stdout, uid)
+  if (!table.ok) return { ok: false, failure: `Fleet firewall: ${table.reason}` }
+  return { ok: true, uid }
+}
+
+/** Removes the table, its unit and files, and the peer client's user, where install added them. */
+export async function removePeerFirewall(session: SshSession, signal?: AbortSignal): Promise<{ removed: boolean; failure?: string }> {
+  const present = await asRoot(session, `test -e ${PEER_FW_UNIT_PATH} && echo yes || echo no`, signal)
+  if (present.stdout.trim() !== 'yes') return { removed: false }
+  const r = await asRoot(session, peerFirewallRemoveScript(), signal)
+  return r.code === 0 ? { removed: true } : { removed: false, failure: `fleet firewall: ${errText(r)}` }
 }
 
 export interface UninstallResult {
@@ -509,6 +573,11 @@ export async function uninstallHostAgent(
       else failures.push(`ufw: ${errText(r)}`)
     }
   }
+
+  io.step('Removing the fleet firewall table, if any')
+  const fw = await removePeerFirewall(session, signal)
+  if (fw.removed) removed.push(`the fleet firewall table (inet ${PEER_TABLE}) and its unit`)
+  if (fw.failure) failures.push(fw.failure)
 
   const paths = [AGENT_ROOT, AGENT_ETC, ...(opts.purge ? [HOST_AGENT_STATE_DIR] : [])]
   const rm = await asRoot(session, `rm -rf ${paths.join(' ')}`, signal)
