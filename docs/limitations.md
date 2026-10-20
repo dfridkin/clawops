@@ -113,8 +113,9 @@ calls are not affected: they hand off to the operator either way.
 
 **Fleet hosts don't talk to each other yet.** `agent install --serve-peers` and `--peer` check
 the tailnet, record the fleet and load its firewall table (WO-67 part A), but no peer listener
-or peer routing exists until parts B and C. A fleet member answers only its own operator, as
-before.
+or peer routing exists until parts C and D. A fleet member answers only its own operator, as
+before. `clawops fleet status` (part B) reads the fleet from the operator's machine; a host agent
+refuses `clawops_stacks_list` with `fleet: true`, because it reads only its own host.
 
 **Long-running tools send no progress notifications.** `clawops_up`, `clawops_apply`,
 `clawops_destroy`, `clawops_gateway_update` and the backup tools record progress on a task that

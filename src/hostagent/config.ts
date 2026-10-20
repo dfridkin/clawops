@@ -56,6 +56,22 @@ const HostAgentConfigSchema = z.object({
 
 export type HostAgentConfig = z.infer<typeof HostAgentConfigSchema>
 
+/** The configuration as read from another host, where a bad file is a finding, not an error. */
+export function parseHostAgentConfig(raw: string): { ok: true; config: HostAgentConfig } | { ok: false; reason: string } {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return { ok: false, reason: `${HOST_AGENT_CONFIG_PATH} is not valid JSON.` }
+  }
+  const result = HostAgentConfigSchema.safeParse(parsed)
+  if (!result.success) {
+    const issues = result.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+    return { ok: false, reason: `${HOST_AGENT_CONFIG_PATH} is invalid: ${issues.join('; ')}` }
+  }
+  return { ok: true, config: result.data }
+}
+
 /** The config path, overridable for tests and for a non-default install. */
 export function hostAgentConfigPath(): string {
   return process.env['CLAWOPS_AGENT_CONFIG'] ?? HOST_AGENT_CONFIG_PATH

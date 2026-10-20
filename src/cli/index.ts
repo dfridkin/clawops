@@ -13,6 +13,7 @@ import logsCmd from './commands/logs.js'
 import configCmd from './commands/config.js'
 import agentsCmd from './commands/agents.js'
 import agentCmd from './commands/agent.js'
+import fleetCmd from './commands/fleet.js'
 import migrateCmd from './commands/migrate.js'
 import gatewayCmd from './commands/gateway.js'
 import backupCmd from './commands/backup.js'
@@ -65,6 +66,7 @@ const main = defineCommand({
     config: configCmd,
     agents: agentsCmd,
     agent: agentCmd,
+    fleet: fleetCmd,
     migrate: migrateCmd,
     gateway: gatewayCmd,
     backup: backupCmd,

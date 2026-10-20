@@ -277,6 +277,7 @@ clawops down --yes          # Destroy local-provider stack
 | `agents` | List OpenClaw agents, or stream one agent's logs |
 | `agent install` | Install a host agent on a stack's gateway host, for one OpenClaw agent only the operator can reach (`--agent`, `--operator <channel>:<peer>`, `--allow` handoff tools, `--strict`). Refuses unless the gateway's routing allows only the operator; denies clawops to every other agent. `--serve-peers <tag>` and `--peer <stack>=<tailnet name>` make the host a fleet member (ADR 0015, in progress: see [WO-67](docs/fleet-plan.md)) |
 | `agent uninstall` | Remove the host agent and unwire the gateway (`--purge` also removes its audit log) |
+| `fleet status` | Read every stack's host over SSH and list its host agent: running or not, which OpenClaw agent it serves, and on a fleet member its tag, peers, firewall table and tailnet state. Reports peers that cannot work, on the host that names them. `--stack a,b` reads only those; `--json`. A stack with nothing deployed is listed as such. Exits 1 when any host has a problem or does not answer |
 | `gateway` | Restart the OpenClaw gateway service |
 | `backup` | Create and restore OpenClaw state backups (`restore` expands into a staging directory, never in place; `--activate` swaps it in and rolls back if the gateway does not come up) |
 | `stacks` | List named stacks and their state |
@@ -381,7 +382,7 @@ Do not bind to a non-loopback address without additional authentication controls
 | `clawops_doctor` | cli | Run diagnostics: local prerequisites, and with a stack, remote health |
 | `clawops_logs_tail` | cli | Tail OpenClaw logs |
 | `clawops_monitor` | cli | Sample gateway and host metrics |
-| `clawops_stacks_list` | admin | List all stacks and their state |
+| `clawops_stacks_list` | admin | List all stacks and their state; with `fleet: true`, every host agent and the fleet's peers, as `clawops fleet status` reports them |
 | `clawops_config_get` | cli | Read a remote config value |
 | `clawops_agents_list` | cli | List running agents |
 | `clawops_agents_logs` | cli | One agent's recent activity, paginated |
