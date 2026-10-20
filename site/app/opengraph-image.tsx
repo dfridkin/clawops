@@ -151,7 +151,7 @@ export default async function OpengraphImage() {
             fontSize: 21,
           }}
         >
-          OpenClaw 2.0 support is live in clawops 2.0
+          Coming in clawops 2.5: host-agent fleets
         </div>
 
         <div
