@@ -40,7 +40,7 @@ function tailnet(name: string, tags: string[], state = 'Running'): string {
   return JSON.stringify({ BackendState: state, Self: { DNSName: `${name}.tail1234.ts.net.`, HostName: name, Tags: tags } })
 }
 
-interface HostOut { config?: HostAgentConfig | string; service?: string; fwunit?: string; fw?: string; tailnet?: string }
+interface HostOut { config?: HostAgentConfig | string; service?: string; fwunit?: string; fw?: string; tailnet?: string; listener?: string }
 
 /**
  * What the status script prints on a host holding these: each marker on a line of its own, then
@@ -50,7 +50,7 @@ function printed(o: HostOut): string {
   const cfg = o.config === undefined ? '' : typeof o.config === 'string' ? o.config : JSON.stringify(o.config, null, 2)
   const line = (v: string) => (v ? `${v}\n` : '')
   const parts: [string, string][] = [
-    ['config', cfg], ['service', line(o.service ?? 'active')], ['fwunit', line(o.fwunit ?? '')], ['fw', line(o.fw ?? '')], ['tailnet', o.tailnet ?? ''],
+    ['config', cfg], ['service', line(o.service ?? 'active')], ['fwunit', line(o.fwunit ?? '')], ['fw', line(o.fw ?? '')], ['tailnet', o.tailnet ?? ''], ['listener', line(o.listener ?? '')],
   ]
   return parts.map(([k, v]) => `\n${MARK}${k}\n${v}`).join('')
 }
@@ -62,6 +62,8 @@ function member(stack: string, opts: { serves?: string; peers?: { stack: string;
     fwunit: 'enabled',
     fw: listing(),
     tailnet: tailnet(opts.name ?? `${stack}-gw`, opts.tags ?? (opts.serves ? [opts.serves] : [])),
+    // ss -Htln as a host prints it, with the listener up on the tailnet address.
+    listener: opts.serves ? 'LISTEN 0      511      100.64.0.2:18800      0.0.0.0:*' : '',
   }
 }
 
@@ -70,10 +72,11 @@ const TAG = 'tag:clawops-agent'
 describe('reading the host', () => {
   it('reads every part in one script, as root, and does not stop at the first failure', () => {
     const s = fleetReadScript()
-    for (const part of ['config', 'service', 'fwunit', 'fw', 'tailnet']) expect(s).toContain(`printf '\\n%s\\n' '${MARK}${part}'`)
+    for (const part of ['config', 'service', 'fwunit', 'fw', 'tailnet', 'listener']) expect(s).toContain(`printf '\\n%s\\n' '${MARK}${part}'`)
     expect(s.split('\n').every((l) => l.endsWith('|| true'))).toBe(true)
     expect(s).toContain('cat /etc/clawops-agent/agent.json')
     expect(s).toContain('nft list table inet clawops_peer')
+    expect(s).toContain("ss -Htln 'sport = :18800'")
   })
 })
 
@@ -127,6 +130,31 @@ describe('one host', () => {
       .toEqual([expect.stringMatching(/did not answer/)])
     expect(assessHost('us', printed({ ...member('us', { serves: TAG }), tailnet: tailnet('us-gw', []) })).problems)
       .toEqual([expect.stringMatching(/no longer carries that tag itself \(its tags: none\)/)])
+  })
+
+  it('reports where the peer listener listens on a member that serves peers', () => {
+    const h = assessHost('us', printed(member('us', { serves: TAG })))
+    expect(h).toMatchObject({ state: 'ok', fleet: { listening: ['100.64.0.2:18800'] } })
+  })
+
+  it('reports a running member that serves peers but has no listener', () => {
+    const h = assessHost('us', printed({ ...member('us', { serves: TAG }), listener: '' }))
+    expect(h).toMatchObject({ state: 'problems', fleet: { listening: [] } })
+    expect(h.problems).toEqual([expect.stringMatching(/serves peers but nothing listens on port 18800/)])
+  })
+
+  it('does not report the listener of a stopped service, or one ss could not ask about', () => {
+    expect(assessHost('us', printed({ ...member('us', { serves: TAG }), listener: '', service: 'inactive' })).problems)
+      .toEqual([expect.stringMatching(/service is inactive/)])
+    const noSs = assessHost('us', printed({ ...member('us', { serves: TAG }), listener: 'unknown' }))
+    expect(noSs.state).toBe('ok')
+    expect(noSs.fleet?.listening).toBeUndefined()
+  })
+
+  it('expects no listener on a member that only queries peers', () => {
+    const h = assessHost('us', printed({ ...member('us', { peers: [{ stack: 'eu', node: 'eu-gw' }] }), listener: '' }))
+    expect(h.state).toBe('ok')
+    expect(h.fleet?.listening).toBeUndefined()
   })
 
   it('reports output with no sections as a host that did not run the script', () => {

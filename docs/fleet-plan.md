@@ -80,14 +80,65 @@ status test in `tests/e2e/local/peer-firewall.e2e.test.ts`, which reads a real s
 That test found a bug the fakes had hidden: agent.json ends without a newline, so the next
 section's marker ran onto its last line.
 
-### Part C: the peer listener
+### Part C: the peer listener ✅
 
-The serving side, ADR §2 and §3. A second listener on the tailnet address (kernel mode) or
-loopback (userspace mode), port 18800. On every request it runs `whois` on the exact remote
-`ip:port`, and refuses a 404, a node without the `--serve-peers` tag, and this host by `StableID`.
-It serves only the 12 read tools and caps a connection at 60 s. Only a few missed lookups may be
-in flight. ufw allows 18800 only on `tailscale0`. Audit records the caller's name, `StableID`
-and tags (§7). Fleet status adds whether the listener is up on each member that serves peers.
+The serving side, ADR §2 and §3, in `src/hostagent/peer-listener.ts`, with tailscaled's LocalAPI
+in `tailscaled.ts`. A host agent whose agent.json has `fleet.serves` starts a second listener on
+port 18800:
+- **Where it binds.** In kernel mode it binds the node's tailnet addresses, v4 and v6. In
+  userspace mode (`TUN: false` in status) it binds loopback.
+- **When it binds.** At boot it waits for tailscaled to be `Running` with an address. It never
+  stops the host's own listener.
+
+On every request it:
+- asks tailscaled `whois` for the exact remote `ip:port`, and `status` for this host's `StableID`;
+- refuses 403 for a 404 (not a tailnet node), for this host by `StableID`, and for a node without
+  the tag;
+- refuses 503 when either answer can't be read.
+
+Around that check:
+- **Lookups.** At most 4 caller lookups are in flight, and any more are refused.
+- **Requests.** A connection lasts at most 60 s, and only POST is answered.
+- **Statelessness.** Each request gets a stateless MCP server of its own, holding the 12 read
+  tools and nothing else. A read naming another stack is refused.
+- **No guardrail on this host.** The host's operator guardrail is not checked on a peer's call.
+  It is about who reaches this host's own agent, and the caller checked its own guardrail first.
+- **Audit.** Every answer records the caller's name, `StableID` and tags (§7). So does every
+  refusal, with its reason. A refusal before any tool ran is logged as `peer_listener`.
+
+Install also changes:
+- **ufw.** Where ufw is active, a host that serves peers allows 18800 on `tailscale0` only.
+  Uninstall removes the rule, and `harden`'s ufw reset adds it back.
+- **The unit.** A fleet member's unit is ordered `After=tailscaled.service`.
+- **The socket check.** Install checks that `clawops-peer` can run `tailscale status`, and refuses
+  if not. Part D's queries run as that user and ask tailscaled where a peer is, so they don't
+  depend on MagicDNS.
+
+Fleet status reads `ss -Htln` on port 18800. It reports a member that serves peers, whose service
+runs and that has nothing listening.
+
+Accepted by `tests/hostagent/peer-listener.test.ts`. That suite runs a real HTTP listener and MCP
+client on loopback, with tailscaled faked per test. It also needs `tailscaled.test.ts` (a real
+unix socket), and new cases in `install.test.ts` and `fleet-status.test.ts`. Each was
+mutation-checked.
+
+**Measured 2026-10-21** with the built host agent, on Headscale 0.27.1 and Tailscale 1.88.3 in
+local Docker:
+- **Bind addresses.** A userspace node and a kernel node bound loopback and both tailnet
+  addresses respectively, from real `TUN` and `TailscaleIPs`.
+- **The tagged peer** got 12 tools and an answer, over v4 and v6. `clawops_gateway_restart` was
+  "not found", though the host's own agent was allowed it.
+- **Refused callers.** These were refused with the reasons above:
+  - an untagged node;
+  - a `tag:other` node;
+  - the host itself;
+  - a LAN neighbour routing the tailnet address over Docker's network. Linux accepted its packet,
+    as SP-14 found, and whois said 404.
+- **Userspace callers.** These arrived from `127.0.0.1:<port>`, and whois told them apart by port.
+- **Revocation.** Retagging the peer refused its next request, and restoring the tag let it back.
+- **Cold paths.** As in SP-14, the first connection to a node without a direct path timed out, on
+  a tailnet with no DERP. That is part D's timeout and retry.
+- **`ss`.** Its output on the e2e target matches what fleet status parses.
 
 ### Part D: routing peer queries
 
@@ -99,6 +150,12 @@ took over 4 s in SP-16, and there is one retry. On a host agent, `clawops_stacks
 peers and whether each answered, and `fleet: true` answers for this host and its peers instead of
 being refused. A destructive call naming a peer is refused with the operator's command, and is
 recorded in neither host's `handoffs.jsonl`. No new tool or input.
+
+Left for part D by part C:
+- **Finding the peer.** The client finds a peer's address from `tailscale status`, run as
+  `clawops-peer`, not from DNS.
+- **No forwarding through a peer.** A peer's listener answers `fleet: true` for its own host only,
+  and never forwards: a fleet query is one hop.
 
 ### Part E: the e2e suite, docs and release
 
@@ -118,3 +175,6 @@ The rest of the part:
 - the site: `operations.mdx`, `commands.mdx` (including `fleet status`), `security.mdx`, `limitations.mdx`;
 - `docs/security/tool-risk-matrix.md` and `mcp-safety.md`, for what a peer can reach;
 - a changeset for the whole fleet.
+- at release, the clawops.fyi banner (#222) changes from "Coming in 2.5" to live, and links the
+  fleet docs instead of the ADR. It merges at the same time as the Version Packages PR, with the
+  owner's OK.

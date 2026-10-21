@@ -215,8 +215,17 @@ name>` make the host a fleet member ([ADR 0015](decisions/0015-host-agent-fleet.
 loads the nftables table `inet clawops_peer` and reads it back. The table keeps containers and
 other users off port 18800 on the tailnet, and `clawops-peer-fw.service` loads it again at
 every boot, before Docker. Install adds `nftables` if the host lacks it, and the `clawops-peer`
-user. `agent uninstall` removes all of it. Nothing serves or queries peers yet: that is WO-67
-parts C and D.
+user. `agent uninstall` removes all of it.
+
+With `--serve-peers` the host agent also listens for peers on port 18800: on its tailnet
+addresses, or on loopback where tailscaled runs in userspace networking. It needs no token. On
+each request it asks tailscaled who is calling, and answers only a tailnet node that carries the
+tag and is not this host, with the 12 read tools and nothing destructive. A connection is cut
+after 60 s. Where ufw is active, install allows port 18800 on `tailscale0` only, and `harden`'s
+ufw reset keeps that rule. At boot the listener waits for the tailnet address if tailscaled has
+none yet; `journalctl -u clawops-agent` says when it starts. Install also checks that the
+`clawops-peer` user can ask tailscaled for status, which part D's peer queries need. Nothing
+sends peer queries yet: that is WO-67 part D.
 
 ### Fleet status
 
@@ -228,8 +237,8 @@ clawops fleet status --stack us,eu
 Reads each stack's host over SSH, four at a time, and lists its host agent: whether one is
 installed, whether its service runs, which OpenClaw agent it serves and whether it was installed
 with `--strict`. On a fleet member it adds the tag it serves, its peers, whether the firewall
-table is exactly the one install loaded, whether the boot unit will load it again, and the host's
-tailnet state and name. Nothing on any host changes.
+table is exactly the one install loaded, whether the boot unit will load it again, the host's
+tailnet state and name, and, on a member that serves peers, whether its peer listener is up. Nothing on any host changes.
 
 It then checks the hosts against each other, and reports each problem on the host that names the
 peer: a peer with no host agent, one installed without `--serve-peers`, one that answers a tag the

@@ -16,13 +16,14 @@ import { sudoWrap } from '../transport/privileged.js'
 import { NO_LOCAL_STATE, NO_OUTPUTS } from '../transport/conn.js'
 import { HOST_AGENT_CONFIG_PATH, parseHostAgentConfig, type HostAgentConfig } from './config.js'
 import { UNIT_NAME } from './install.js'
-import { checkPeerTable, PEER_FW_UNIT, PEER_TABLE_LIST_CMD } from './peer-firewall.js'
+import { checkPeerTable, PEER_FW_UNIT, PEER_TABLE_LIST_CMD, PEER_PORT } from './peer-firewall.js'
 import type { FleetPeer } from './fleet.js'
 
-const SECTIONS = ['config', 'service', 'fwunit', 'fw', 'tailnet'] as const
+const SECTIONS = ['config', 'service', 'fwunit', 'fw', 'tailnet', 'listener'] as const
 type Section = (typeof SECTIONS)[number]
 
 const MARK = '@@clawops-fleet:'
+const NO_SS = 'unknown'
 
 /**
  * Everything fleetStatus needs from one host, in one round trip, as root: agent.json and the
@@ -36,6 +37,8 @@ export function fleetReadScript(): string {
     fwunit: `systemctl is-enabled ${PEER_FW_UNIT} 2>/dev/null`,
     fw: `${PEER_TABLE_LIST_CMD} 2>/dev/null`,
     tailnet,
+    // `unknown` where ss is missing, so a host without it is not reported as not listening.
+    listener: `(command -v ss >/dev/null && ss -Htln 'sport = :${PEER_PORT}') 2>/dev/null || echo ${NO_SS}`,
   }
   // Each marker starts its own line: a file without a trailing newline, as agent.json is, would
   // otherwise run into the next one.
@@ -85,6 +88,8 @@ export interface FleetHost {
     /** `ok`, or why the table is not the one install loaded. */
     firewall: string
     tailnet?: TailnetSelf
+    /** On a host that serves peers: the addresses its peer listener is bound to, when ss could say. */
+    listening?: string[]
   }
   problems: string[]
 }
@@ -94,6 +99,12 @@ export interface FleetStatus {
   /** Hosts with a host agent installed, and how many of them are fleet members. */
   agents: number
   members: number
+}
+
+/** The local addresses in `ss -Htln` output, or undefined when ss was not there to ask. */
+export function parseListening(raw: string | undefined): string[] | undefined {
+  if (raw === undefined || raw.trim() === NO_SS) return undefined
+  return raw.split('\n').map((l) => l.trim().split(/\s+/)[3]).filter((a): a is string => !!a)
 }
 
 function parseTailnet(raw: string | undefined): TailnetSelf | undefined {
@@ -131,11 +142,13 @@ export function assessHost(stack: string, stdout: string): FleetHost {
   if (c.fleet) {
     const fw = checkPeerTable(s.fw ?? '', c.fleet.peerUid)
     const tailnet = parseTailnet(s.tailnet)
+    const listening = c.fleet.serves ? parseListening(s.listener) : undefined
     host.fleet = {
       ...(c.fleet.serves ? { serves: c.fleet.serves } : {}),
       peers: c.fleet.peers,
       firewall: fw.ok ? 'ok' : fw.reason,
       ...(tailnet ? { tailnet } : {}),
+      ...(listening ? { listening } : {}),
     }
     const reinstall = 'Run `clawops agent install` again to restore it.'
     if (!fw.ok) host.problems.push(`${fw.reason} ${reinstall}`)
@@ -148,6 +161,10 @@ export function assessHost(stack: string, stdout: string): FleetHost {
       host.problems.push(`The host is not on the tailnet: tailscaled reports ${tailnet.state}.`)
     } else if (c.fleet.serves && !tailnet.tags.includes(c.fleet.serves)) {
       host.problems.push(`It serves peers tagged ${c.fleet.serves} but no longer carries that tag itself (its tags: ${tailnet.tags.join(', ') || 'none'}).`)
+    }
+    // Only while the service runs: a stopped service is already reported, and is why.
+    if (service === 'active' && listening?.length === 0) {
+      host.problems.push(`It serves peers but nothing listens on port ${PEER_PORT}. The host agent waits for a tailnet address before it listens; see \`journalctl -u ${UNIT_NAME}\` on the host.`)
     }
   }
 

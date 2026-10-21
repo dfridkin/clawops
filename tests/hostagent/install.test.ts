@@ -38,7 +38,7 @@ function gateway(): Record<string, any> {
 interface Call { cmd: string; stdin?: string }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- gateway configs are edited freely
-function fakeHost(cfg: Record<string, any>, over: { persistDenies?: boolean; ufwActive?: boolean; answers?: boolean; restartOnWrite?: boolean; tailscale?: string; nftListing?: string } = {}) {
+function fakeHost(cfg: Record<string, any>, over: { persistDenies?: boolean; ufwActive?: boolean; answers?: boolean; restartOnWrite?: boolean; tailscale?: string; nftListing?: string; peerSocket?: boolean } = {}) {
   const calls: Call[] = []
   const killed = new Set<string>()
   const ok = (stdout = ''): SshExecResult => ({ stdout, stderr: '', code: 0 })
@@ -46,6 +46,7 @@ function fakeHost(cfg: Record<string, any>, over: { persistDenies?: boolean; ufw
     if (cmd === 'uname -s') return ok('Linux\n')
     if (cmd.startsWith('tailscale status --json')) return ok(over.tailscale ?? '')
     if (cmd.includes('id -u clawops-peer')) return ok('998\n')
+    if (cmd.includes('runuser -u clawops-peer')) return over.peerSocket === false ? { stdout: '', stderr: 'dial unix /run/tailscale/tailscaled.sock: connect: permission denied', code: 1 } : ok()
     if (cmd.includes('nft list table inet clawops_peer')) return ok(over.nftListing ?? peerListing(998))
     if (cmd === 'sudo -n true') return ok()
     if (/cat \/var\/lib\/clawops\/openclaw\/openclaw\.json/.test(cmd)) return ok(JSON.stringify(cfg))
@@ -278,6 +279,46 @@ describe('agent install for a fleet member', () => {
     expect(calls.some((c) => /systemctl restart clawops-agent/.test(c.cmd))).toBe(false)
   })
 
+  it('checks that clawops-peer can ask tailscaled, after the table and before the agent starts', async () => {
+    const { session, calls } = fakeHost(strictGateway(), { tailscale: TAILNET_TAGGED })
+    const r = await installHostAgent(session, FLEET, io, undefined, deps())
+    expect(r.ok, JSON.stringify(r)).toBe(true)
+    const check = indexOf(calls, /runuser -u clawops-peer -- tailscale --socket=\/run\/tailscale\/tailscaled\.sock status --json/)
+    expect(check).toBeGreaterThan(indexOf(calls, /nft list table/))
+    expect(check).toBeLessThan(indexOf(calls, /systemctl restart clawops-agent/))
+  })
+
+  it('does not start the agent when clawops-peer cannot reach tailscaled', async () => {
+    const { session, calls } = fakeHost(strictGateway(), { tailscale: TAILNET_TAGGED, peerSocket: false })
+    const r = await installHostAgent(session, FLEET, io, undefined, deps())
+    expect(r).toEqual({ ok: false, stage: 'install', failures: [expect.stringMatching(/clawops-peer cannot ask tailscaled at \/run\/tailscale\/tailscaled\.sock.*permission denied/)] })
+    expect(calls.some((c) => /systemctl restart clawops-agent/.test(c.cmd))).toBe(false)
+  })
+
+  it('lets peers in on tailscale0 only, to the peer port, where ufw is active', async () => {
+    const { session, calls } = fakeHost(strictGateway(), { tailscale: TAILNET_TAGGED, ufwActive: true })
+    const r = await installHostAgent(session, FLEET, io, undefined, deps())
+    expect(r.ok, JSON.stringify(r)).toBe(true)
+    const rule = calls.find((c) => /ufw allow in on tailscale0/.test(c.cmd))
+    expect(rule?.cmd).toContain('ufw allow in on tailscale0 to any port 18800 proto tcp comment ')
+    expect(rule?.cmd).toContain('clawops fleet peers')
+    expect(indexOf(calls, /ufw allow in on tailscale0/)).toBeLessThan(indexOf(calls, /systemctl restart clawops-agent/))
+  })
+
+  it('opens no peer port on a member that only queries peers', async () => {
+    const { session, calls } = fakeHost(strictGateway(), { tailscale: TAILNET_TAGGED, ufwActive: true })
+    const r = await installHostAgent(session, { ...FLEET, servePeers: undefined }, io, undefined, deps())
+    expect(r.ok, JSON.stringify(r)).toBe(true)
+    expect(calls.some((c) => /tailscale0/.test(c.cmd))).toBe(false)
+  })
+
+  it('orders a fleet member\'s unit after tailscaled, and no other host\'s', async () => {
+    const { session, calls } = fakeHost(strictGateway(), { tailscale: TAILNET_TAGGED })
+    await installHostAgent(session, FLEET, io, undefined, deps())
+    expect(calls.find((c) => /clawops-agent\.service\.new/.test(c.cmd))!.stdin).toContain('After=docker.service tailscaled.service')
+    expect(unitFile({ address: '172.17.0.1', port: 18790 })).not.toContain('tailscaled')
+  })
+
   it('touches neither the tailnet nor nftables on a host outside a fleet', async () => {
     const { session, calls } = fakeHost(gateway())
     const r = await installHostAgent(session, OPTS, io, undefined, deps())
@@ -404,6 +445,15 @@ describe('agent uninstall', () => {
     expect(calls.some((c) => c.includes('nft delete table inet clawops_peer'))).toBe(true)
   })
 
+  it('removes the peer rule where install added it', async () => {
+    const agentJson = JSON.stringify({ listen: { address: '172.17.0.1', port: 18790 }, fleet: { serves: 'tag:clawops-agent', peers: [], peerUid: 998 } })
+    const { session, calls } = host(agentJson, 'Status: active\n18790/tcp on docker0 ALLOW IN Anywhere # clawops host agent\n18800/tcp on tailscale0 ALLOW IN Anywhere # clawops fleet peers\n', true)
+    const r = await uninstallHostAgent(session, { purge: false }, io)
+    expect(r.failures).toEqual([])
+    expect(calls.some((c) => c.includes('ufw delete allow in on tailscale0 to any port 18800 proto tcp'))).toBe(true)
+    expect(r.removed.join('\n')).toMatch(/ufw rule for fleet peers/)
+  })
+
   it('removes the state directory only with --purge', async () => {
     const { session, calls } = host(JSON_WITH_LISTEN, 'Status: inactive\n')
     await uninstallHostAgent(session, { purge: true }, io)
@@ -431,6 +481,19 @@ describe('harden keeps the host agent reachable', () => {
   })
 
   it('adds nothing for a host with no host agent', async () => {
-    expect(await applyUfw('')).not.toContain('docker0')
+    const script = await applyUfw('')
+    expect(script).not.toContain('docker0')
+    expect(script).not.toContain('tailscale0')
+  })
+
+  it('re-adds the peer rule after its reset on a host that serves peers', async () => {
+    const script = await applyUfw(JSON.stringify({ listen: { address: '172.17.0.1', port: 18790 }, fleet: { serves: 'tag:clawops-agent', peers: [], peerUid: 998 } }))
+    expect(script).toContain('ufw allow in on tailscale0 to any port 18800 proto tcp')
+    expect(script.indexOf('tailscale0')).toBeGreaterThan(script.indexOf('ufw --force reset'))
+  })
+
+  it('opens no peer port on a fleet member that does not serve peers', async () => {
+    const script = await applyUfw(JSON.stringify({ listen: { address: '172.17.0.1', port: 18790 }, fleet: { peers: [{ stack: 'eu', node: 'eu-gw' }], peerUid: 998 } }))
+    expect(script).not.toContain('tailscale0')
   })
 })
