@@ -140,22 +140,65 @@ local Docker:
   a tailnet with no DERP. That is part D's timeout and retry.
 - **`ss`.** Its output on the e2e target matches what fleet status parses.
 
-### Part D: routing peer queries
+### Part D: routing peer queries ✅
 
-The calling side, ADR §4 and §5. A read tool that names a stack in `fleet.peers` is forwarded,
-as `clawops-peer`, to that peer's listener. That happens only after the whole guardrail passes,
-including `--strict`'s container-reach check, and only while `checkPeerTable` passes on the
-kernel's listing. The timeout allows for the first connection after tailscaled restarts, which
-took over 4 s in SP-16, and there is one retry. On a host agent, `clawops_stacks_list` lists the
-peers and whether each answered, and `fleet: true` answers for this host and its peers instead of
-being refused. A destructive call naming a peer is refused with the operator's command, and is
-recorded in neither host's `handoffs.jsonl`. No new tool or input.
+The calling side, ADR §4 and §5, in `src/hostagent/peer-route.ts` and `peer-client.ts`.
 
-Left for part D by part C:
-- **Finding the peer.** The client finds a peer's address from `tailscale status`, run as
-  `clawops-peer`, not from DNS.
-- **No forwarding through a peer.** A peer's listener answers `fleet: true` for its own host only,
-  and never forwards: a fleet query is one hop.
+**What is forwarded.** `hostAgentDispatch` checks the guardrail first, then whether the call's
+`stackName` is in `fleet.peers`. If it is, a read tool goes to that peer and anything else is
+refused. Before any peer query:
+- the host agent must have been installed with `--strict`, checked again in case agent.json was
+  edited;
+- `checkPeerTable` must pass on the kernel's listing of the table.
+
+**Destructive calls.** A handoff tool naming a peer is refused with the operator's command, built
+by `buildHandoff` and never recorded. Any other tool naming a peer is refused with no command.
+
+**How a query is sent.** It runs in a child process: the same build, `host-agent.mjs
+--peer-call`, spawned with clawops-peer's uid and gid from `/etc/passwd`. The child gets only
+`PATH` and the tailscaled socket path, and its working directory is `/`. It finds the peer by
+`--peer` name, full or first label, in tailscaled's `status` peer list. That list is keyed on the
+control server's DNS name, never the peer's own HostName. The child:
+- refuses a short name two nodes share;
+- prefers the peer's IPv4 address;
+- POSTs one `tools/call`.
+
+**Limits.** Each attempt has a 7 s deadline on the whole exchange, so a peer can't keep a query
+alive by dripping bytes. A failed or stalled connection gets one retry; an answer, even a
+refusal, is never retried. The child is killed after 19 s. Forwarded answers start "Answered by
+peer eu (eu-gw.…)" and are capped at 8 KB. The audit line gets `forwardedTo`.
+
+**`clawops_stacks_list` on a host agent.**
+- It lists this host and each peer, and says whether each one answered.
+- `fleet: true` reads this host with the status script, run locally as root.
+- It asks each peer for `fleet: true`. The peer listener's own stacks list answers `{ host }` for
+  itself alone and never forwards, so a fleet query is one hop.
+- It runs `crossCheck` over the result.
+- A peer's account of itself is data. One with another stack name, an unknown state, or no host
+  is reported as such.
+
+Accepted by:
+- `tests/hostagent/peer-route.test.ts`, through a real MCP server and client, with the peer
+  faked and every call it would receive recorded;
+- `tests/hostagent/peer-client.test.ts`, including a real child process spawned with this user's
+  own uid;
+- `tailscaled.test.ts`.
+
+Each was mutation-checked, 26 mutations.
+
+**Measured 2026-10-21** on Headscale 0.27.1 and Tailscale 1.88.3 in local Docker. The caller was
+a kernel-mode node, and its host agent ran as root beside a real `clawops-peer` and the real
+`inet clawops_peer` table:
+- **Without the table:** root reached the peer's port, and every peer query was refused.
+- **With the table:** root's connection to the peer's port was blocked, and clawops-peer's got
+  through.
+- **Forwarding:** a forwarded `config_get` came back from the peer through the child process,
+  attributed to it. `fleet: true` listed both hosts as each read itself, and a peer name not on
+  the tailnet as unreachable.
+- **Write calls:** `gateway restart --stack <peer>` was refused with the command.
+- **Audit:** the caller's log had `forwardedTo` and the peer's had the caller. Neither host had a
+  `handoffs.jsonl`.
+- **Losing the table:** deleting it refused the next query.
 
 ### Part E: the e2e suite, docs and release
 

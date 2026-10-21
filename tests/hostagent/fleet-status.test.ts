@@ -4,13 +4,12 @@
 // right host.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { SshSession } from '../../src/transport/ssh.js'
 import {
   assessHost, crossCheck, fleetStatus, fleetStatusFromConfig, fleetReadScript, type FleetHost, type FleetStatus,
 } from '../../src/hostagent/fleet-status.js'
 import { peerTable } from '../../src/hostagent/peer-firewall.js'
-import { enterHostAgentMode, exitHostAgentModeForTests } from '../../src/hostagent/mode.js'
+import { exitHostAgentModeForTests } from '../../src/hostagent/mode.js'
 import type { HostAgentConfig } from '../../src/hostagent/config.js'
 import { MINIMAL_CONFIG } from '../helpers/config.js'
 import { NO_LOCAL_STATE, NO_OUTPUTS } from '../../src/transport/conn.js'
@@ -311,14 +310,6 @@ describe('the stacks it reads', () => {
 
 describe('clawops_stacks_list with fleet: true', () => {
   afterEach(() => exitHostAgentModeForTests())
-
-  it('is refused on a host agent, which reads only its own host', async () => {
-    enterHostAgentMode(config('us'))
-    const { handleStacksList } = await import('../../src/mcp/tools/cli/stacks.js')
-    const r = await handleStacksList({ fleet: true }, {} as McpServer)
-    expect(r.isError).toBe(true)
-    expect((r.content[0] as { text: string }).text).toMatch(/does not report the fleet.*clawops fleet status/)
-  })
 
   it('fits a large fleet in 8 KB, keeping the hosts that have problems', async () => {
     const { fleetText } = await import('../../src/mcp/tools/cli/stacks.js')

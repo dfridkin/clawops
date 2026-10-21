@@ -131,3 +131,36 @@ export async function selfStatus(signal?: AbortSignal): Promise<SelfResult> {
     },
   }
 }
+
+/** A peer node as `/localapi/v0/status` lists it. */
+export interface TailnetPeer {
+  /** The MagicDNS name, without its trailing dot. Unique on the tailnet; the control server assigns it. */
+  dnsName: string
+  ips: string[]
+  online: boolean
+}
+
+export type PeersResult = { ok: true; peers: TailnetPeer[] } | { ok: false; reason: string }
+
+/** Every peer this node sees, for finding the one a `--peer` entry names. */
+export async function tailnetPeers(signal?: AbortSignal): Promise<PeersResult> {
+  let answer: Answer
+  try {
+    answer = await get('/localapi/v0/status', signal)
+  } catch (err) {
+    return { ok: false, reason: `tailscaled did not answer: ${err instanceof Error ? err.message : String(err)}` }
+  }
+  if (answer.status !== 200) return { ok: false, reason: `tailscaled answered status with HTTP ${answer.status}.` }
+  let body: { Peer?: Record<string, { DNSName?: unknown; TailscaleIPs?: unknown; Online?: unknown }> | null }
+  try {
+    body = JSON.parse(answer.body) as typeof body
+  } catch {
+    return { ok: false, reason: 'tailscaled answered status with something that is not JSON.' }
+  }
+  const peers = Object.values(body.Peer ?? {}).flatMap((p) =>
+    typeof p.DNSName === 'string' && p.DNSName !== ''
+      ? [{ dnsName: p.DNSName.replace(/\.$/, ''), ips: strings(p.TailscaleIPs), online: p.Online === true }]
+      : [],
+  )
+  return { ok: true, peers }
+}

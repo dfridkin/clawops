@@ -56,13 +56,14 @@ import {
 import { buildHandoff, recordHandoff, handoffText } from '../../hostagent/handoff.js'
 import { currentGuardrail } from '../../hostagent/live.js'
 import { guardrailRefusal } from '../../hostagent/guardrail.js'
+import { peerFor, routeToPeer } from '../../hostagent/peer-route.js'
 import { UsageError } from '../../errors/index.js'
 
 // ── Handler imports ──────────────────────────────────────────────────────────
 import { handleStatus } from './cli/status.js'
 import { handleDoctor } from './cli/doctor.js'
 import { handleLogsTail } from './cli/logs.js'
-import { handleStacksList, handleStacksDelete } from './cli/stacks.js'
+import { handleStacksList, handleStacksDelete, handlePeerStacksList } from './cli/stacks.js'
 import { handleConfigGet, handleConfigSet, handleConfigUnset, handleConfigValidate } from './cli/config.js'
 import { handleAgentsList, handleAgentsLogs } from './cli/agents.js'
 import { handleGatewayRestart, handleGatewayStatus, handleGatewayUpdate } from './cli/gateway.js'
@@ -213,7 +214,9 @@ export function registerPeerTools(server: McpServer, agent: HostAgentConfig, cal
   for (const toolName of HOST_AGENT_READ_TOOLS) {
     const entry = TOOL_REGISTRY[toolName]
     if (!entry) continue
-    const { schema, annotations, handler, description } = entry
+    const { schema, annotations, description } = entry
+    // A peer's stacks list answers for this host alone and never forwards: one hop.
+    const handler = toolName === 'clawops_stacks_list' ? (handlePeerStacksList as AnyHandler) : entry.handler
     const { title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint } = annotations
     const audited = withAudit(toolName, (input) => peerDispatch(agent, handler)(input, server), caller)
     server.registerTool(
@@ -252,7 +255,8 @@ export function peerDispatch(agent: HostAgentConfig, handler: AnyHandler): AnyHa
  * host agent manages only its own. A
  * self-targeting tool is refused with no command offered. A handoff tool returns the CLI
  * command and never reaches its handler, so neither `yes` nor elicitation can make it run.
- * Everything else is a read tool and runs as it does anywhere.
+ * Everything else is a read tool and runs as it does anywhere. A call naming one of this host's
+ * fleet peers goes to peer-route.ts instead, once the guardrail has passed.
  */
 export function hostAgentDispatch(agent: HostAgentConfig, toolName: string, handler: AnyHandler): AnyHandler {
   return async (input, server) => {
@@ -260,6 +264,12 @@ export function hostAgentDispatch(agent: HostAgentConfig, toolName: string, hand
 
     const guard = await currentGuardrail(agent)
     if (!guard.ok) return refusal(guardrailRefusal(guard.failures))
+
+    // A stack in this host's --peer list: a read goes to that peer, anything else is refused
+    // (ADR 0015 §3, §5). Only after the guardrail above, which under --strict includes the
+    // container check that --peer requires (§4).
+    const peer = peerFor(agent, args['stackName'])
+    if (peer) return routeToPeer(agent, peer, toolName, args)
 
     let stack: string
     try {

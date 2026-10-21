@@ -111,11 +111,21 @@ agent, and the host agent's transcripts on disk. Install and `clawops_status` na
 `--strict` refuses while any exist. Sandboxing them gets its own ADR, with WO-53. Destructive
 calls are not affected: they hand off to the operator either way.
 
-**Fleet hosts don't query each other yet.** `agent install --serve-peers` and `--peer` check
-the tailnet, record the fleet and load its firewall table (WO-67 part A), and a host installed
-with `--serve-peers` answers peers on port 18800 (part C). Nothing sends a peer query until part
-D, so a fleet member's own agent still reads only its own host. `clawops fleet status` (part B) reads the fleet from the operator's machine; a host agent
-refuses `clawops_stacks_list` with `fleet: true`, because it reads only its own host.
+**Peer queries are one hop, reads only, and not yet released.** A host agent with `--peer`
+entries forwards a read naming a peer's stack (ADR 0015, WO-67 parts C and D, on `main` for 2.5).
+Several limits apply:
+- **One hop.** A peer answers for itself only. `fleet: true` on a host agent shows this host and
+  its own peers, never a peer's peers.
+- **`clawops_task_status` stays local.** It takes a task id, not a stack, so it can't follow a
+  task a peer started.
+- **No progress.** A forwarded `clawops_monitor` or `clawops_workflow_recover` sends no progress
+  notifications while the peer works.
+- **Timeouts.** A query to an unreachable peer takes up to about 14 s before it says so: two
+  attempts of 7 s each.
+- **Audit.** The calling host records which peer a forwarded read went to. A stacks list, which
+  asks every peer, records the call but not each peer it asked; each peer records the caller.
+- **Not end to end yet.** Part E's Headscale suite on the systemd harness hasn't run, so these
+  have only been checked by hand, in Docker.
 
 **Long-running tools send no progress notifications.** `clawops_up`, `clawops_apply`,
 `clawops_destroy`, `clawops_gateway_update` and the backup tools record progress on a task that

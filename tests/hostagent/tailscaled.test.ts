@@ -6,7 +6,7 @@ import { createServer, type IncomingMessage, type Server } from 'node:http'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { whois, selfStatus } from '../../src/hostagent/tailscaled.js'
+import { whois, selfStatus, tailnetPeers } from '../../src/hostagent/tailscaled.js'
 
 let dir: string
 let server: Server | undefined
@@ -109,5 +109,29 @@ describe('selfStatus', () => {
   it('says why when tailscaled cannot be read', async () => {
     answer = () => ({ status: 403, body: '' })
     expect(await selfStatus()).toEqual({ ok: false, reason: expect.stringMatching(/HTTP 403/) })
+  })
+})
+
+describe('tailnetPeers', () => {
+  it('lists each peer by its MagicDNS name, with its addresses and whether it is online', async () => {
+    answer = () => ({ status: 200, body: JSON.stringify({
+      BackendState: 'Running',
+      Self: { ID: 'nSelf' },
+      Peer: {
+        'nodekey:a': { DNSName: 'eu-gw.tail1234.ts.net.', HostName: 'claims-to-be-us-gw', TailscaleIPs: ['100.64.0.5', 'fd7a:115c:a1e0::5'], Online: true },
+        'nodekey:b': { DNSName: 'ap-gw.tail1234.ts.net.', TailscaleIPs: ['100.64.0.6'], Online: false },
+        'nodekey:c': { DNSName: '', TailscaleIPs: ['100.64.0.7'] },
+      },
+    }) })
+    expect(await tailnetPeers()).toEqual({ ok: true, peers: [
+      { dnsName: 'eu-gw.tail1234.ts.net', ips: ['100.64.0.5', 'fd7a:115c:a1e0::5'], online: true },
+      { dnsName: 'ap-gw.tail1234.ts.net', ips: ['100.64.0.6'], online: false },
+    ] })
+    expect(seen[0]!.url).toBe('/localapi/v0/status')
+  })
+
+  it('reads a node with no peers as an empty list', async () => {
+    answer = () => ({ status: 200, body: JSON.stringify({ BackendState: 'Running', Peer: null }) })
+    expect(await tailnetPeers()).toEqual({ ok: true, peers: [] })
   })
 })

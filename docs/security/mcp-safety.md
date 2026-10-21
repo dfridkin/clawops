@@ -89,7 +89,16 @@ refused alongside it.
   anything that is not a tailnet node, a node without the tag, and this host itself. It serves the
   same 12 read tools and nothing destructive, whatever was allowed for the host's own agent, and
   each read is about this host only. A connection lasts at most 60 s, and at most 4 caller
-  lookups run at once. Nothing queries peers until WO-67 part D.
+  lookups run at once.
+- **Querying peers.** A host agent installed with `--peer <stack>=<name>` forwards a read
+  naming that stack to the peer, and refuses anything else naming it:
+  - **Destructive calls** are refused with the operator's command, and are recorded in neither
+    host's `handoffs.jsonl`.
+  - **Before forwarding,** its whole guardrail must pass. That includes `--strict`'s check that no
+    other agent can act in the gateway container. The fleet firewall table must also be exactly
+    the one install loaded.
+  - **The query itself** runs in a child process as `clawops-peer`, the only uid the table lets
+    reach port 18800 on the tailnet. Nothing of the host agent's environment goes with it.
 
 ### Spending limits apply in every mode
 
