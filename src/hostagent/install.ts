@@ -41,12 +41,13 @@ import { HOST_AGENT_CONFIG_PATH, HOST_AGENT_STATE_DIR, type HostAgentConfig } fr
 import { MCP_HTTP_PORT } from '../mcp/server.js'
 import { GATEWAY_PORT } from '../openclaw/run-flags.js'
 import { PUBLISH_INSPECT_CMD, publishedGatewayPort } from '../openclaw/runtime.js'
-import { ufwAllowRule, ufwDeleteRule, listenFrom, HOST_AGENT_UFW_COMMENT } from './firewall.js'
+import { ufwAllowRule, ufwDeleteRule, listenFrom, HOST_AGENT_UFW_COMMENT, ufwPeerAllowRule, ufwPeerDeleteRule, servesPeersFrom, PEER_UFW_COMMENT } from './firewall.js'
 import { validateFleetOpts, parsePeer, checkTailnet, type FleetPeer } from './fleet.js'
 import {
   peerTable, peerFirewallUnit, peerFirewallPrepareScript, peerFirewallLoadScript, peerFirewallRemoveScript,
-  checkPeerTable, PEER_FW_RULES_PATH, PEER_FW_UNIT_PATH, PEER_TABLE_LIST_CMD, PEER_TABLE,
+  checkPeerTable, PEER_FW_RULES_PATH, PEER_FW_UNIT_PATH, PEER_TABLE_LIST_CMD, PEER_TABLE, PEER_PORT, PEER_USER,
 } from './peer-firewall.js'
+import { TAILSCALED_SOCKET } from './tailscaled.js'
 
 export const AGENT_ROOT = '/opt/clawops-agent'
 export const AGENT_ETC = path.posix.dirname(HOST_AGENT_CONFIG_PATH)
@@ -188,13 +189,20 @@ export function unpackScript(): string {
   return `${AGENT_ROOT}/node/bin/node -e ${shellQuote(js)} ${AGENT_ROOT}`
 }
 
-/** The systemd unit. The token comes from the EnvironmentFile, never the command line. */
-export function unitFile(listen: { address: string; port: number }): string {
+/** Whether the peer client's user can read tailscaled, as it must to find a peer. */
+export const PEER_SOCKET_CHECK = `runuser -u ${PEER_USER} -- tailscale --socket=${TAILSCALED_SOCKET} status --json --peers=false >/dev/null`
+
+/**
+ * The systemd unit. The token comes from the EnvironmentFile, never the command line. A fleet
+ * member starts after tailscaled, so its peer listener usually finds the tailnet address at once;
+ * it waits for one if not.
+ */
+export function unitFile(listen: { address: string; port: number }, opts: { fleet?: boolean } = {}): string {
   return [
     '# Written by `clawops agent install` (ADR 0014). Remove with `clawops agent uninstall`.',
     '[Unit]',
     'Description=clawops host agent',
-    'After=docker.service',
+    opts.fleet ? 'After=docker.service tailscaled.service' : 'After=docker.service',
     'Wants=docker.service',
     '',
     '[Service]',
@@ -420,6 +428,16 @@ export async function installHostAgent(
     const fw = await installPeerFirewall(session, signal)
     if (!fw.ok) return { ok: false, stage: 'install', failures: [fw.failure] }
     peerUid = fw.uid
+    // Peer queries run as clawops-peer (part D), which asks tailscaled where each peer is. Root
+    // can always reach the socket, so this user is the one to check (ADR 0015 §1).
+    const reach = await asRoot(session, PEER_SOCKET_CHECK, signal)
+    if (reach.code !== 0) {
+      return {
+        ok: false,
+        stage: 'install',
+        failures: [`${PEER_USER} cannot ask tailscaled at ${TAILSCALED_SOCKET}, and peer queries run as that user: ${errText(reach)}`],
+      }
+    }
   }
 
   const config: HostAgentConfig = {
@@ -442,7 +460,7 @@ export async function installHostAgent(
   for (const [file, mode, contents] of [
     [HOST_AGENT_CONFIG_PATH, '0644', JSON.stringify(config, null, 2) + '\n'],
     [AGENT_ENV_PATH, '0600', `CLAWOPS_MCP_TOKEN=${token}\n`],
-    [UNIT_PATH, '0644', unitFile(listen)],
+    [UNIT_PATH, '0644', unitFile(listen, { fleet: inFleet })],
   ] as const) {
     const r = await writeRootFile(session, file, mode, contents, signal)
     if (r.code !== 0) return { ok: false, stage: 'install', failures: [`${file}: ${errText(r)}`] }
@@ -456,6 +474,11 @@ export async function installHostAgent(
     io.step('Letting the gateway container through the firewall')
     const r = await asRoot(session, ufwAllowRule(listen), signal)
     if (r.code !== 0) return { ok: false, stage: 'install', failures: [`ufw: ${errText(r)}`] }
+    if (opts.servePeers !== undefined) {
+      io.step(`Letting peers through the firewall, on tailscale0 only, to port ${PEER_PORT}`)
+      const p = await asRoot(session, ufwPeerAllowRule(PEER_PORT), signal)
+      if (p.code !== 0) return { ok: false, stage: 'install', failures: [`ufw: ${errText(p)}`] }
+    }
   }
 
   // 5. Start, and wait for it to answer. 401 is the answer: it is up and wants the token.
@@ -565,11 +588,16 @@ export async function uninstallHostAgent(
   if (stop.code === 0) removed.push(UNIT_PATH)
   else failures.push(`systemctl: ${errText(stop)}`)
 
-  if (listen) {
+  if (listen || servesPeersFrom(cfg.stdout)) {
     const ufw = await asRoot(session, 'ufw status 2>/dev/null || true', signal)
-    if (ufw.stdout.includes(HOST_AGENT_UFW_COMMENT)) {
+    if (listen && ufw.stdout.includes(HOST_AGENT_UFW_COMMENT)) {
       const r = await asRoot(session, ufwDeleteRule(listen), signal)
       if (r.code === 0) removed.push('the ufw rule for the gateway container')
+      else failures.push(`ufw: ${errText(r)}`)
+    }
+    if (ufw.stdout.includes(PEER_UFW_COMMENT)) {
+      const r = await asRoot(session, ufwPeerDeleteRule(PEER_PORT), signal)
+      if (r.code === 0) removed.push('the ufw rule for fleet peers')
       else failures.push(`ufw: ${errText(r)}`)
     }
   }

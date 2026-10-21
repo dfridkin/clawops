@@ -82,6 +82,14 @@ refused alongside it.
   every agent has `exec` and file tools in the container. Any of them can read the clawops token
   from `openclaw.json` and the host agent's transcripts from disk. `clawops_status` names them;
   install with `--strict` to refuse instead.
+- **Peers get the read tools only (2.5, in progress).** A host agent installed with
+  `--serve-peers <tag>` also listens on port 18800 on its tailnet address, or on loopback in
+  userspace networking ([ADR 0015](../decisions/0015-host-agent-fleet.md)). That listener takes
+  no token. On every request it asks tailscaled who is at the connection's `ip:port`, and refuses
+  anything that is not a tailnet node, a node without the tag, and this host itself. It serves the
+  same 12 read tools and nothing destructive, whatever was allowed for the host's own agent, and
+  each read is about this host only. A connection lasts at most 60 s, and at most 4 caller
+  lookups run at once. Nothing queries peers until WO-67 part D.
 
 ### Spending limits apply in every mode
 

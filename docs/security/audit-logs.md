@@ -40,6 +40,17 @@ One JSON object per line (NDJSON):
 | `durationMs` | number | Elapsed time from tool entry to response |
 | `result` | `"ok"` \| `"error"` | Whether the tool returned successfully |
 | `error` | string? | Present only when `result` is `"error"` |
+| `peer` | object? | On a host agent's peer listener only: the calling tailnet node's `name`, `stableId` and `tags`, from tailscaled's whois. The name is the peer's choice; the StableID and tags are not |
+| `reason` | string? | On the peer listener only: why a call was refused |
+
+A host agent that serves peers ([ADR 0015](../decisions/0015-host-agent-fleet.md) §7) records
+every answer with the caller, and every refusal with its reason. A request refused before any
+tool ran is recorded with `tool: "peer_listener"` and the remote address it came from:
+
+```json
+{"ts":"2026-10-21T14:05:14.364Z","sessionId":"89d7a138","tool":"clawops_stacks_list","args":{"fleet":false},"durationMs":0,"result":"ok","peer":{"name":"us-gw.tail1234.ts.net","stableId":"nUS1","tags":["tag:clawops-agent"]}}
+{"ts":"2026-10-21T14:05:32.093Z","sessionId":"89d7a138","tool":"peer_listener","args":{"remote":"100.64.0.3:44080"},"durationMs":0,"result":"error","reason":"Refused: laptop.tail1234.ts.net does not carry tag:clawops-agent (its tags: none).","peer":{"name":"laptop.tail1234.ts.net","stableId":"nLP7","tags":[]}}
+```
 
 ## Reading the log
 
