@@ -113,8 +113,22 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
         process.stderr.write(`[fleet e2e] ${what} reached eu after ${Date.now() - t0} ms, ${i} failed attempts\n`)
         return
       }
+      if (i === 0) await dumpState(`${what} could not reach eu (${r.code})`)
     }
+    await dumpState(`${what} gave up`)
     throw new Error(`${what} never reached eu's peer port in ${seconds} s`)
+  }
+
+  /** What eu and us say about the peer port and each other, for a contact that failed. */
+  async function dumpState(why: string): Promise<void> {
+    const peers = `tailscale status --json | /opt/clawops-agent/node/bin/node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);for(const p of Object.values(j.Peer||{}))console.log(p.HostName,'online',p.Online,'active',p.Active,'inEngine',p.InEngine,'hs',p.LastHandshake,'rx',p.RxBytes,'tx',p.TxBytes,'cur',p.CurAddr)})"`
+    const eu1 = await eu.vm.inspect([
+      `ss -Hltn 'sport = :${PEER_PORT}'`, `ss -Htn state syn-recv 'sport = :${PEER_PORT}' | wc -l`,
+      "grep -E '^TcpExt' /proc/net/netstat | awk 'NR==1{for(i=1;i<=NF;i++)h[i]=$i} NR==2{for(i=1;i<=NF;i++)if(h[i]~/Listen/)print h[i],$i}'",
+      peers, 'nft list table inet clawops_peer 2>&1 | grep -E "counter packets [1-9]" ', 'journalctl -u clawops-agent -n 15 --no-pager 2>&1 | cut -c1-200',
+    ].join('; echo --; '))
+    const us1 = await us.vm.inspect(`${peers}; echo --; nft list table inet clawops_peer 2>&1 | grep -E "counter packets [1-9]"`)
+    process.stderr.write(`[fleet e2e] ${why}\n== eu\n${eu1.stdout}\n== us\n${us1.stdout}\n`)
   }
 
   /** What a refused POST said, from the JSON-RPC error the listener answers with. */
