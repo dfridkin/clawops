@@ -3,6 +3,9 @@
 
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { APT_UPDATE_FN } from '../../src/providers/apt.js'
 import { makeStartupScript } from '../../src/providers/startup.js'
 import { renderScript } from '../../src/providers/local/bootstrap.js'
@@ -17,9 +20,16 @@ rm() { echo "rm $*" >> "$LOG"; }
 ${APT_UPDATE_FN}
 apt_update
 echo "after" >> "$LOG"`
-  const log = `/dev/fd/3`
-  const r = spawnSync('bash', ['-c', `exec 3>&1 1>&2; ${script.replace(/"\$LOG"/g, log)}`], { encoding: 'utf-8' })
-  return { code: r.status, calls: r.stdout.trim().split('\n').filter(Boolean), stderr: r.stderr }
+  // A file, not /dev/fd: on Linux a child's stdio is a socket, which cannot be opened by path.
+  const dir = mkdtempSync(path.join(tmpdir(), 'clawops-apt-'))
+  const log = path.join(dir, 'calls')
+  try {
+    const r = spawnSync('bash', ['-c', script], { encoding: 'utf-8', env: { ...process.env, LOG: log } })
+    const calls = existsSync(log) ? readFileSync(log, 'utf-8').trim().split('\n').filter(Boolean) : []
+    return { code: r.status, calls, stderr: r.stderr }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 }
 
 describe('apt_update', () => {
