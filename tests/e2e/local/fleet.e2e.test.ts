@@ -101,9 +101,10 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
   }
 
   /**
-   * Wait until `post` gets any HTTP answer from eu's listener, and log how long that took. This
-   * tailnet has no DERP relay, so a first contact, or one after tailscaled has idled the peer
-   * out, waits for a direct path; a real tailnet relays those packets meanwhile.
+   * Wait until `post` gets any HTTP answer from eu's listener, and log how long that took. On
+   * this relay-less tailnet the first WireGuard handshake between two nodes took 15-40 s, though
+   * disco pings answered at once (measured in CI with this function's state dump): longer than a
+   * peer query's two 7 s attempts. Each source makes its first contact here, not in a test.
    */
   async function reachable(what: string, post: () => Promise<PostResult>, seconds = 90): Promise<void> {
     const t0 = Date.now()
@@ -113,7 +114,6 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
         process.stderr.write(`[fleet e2e] ${what} reached eu after ${Date.now() - t0} ms, ${i} failed attempts\n`)
         return
       }
-      if (i === 0) await dumpState(`${what} could not reach eu (${r.code})`)
     }
     await dumpState(`${what} gave up`)
     throw new Error(`${what} never reached eu's peer port in ${seconds} s`)
@@ -171,21 +171,6 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
     otherTag = await startCaller(network, 'other', await hs.key(['tag:other']))
     neighbour = await startCaller(network, 'neighbour')
 
-    // This tailnet has no DERP relay, so a node's first packets to another wait for a direct
-    // path, which can take longer than a peer query's attempts. A real tailnet relays them
-    // meanwhile. Each path the tests use is established first.
-    const euIp = eu.ips.find((ip) => !ip.includes(':'))!
-    const usIp = us.ips.find((ip) => !ip.includes(':'))!
-    const pings = await Promise.all([
-      us.vm.inspect(`tailscale ping --timeout=60s -c 60 ${euIp}`),
-      eu.vm.inspect(`tailscale ping --timeout=60s -c 60 ${usIp}`),
-      ...[untagged, otherTag].map(async (c) => {
-        const r = await c.container.exec(['tailscale', 'ping', '--timeout=60s', '-c', '60', euIp])
-        return { stdout: r.output, exitCode: r.exitCode }
-      }),
-    ])
-    for (const p of pings) process.stderr.write(`[fleet e2e] ping exit ${p.exitCode}: ${p.stdout.trim().split('\n').slice(-2).join(' | ')}\n`)
-
     await Promise.all([us, eu].map((h) => configureOperatorAgent(h.vm, { strict: true })))
     const installEu = await clawops('agent', 'install', '--stack', 'eu', '--agent', 'ops', '--operator', 'telegram:12345', '--strict', '--serve-peers', TAG)
     expect(installEu.code, installEu.out).toBe(0)
@@ -212,6 +197,7 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
 
   it('forwards a read to the peer, run as clawops-peer, and both hosts log it', async () => {
     await reachable('us as clawops-peer', () => postFromHost(us.vm, euUrl(), toolCall('clawops_status'), 'clawops-peer'))
+    const [sentBefore, answeredBefore] = [(await audit(us)).length, (await audit(eu)).length]
     const [status, config] = await callHostAgent(us.vm, [
       { name: 'clawops_gateway_status', arguments: { stackName: 'eu' } },
       { name: 'clawops_config_get', arguments: { stackName: 'eu', key: 'gateway.port' } },
@@ -222,10 +208,10 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
     expect(config!.isError, config!.text).toBe(false)
     expect(config!.text).toMatch(/^Answered by peer eu/)
 
-    const sent = (await audit(us)).filter((l) => l.forwardedTo)
+    const sent = (await audit(us)).slice(sentBefore).filter((l) => l.forwardedTo)
     expect(sent.map((l) => l.tool)).toEqual(['clawops_gateway_status', 'clawops_config_get'])
     expect(sent[0]!.forwardedTo).toEqual({ stack: 'eu', node: 'eu-gw' })
-    const answered = (await audit(eu)).filter((l) => l.peer && l.tool !== 'peer_listener')
+    const answered = (await audit(eu)).slice(answeredBefore).filter((l) => l.peer && l.tool !== 'peer_listener')
     expect(answered.map((l) => l.tool)).toEqual(['clawops_gateway_status', 'clawops_config_get'])
     expect(answered[0]!.peer).toMatchObject({ name: expect.stringMatching(/^us-gw/), tags: [TAG] })
   }, 120_000)
