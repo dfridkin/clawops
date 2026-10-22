@@ -21,7 +21,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { startVmTarget, stopVmTarget, type VmTarget } from './vm-container.js'
+import { startVmTarget, stopVmTarget, VM_START_TIMEOUT, type VmTarget } from './vm-container.js'
 import { localBootstrap } from '../../../src/providers/local/bootstrap.js'
 import { GATEWAY_PORT } from '../../../src/openclaw/runtime.js'
 import type { LocalState } from '../../../src/providers/local/state.js'
@@ -47,7 +47,7 @@ describe.skipIf(!enabled)('local provider bootstrap against a systemd target', (
     process.env['CLAWOPS_HOME'] = mkdtempSync(path.join(tmpdir(), 'clawops-e2e-home-'))
     vm = await startVmTarget(OPENCLAW_VERSION)
     knownHostsPath = path.join(mkdtempSync(path.join(tmpdir(), 'clawops-e2e-kh-')), 'known_hosts')
-  }, 300_000)
+  }, VM_START_TIMEOUT)
 
   afterAll(async () => {
     if (vm) await stopVmTarget(vm)

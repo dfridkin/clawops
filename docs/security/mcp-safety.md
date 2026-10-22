@@ -82,7 +82,7 @@ refused alongside it.
   every agent has `exec` and file tools in the container. Any of them can read the clawops token
   from `openclaw.json` and the host agent's transcripts from disk. `clawops_status` names them;
   install with `--strict` to refuse instead.
-- **Peers get the read tools only (2.5, in progress).** A host agent installed with
+- **Peers get the read tools only (2.5).** A host agent installed with
   `--serve-peers <tag>` also listens on port 18800 on its tailnet address, or on loopback in
   userspace networking ([ADR 0015](../decisions/0015-host-agent-fleet.md)). That listener takes
   no token. On every request it asks tailscaled who is at the connection's `ip:port`, and refuses
@@ -99,6 +99,11 @@ refused alongside it.
     the one install loaded.
   - **The query itself** runs in a child process as `clawops-peer`, the only uid the table lets
     reach port 18800 on the tailnet. Nothing of the host agent's environment goes with it.
+- **The tailnet policy is a second barrier, not one clawops relies on.** On the default
+  allow-all policy every node can reach port 18800, and the tag check above is what refuses
+  them. `clawops doctor` reads the packet filter tailscaled compiled from the policy and warns
+  when a host serves peers and nodes without the tag can reach that port. The operations guide
+  gives the policy the fleet is designed for (*Tailnet policy*).
 
 ### Spending limits apply in every mode
 

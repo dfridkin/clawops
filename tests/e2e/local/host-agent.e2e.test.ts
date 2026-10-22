@@ -14,43 +14,12 @@ import { copyFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync } from 'nod
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { startVmTarget, stopVmTarget, TEST_KEY_PATH, type VmTarget } from './vm-container.js'
+import { callHostAgent, configureOperatorAgent, gatewayConfig, gatewayReady as ready, oc as ocOn, setConfig as setOn, type ToolCall } from './gateway.js'
 
 const VERSION = process.env['CLAWOPS_E2E_OPENCLAW_VERSION'] ?? '2026.9.2'
 const STACK = 'e2e-agent'
 const ENTRY = path.resolve(__dirname, '../../../dist/cli.js')
 const enabled = process.env['CLAWOPS_E2E_LOCAL'] === '1'
-
-/**
- * An MCP client run on the host with the host agent's own Node, against the service: what the
- * gateway's bridge does, minus a model. Prints one JSON line per call result.
- */
-function mcpOnHost(calls: Array<{ name: string; arguments?: Record<string, unknown> }>): string {
-  const js = `
-const env=require('fs').readFileSync('/etc/clawops-agent/agent.env','utf8');
-const token=/CLAWOPS_MCP_TOKEN=(\\S+)/.exec(env)[1];
-const cfg=JSON.parse(require('fs').readFileSync('/etc/clawops-agent/agent.json','utf8'));
-const url='http://'+cfg.listen.address+':'+cfg.listen.port+'/';
-let sid;
-async function rpc(method,params,id){
-  const h={'content-type':'application/json',accept:'application/json, text/event-stream',authorization:'Bearer '+token};
-  if(sid)h['mcp-session-id']=sid;
-  const r=await fetch(url,{method:'POST',headers:h,body:JSON.stringify(id===undefined?{jsonrpc:'2.0',method,params}:{jsonrpc:'2.0',id,method,params})});
-  sid=r.headers.get('mcp-session-id')||sid;
-  const t=await r.text();
-  const line=t.split('\\n').find(l=>l.startsWith('data: '));
-  return line?JSON.parse(line.slice(6)):(t?JSON.parse(t):null);
-}
-(async()=>{
-  await rpc('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'e2e',version:'1'}},1);
-  await rpc('notifications/initialized',{});
-  let id=2;
-  for(const c of ${JSON.stringify(calls)}){
-    const r=await rpc('tools/call',{name:c.name,arguments:c.arguments||{}},id++);
-    console.log(JSON.stringify({name:c.name,isError:!!r.result?.isError,text:(r.result?.content||[]).map(x=>x.text).join('\\n')}));
-  }
-})().catch(e=>{console.error(e);process.exit(1)});`
-  return js
-}
 
 /** The JSON document in a command's output: pretty-printed, and with stderr after it. */
 function jsonOf(out: string): { data: Record<string, unknown> } {
@@ -67,50 +36,10 @@ describe.skipIf(!enabled)('clawops agent install on a real host', () => {
     return { code: r.status ?? -1, out: `${r.stdout}\n${r.stderr}` }
   }
 
-  async function gatewayReady(): Promise<void> {
-    for (let i = 0; i < 90; i++) {
-      const probe = await vm.inspect('curl -s --max-time 3 http://127.0.0.1:18789/startupz; docker exec openclaw true && echo EXEC-OK')
-      if (/"status"\s*:\s*"started"/.test(probe.stdout) && probe.stdout.includes('EXEC-OK')) return
-      await new Promise((r) => setTimeout(r, 2000))
-    }
-    throw new Error('the gateway did not come back')
-  }
-
-  /**
-   * Some keys make the gateway restart itself, and the `docker exec` that set one is killed with
-   * it (137). The write landed before the restart, so wait for the gateway and carry on; the
-   * assertions that matter read the configuration back.
-   */
-  async function oc(args: string): Promise<{ stdout: string; exitCode: number }> {
-    const r = await vm.inspect(`docker exec openclaw openclaw ${args}`)
-    if (r.exitCode === 137) {
-      await gatewayReady()
-      return { stdout: r.stdout, exitCode: 0 }
-    }
-    if (/config set/.test(args)) await gatewayReady()
-    return r
-  }
-
-  /** Set a key and read the file back until it holds the value: a restart can lose a write. */
-  async function setConfig(key: string, value: unknown): Promise<void> {
-    let held: unknown
-    for (let i = 0; i < 5; i++) {
-      await oc(`config set ${key} '${JSON.stringify(value)}' --strict-json`)
-      const cfg = JSON.parse((await vm.inspect('cat /var/lib/clawops/openclaw/openclaw.json')).stdout) as Record<string, unknown>
-      held = key.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], cfg)
-      if (JSON.stringify(held) === JSON.stringify(value)) return
-      await new Promise((r) => setTimeout(r, 3000))
-    }
-    throw new Error(`${key} did not keep ${JSON.stringify(value)}; the file holds ${JSON.stringify(held)}`)
-  }
-
-  async function callTools(calls: Array<{ name: string; arguments?: Record<string, unknown> }>) {
-    // Base64 into a file, so no shell quoting stands between the script and Node.
-    const b64 = Buffer.from(mcpOnHost(calls)).toString('base64')
-    const r = await vm.inspect(`echo ${b64} | base64 -d > /root/mcpcall.js && /opt/clawops-agent/node/bin/node /root/mcpcall.js`)
-    expect(r.exitCode, r.stdout).toBe(0)
-    return r.stdout.trim().split('\n').filter((l) => l.startsWith('{')).map((l) => JSON.parse(l) as { name: string; isError: boolean; text: string })
-  }
+  const gatewayReady = () => ready(vm)
+  const oc = (args: string) => ocOn(vm, args)
+  const setConfig = (key: string, value: unknown) => setOn(vm, key, value)
+  const callTools = (calls: ToolCall[]) => callHostAgent(vm, calls)
 
   beforeAll(async () => {
     if (!existsSync(ENTRY)) throw new Error(`${ENTRY} does not exist. Run \`pnpm build\` first.`)
@@ -128,15 +57,8 @@ describe.skipIf(!enabled)('clawops agent install on a real host', () => {
     const up = clawops('up', '--stack', STACK, '--openclaw-version', VERSION)
     expect(up.code, up.out).toBe(0)
 
-    // An operator-only agent, configured the way the docs tell an operator to. Each key is read
-    // back: the channel write restarts the gateway, and a write in that window is lost.
-    const add = await oc('agents add ops --non-interactive --workspace /home/node/.openclaw/workspace-ops')
-    expect(add.exitCode, add.stdout).toBe(0)
-    await setConfig('bindings', [{ agentId: 'ops', match: { channel: 'telegram', peer: { kind: 'direct', id: '12345' } } }])
-    await setConfig('channels.telegram', { enabled: false, dmPolicy: 'pairing' })
-    await setConfig('tools.agentToAgent.enabled', false)
-    await setConfig('tools.sessions.visibility', 'agent')
-    const cfg = JSON.parse((await vm.inspect('cat /var/lib/clawops/openclaw/openclaw.json')).stdout)
+    await configureOperatorAgent(vm)
+    const cfg = await gatewayConfig(vm) as { tools: unknown; agents: { entries?: unknown; list?: unknown } }
     expect(cfg.tools).toMatchObject({ agentToAgent: { enabled: false }, sessions: { visibility: 'agent' } })
     expect(cfg.agents.entries ?? cfg.agents.list).toBeTruthy()
   }, 1_800_000)
