@@ -9,7 +9,7 @@
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update -q && apt-get install -y -q --no-install-recommends \
+RUN apt-get -o Acquire::Retries=5 update -q && apt-get -o Acquire::Retries=5 install -y -q --no-install-recommends \
       systemd systemd-sysv dbus dbus-user-session \
       openssh-server sudo ca-certificates curl gnupg lsb-release iproute2 \
  && rm -rf /var/lib/apt/lists/*

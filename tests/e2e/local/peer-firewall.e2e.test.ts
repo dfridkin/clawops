@@ -20,7 +20,7 @@ import { connect, type SshSession } from '../../../src/transport/ssh.js'
 import { installPeerFirewall, removePeerFirewall } from '../../../src/hostagent/install.js'
 import { checkPeerTable, PEER_TABLE_LIST_CMD } from '../../../src/hostagent/peer-firewall.js'
 import { fleetStatus } from '../../../src/hostagent/fleet-status.js'
-import { startVmTarget, stopVmTarget, TEST_KEY_PATH, VM_USER, type VmTarget } from './vm-container.js'
+import { startVmTarget, stopVmTarget, TEST_KEY_PATH, VM_START_TIMEOUT, VM_USER, type VmTarget } from './vm-container.js'
 
 const enabled = process.env['CLAWOPS_E2E_LOCAL'] === '1'
 // Names this suite's cache volumes, apart from the OpenClaw suites' multi-gigabyte ones.
@@ -63,7 +63,7 @@ describe.skipIf(!enabled)('the fleet firewall table on a real host', () => {
     const r = await vm.inspect(`echo ${b64} | base64 -d > /etc/systemd/system/docker.service && systemctl daemon-reload && systemctl enable --now docker.service`)
     expect(r.exitCode, r.stdout).toBe(0)
     session = await open()
-  }, 300_000)
+  }, VM_START_TIMEOUT)
 
   afterAll(async () => {
     session?.close()

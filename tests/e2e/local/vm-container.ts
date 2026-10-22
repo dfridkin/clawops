@@ -24,6 +24,13 @@ export const TEST_KEY_PATH = path.join(FIXTURES, 'test_key')
 
 export const VM_USER = 'clawops-test'
 
+/**
+ * For a hook that calls startVmTarget. The first suite to run builds the image, and that build
+ * runs apt-get against Ubuntu's mirrors: usually a minute, but past five on a day the mirror was
+ * slow (the nightly of 2026-10-22), which timed out a 300s hook before any test ran.
+ */
+export const VM_START_TIMEOUT = 900_000
+
 export interface VmTarget {
   host: string
   port: number
