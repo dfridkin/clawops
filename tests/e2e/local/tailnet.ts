@@ -27,6 +27,29 @@ async function until<T>(what: string, attempt: () => Promise<T | undefined>, sec
   throw new Error(`${what} did not happen within ${seconds} s`)
 }
 
+let tls: { cert: string; key: string } | undefined
+
+/**
+ * A throwaway certificate for "hs", made once per run with openssl: Headscale serves TLS so that
+ * nodes can use its DERP relay, and each node trusts this certificate alone (SSL_CERT_FILE).
+ */
+export function headscaleTls(): { cert: string; key: string } {
+  if (tls) return tls
+  const dir = mkdtempSync(path.join(tmpdir(), 'clawops-e2e-hs-tls-'))
+  const cert = path.join(dir, 'cert.pem')
+  const key = path.join(dir, 'key.pem')
+  execFileSync('openssl', [
+    'req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-nodes', '-days', '1',
+    '-subj', '/CN=hs', '-addext', 'subjectAltName=DNS:hs', '-keyout', key, '-out', cert,
+  ], { stdio: 'pipe' })
+  tls = { cert, key }
+  return tls
+}
+
+/** Where each node keeps the certificate, and the login server it joins. */
+const NODE_CERT = '/etc/ssl/clawops-e2e-hs.pem'
+const LOGIN = '--login-server=https://hs:8443'
+
 export interface HeadscaleNode { id: string; name: string; tags: string[]; ips: string[] }
 
 export interface Headscale {
@@ -45,7 +68,8 @@ export async function startHeadscale(network: StartedNetwork): Promise<Headscale
     .withNetworkAliases('hs')
     .withCopyFilesToContainer([
       { source: path.join(HERE, 'tailnet/headscale.yaml'), target: '/etc/headscale/config.yaml' },
-      { source: path.join(HERE, 'tailnet/derp.yaml'), target: '/etc/headscale/derp.yaml' },
+      { source: headscaleTls().cert, target: '/etc/headscale/tls/cert.pem', mode: 0o644 },
+      { source: headscaleTls().key, target: '/etc/headscale/tls/key.pem', mode: 0o644 },
     ])
     .withCommand(['serve'])
     .start()
@@ -101,12 +125,14 @@ export function tailscaleBinaries(): { tailscale: string; tailscaled: string } {
 }
 
 /** The unit Tailscale's Debian package installs, with the paths it uses. */
-const TAILSCALED_UNIT = `[Unit]
+const TAILSCALED_UNIT = `# As the package installs it, plus trust in the suite's own Headscale certificate.
+[Unit]
 Description=Tailscale node agent
 Wants=network-pre.target
 After=network-pre.target NetworkManager.service systemd-resolved.service
 
 [Service]
+Environment=SSL_CERT_FILE=${NODE_CERT}
 ExecStart=/usr/sbin/tailscaled --state=/var/lib/tailscale/tailscaled.state --socket=/run/tailscale/tailscaled.sock --port=41641
 ExecStopPost=/usr/sbin/tailscaled --cleanup
 Restart=on-failure
@@ -140,12 +166,13 @@ export async function joinHost(vm: VmTarget, key: string, hostname: string): Pro
   await vm.container.copyFilesToContainer([
     { source: bin.tailscale, target: '/usr/bin/tailscale', mode: 0o755 },
     { source: bin.tailscaled, target: '/usr/sbin/tailscaled', mode: 0o755 },
+    { source: headscaleTls().cert, target: NODE_CERT, mode: 0o644 },
   ])
   await vm.container.copyContentToContainer([{ content: TAILSCALED_UNIT, target: '/etc/systemd/system/tailscaled.service', mode: 0o644 }])
   const r = await vm.inspect('systemctl daemon-reload && systemctl enable --now tailscaled')
   if (r.exitCode !== 0) throw new Error(`tailscaled: ${r.stdout}`)
   // --accept-dns=false, as `clawops harden` leaves a host: peers are found without MagicDNS.
-  const up = await vm.inspect(`tailscale up --login-server=http://hs:8080 --auth-key=${key} --hostname=${hostname} --accept-dns=false`)
+  const up = await vm.inspect(`tailscale up ${LOGIN} --auth-key=${key} --hostname=${hostname} --accept-dns=false`)
   if (up.exitCode !== 0) throw new Error(`tailscale up on ${hostname}: ${up.stdout}`)
   return waitRunning((c) => vm.inspect(c), hostname)
 }
@@ -190,7 +217,9 @@ export async function startCaller(network: StartedNetwork, hostname: string, key
     .withCopyFilesToContainer([
       { source: bin.tailscale, target: '/usr/local/bin/tailscale', mode: 0o755 },
       { source: bin.tailscaled, target: '/usr/local/bin/tailscaled', mode: 0o755 },
+      { source: headscaleTls().cert, target: NODE_CERT, mode: 0o644 },
     ])
+    .withEnvironment({ SSL_CERT_FILE: NODE_CERT })
     .withCopyContentToContainer([{ content: POST_SCRIPT, target: '/post.mjs' }])
     .withCommand(['sh', '-c', key ? 'mkdir -p /var/lib/tailscale /run/tailscale && exec tailscaled --state=/var/lib/tailscale/s --socket=/run/tailscale/tailscaled.sock' : 'exec sleep infinity'])
     .start()
@@ -202,7 +231,7 @@ export async function startCaller(network: StartedNetwork, hostname: string, key
   if (key) {
     await until('tailscaled in the caller', async () => ((await run('tailscale status --json >/dev/null 2>&1; test -S /run/tailscale/tailscaled.sock')).exitCode === 0 ? true : undefined))
     // No netfilter: a caller needs none, and the image has no iptables.
-    const up = await run(`tailscale up --login-server=http://hs:8080 --auth-key=${key} --hostname=${hostname} --accept-dns=false --netfilter-mode=off`)
+    const up = await run(`tailscale up ${LOGIN} --auth-key=${key} --hostname=${hostname} --accept-dns=false --netfilter-mode=off`)
     if (up.exitCode !== 0) throw new Error(`tailscale up on ${hostname}: ${up.stdout}`)
     ips = (await waitRunning(run, hostname)).ips
   }

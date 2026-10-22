@@ -101,10 +101,11 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
   }
 
   /**
-   * Wait until `post` gets any HTTP answer from eu's listener, and log how long that took. On
-   * this relay-less tailnet the first WireGuard handshake between two nodes took 15-40 s, though
-   * disco pings answered at once (measured in CI with this function's state dump): longer than a
-   * peer query's two 7 s attempts. Each source makes its first contact here, not in a test.
+   * Wait until `post` gets any HTTP answer from eu's listener, and log how long that took. Before
+   * this tailnet had a DERP relay, a node's first WireGuard handshake to another took 15 s to more
+   * than 90 s, though disco pings answered at once: longer than a peer query's two 7 s attempts.
+   * Each source still makes its first contact here rather than in a test, and the log says how
+   * long it took with the relay.
    */
   async function reachable(what: string, post: () => Promise<PostResult>, seconds = 90): Promise<void> {
     const t0 = Date.now()

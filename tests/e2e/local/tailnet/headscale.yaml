@@ -1,7 +1,12 @@
 # Headscale for the fleet e2e suite: a private control server on the suite's Docker network.
-# No secrets here: auth keys are made by the suite at run time and die with the container.
-server_url: http://hs:8080
-listen_addr: 0.0.0.0:8080
+# No secrets here: the auth keys and the TLS certificate are made by the suite at run time and die
+# with the run.
+server_url: https://hs:8443
+listen_addr: 0.0.0.0:8443
+# TLS because tailscaled reaches the embedded DERP relay over HTTPS only. The certificate is
+# self-signed for "hs", and every node trusts it through SSL_CERT_FILE.
+tls_cert_path: /etc/headscale/tls/cert.pem
+tls_key_path: /etc/headscale/tls/key.pem
 metrics_listen_addr: 127.0.0.1:9090
 grpc_listen_addr: 127.0.0.1:50443
 noise:
@@ -10,13 +15,19 @@ prefixes:
   v4: 100.64.0.0/10
   v6: fd7a:115c:a1e0::/48
   allocation: sequential
-# No relay: every node is on the same Docker network, so paths are direct (derp.yaml names a
-# region that cannot be reached, which Headscale needs to start with no DERP at all).
+# A relay, as every real tailnet has. Without one a node's first WireGuard handshake to another
+# took 15 s to more than 90 s in CI, while disco pings answered at once.
 derp:
   server:
-    enabled: false
+    enabled: true
+    region_id: 999
+    region_code: e2e
+    region_name: fleet e2e
+    stun_listen_addr: 0.0.0.0:3478
+    private_key_path: /var/lib/headscale/derp_server_private.key
+    automatically_add_embedded_derp_region: true
   urls: []
-  paths: [/etc/headscale/derp.yaml]
+  paths: []
   auto_update_enabled: false
   update_frequency: 24h
 disable_check_updates: true
