@@ -45,6 +45,12 @@ describe('reading filter addresses', () => {
     expect(sourcesToPort(DOCUMENTED, ['100.64.0.9'], 18800)).toEqual([])
     expect(sourcesToPort([{ ...ALLOW_ALL[0]!, IPProto: [17] }], ['100.64.0.2'], 18800)).toEqual([])
   })
+
+  it('never matches an IPv6 address against an IPv4 range with the same number', () => {
+    // ::6440:2 is 100.64.0.2 as a number, in the other family.
+    const rule: FilterRule = { SrcIPs: ['*'], DstPorts: [{ IP: '100.64.0.0/10', Ports: { First: 0, Last: 65535 } }] }
+    expect(sourcesToPort([rule], ['::6440:2'], 18800)).toEqual([])
+  })
 })
 
 describe('the doctor check', () => {
@@ -66,6 +72,11 @@ describe('the doctor check', () => {
     expect(peerPolicyCheck(JSON.stringify(rules), NODES, TAG)).toMatchObject({ status: 'warn', detail: '1 node without tag:clawops-agent can reach port 18800: laptop.fleet.test; the host agent\'s tag check refuses them' })
   })
 
+  it('does not call an IPv4-only rule allow-all, and names the untagged nodes it lets through', () => {
+    const v4Only: FilterRule[] = [{ SrcIPs: ['100.64.0.0/10'], DstPorts: [{ IP: '*', Ports: { First: 0, Last: 65535 } }] }]
+    expect(peerPolicyCheck(JSON.stringify(v4Only), NODES, TAG)).toMatchObject({ status: 'warn', detail: expect.stringMatching(/^1 node without tag:clawops-agent can reach port 18800: laptop/) })
+  })
+
   it('warns when no peer can reach the port at all', () => {
     expect(peerPolicyCheck(JSON.stringify([DOCUMENTED[1]]), NODES, TAG)).toMatchObject({ status: 'warn', detail: expect.stringMatching(/no node on the tailnet can reach port 18800/) })
   })
@@ -74,5 +85,7 @@ describe('the doctor check', () => {
     expect(peerPolicyCheck('', NODES, TAG)).toMatchObject({ status: 'warn', detail: expect.stringMatching(/could not read/) })
     expect(peerPolicyCheck('{"error":"denied"}', NODES, TAG)).toMatchObject({ status: 'warn', detail: expect.stringMatching(/could not read/) })
     expect(peerPolicyCheck(JSON.stringify(DOCUMENTED), '', TAG)).toMatchObject({ status: 'warn', detail: expect.stringMatching(/could not read/) })
+    // A node that is not up has no addresses, so nothing can be said about what reaches it.
+    expect(peerPolicyCheck(JSON.stringify(ALLOW_ALL), JSON.stringify({ Self: { TailscaleIPs: [] }, Peer: {} }), TAG)).toMatchObject({ status: 'warn', detail: expect.stringMatching(/could not read/) })
   })
 })

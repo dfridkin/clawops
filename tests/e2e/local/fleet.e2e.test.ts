@@ -35,7 +35,7 @@ import {
 
 const VERSION = process.env['CLAWOPS_E2E_OPENCLAW_VERSION'] ?? '2026.9.2'
 const ENTRY = path.resolve(__dirname, '../../../dist/cli.js')
-// Its own opt-in: two OpenClaw pulls need about 7 GB of disk, more than the other suites.
+// Its own opt-in: two OpenClaw hosts need about 10 GB of disk, more than the other suites.
 const enabled = process.env['CLAWOPS_E2E_LOCAL'] === '1' && process.env['CLAWOPS_E2E_FLEET'] === '1'
 const TAG = 'tag:clawops-agent'
 const PEER_PORT = 18800
@@ -140,10 +140,21 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
     otherTag = await startCaller(network, 'other', await hs.key(['tag:other']))
     neighbour = await startCaller(network, 'neighbour')
 
+    // This tailnet has no DERP relay, so a node's first packets to another wait for a direct
+    // path, which can take longer than a peer query's attempts. A real tailnet relays them
+    // meanwhile. Each path the tests use is established first.
+    const euIp = eu.ips.find((ip) => !ip.includes(':'))!
+    const usIp = us.ips.find((ip) => !ip.includes(':'))!
+    await Promise.all([
+      us.vm.inspect(`tailscale ping --timeout=60s -c 60 ${euIp}`),
+      eu.vm.inspect(`tailscale ping --timeout=60s -c 60 ${usIp}`),
+      ...[untagged, otherTag].map((c) => c.container.exec(['tailscale', 'ping', '--timeout=60s', '-c', '60', euIp])),
+    ])
+
     await Promise.all([us, eu].map((h) => configureOperatorAgent(h.vm, { strict: true })))
     const installEu = await clawops('agent', 'install', '--stack', 'eu', '--agent', 'ops', '--operator', 'telegram:12345', '--strict', '--serve-peers', TAG)
     expect(installEu.code, installEu.out).toBe(0)
-    const installUs = await clawops('agent', 'install', '--stack', 'us', '--agent', 'ops', '--operator', 'telegram:12345', '--strict', '--serve-peers', TAG, '--peer', 'eu=eu-gw')
+    const installUs = await clawops('agent', 'install', '--stack', 'us', '--agent', 'ops', '--operator', 'telegram:12345', '--strict', '--serve-peers', TAG, '--peer', 'eu=eu-gw', '--allow', 'clawops_gateway_restart')
     expect(installUs.code, installUs.out).toBe(0)
   }, 3_600_000)
 
