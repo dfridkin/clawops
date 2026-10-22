@@ -250,7 +250,33 @@ A stack with nothing deployed, because it was never brought up or was torn down,
 backend cannot be read, is reported as unreachable, and the rest are still read.
 Reading needs passwordless sudo for the SSH user, as install does. The command exits 1 when any
 host has a problem or did not answer, so a script can tell. Agents get the same reading from
-`clawops_stacks_list` with `fleet: true`; a host agent refuses it, since it reads only its own host.
+`clawops_stacks_list` with `fleet: true`. On a host agent that call reads this host and asks each
+of its peers to report itself (see *Peer queries* below).
+
+### Peer queries
+
+A host agent installed with `--peer eu=eu-gw` can answer its own agent's questions about `eu`.
+A read tool whose `stackName` is `eu` goes to eu's host agent over the tailnet. The answer comes
+back saying which host gave it. `clawops_stacks_list` on a host agent lists this host and each
+peer, and says whether each one answered.
+
+A call naming a peer is checked in this order:
+1. **This host's guardrail** must pass, as for any call. Under `--strict`, which `--peer`
+   requires, that includes the check that no other agent can act in the gateway container.
+2. **The fleet firewall table** must be the one install loaded. While it is missing or changed,
+   every peer query is refused, and `clawops agent install` restores it.
+3. **Only reads are forwarded.** `gateway restart`, `config set` and the other handoff tools are
+   refused when they name a peer, with the command for the operator to run on their own machine.
+   Nothing is recorded in either host's `handoffs.jsonl`.
+
+How the query is sent:
+- It runs in a child process as `clawops-peer`. That is the one uid the firewall table lets
+  reach port 18800 on the tailnet: neither containers nor root get through.
+- The peer is found by its MagicDNS name in tailscaled's own peer list, so the host needs no
+  tailnet DNS.
+- Each attempt has 7 s, with one retry. The first connection after tailscaled restarts can take
+  several seconds.
+- A peer that doesn't answer is reported as a note. It doesn't fail the call.
 
 ## Gateway management
 

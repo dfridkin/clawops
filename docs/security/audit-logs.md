@@ -42,6 +42,7 @@ One JSON object per line (NDJSON):
 | `error` | string? | Present only when `result` is `"error"` |
 | `peer` | object? | On a host agent's peer listener only: the calling tailnet node's `name`, `stableId` and `tags`, from tailscaled's whois. The name is the peer's choice; the StableID and tags are not |
 | `reason` | string? | On the peer listener only: why a call was refused |
+| `forwardedTo` | object? | On a host agent with `--peer` entries: the peer (`stack`, `node`) a read was forwarded to |
 
 A host agent that serves peers ([ADR 0015](../decisions/0015-host-agent-fleet.md) §7) records
 every answer with the caller, and every refusal with its reason. A request refused before any

@@ -158,6 +158,13 @@ peer.
 - **An unreachable peer is a note, not a failure.** A peer query has a timeout and one retry
   (SP-14 saw first connections stall before a direct path came up).
 
+*Implementation note, WO-67 part D (2026-10-21):*
+- **Finding the peer.** A peer is found in tailscaled's own peer list by its MagicDNS name, not
+  through DNS. A short name two nodes share is refused.
+- **One hop.** A peer answers `clawops_stacks_list` for itself only, so `fleet: true` on a host
+  agent never reaches a peer's peers.
+- **Timeouts.** Each attempt has 7 s ([fleet plan](../fleet-plan.md)).
+
 ### 6. The tailnet policy clawops documents
 
 The operator owns the tailnet's policy; clawops never edits it. The docs give the policy this

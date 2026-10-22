@@ -19,6 +19,8 @@ export interface AuditEntry {
   peer?: PeerCaller
   /** Why the peer listener refused, when it did. */
   reason?: string
+  /** On a host agent with fleet peers: the peer a call was forwarded to (ADR 0015 §7). */
+  forwardedTo?: { stack: string; node: string }
 }
 
 /** A peer as the audit log records it. The name is the peer's own choice; StableID and tags are not. */
@@ -167,6 +169,12 @@ function getAuditLogPath(): string {
   return cfg?.mcp?.auditLogPath ?? path.join(getConfigDir(), 'mcp-audit.log')
 }
 
+/** The peer a host agent forwarded a call to, from the result's `_meta` (peer-route.ts). */
+function forwarded(result: import('@modelcontextprotocol/sdk/types.js').CallToolResult): { forwardedTo?: { stack: string; node: string } } {
+  const f = result._meta?.['clawops/forwardedTo'] as { stack?: unknown; node?: unknown } | undefined
+  return f && typeof f.stack === 'string' && typeof f.node === 'string' ? { forwardedTo: { stack: f.stack, node: f.node } } : {}
+}
+
 /** The first line of a refusal's text, for the audit log's `reason`. */
 function refusalText(result: import('@modelcontextprotocol/sdk/types.js').CallToolResult): string {
   const first = result.content.find((c) => c.type === 'text')
@@ -202,6 +210,7 @@ export function withAudit<T>(
         result: result.isError === true ? 'error' : 'ok',
         ...(peer ? { peer } : {}),
         ...(peer && result.isError === true ? { reason: refusalText(result) } : {}),
+        ...forwarded(result),
       })
       return result
     } catch (err) {
