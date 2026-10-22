@@ -21,12 +21,12 @@ export default function Home() {
         <div className={styles.strip}>
           <div className={styles.stripInner}>
             <span>
-              <strong>Coming in clawops 2.5: host-agent fleets.</strong> Each gateway&apos;s host
+              <strong>Host-agent fleets are live in clawops 2.5.</strong> Each gateway&apos;s host
               agent still manages only its own host, and reads its peers over your tailnet,
               authenticated by tag, with no shared keys. See them all with{' '}
               <code>clawops fleet status</code>.
             </span>
-            <a href="https://github.com/dfridkin/clawops/blob/main/docs/decisions/0015-host-agent-fleet.md">Read the design</a>
+            <a href="/docs/operations#fleet">Set up a fleet</a>
           </div>
         </div>
 

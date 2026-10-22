@@ -151,7 +151,7 @@ export default async function OpengraphImage() {
             fontSize: 21,
           }}
         >
-          Coming in clawops 2.5: host-agent fleets
+          Host-agent fleets are live in clawops 2.5
         </div>
 
         <div
