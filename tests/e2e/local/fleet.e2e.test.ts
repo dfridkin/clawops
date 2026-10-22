@@ -100,6 +100,23 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
     return { name: 'Fleet policy', status: m[1]!, detail: m[2]! }
   }
 
+  /**
+   * Wait until `post` gets any HTTP answer from eu's listener, and log how long that took. This
+   * tailnet has no DERP relay, so a first contact, or one after tailscaled has idled the peer
+   * out, waits for a direct path; a real tailnet relays those packets meanwhile.
+   */
+  async function reachable(what: string, post: () => Promise<PostResult>, seconds = 90): Promise<void> {
+    const t0 = Date.now()
+    for (let i = 0; Date.now() - t0 < seconds * 1000; i++) {
+      const r = await post()
+      if (r.status !== 'ERR') {
+        process.stderr.write(`[fleet e2e] ${what} reached eu after ${Date.now() - t0} ms, ${i} failed attempts\n`)
+        return
+      }
+    }
+    throw new Error(`${what} never reached eu's peer port in ${seconds} s`)
+  }
+
   /** What a refused POST said, from the JSON-RPC error the listener answers with. */
   function refusal(r: PostResult): string {
     return (JSON.parse(r.body ?? '{}') as { error?: { message?: string } }).error?.message ?? ''
@@ -145,11 +162,15 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
     // meanwhile. Each path the tests use is established first.
     const euIp = eu.ips.find((ip) => !ip.includes(':'))!
     const usIp = us.ips.find((ip) => !ip.includes(':'))!
-    await Promise.all([
+    const pings = await Promise.all([
       us.vm.inspect(`tailscale ping --timeout=60s -c 60 ${euIp}`),
       eu.vm.inspect(`tailscale ping --timeout=60s -c 60 ${usIp}`),
-      ...[untagged, otherTag].map((c) => c.container.exec(['tailscale', 'ping', '--timeout=60s', '-c', '60', euIp])),
+      ...[untagged, otherTag].map(async (c) => {
+        const r = await c.container.exec(['tailscale', 'ping', '--timeout=60s', '-c', '60', euIp])
+        return { stdout: r.output, exitCode: r.exitCode }
+      }),
     ])
+    for (const p of pings) process.stderr.write(`[fleet e2e] ping exit ${p.exitCode}: ${p.stdout.trim().split('\n').slice(-2).join(' | ')}\n`)
 
     await Promise.all([us, eu].map((h) => configureOperatorAgent(h.vm, { strict: true })))
     const installEu = await clawops('agent', 'install', '--stack', 'eu', '--agent', 'ops', '--operator', 'telegram:12345', '--strict', '--serve-peers', TAG)
@@ -176,6 +197,7 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
   })
 
   it('forwards a read to the peer, run as clawops-peer, and both hosts log it', async () => {
+    await reachable('us as clawops-peer', () => postFromHost(us.vm, euUrl(), toolCall('clawops_status'), 'clawops-peer'))
     const [status, config] = await callHostAgent(us.vm, [
       { name: 'clawops_gateway_status', arguments: { stackName: 'eu' } },
       { name: 'clawops_config_get', arguments: { stackName: 'eu', key: 'gateway.port' } },
@@ -236,6 +258,8 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
   }, 60_000)
 
   it('refuses an untagged caller and a caller with another tag, and logs why', async () => {
+    await reachable('the untagged node', () => untagged.post(euUrl(), toolCall('clawops_status')))
+    await reachable('the tag:other node', () => otherTag.post(euUrl(), toolCall('clawops_status')))
     const a = await untagged.post(euUrl(), toolCall('clawops_status'))
     expect(a.status, JSON.stringify(a)).toBe(403)
     expect(refusal(a)).toMatch(new RegExp(`^Refused: laptop.* does not carry ${TAG} \\(its tags: none\\)`))
@@ -326,13 +350,20 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
 
   it('refuses peer queries while the firewall table is missing, when a container could reach the peer', async () => {
     const image = (await us.vm.inspect("docker inspect openclaw --format '{{.Config.Image}}'")).stdout.trim()
-    const probe = `docker run --rm --entrypoint node ${image} -e "const s=require('net').connect({host:'${eu.ips.find((ip) => !ip.includes(':'))}',port:${PEER_PORT},timeout:3000});s.on('connect',()=>{console.log('REACHED');process.exit(0)});s.on('timeout',()=>{console.log('BLOCKED');process.exit(0)});s.on('error',(e)=>{console.log('BLOCKED '+e.code);process.exit(0)})"`
+    const probe = `docker run --rm --entrypoint node ${image} -e "const s=require('net').connect({host:'${eu.ips.find((ip) => !ip.includes(':'))}',port:${PEER_PORT},timeout:8000});s.on('connect',()=>{console.log('REACHED');process.exit(0)});s.on('timeout',()=>{console.log('BLOCKED');process.exit(0)});s.on('error',(e)=>{console.log('BLOCKED '+e.code);process.exit(0)})"`
     expect((await us.vm.inspect(probe)).stdout).toContain('BLOCKED')
 
     expect((await us.vm.inspect('nft delete table inet clawops_peer')).exitCode).toBe(0)
     try {
       // What the table is for: without it, a gateway container reaches the peer as this host.
-      expect((await us.vm.inspect(probe)).stdout).toContain('REACHED')
+      await reachable('us as clawops-peer', () => postFromHost(us.vm, euUrl(), toolCall('clawops_status'), 'clawops-peer'))
+      let seen = ''
+      for (let i = 0; i < 5 && !seen.includes('REACHED'); i++) seen = (await us.vm.inspect(probe)).stdout
+      if (!seen.includes('REACHED')) {
+        const state = await us.vm.inspect(`nft list ruleset 2>&1 | head -80; echo ---; iptables-save 2>&1 | grep -v '^#' | head -80; echo ---; sysctl net.ipv4.ip_forward; ip route get ${eu.ips.find((ip) => !ip.includes(':'))} from 172.17.0.2 iif docker0 2>&1`)
+        process.stderr.write(`[fleet e2e] the probe never reached eu with the table gone:\n${state.stdout}\n`)
+      }
+      expect(seen).toContain('REACHED')
       const [r] = await callHostAgent(us.vm, [{ name: 'clawops_gateway_status', arguments: { stackName: 'eu' } }])
       expect(r!.isError).toBe(true)
       expect(r!.text).toMatch(/^Refused: peer queries need the fleet firewall table/)
