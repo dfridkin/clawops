@@ -460,7 +460,31 @@ export async function remoteChecks(session: SshSession, signal?: AbortSignal): P
       : { name: 'Log rotation', status: 'warn', detail: 'not configured — logs may grow unbounded' },
   )
 
+  const policy = await fleetPolicyCheck(session, signal)
+  if (policy) checks.push(policy)
+
   return checks
+}
+
+/**
+ * On a host that serves peers: whether the tailnet policy keeps other nodes off the peer port
+ * (ADR 0015 §6). Absent on any other host.
+ */
+async function fleetPolicyCheck(session: SshSession, signal?: AbortSignal): Promise<Check | undefined> {
+  const { HOST_AGENT_CONFIG_PATH } = await import('../hostagent/config.js')
+  const { TAILSCALED_SOCKET } = await import('../hostagent/tailscaled.js')
+  const { peerPolicyCheck } = await import('../hostagent/peer-policy.js')
+  const agent = await execPrivileged(session, `cat ${HOST_AGENT_CONFIG_PATH} 2>/dev/null || true`, signal)
+  let serves: unknown
+  try { serves = (JSON.parse(agent.stdout) as { fleet?: { serves?: unknown } }).fleet?.serves } catch { serves = undefined }
+  if (typeof serves !== 'string') return undefined
+  const rules = await execPrivileged(
+    session,
+    `curl -s --max-time 5 --unix-socket ${TAILSCALED_SOCKET} -H 'Host: local-tailscaled.sock' http://local-tailscaled.sock/localapi/v0/debug-packet-filter-rules 2>/dev/null || true`,
+    signal,
+  )
+  const status = await session.exec('tailscale status --json 2>/dev/null || true', signal)
+  return peerPolicyCheck(rules.stdout, status.stdout, serves)
 }
 
 async function deployedVersionCheck(image: string, deployedVersion: string): Promise<Check> {

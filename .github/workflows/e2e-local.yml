@@ -52,3 +52,38 @@ jobs:
       #
       # Nothing is cached between runs: the runner is thrown away, so the image pull is paid every
       # time. The volumes in vm-container.ts are for a developer's machine.
+
+  fleet:
+    name: a two-host fleet on a real tailnet
+    # ADR 0015's verification list: Headscale, two systemd targets each with OpenClaw, Tailscale and
+    # a fleet host agent, and callers that are not fleet hosts. Its own job because it pulls the
+    # OpenClaw image twice, which a laptop's Docker Desktop often has no room for, and takes
+    # about 40 minutes.
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'e2e')
+    timeout-minutes: 90
+
+    steps:
+      # Two OpenClaw images, each unpacked in a nested Docker, need more than the runner has free.
+      # These toolchains are unused here.
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.x'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run the fleet suite
+        run: pnpm test:e2e:fleet

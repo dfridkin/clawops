@@ -26,7 +26,8 @@ backup, restore with `--activate`, migrate and gateway updates, is a tool.
 **Tailscale: no private-only mode on local stacks, and no `doctor` check yet.** `clawops harden
 --tailscale` joins any stack to a tailnet and moves clawops onto that address. Closing the public
 ports goes through `clawops plan --private-only`, which local stacks don't have. `clawops doctor`
-doesn't yet report tailnet status.
+doesn't yet report tailnet status, except on a fleet host, where it checks what the tailnet
+policy lets reach the peer port.
 
 ## Scope
 
@@ -34,6 +35,11 @@ doesn't yet report tailnet status.
 deployment every OpenClaw agent can run commands and read files in the gateway container, which
 holds the host agent's token and transcripts. `clawops agent install` names those agents; restrict
 their tools, or install with `--strict` to refuse while any remain.
+
+**Fleet peers are one hop and reads only** (2.5). A host agent asks its own peers, never a
+peer's peers. A task a peer started can't be followed from another host, and a forwarded
+long-running read sends no progress updates. A peer that doesn't answer takes up to about 14
+seconds to say so. On a self-hosted tailnet with no DERP relay, the first query between two hosts can come back unreachable while their tunnel is set up. Every host must be on a tailnet you run, and you write its policy.
 
 **clawops manages the host, not your agent.** It provisions and operates the infrastructure OpenClaw
 runs on. Authoring agents, skills and prompts is OpenClaw's job.
