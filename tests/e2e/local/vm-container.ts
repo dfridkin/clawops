@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { GenericContainer, Wait } from 'testcontainers'
-import type { StartedTestContainer } from 'testcontainers'
+import type { StartedNetwork, StartedTestContainer } from 'testcontainers'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const FIXTURES = path.join(HERE, '../../integration/fixtures')
@@ -68,7 +68,13 @@ function cacheVolumesFor(
   ]
 }
 
-export async function startVmTarget(openclawVersion: string): Promise<VmTarget> {
+export interface VmTargetOptions {
+  /** A network to join instead of the default bridge, so targets can reach each other by name. */
+  network?: StartedNetwork
+  hostname?: string
+}
+
+export async function startVmTarget(openclawVersion: string, opts: VmTargetOptions = {}): Promise<VmTarget> {
   const authorizedKey = readFileSync(path.join(FIXTURES, 'test_key.pub'), 'utf-8').trim()
 
   const image = await GenericContainer.fromDockerfile(path.join(HERE, 'vm'))
@@ -80,7 +86,10 @@ export async function startVmTarget(openclawVersion: string): Promise<VmTarget> 
   // which is how the first CI run reported only "invalid container name or ID: value is empty".
   const bootLog: string[] = []
 
-  const started = image
+  let built = image
+  if (opts.network) built = built.withNetwork(opts.network)
+  if (opts.hostname) built = built.withHostname(opts.hostname)
+  const started = built
     // Privileged, because systemd manages cgroups and dockerd creates them. /run and /run/lock
     // are tmpfs: systemd writes its runtime state there and the image ships neither.
     //
