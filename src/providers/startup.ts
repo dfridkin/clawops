@@ -5,6 +5,7 @@
 import {
   gatewayRunCommand, STATE_DIR_HOST_LINUX, CONFIG_FILENAME, CONTAINER_UID, GATEWAY_PORT,
 } from '../openclaw/runtime.js'
+import { APT_UPDATE_FN } from './apt.js'
 
 export interface StartupScriptOpts {
   openclawVersion: string
@@ -67,8 +68,9 @@ chown clawops:clawops /home/clawops/.ssh
 # ── Docker installation ──────────────────────────────────────────────────────
 if ! command -v docker &>/dev/null; then
   export DEBIAN_FRONTEND=noninteractive
-  apt-get update -q
-  apt-get install -y -q ca-certificates curl gnupg lsb-release
+  ${APT_UPDATE_FN}
+  apt_update
+  apt-get -o Acquire::Retries=3 install -y -q ca-certificates curl gnupg lsb-release
   install -m 0755 -d /etc/apt/keyrings
   curl -fsSL https://download.docker.com/linux/${dockerDistro}/gpg \\
     -o /etc/apt/keyrings/docker.asc
@@ -76,8 +78,8 @@ if ! command -v docker &>/dev/null; then
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \\
     https://download.docker.com/linux/${dockerDistro} $(lsb_release -cs) stable" \\
     > /etc/apt/sources.list.d/docker.list
-  apt-get update -q
-  apt-get install -y -q \\
+  apt_update
+  apt-get -o Acquire::Retries=3 install -y -q \\
     docker-ce \\
     docker-ce-cli \\
     containerd.io \\

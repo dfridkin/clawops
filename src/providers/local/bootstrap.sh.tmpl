@@ -7,6 +7,9 @@ set -euo pipefail
 OPENCLAW_VERSION="{{OPENCLAW_VERSION}}"
 OPENCLAW_PORT={{OPENCLAW_PORT}}
 
+# Retries apt-get update past a mirror caught mid-sync (src/providers/apt.ts).
+{{APT_UPDATE_FN}}
+
 # ── OS detection ──────────────────────────────────────────────────────────────
 OS="$(uname -s)"
 
@@ -67,8 +70,8 @@ if ! command -v docker &>/dev/null; then
       ;;
     apt)
       export DEBIAN_FRONTEND=noninteractive
-      apt-get update -q
-      apt-get install -y -q ca-certificates curl gnupg lsb-release
+      apt_update
+      apt-get -o Acquire::Retries=3 install -y -q ca-certificates curl gnupg lsb-release
       install -m 0755 -d /etc/apt/keyrings
       # Detect Ubuntu vs Debian; use the correct Docker APT repo for each.
       # /etc/os-release ID is 'ubuntu' on Ubuntu and 'debian' on Debian.
@@ -84,8 +87,8 @@ if ! command -v docker &>/dev/null; then
       echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
         https://download.docker.com/linux/${DOCKER_DISTRO} $(lsb_release -cs) stable" \
         > /etc/apt/sources.list.d/docker.list
-      apt-get update -q
-      apt-get install -y -q docker-ce docker-ce-cli containerd.io
+      apt_update
+      apt-get -o Acquire::Retries=3 install -y -q docker-ce docker-ce-cli containerd.io
       systemctl enable --now docker
       ;;
     dnf|yum)

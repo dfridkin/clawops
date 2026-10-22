@@ -9,6 +9,7 @@ import type { SshSession } from '../../transport/ssh.js'
 import { gatewayRunArgs, gatewayRunCommand, GATEWAY_PORT } from '../../openclaw/runtime.js'
 import { writeLocalState, type LocalState } from './state.js'
 import { ProviderError } from '../../errors/index.js'
+import { APT_UPDATE_FN } from '../apt.js'
 
 const HEALTH_POLL_INTERVAL_MS = 3_000
 const HEALTH_TIMEOUT_MS = 120_000
@@ -66,6 +67,7 @@ export function renderScript(openclawVersion: string, gatewayPort: number = GATE
     .replace(/\{\{GATEWAY_RUN_DARWIN\}\}/g, gatewayRunCommand(shared))
     .replace(/\{\{OPENCLAW_VERSION\}\}/g, openclawVersion)
     .replace(/\{\{OPENCLAW_PORT\}\}/g, String(gatewayPort))
+    .replace(/\{\{APT_UPDATE_FN\}\}/g, () => APT_UPDATE_FN)
 }
 
 /**
