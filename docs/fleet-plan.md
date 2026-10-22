@@ -200,7 +200,7 @@ a kernel-mode node, and its host agent ran as root beside a real `clawops-peer` 
   `handoffs.jsonl`.
 - **Losing the table:** deleting it refused the next query.
 
-### Part E: the e2e suite, docs and release
+### Part E: the e2e suite, docs and release ✅
 
 ADR 0015's e2e list, on the systemd harness with Headscale. Each test breaks one condition
 alone:
@@ -221,3 +221,32 @@ The rest of the part:
 - at release, the clawops.fyi banner (#222) changes from "Coming in 2.5" to live, and links the
   fleet docs instead of the ADR. It merges at the same time as the Version Packages PR, with the
   owner's OK.
+
+**What was built and measured** (`pnpm test:e2e:fleet`, 13 tests, in the e2e workflow's `fleet` job):
+- **The suite.** Headscale 0.27.1 with its embedded DERP relay, two systemd targets with OpenClaw from `clawops up`, Tailscale
+  1.88.3 installed as its package does, and real `agent install --strict --serve-peers` (and
+  `--peer` on one). Callers that are not fleet hosts: an untagged node, a `tag:other` node and a
+  LAN neighbour. Every case on ADR 0015's list passes, each breaking one condition. The policy is
+  allow-all until the last test, so each refusal is the host agent's own.
+- **The uid drop under the unit's sandbox** works: `NoNewPrivileges` and `ProtectSystem=strict`
+  leave the child able to become `clawops-peer`, read tailscaled and reach the peer.
+- **The reboot.** Two containers with `--restart always`, one on Docker's bridge and one on the
+  host network as root, tried the peer every 250 ms through a reboot, and never connected.
+  `clawops-peer` reached the peer again within seconds of the boot.
+- **The documented policy (§6)** keeps an untagged node off port 18800 altogether, and the fleet
+  works under it.
+- **`doctor`'s policy check.** The ADR said doctor would note a policy "it cannot confirm". It can
+  read more than that: tailscaled serves the packet filter the control server compiled for the
+  node, at `/localapi/v0/debug-packet-filter-rules`. On allow-all that is one rule from
+  `0.0.0.0/0` and `::/0` to every port. Doctor now reports what can reach port 18800: every node,
+  the untagged nodes it can, only tagged ones (pass), or none.
+
+**Found on the way:**
+- **Two OpenClaw hosts don't fit a laptop.** About 10 GB of images; Docker Desktop stopped on a
+  Mac with 13 GB free. The suite has its own opt-in and its own CI job, which frees runner disk.
+- **Without a relay, a first handshake outlasts a peer query.** The suite's tailnet first had no
+  DERP relay. Disco pings answered within milliseconds, but the first WireGuard handshake
+  between two nodes took 15 s to more than 90 s, so a host's first query to a peer came back
+  unreachable. With Headscale's embedded relay, served over TLS with a per-run certificate, every
+  first contact took 114-144 ms and every test passed. A tailnet with no relay is a choice only a
+  self-hosted control server allows; `docs/limitations.md` says what it costs.

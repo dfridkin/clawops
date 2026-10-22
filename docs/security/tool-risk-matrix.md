@@ -70,6 +70,19 @@ risk column changes meaning, because no destructive tool runs:
 | `clawops_destroy`, `clawops_stacks_delete`, `clawops_migrate` | Never served; refused with no command (self-targeting) |
 | `clawops_up`, `clawops_apply`, `clawops_init`, `clawops_plan`, `clawops_workflow_deploy_app`, `clawops_backup_create`, `clawops_secret_*` | Never served: they need the operator's machine |
 
+### Fleet peers
+
+A fleet host agent (2.5, [ADR 0015](../decisions/0015-host-agent-fleet.md)) adds a second caller,
+another host's agent over the tailnet, and a second target, a peer. Neither adds a tool.
+
+| Call | On a fleet host agent |
+|---|---|
+| A peer calls one of the 12 read tools | Served on port 18800 when the caller carries the `--serve-peers` tag and is not this host. Every read is about this host only, and `clawops_stacks_list` reports this host alone |
+| A peer calls anything else | Not in the peer listener's catalogue, whatever was allowed for this host's own agent |
+| This host's agent calls a read tool naming a peer's stack | Forwarded to that peer, once this host's guardrail and `--strict` pass and the firewall table is the one install loaded. The answer names the peer that gave it |
+| This host's agent calls a handoff tool naming a peer's stack | Refused, with the command for the operator to run on their own machine. Nothing is recorded on either host |
+| This host's agent calls any other tool naming a peer's stack | Refused, with no command |
+
 ## Annotations
 
 Each tool's `readOnlyHint` and `destructiveHint` annotations are set in

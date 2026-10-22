@@ -275,7 +275,7 @@ clawops down --yes          # Destroy local-provider stack
 | `tunnel` | Local port-forward to gateway UI over SSH |
 | `config` | Get/set remote OpenClaw config values (`--dry-run` shows would-write JSON) |
 | `agents` | List OpenClaw agents, or stream one agent's logs |
-| `agent install` | Install a host agent on a stack's gateway host, for one OpenClaw agent only the operator can reach (`--agent`, `--operator <channel>:<peer>`, `--allow` handoff tools, `--strict`). Refuses unless the gateway's routing allows only the operator; denies clawops to every other agent. `--serve-peers <tag>` and `--peer <stack>=<tailnet name>` make the host a fleet member (ADR 0015, in progress: see [WO-67](docs/fleet-plan.md)) |
+| `agent install` | Install a host agent on a stack's gateway host, for one OpenClaw agent only the operator can reach (`--agent`, `--operator <channel>:<peer>`, `--allow` handoff tools, `--strict`). Refuses unless the gateway's routing allows only the operator; denies clawops to every other agent. `--serve-peers <tag>` and `--peer <stack>=<tailnet name>` make the host a fleet member, whose host agent reads its peers over the tailnet (2.5, ADR 0015; see [Operations](docs/operations.md#host-agent)) |
 | `agent uninstall` | Remove the host agent and unwire the gateway (`--purge` also removes its audit log) |
 | `fleet status` | Read every stack's host over SSH and list its host agent: running or not, which OpenClaw agent it serves, and on a fleet member its tag, peers, firewall table and tailnet state. Reports peers that cannot work, on the host that names them. `--stack a,b` reads only those; `--json`. A stack with nothing deployed is listed as such. Exits 1 when any host has a problem or does not answer |
 | `gateway` | Restart the OpenClaw gateway service |
@@ -603,10 +603,11 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (2122 tests, ~13s)
+pnpm test                  # vitest (2420 tests, ~14s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm test:e2e:local        # builds, then bootstrap, the host-touching MCP tools and a 1.x migration, in systemd containers
+pnpm test:e2e:fleet        # builds, then a two-host fleet on a Headscale tailnet (about 10 GB of images; CI runs it)
 pnpm typecheck             # tsc --noEmit
 pnpm lint                  # eslint src/ tests/ scripts/ (--max-warnings=0)
 pnpm gen:schemas           # regenerate src/providers/types.ts + src/mcp/tools/_generated.ts
