@@ -191,6 +191,11 @@ design assumes:
 - **On the default allow-all policy, the tag check is the only barrier.** `doctor` says so when it
   sees a peer listener on a tailnet whose policy it cannot confirm.
 
+*Implementation note, WO-67 part E (2026-10-22):* `doctor` reads more than this expected. tailscaled
+serves the packet filter compiled for the node, so on a host that serves peers doctor reports what
+can reach the peer port. It warns on every node, as on allow-all, or on named untagged nodes, and
+also when the filter can't be read.
+
 ### 7. Audit on both sides
 
 The calling host agent logs the forwarded call with the peer's name. The peer logs the caller's
@@ -261,7 +266,8 @@ Before this ADR is accepted:
   Tailscale*). No change to the design. Not run: a node that tags itself with `--advertise-tags`,
   which needs an interactive login.
 
-When built, e2e tests on the systemd harness, each one breaking one condition alone:
+When built, e2e tests on the systemd harness, each one breaking one condition alone. Done
+2026-10-22 in `pnpm test:e2e:fleet` (WO-67 part E), with every case below passing:
 
 - An untagged caller, a caller with another tag, and the host itself are refused.
 - A LAN neighbour reaching the peer port is refused.

@@ -80,6 +80,14 @@ on, with no SSH, Pulumi state or cloud credentials. A destructive tool you allow
 stack is refused outright. It re-checks on every call that only you can reach it. See
 [Operations](/docs/operations#host-agent).
 
+**Fleet peers only read** (2.5). A host agent installed with `--serve-peers` answers other host
+agents over your tailnet, with no token: it asks tailscaled who is calling and serves only a node
+carrying the tag. Peers get the read tools, about that host only. A host agent with `--peer`
+forwards only reads, needs `--strict`, and sends each query as a dedicated user that an nftables
+table alone lets out to the peer port, so neither the gateway container nor root can. A change
+naming a peer is refused with the command for you to run. The calling host logs which peer a read went to, and the peer logs who asked. See
+[Fleet](/docs/operations#fleet).
+
 **Wiring clawops into a gateway reaches every agent on it**, unless each one denies
 `clawops__*`. See [MCP](/docs/mcp#wiring-the-gateways-own-ai).
 

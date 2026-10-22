@@ -208,7 +208,7 @@ and read files there, so it can read the host agent's token and transcripts. Ins
 agents. Give them `tools.profile: "messaging"` or a `tools.allow` list, or install with
 `--strict` to refuse while any remain.
 
-**Fleet membership (2.5, in progress).** `--serve-peers <tag>` and `--peer <stack>=<tailnet
+**Fleet membership (2.5).** `--serve-peers <tag>` and `--peer <stack>=<tailnet
 name>` make the host a fleet member ([ADR 0015](decisions/0015-host-agent-fleet.md),
 [WO-67](fleet-plan.md)). Install refuses unless the host is on the tailnet and, for
 `--serve-peers`, carries the tag; `--peer` also needs `--strict`. On a fleet member install
@@ -224,8 +224,7 @@ tag and is not this host, with the 12 read tools and nothing destructive. A conn
 after 60 s. Where ufw is active, install allows port 18800 on `tailscale0` only, and `harden`'s
 ufw reset keeps that rule. At boot the listener waits for the tailnet address if tailscaled has
 none yet; `journalctl -u clawops-agent` says when it starts. Install also checks that the
-`clawops-peer` user can ask tailscaled for status, which part D's peer queries need. Nothing
-sends peer queries yet: that is WO-67 part D.
+`clawops-peer` user can ask tailscaled for status, which peer queries need.
 
 ### Fleet status
 
@@ -277,6 +276,38 @@ How the query is sent:
 - Each attempt has 7 s, with one retry. The first connection after tailscaled restarts can take
   several seconds.
 - A peer that doesn't answer is reported as a note. It doesn't fail the call.
+
+### Tailnet policy
+
+clawops never edits your tailnet's policy. The fleet is designed for this one, in Tailscale's
+policy file (or Headscale's), with your own login in place of `you@example.com`:
+
+```hujson
+{
+  "tagOwners": { "tag:clawops-agent": ["you@example.com"] },
+  "acls": [
+    // Fleet hosts reach each other's peer port, and nothing else does.
+    { "action": "accept", "src": ["tag:clawops-agent"], "dst": ["tag:clawops-agent:18800"] },
+    // Your own devices keep SSH to the hosts. The rule above alone would cut it off.
+    { "action": "accept", "src": ["you@example.com"], "dst": ["tag:clawops-agent:22"] }
+  ]
+}
+```
+
+- **Only you own the tag.** A tag is only as narrow as its `tagOwners`: anyone listed there can
+  put it on a node, and that node is then a peer.
+- **Join each host with a tagged auth key**, not `--advertise-tags`. Generate the key with the
+  tag in the admin console, and pass it to `tailscale up --auth-key`. To take a host out of the
+  fleet, remove the tag from its node, or delete the node. Its next request is refused.
+- **Add rules for anything else you run on these hosts.** The policy above allows only the peer
+  port and SSH to them.
+- **On the default allow-all policy the tag check is the only barrier.** Every node on the
+  tailnet can reach port 18800, and the host agent refuses each one that lacks the tag. That
+  holds, and the e2e suite tests it, but a policy is a second barrier at no cost.
+  `clawops doctor` warns when a host serves peers and the tailnet lets every node reach that port.
+
+The e2e suite runs the fleet under both: the default policy, where each refusal is the host
+agent's own, and the policy above, where an untagged node can't connect at all.
 
 ## Gateway management
 

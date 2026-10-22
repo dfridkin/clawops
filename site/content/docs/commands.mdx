@@ -55,7 +55,8 @@ description: Every clawops command, grouped by what you reach for it.
 
 | Command | Does |
 |---|---|
-| `agent` | `install`, `uninstall`: a host agent on the gateway host, for one agent only you can reach. See [Operations](/docs/operations#host-agent) |
+| `agent` | `install`, `uninstall`: a host agent on the gateway host, for one agent only you can reach. See [Operations](/docs/operations#host-agent). `--serve-peers <tag>` and `--peer <stack>=<tailnet name>` join it to a fleet (2.5, see [Fleet](/docs/operations#fleet)) |
+| `fleet` | `status`: every stack's host agent, its peers, firewall table and tailnet, and any peer that can't work. `--stack a,b` reads only those; exits 1 on a problem |
 | `harden` | Apply hardening modules: ssh, ufw, fail2ban, unattended-upgrades, auditd. `--tailscale` moves the stack onto its tailnet address; `--tailscale-revert` moves it back |
 | `secret` | `list`, `set`, `delete`, `rotate`, `audit` |
 
