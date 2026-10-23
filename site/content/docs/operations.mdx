@@ -126,6 +126,59 @@ container on a default deployment; install names them, and `--strict` refuses wh
 
 A request shows in `clawops status` until you run that command, or for 7 days.
 
+## Fleet
+
+New in 2.5. Host agents on several stacks can read each other over your tailnet, so the agent on
+one gateway can answer questions about the others. Each host is still read-only to its peers,
+and every change still comes back to you as a command.
+
+```bash
+# Each host is on your tailnet, joined with an auth key that carries the tag
+clawops agent install --stack eu --agent ops --operator telegram:12345 --strict \
+  --serve-peers tag:clawops-agent
+clawops agent install --stack us --agent ops --operator telegram:12345 --strict \
+  --serve-peers tag:clawops-agent --peer eu=eu-gw
+
+clawops fleet status            # every host agent, its peers, and what stops a peer working
+```
+
+- **`--serve-peers <tag>`** makes the host agent answer other host agents on port 18800, on its
+  tailnet address. It needs no token: on every request it asks tailscaled who is calling, and
+  answers only a node that carries the tag and is not this host. Peers get the 12 read tools,
+  about this host only, and nothing destructive.
+- **`--peer <stack>=<tailnet name>`** lets this host agent ask that peer. A read naming the
+  stack goes to the peer, and the answer says which host gave it. A change naming the peer is
+  refused, with the command for you to run. It needs `--strict`: while any other agent could act
+  in this gateway's container, peer queries are refused.
+- **The firewall table.** On every fleet member, install loads an nftables table that lets only a
+  dedicated `clawops-peer` user reach peers. The gateway container, other containers and root
+  can't, before or after a reboot. While the table is missing, peer queries are refused.
+- **`clawops fleet status`** reads every stack's host over SSH and reports each host agent, its
+  peers, the firewall table and the tailnet. It flags a peer that can't work, on the host that
+  names it. From inside a gateway, `clawops_stacks_list` with `fleet: true` gives the same view.
+
+### Tailnet policy
+
+clawops never edits your tailnet's policy. The fleet is designed for this one, with your login
+in place of `you@example.com`:
+
+```jsonc
+{
+  "tagOwners": { "tag:clawops-agent": ["you@example.com"] },
+  "acls": [
+    { "action": "accept", "src": ["tag:clawops-agent"], "dst": ["tag:clawops-agent:18800"] },
+    { "action": "accept", "src": ["you@example.com"], "dst": ["tag:clawops-agent:22"] }
+  ]
+}
+```
+
+Only you should own the tag, since anyone in `tagOwners` can make a node a peer. Join hosts with
+a tagged auth key rather than `--advertise-tags`. Untag or delete a host's node to take it out of
+the fleet: its next request is refused. The second rule keeps your own SSH to the hosts.
+
+On the default allow-all policy the tag check is the only barrier. It holds, but `clawops doctor`
+warns about it, and the policy above adds a second one.
+
 ## Hardening
 
 ```bash

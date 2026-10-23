@@ -208,15 +208,106 @@ and read files there, so it can read the host agent's token and transcripts. Ins
 agents. Give them `tools.profile: "messaging"` or a `tools.allow` list, or install with
 `--strict` to refuse while any remain.
 
-**Fleet membership (2.5, in progress).** `--serve-peers <tag>` and `--peer <stack>=<tailnet
+**Fleet membership (2.5).** `--serve-peers <tag>` and `--peer <stack>=<tailnet
 name>` make the host a fleet member ([ADR 0015](decisions/0015-host-agent-fleet.md),
 [WO-67](fleet-plan.md)). Install refuses unless the host is on the tailnet and, for
 `--serve-peers`, carries the tag; `--peer` also needs `--strict`. On a fleet member install
 loads the nftables table `inet clawops_peer` and reads it back. The table keeps containers and
 other users off port 18800 on the tailnet, and `clawops-peer-fw.service` loads it again at
 every boot, before Docker. Install adds `nftables` if the host lacks it, and the `clawops-peer`
-user. `agent uninstall` removes all of it. Nothing serves or queries peers yet: that is WO-67
-parts B and C.
+user. `agent uninstall` removes all of it.
+
+With `--serve-peers` the host agent also listens for peers on port 18800: on its tailnet
+addresses, or on loopback where tailscaled runs in userspace networking. It needs no token. On
+each request it asks tailscaled who is calling, and answers only a tailnet node that carries the
+tag and is not this host, with the 12 read tools and nothing destructive. A connection is cut
+after 60 s. Where ufw is active, install allows port 18800 on `tailscale0` only, and `harden`'s
+ufw reset keeps that rule. At boot the listener waits for the tailnet address if tailscaled has
+none yet; `journalctl -u clawops-agent` says when it starts. Install also checks that the
+`clawops-peer` user can ask tailscaled for status, which peer queries need.
+
+### Fleet status
+
+```bash
+clawops fleet status              # every stack in ~/.clawops/config.json
+clawops fleet status --stack us,eu
+```
+
+Reads each stack's host over SSH, four at a time, and lists its host agent: whether one is
+installed, whether its service runs, which OpenClaw agent it serves and whether it was installed
+with `--strict`. On a fleet member it adds the tag it serves, its peers, whether the firewall
+table is exactly the one install loaded, whether the boot unit will load it again, the host's
+tailnet state and name, and, on a member that serves peers, whether its peer listener is up. Nothing on any host changes.
+
+It then checks the hosts against each other, and reports each problem on the host that names the
+peer: a peer with no host agent, one installed without `--serve-peers`, one that answers a tag the
+caller does not carry, and one reached by a name it does not have on the tailnet. A peer that is
+not in your config, or did not answer, is not judged.
+
+A stack with nothing deployed, because it was never brought up or was torn down, is listed as
+"not deployed" and is not a problem. A host that does not answer within 30 s, or whose state
+backend cannot be read, is reported as unreachable, and the rest are still read.
+Reading needs passwordless sudo for the SSH user, as install does. The command exits 1 when any
+host has a problem or did not answer, so a script can tell. Agents get the same reading from
+`clawops_stacks_list` with `fleet: true`. On a host agent that call reads this host and asks each
+of its peers to report itself (see *Peer queries* below).
+
+### Peer queries
+
+A host agent installed with `--peer eu=eu-gw` can answer its own agent's questions about `eu`.
+A read tool whose `stackName` is `eu` goes to eu's host agent over the tailnet. The answer comes
+back saying which host gave it. `clawops_stacks_list` on a host agent lists this host and each
+peer, and says whether each one answered.
+
+A call naming a peer is checked in this order:
+1. **This host's guardrail** must pass, as for any call. Under `--strict`, which `--peer`
+   requires, that includes the check that no other agent can act in the gateway container.
+2. **The fleet firewall table** must be the one install loaded. While it is missing or changed,
+   every peer query is refused, and `clawops agent install` restores it.
+3. **Only reads are forwarded.** `gateway restart`, `config set` and the other handoff tools are
+   refused when they name a peer, with the command for the operator to run on their own machine.
+   Nothing is recorded in either host's `handoffs.jsonl`.
+
+How the query is sent:
+- It runs in a child process as `clawops-peer`. That is the one uid the firewall table lets
+  reach port 18800 on the tailnet: neither containers nor root get through.
+- The peer is found by its MagicDNS name in tailscaled's own peer list, so the host needs no
+  tailnet DNS.
+- Each attempt has 7 s, with one retry. The first connection after tailscaled restarts can take
+  several seconds.
+- A peer that doesn't answer is reported as a note. It doesn't fail the call.
+
+### Tailnet policy
+
+clawops never edits your tailnet's policy. The fleet is designed for this one, in Tailscale's
+policy file (or Headscale's), with your own login in place of `you@example.com`:
+
+```hujson
+{
+  "tagOwners": { "tag:clawops-agent": ["you@example.com"] },
+  "acls": [
+    // Fleet hosts reach each other's peer port, and nothing else does.
+    { "action": "accept", "src": ["tag:clawops-agent"], "dst": ["tag:clawops-agent:18800"] },
+    // Your own devices keep SSH to the hosts. The rule above alone would cut it off.
+    { "action": "accept", "src": ["you@example.com"], "dst": ["tag:clawops-agent:22"] }
+  ]
+}
+```
+
+- **Only you own the tag.** A tag is only as narrow as its `tagOwners`: anyone listed there can
+  put it on a node, and that node is then a peer.
+- **Join each host with a tagged auth key**, not `--advertise-tags`. Generate the key with the
+  tag in the admin console, and pass it to `tailscale up --auth-key`. To take a host out of the
+  fleet, remove the tag from its node, or delete the node. Its next request is refused.
+- **Add rules for anything else you run on these hosts.** The policy above allows only the peer
+  port and SSH to them.
+- **On the default allow-all policy the tag check is the only barrier.** Every node on the
+  tailnet can reach port 18800, and the host agent refuses each one that lacks the tag. That
+  holds, and the e2e suite tests it, but a policy is a second barrier at no cost.
+  `clawops doctor` warns when a host serves peers and the tailnet lets every node reach that port.
+
+The e2e suite runs the fleet under both: the default policy, where each refusal is the host
+agent's own, and the policy above, where an untagged node can't connect at all.
 
 ## Gateway management
 

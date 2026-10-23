@@ -21,7 +21,7 @@ import path from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { ElicitRequestSchema, type CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import { startVmTarget, stopVmTarget, TEST_KEY_PATH, type VmTarget } from './vm-container.js'
+import { startVmTarget, stopVmTarget, TEST_KEY_PATH, VM_START_TIMEOUT, type VmTarget } from './vm-container.js'
 
 const FROM_VERSION = process.env['CLAWOPS_E2E_OPENCLAW_VERSION'] ?? '2026.9.2'
 // A concrete release one step past the supported minimum. Pulled during the update test.
@@ -112,7 +112,7 @@ describe.skipIf(!enabled)('MCP tools against a real host, over stdio', () => {
       return answer === 'accept' ? { action: 'accept', content: { confirmed: true } } : { action: 'decline' }
     })
     await client.connect(transport)
-  }, 300_000)
+  }, VM_START_TIMEOUT)
 
   afterAll(async () => {
     await client?.close()

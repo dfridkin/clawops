@@ -28,3 +28,29 @@ export function listenFrom(agentJson: string): Listen | undefined {
   } catch { /* no host agent */ }
   return undefined
 }
+
+/**
+ * A fleet member that serves peers takes one more: the peer port, only on `tailscale0` (ADR 0015
+ * §2). Defence in depth: Linux accepts a packet for the tailnet address on any interface, and the
+ * listener's whois check is what refuses a stranger who gets that far.
+ */
+export const PEER_UFW_COMMENT = 'clawops fleet peers'
+
+export function ufwPeerAllowRule(port: number): string {
+  return `ufw allow in on tailscale0 to any port ${port} proto tcp comment ${shellQuote(PEER_UFW_COMMENT)}`
+}
+
+export function ufwPeerDeleteRule(port: number): string {
+  return `ufw delete allow in on tailscale0 to any port ${port} proto tcp`
+}
+
+/** Whether an agent.json says this host serves peers, so harden's ufw reset keeps their rule. */
+export function servesPeersFrom(agentJson: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(agentJson)
+    const serves = (parsed as { fleet?: { serves?: unknown } } | null)?.fleet?.serves
+    return typeof serves === 'string' && serves !== ''
+  } catch {
+    return false
+  }
+}

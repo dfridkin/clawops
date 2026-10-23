@@ -3,7 +3,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import { withAudit } from '../audit.js'
+import { withAudit, type PeerCaller } from '../audit.js'
 import {
   TOOLSETS,
   type Toolset,
@@ -51,18 +51,19 @@ import type { McpServeOpts } from '../server.js'
 import { hostAgent, hostAgentStack } from '../../hostagent/mode.js'
 import type { HostAgentConfig } from '../../hostagent/config.js'
 import {
-  HANDOFF_TOOLS, SELF_TARGETING_TOOLS, SELF_TARGETING_REFUSAL, hostAgentToolNames,
+  HANDOFF_TOOLS, SELF_TARGETING_TOOLS, SELF_TARGETING_REFUSAL, hostAgentToolNames, HOST_AGENT_READ_TOOLS,
 } from '../../hostagent/tools.js'
 import { buildHandoff, recordHandoff, handoffText } from '../../hostagent/handoff.js'
 import { currentGuardrail } from '../../hostagent/live.js'
 import { guardrailRefusal } from '../../hostagent/guardrail.js'
+import { peerFor, routeToPeer } from '../../hostagent/peer-route.js'
 import { UsageError } from '../../errors/index.js'
 
 // ── Handler imports ──────────────────────────────────────────────────────────
 import { handleStatus } from './cli/status.js'
 import { handleDoctor } from './cli/doctor.js'
 import { handleLogsTail } from './cli/logs.js'
-import { handleStacksList, handleStacksDelete } from './cli/stacks.js'
+import { handleStacksList, handleStacksDelete, handlePeerStacksList } from './cli/stacks.js'
 import { handleConfigGet, handleConfigSet, handleConfigUnset, handleConfigValidate } from './cli/config.js'
 import { handleAgentsList, handleAgentsLogs } from './cli/agents.js'
 import { handleGatewayRestart, handleGatewayStatus, handleGatewayUpdate } from './cli/gateway.js'
@@ -205,6 +206,48 @@ export function registerTools(server: McpServer, opts: McpServeOpts): void {
 }
 
 /**
+ * Register the tools a peer gets on the peer listener: the read tools and nothing else, whatever
+ * the host's own agent was allowed (ADR 0015 §3). Built per request, for one caller, so every
+ * audit line names the node that asked.
+ */
+export function registerPeerTools(server: McpServer, agent: HostAgentConfig, caller: PeerCaller): void {
+  for (const toolName of HOST_AGENT_READ_TOOLS) {
+    const entry = TOOL_REGISTRY[toolName]
+    if (!entry) continue
+    const { schema, annotations, description } = entry
+    // A peer's stacks list answers for this host alone and never forwards: one hop.
+    const handler = toolName === 'clawops_stacks_list' ? (handlePeerStacksList as AnyHandler) : entry.handler
+    const { title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint } = annotations
+    const audited = withAudit(toolName, (input) => peerDispatch(agent, handler)(input, server), caller)
+    server.registerTool(
+      toolName,
+      { title, description, inputSchema: schema, annotations: { title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint } },
+      audited,
+    )
+  }
+}
+
+/**
+ * A peer's call: about this host or refused, then the read tool as it runs for the host's own
+ * agent. The host's operator guardrail is not checked here. It is about who reaches this host's
+ * own agent; a peer was authorised by its tag, and the calling host checked its own guardrail
+ * before it forwarded the call (ADR 0015 §4).
+ */
+export function peerDispatch(agent: HostAgentConfig, handler: AnyHandler): AnyHandler {
+  return async (input, server) => {
+    const args = (input ?? {}) as Record<string, unknown>
+    let stack: string
+    try {
+      stack = hostAgentStack(agent, args['stackName'])
+    } catch (err) {
+      if (err instanceof UsageError) return refusal(err.message)
+      throw err
+    }
+    return handler({ ...args, stackName: stack }, server)
+  }
+}
+
+/**
  * What a host agent's call does, decided below every tool handler (ADR 0014 §2 and §4).
  *
  * The operator-only guardrail is checked first, on every call, against openclaw.json as it is
@@ -212,7 +255,8 @@ export function registerTools(server: McpServer, opts: McpServeOpts): void {
  * host agent manages only its own. A
  * self-targeting tool is refused with no command offered. A handoff tool returns the CLI
  * command and never reaches its handler, so neither `yes` nor elicitation can make it run.
- * Everything else is a read tool and runs as it does anywhere.
+ * Everything else is a read tool and runs as it does anywhere. A call naming one of this host's
+ * fleet peers goes to peer-route.ts instead, once the guardrail has passed.
  */
 export function hostAgentDispatch(agent: HostAgentConfig, toolName: string, handler: AnyHandler): AnyHandler {
   return async (input, server) => {
@@ -220,6 +264,12 @@ export function hostAgentDispatch(agent: HostAgentConfig, toolName: string, hand
 
     const guard = await currentGuardrail(agent)
     if (!guard.ok) return refusal(guardrailRefusal(guard.failures))
+
+    // A stack in this host's --peer list: a read goes to that peer, anything else is refused
+    // (ADR 0015 §3, §5). Only after the guardrail above, which under --strict includes the
+    // container check that --peer requires (§4).
+    const peer = peerFor(agent, args['stackName'])
+    if (peer) return routeToPeer(agent, peer, toolName, args)
 
     let stack: string
     try {

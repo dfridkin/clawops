@@ -269,6 +269,20 @@ describe('runDiagnostics — remote checks', () => {
     expect(published?.remedy).toMatch(/tunnel|TLS/)
   })
 
+  it('checks the tailnet policy only on a host that serves peers, and warns on allow-all', async () => {
+    expect(find(await runDiagnostics({ stack: 'prod' }, withHost(healthyHost())), 'Fleet policy')).toBeUndefined()
+
+    const allowAll = '[{"SrcIPs":["0.0.0.0/0","::/0"],"DstPorts":[{"IP":"0.0.0.0/0","Ports":{"First":0,"Last":65535}},{"IP":"::/0","Ports":{"First":0,"Last":65535}}],"IPProto":[6,17]}]'
+    const member = healthyHost()
+      .respond(/cat \/etc\/clawops-agent\/agent\.json/, { stdout: '{"fleet":{"serves":"tag:clawops-agent","peers":[]}}' })
+      .respond(/debug-packet-filter-rules/, { stdout: allowAll })
+      .respond(/tailscale status --json/, { stdout: '{"Self":{"TailscaleIPs":["100.64.0.2"]},"Peer":{}}' })
+    const report = await runDiagnostics({ stack: 'prod' }, withHost(member))
+    expect(find(report, 'Fleet policy')).toMatchObject({ status: 'warn', detail: expect.stringMatching(/tag check is the only barrier/) })
+    // A warning: the fleet still works, and the host agent still refuses untagged callers.
+    expect(report.ok).toBe(true)
+  })
+
   it('fails a full disk and warns a filling one', async () => {
     const full = healthyHost().respond(/df -h/, { stdout: '94% used (19G of 20G)' })
     expect(find(await runDiagnostics({ stack: 'prod' }, withHost(full)), 'Disk')?.status).toBe('fail')

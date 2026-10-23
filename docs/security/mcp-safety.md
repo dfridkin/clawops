@@ -13,7 +13,7 @@ changes:
 
 - `clawops_status`
 - `clawops_logs_tail`
-- `clawops_stacks_list`
+- `clawops_stacks_list`; with `fleet: true` it connects to every stack's host to read its host agent, and changes nothing
 - `clawops_config_get`
 - `clawops_config_validate`. Validate the remote openclaw.json (read-only check)
 - `clawops_agents_list`
@@ -82,6 +82,28 @@ refused alongside it.
   every agent has `exec` and file tools in the container. Any of them can read the clawops token
   from `openclaw.json` and the host agent's transcripts from disk. `clawops_status` names them;
   install with `--strict` to refuse instead.
+- **Peers get the read tools only (2.5).** A host agent installed with
+  `--serve-peers <tag>` also listens on port 18800 on its tailnet address, or on loopback in
+  userspace networking ([ADR 0015](../decisions/0015-host-agent-fleet.md)). That listener takes
+  no token. On every request it asks tailscaled who is at the connection's `ip:port`, and refuses
+  anything that is not a tailnet node, a node without the tag, and this host itself. It serves the
+  same 12 read tools and nothing destructive, whatever was allowed for the host's own agent, and
+  each read is about this host only. A connection lasts at most 60 s, and at most 4 caller
+  lookups run at once.
+- **Querying peers.** A host agent installed with `--peer <stack>=<name>` forwards a read
+  naming that stack to the peer, and refuses anything else naming it:
+  - **Destructive calls** are refused with the operator's command, and are recorded in neither
+    host's `handoffs.jsonl`.
+  - **Before forwarding,** its whole guardrail must pass. That includes `--strict`'s check that no
+    other agent can act in the gateway container. The fleet firewall table must also be exactly
+    the one install loaded.
+  - **The query itself** runs in a child process as `clawops-peer`, the only uid the table lets
+    reach port 18800 on the tailnet. Nothing of the host agent's environment goes with it.
+- **The tailnet policy is a second barrier, not one clawops relies on.** On the default
+  allow-all policy every node can reach port 18800, and the tag check above is what refuses
+  them. `clawops doctor` reads the packet filter tailscaled compiled from the policy and warns
+  when a host serves peers and nodes without the tag can reach that port. The operations guide
+  gives the policy the fleet is designed for (*Tailnet policy*).
 
 ### Spending limits apply in every mode
 

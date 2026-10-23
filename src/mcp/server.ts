@@ -5,11 +5,11 @@ import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
-import { registerTools } from './tools/registry.js'
+import { registerTools, registerPeerTools } from './tools/registry.js'
 import { registerResources } from './resources.js'
 import { registerPrompts } from './prompts.js'
 import { loadHostAgentConfig } from '../hostagent/config.js'
-import { enterHostAgentMode } from '../hostagent/mode.js'
+import { enterHostAgentMode, hostAgent } from '../hostagent/mode.js'
 
 export interface McpServeOpts {
   port?: number
@@ -130,6 +130,18 @@ export async function serveMcp(opts: McpServeOpts): Promise<void> {
       `[clawops] MCP HTTP server listening on ${bind}:${opts.port}` +
         `${token ? ' (bearer token required)' : ' (loopback, no token)'}\n`,
     )
+
+    // A fleet member installed with --serve-peers also answers peers, on the tailnet (ADR 0015).
+    const agent = hostAgent()
+    const serves = agent?.fleet?.serves
+    if (agent && serves) {
+      const { startPeerListener } = await import('../hostagent/peer-listener.js')
+      void startPeerListener(serves, (caller) => {
+        const server = new McpServer({ name: 'clawops', version })
+        registerPeerTools(server, agent, caller)
+        return server
+      })
+    }
 
     await new Promise<void>((resolve) => httpServer.once('close', resolve))
   } else {

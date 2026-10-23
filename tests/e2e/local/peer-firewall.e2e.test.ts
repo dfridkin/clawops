@@ -19,7 +19,8 @@ import path from 'node:path'
 import { connect, type SshSession } from '../../../src/transport/ssh.js'
 import { installPeerFirewall, removePeerFirewall } from '../../../src/hostagent/install.js'
 import { checkPeerTable, PEER_TABLE_LIST_CMD } from '../../../src/hostagent/peer-firewall.js'
-import { startVmTarget, stopVmTarget, TEST_KEY_PATH, VM_USER, type VmTarget } from './vm-container.js'
+import { fleetStatus } from '../../../src/hostagent/fleet-status.js'
+import { startVmTarget, stopVmTarget, TEST_KEY_PATH, VM_START_TIMEOUT, VM_USER, type VmTarget } from './vm-container.js'
 
 const enabled = process.env['CLAWOPS_E2E_LOCAL'] === '1'
 // Names this suite's cache volumes, apart from the OpenClaw suites' multi-gigabyte ones.
@@ -62,7 +63,7 @@ describe.skipIf(!enabled)('the fleet firewall table on a real host', () => {
     const r = await vm.inspect(`echo ${b64} | base64 -d > /etc/systemd/system/docker.service && systemctl daemon-reload && systemctl enable --now docker.service`)
     expect(r.exitCode, r.stdout).toBe(0)
     session = await open()
-  }, 300_000)
+  }, VM_START_TIMEOUT)
 
   afterAll(async () => {
     session?.close()
@@ -108,6 +109,29 @@ describe.skipIf(!enabled)('the fleet firewall table on a real host', () => {
     const fw = await installPeerFirewall(session)
     expect(fw).toEqual({ ok: true, uid })
     expect((await vm.inspect('nft list tables')).stdout.match(/clawops_peer/g)).toHaveLength(1)
+  }, 120_000)
+
+  // `clawops fleet status` reads this host with the same script; here against a real systemd and
+  // a real nft, whose output the unit tests only imitate. There is no host agent unit and no
+  // tailscaled on this target, so those two are what it reports.
+  it('is read by fleet status as install left it', async () => {
+    const agentJson = JSON.stringify({
+      version: 1, stack: 'e2e', provider: 'local', agentId: 'ops', operators: ['telegram:1'], allow: [], strict: true,
+      fleet: { serves: 'tag:clawops-agent', peers: [], peerUid: uid }, installedAt: new Date().toISOString(),
+    })
+    const b64 = Buffer.from(agentJson).toString('base64')
+    expect((await vm.inspect(`echo ${b64} | base64 -d > /etc/clawops-agent/agent.json`)).exitCode).toBe(0)
+    try {
+      const status = await fleetStatus(['e2e'], { open: async () => ({ session, release: () => {} }) })
+      const [h] = status.hosts
+      expect(h, JSON.stringify(h)).toMatchObject({ state: 'problems', service: 'inactive', fleet: { serves: 'tag:clawops-agent', firewall: 'ok' } })
+      expect(h!.problems).toEqual([
+        expect.stringMatching(/service is inactive/),
+        expect.stringMatching(/tailscaled did not answer/),
+      ])
+    } finally {
+      await vm.inspect('rm -f /etc/clawops-agent/agent.json')
+    }
   }, 120_000)
 
   it('fails the check once someone puts a rule ahead of the drops', async () => {

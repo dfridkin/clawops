@@ -7,7 +7,8 @@ import { SENTINEL_DIR } from '../types.js'
 import {
   PUBLISH_INSPECT_CMD, publishForRestart, publishedGatewayPort,
 } from '../../openclaw/runtime.js'
-import { ufwAllowRule, listenFrom } from '../../hostagent/firewall.js'
+import { ufwAllowRule, listenFrom, ufwPeerAllowRule, servesPeersFrom } from '../../hostagent/firewall.js'
+import { PEER_PORT } from '../../hostagent/peer-firewall.js'
 import { HOST_AGENT_CONFIG_PATH } from '../../hostagent/config.js'
 
 const SENTINEL = `${SENTINEL_DIR}/ufw.applied`
@@ -79,6 +80,10 @@ export function makeUfwModule(sshPort: number = 22): HardeningModule {
       if (agentListen) {
         rules.push(ufwAllowRule(agentListen))
         gatewayNote += `; host agent allowed on docker0 to ${agentListen.address}:${agentListen.port}`
+      }
+      if (servesPeersFrom(agentJson)) {
+        rules.push(ufwPeerAllowRule(PEER_PORT))
+        gatewayNote += `; fleet peers allowed on tailscale0 to port ${PEER_PORT}`
       }
 
       const script = [

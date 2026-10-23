@@ -15,6 +15,19 @@ export interface AuditEntry {
   durationMs: number
   result: 'ok' | 'error'
   resourceCount?: number
+  /** On a host agent's peer listener: the calling node, from tailscaled's whois (ADR 0015 §7). */
+  peer?: PeerCaller
+  /** Why the peer listener refused, when it did. */
+  reason?: string
+  /** On a host agent with fleet peers: the peer a call was forwarded to (ADR 0015 §7). */
+  forwardedTo?: { stack: string; node: string }
+}
+
+/** A peer as the audit log records it. The name is the peer's own choice; StableID and tags are not. */
+export interface PeerCaller {
+  name: string
+  stableId: string
+  tags: string[]
 }
 
 // One session ID per server process
@@ -156,6 +169,19 @@ function getAuditLogPath(): string {
   return cfg?.mcp?.auditLogPath ?? path.join(getConfigDir(), 'mcp-audit.log')
 }
 
+/** The peer a host agent forwarded a call to, from the result's `_meta` (peer-route.ts). */
+function forwarded(result: import('@modelcontextprotocol/sdk/types.js').CallToolResult): { forwardedTo?: { stack: string; node: string } } {
+  const f = result._meta?.['clawops/forwardedTo'] as { stack?: unknown; node?: unknown } | undefined
+  return f && typeof f.stack === 'string' && typeof f.node === 'string' ? { forwardedTo: { stack: f.stack, node: f.node } } : {}
+}
+
+/** The first line of a refusal's text, for the audit log's `reason`. */
+function refusalText(result: import('@modelcontextprotocol/sdk/types.js').CallToolResult): string {
+  const first = result.content.find((c) => c.type === 'text')
+  const text = first && first.type === 'text' ? first.text : ''
+  return (text.split('\n')[0] ?? '').slice(0, 300)
+}
+
 /**
  * Wrap a tool handler with audit logging and timing.
  * The wrapper calls auditLog on both success and error.
@@ -163,6 +189,7 @@ function getAuditLogPath(): string {
 export function withAudit<T>(
   toolName: string,
   handler: (input: T) => Promise<import('@modelcontextprotocol/sdk/types.js').CallToolResult>,
+  peer?: PeerCaller,
 ): (input: T) => Promise<import('@modelcontextprotocol/sdk/types.js').CallToolResult> {
   return async (input: T) => {
     const start = Date.now()
@@ -181,6 +208,9 @@ export function withAudit<T>(
         args: sanitize(input as Record<string, unknown>),
         durationMs: Date.now() - start,
         result: result.isError === true ? 'error' : 'ok',
+        ...(peer ? { peer } : {}),
+        ...(peer && result.isError === true ? { reason: refusalText(result) } : {}),
+        ...forwarded(result),
       })
       return result
     } catch (err) {
@@ -191,8 +221,26 @@ export function withAudit<T>(
         args: sanitize(input as Record<string, unknown>),
         durationMs: Date.now() - start,
         result: 'error',
+        ...(peer ? { peer } : {}),
       })
       throw err
     }
   }
+}
+
+/**
+ * A request the peer listener refused before any tool ran: no tailnet node, the wrong tag, this
+ * host itself, too many lookups. Recorded with the caller where whois named one (ADR 0015 §7).
+ */
+export function auditPeerRefusal(remote: string, reason: string, peer?: PeerCaller): void {
+  auditLog({
+    ts: new Date().toISOString(),
+    sessionId: getSessionId(),
+    tool: 'peer_listener',
+    args: { remote },
+    durationMs: 0,
+    result: 'error',
+    reason,
+    ...(peer ? { peer } : {}),
+  })
 }

@@ -111,10 +111,24 @@ agent, and the host agent's transcripts on disk. Install and `clawops_status` na
 `--strict` refuses while any exist. Sandboxing them gets its own ADR, with WO-53. Destructive
 calls are not affected: they hand off to the operator either way.
 
-**Fleet hosts don't talk to each other yet.** `agent install --serve-peers` and `--peer` check
-the tailnet, record the fleet and load its firewall table (WO-67 part A), but no peer listener
-or peer routing exists until parts B and C. A fleet member answers only its own operator, as
-before.
+**Peer queries are one hop and reads only** (2.5). A host agent with `--peer` entries forwards a
+read naming a peer's stack (ADR 0015).
+Several limits apply:
+- **One hop.** A peer answers for itself only. `fleet: true` on a host agent shows this host and
+  its own peers, never a peer's peers.
+- **`clawops_task_status` stays local.** It takes a task id, not a stack, so it can't follow a
+  task a peer started.
+- **No progress.** A forwarded `clawops_monitor` or `clawops_workflow_recover` sends no progress
+  notifications while the peer works.
+- **Timeouts.** A query to an unreachable peer takes up to about 14 s before it says so: two
+  attempts of 7 s each. On a tailnet with no DERP relay, which only a self-hosted control server
+  can be, the first query between two hosts can come back unreachable: there the first WireGuard
+  handshake between two nodes took 15 s to more than 90 s. With a relay it took about 0.1 s.
+- **Audit.** The calling host records which peer a forwarded read went to. A stacks list, which
+  asks every peer, records the call but not each peer it asked; each peer records the caller.
+- **The e2e suite needs room.** `pnpm test:e2e:fleet` runs two OpenClaw hosts, about 10 GB of
+  images. On a laptop with less free, Docker Desktop stops partway, so it runs in CI, in the e2e
+  workflow's fleet job.
 
 **Long-running tools send no progress notifications.** `clawops_up`, `clawops_apply`,
 `clawops_destroy`, `clawops_gateway_update` and the backup tools record progress on a task that
@@ -127,7 +141,8 @@ one change to the registry and every long-running handler.
 --tailscale` joins any stack to a tailnet and moves clawops onto that address. Closing the public
 ports goes through `clawops plan --private-only`, and local stacks have no plan/apply path, so on
 a local host the public SSH port stays open unless you close it yourself. `clawops doctor` doesn't
-yet report tailnet status or key expiry.
+yet report tailnet status or key expiry. On a fleet host it does check what the tailnet policy
+lets reach the peer port, from the packet filter tailscaled holds.
 
 ## Credentials and secrets
 
