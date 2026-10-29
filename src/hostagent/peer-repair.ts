@@ -11,9 +11,9 @@
 // the uid it recorded, loaded in one transaction, and read back. Every repair, and every failure
 // to repair, is logged and audited, so clawops rewriting firewall state is never silent.
 //
-// It loads the table from stdin and leaves the rules file alone. The agent's unit makes /etc
-// read-only to it (ProtectSystem=strict), and widening that would let it rewrite its own
-// agent.json too. The file is root's, written by install; `fleet status` and doctor report a
+// It loads the table from a file of its own in /tmp and leaves the rules file alone. The agent's
+// unit makes /etc read-only to it (ProtectSystem=strict), and widening that would let it rewrite
+// its own agent.json too. Not from stdin: nft 1.0 refuses a pipe for -f ("Not a regular file"). The file is root's, written by install; `fleet status` and doctor report a
 // boot unit that would not load it.
 
 import process from 'node:process'
@@ -30,6 +30,9 @@ export function peerTableCheckMs(): number {
   const ms = Number(process.env['CLAWOPS_PEER_TABLE_CHECK_MS'])
   return Number.isInteger(ms) && ms >= 1_000 ? ms : PEER_TABLE_CHECK_MS
 }
+
+/** Load the table on stdin through a regular file, which is what `nft -f` reads. */
+export const PEER_TABLE_LOAD_CMD = 'f=$(mktemp /tmp/clawops-peer-fw.XXXXXX) || exit 1; cat > "$f" && nft -f "$f"; r=$?; rm -f -- "$f"; exit $r'
 
 export type RepairOutcome =
   | { kind: 'ok' }
@@ -50,7 +53,8 @@ export async function repairPeerTable(session: SshSession, peerUid: number, sign
   if (before.ok) return { kind: 'ok' }
 
   // The table replaces itself in one transaction: it creates, deletes and defines in one file.
-  const load = await session.execWithInput('nft -f -', Readable.from([Buffer.from(peerTable(peerUid))]), signal)
+  // /tmp is the unit's own (PrivateTmp), so nothing else on the host sees the file.
+  const load = await session.execWithInput(PEER_TABLE_LOAD_CMD, Readable.from([Buffer.from(peerTable(peerUid))]), signal)
   if (load.code !== 0) return { kind: 'failed', was: before.reason, failure: `nft could not load it: ${errText(load)}` }
   const after = await read()
   return after.ok ? { kind: 'repaired', was: before.reason } : { kind: 'failed', was: before.reason, failure: after.reason }

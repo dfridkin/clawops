@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest'
 import type { SshExecResult, SshSession } from '../../src/transport/ssh.js'
-import { repairPeerTable, watchPeerTable, type RepairOutcome } from '../../src/hostagent/peer-repair.js'
+import { repairPeerTable, watchPeerTable, PEER_TABLE_LOAD_CMD, type RepairOutcome } from '../../src/hostagent/peer-repair.js'
 import { peerTable } from '../../src/hostagent/peer-firewall.js'
 import { listing, UID } from '../helpers/peer-table.js'
 
@@ -44,8 +44,10 @@ describe('repairPeerTable', () => {
     expect(r).toEqual({ kind: 'repaired', was: expect.stringMatching(/is missing/) })
     expect(k.loads).toHaveLength(1)
     expect(k.loads[0]!.contents).toBe(peerTable(UID))
-    // The agent's unit has /etc read-only (ProtectSystem=strict): a write there fails, and the load with it.
-    expect(k.loads[0]!.cmd).toBe('nft -f -')
+    // Both measured on the fleet e2e host: the agent's unit has /etc read-only
+    // (ProtectSystem=strict), and nft refuses a pipe for -f ("Not a regular file: /dev/stdin").
+    expect(k.loads[0]!.cmd).toBe(PEER_TABLE_LOAD_CMD)
+    expect(k.loads[0]!.cmd).not.toMatch(/\/etc\/|nft -f -/)
   })
 
   it('replaces a table someone opened with a rule ahead of the drops', async () => {
