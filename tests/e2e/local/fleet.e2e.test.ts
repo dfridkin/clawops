@@ -405,6 +405,8 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
         if (await held()) return
         await new Promise((r) => setTimeout(r, 1_000))
       }
+      const logs = await us.vm.inspect('journalctl -u clawops-agent -n 30 --no-pager 2>&1 | cut -c1-300; systemctl show clawops-agent -p Environment')
+      process.stderr.write(`[fleet e2e] the table was not restored after it was ${what}:\n${logs.stdout}\n`)
       throw new Error(`the host agent did not restore the table after it was ${what}`)
     }
     await tableCheckEvery(us, 2_000)

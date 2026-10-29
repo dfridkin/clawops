@@ -7,15 +7,20 @@
 // a firewall tool rewriting the ruleset would leave the host open until someone noticed.
 //
 // So the host agent, which runs as root on every fleet member, reads the table back on a timer
-// and puts it back when it is missing or changed: the rules file rewritten from what install
-// wrote, loaded in one transaction, and read back. Every repair, and every failure to repair, is
-// logged and audited, so clawops rewriting firewall state is never silent.
+// and puts it back when it is missing or changed: the table install wrote, generated again from
+// the uid it recorded, loaded in one transaction, and read back. Every repair, and every failure
+// to repair, is logged and audited, so clawops rewriting firewall state is never silent.
+//
+// It loads the table from stdin and leaves the rules file alone. The agent's unit makes /etc
+// read-only to it (ProtectSystem=strict), and widening that would let it rewrite its own
+// agent.json too. The file is root's, written by install; `fleet status` and doctor report a
+// boot unit that would not load it.
 
 import process from 'node:process'
 import { Readable } from 'node:stream'
 import type { SshSession } from '../transport/ssh.js'
 import type { HostAgentConfig } from './config.js'
-import { checkPeerTable, peerTable, PEER_FW_RULES_PATH, PEER_TABLE_LIST_CMD } from './peer-firewall.js'
+import { checkPeerTable, peerTable, PEER_TABLE_LIST_CMD } from './peer-firewall.js'
 
 /** How often the table is read back. A container that finds it missing has at most this long. */
 export const PEER_TABLE_CHECK_MS = 30_000
@@ -35,11 +40,7 @@ function errText(r: { stdout: string; stderr: string; code: number }): string {
   return (r.stderr.trim() || r.stdout.trim() || `exit ${r.code}`).slice(0, 500)
 }
 
-/**
- * Read the table back and, when it is not the one install loaded, restore it. The rules file is
- * rewritten too, from the uid install recorded, so the next boot loads the right table whatever
- * happened to the file.
- */
+/** Read the table back and, when it is not the one install loaded, restore it. */
 export async function repairPeerTable(session: SshSession, peerUid: number, signal?: AbortSignal): Promise<RepairOutcome> {
   const read = async () => {
     const listed = await session.exec(`${PEER_TABLE_LIST_CMD} 2>/dev/null`, signal)
@@ -48,12 +49,8 @@ export async function repairPeerTable(session: SshSession, peerUid: number, sign
   const before = await read()
   if (before.ok) return { kind: 'ok' }
 
-  const file = PEER_FW_RULES_PATH
-  const load = await session.execWithInput(
-    `umask 022 && cat > ${file}.new && chmod 0644 ${file}.new && mv ${file}.new ${file} && nft -f ${file}`,
-    Readable.from([Buffer.from(peerTable(peerUid))]),
-    signal,
-  )
+  // The table replaces itself in one transaction: it creates, deletes and defines in one file.
+  const load = await session.execWithInput('nft -f -', Readable.from([Buffer.from(peerTable(peerUid))]), signal)
   if (load.code !== 0) return { kind: 'failed', was: before.reason, failure: `nft could not load it: ${errText(load)}` }
   const after = await read()
   return after.ok ? { kind: 'repaired', was: before.reason } : { kind: 'failed', was: before.reason, failure: after.reason }

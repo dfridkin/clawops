@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import type { SshExecResult, SshSession } from '../../src/transport/ssh.js'
 import { repairPeerTable, watchPeerTable, type RepairOutcome } from '../../src/hostagent/peer-repair.js'
-import { peerTable, PEER_FW_RULES_PATH } from '../../src/hostagent/peer-firewall.js'
+import { peerTable } from '../../src/hostagent/peer-firewall.js'
 import { listing, UID } from '../helpers/peer-table.js'
 
 /** A host whose kernel holds `table` (empty: none), and whose nft loads what it is given unless told to fail. */
@@ -38,13 +38,14 @@ describe('repairPeerTable', () => {
     expect(k.loads).toEqual([])
   })
 
-  it('puts back a missing table, from the uid install recorded, through the rules file the boot unit loads', async () => {
+  it('puts back a missing table, generated from the uid install recorded, without writing under /etc', async () => {
     const k = new FakeKernel('')
     const r = await repairPeerTable(k.session(), UID)
     expect(r).toEqual({ kind: 'repaired', was: expect.stringMatching(/is missing/) })
     expect(k.loads).toHaveLength(1)
     expect(k.loads[0]!.contents).toBe(peerTable(UID))
-    expect(k.loads[0]!.cmd).toContain(`mv ${PEER_FW_RULES_PATH}.new ${PEER_FW_RULES_PATH} && nft -f ${PEER_FW_RULES_PATH}`)
+    // The agent's unit has /etc read-only (ProtectSystem=strict): a write there fails, and the load with it.
+    expect(k.loads[0]!.cmd).toBe('nft -f -')
   })
 
   it('replaces a table someone opened with a rule ahead of the drops', async () => {
