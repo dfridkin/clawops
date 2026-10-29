@@ -141,8 +141,15 @@ one change to the registry and every long-running handler.
 --tailscale` joins any stack to a tailnet and moves clawops onto that address. Closing the public
 ports goes through `clawops plan --private-only`, and local stacks have no plan/apply path, so on
 a local host the public SSH port stays open unless you close it yourself. `clawops doctor` doesn't
-yet report tailnet status or key expiry. On a fleet host it does check what the tailnet policy
-lets reach the peer port, from the packet filter tailscaled holds.
+yet report tailnet status or key expiry. On a fleet host it does check the fleet firewall table
+and, on a host that serves peers, what the tailnet policy lets reach the peer port, from the
+packet filter tailscaled holds.
+
+**The fleet firewall table can be open for up to 30 s** (2.5). The host agent puts the table back
+when something removes or changes it, but only on its next check, and only while it runs. At boot
+the unit loads the table before Docker starts; if that load fails, containers start without it
+until the host agent, which starts after Docker, restores it. While the host agent is stopped,
+nothing restores it, and `clawops doctor` fails the **Fleet firewall** check.
 
 ## Credentials and secrets
 

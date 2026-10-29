@@ -32,6 +32,7 @@ import {
   BASE_DOMAIN, joinHost, peerUrl, postFromHost, startCaller, startHeadscale, toolCall,
   type Caller, type Headscale, type PostResult,
 } from './tailnet.js'
+import { checkPeerTable } from '../../../src/hostagent/peer-firewall.js'
 
 const VERSION = process.env['CLAWOPS_E2E_OPENCLAW_VERSION'] ?? '2026.9.2'
 const ENTRY = path.resolve(__dirname, '../../../dist/cli.js')
@@ -85,6 +86,23 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
   async function audit(h: Host): Promise<AuditLine[]> {
     const out = (await h.vm.inspect(`cat ${AUDIT} 2>/dev/null`)).stdout
     return out.split('\n').filter((l) => l.startsWith('{')).map((l) => JSON.parse(l) as AuditLine)
+  }
+
+  /**
+   * How often a host agent checks its firewall table, by a unit drop-in and a restart; undefined
+   * puts back the default. The repair loop would otherwise restore a table a case removed on
+   * purpose, partway through it.
+   */
+  async function tableCheckEvery(h: Host, ms: number | undefined): Promise<void> {
+    const dir = '/etc/systemd/system/clawops-agent.service.d'
+    const set = ms === undefined
+      ? `rm -f ${dir}/e2e-table.conf`
+      : `mkdir -p ${dir} && printf '[Service]\\nEnvironment=CLAWOPS_PEER_TABLE_CHECK_MS=${ms}\\n' > ${dir}/e2e-table.conf`
+    expect((await h.vm.inspect(`${set} && systemctl daemon-reload && systemctl restart clawops-agent.service`)).exitCode).toBe(0)
+    for (let i = 0; i < 30; i++) {
+      try { await callHostAgent(h.vm, [{ name: 'clawops_stacks_list', arguments: {} }]); return } catch { await new Promise((r) => setTimeout(r, 2_000)) }
+    }
+    throw new Error(`the host agent on ${h.stack} did not answer after its restart`)
   }
 
   const euUrl = () => peerUrl(eu.ips.find((ip) => !ip.includes(':'))!, PEER_PORT)
@@ -354,6 +372,8 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
     const probe = `docker run --rm --entrypoint node ${image} -e "const s=require('net').connect({host:'${eu.ips.find((ip) => !ip.includes(':'))}',port:${PEER_PORT},timeout:8000});s.on('connect',()=>{console.log('REACHED');process.exit(0)});s.on('timeout',()=>{console.log('BLOCKED');process.exit(0)});s.on('error',(e)=>{console.log('BLOCKED '+e.code);process.exit(0)})"`
     expect((await us.vm.inspect(probe)).stdout).toContain('BLOCKED')
 
+    // Out of the repair loop's way: the next case is the one about it.
+    await tableCheckEvery(us, 3_600_000)
     expect((await us.vm.inspect('nft delete table inet clawops_peer')).exitCode).toBe(0)
     try {
       // What the table is for: without it, a gateway container reaches the peer as this host.
@@ -372,6 +392,41 @@ describe.skipIf(!enabled)('a fleet of two host agents on a real tailnet', () => 
       expect((await us.vm.inspect('systemctl restart clawops-peer-fw.service')).exitCode).toBe(0)
     }
     expect((await us.vm.inspect(probe)).stdout).toContain('BLOCKED')
+  }, 300_000)
+
+  it('puts back a table that was removed or opened while it ran, and audits each repair', async () => {
+    const image = (await us.vm.inspect("docker inspect openclaw --format '{{.Config.Image}}'")).stdout.trim()
+    const probe = `docker run --rm --entrypoint node ${image} -e "const s=require('net').connect({host:'${eu.ips.find((ip) => !ip.includes(':'))}',port:${PEER_PORT},timeout:8000});s.on('connect',()=>{console.log('REACHED');process.exit(0)});s.on('timeout',()=>{console.log('BLOCKED');process.exit(0)});s.on('error',(e)=>{console.log('BLOCKED '+e.code);process.exit(0)})"`
+    const uid = Number((await us.vm.inspect('id -u clawops-peer')).stdout.trim())
+    // Judged as the host agent and doctor judge it: exactly the table install loads.
+    const held = async () => checkPeerTable((await us.vm.inspect('nft list table inet clawops_peer 2>/dev/null')).stdout, uid).ok
+    const restored = async (what: string) => {
+      for (let i = 0; i < 20; i++) {
+        if (await held()) return
+        await new Promise((r) => setTimeout(r, 1_000))
+      }
+      throw new Error(`the host agent did not restore the table after it was ${what}`)
+    }
+    await tableCheckEvery(us, 2_000)
+    try {
+      const before = (await audit(us)).length
+      // Removed outright, as `nft flush ruleset` or a failed boot load would leave it.
+      expect((await us.vm.inspect('nft delete table inet clawops_peer')).exitCode).toBe(0)
+      await restored('deleted')
+      expect((await us.vm.inspect(probe)).stdout).toContain('BLOCKED')
+      // Opened: every rule still there, with an accept ahead of the drops.
+      expect((await us.vm.inspect('nft insert rule inet clawops_peer pre iifname "docker0" accept')).exitCode).toBe(0)
+      await restored('opened')
+      expect((await us.vm.inspect(probe)).stdout).toContain('BLOCKED')
+
+      const repairs = (await audit(us)).slice(before).filter((l) => l.tool === 'peer_table_repair')
+      expect(repairs.map((l) => [l.result, l.reason?.match(/missing|changed/)?.[0]])).toEqual([['ok', 'missing'], ['ok', 'changed']])
+      // And peer queries go through again, without anyone running install.
+      const [r] = await callHostAgent(us.vm, [{ name: 'clawops_gateway_status', arguments: { stackName: 'eu' } }])
+      expect(r!.text).toMatch(/^Answered by peer eu/)
+    } finally {
+      await tableCheckEvery(us, undefined)
+    }
   }, 300_000)
 
   it('after a reboot, gateway containers with a restart policy never reach the peer, and peer queries work again', async () => {

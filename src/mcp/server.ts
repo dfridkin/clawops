@@ -131,8 +131,14 @@ export async function serveMcp(opts: McpServeOpts): Promise<void> {
         `${token ? ' (bearer token required)' : ' (loopback, no token)'}\n`,
     )
 
-    // A fleet member installed with --serve-peers also answers peers, on the tailnet (ADR 0015).
+    // A fleet member keeps its firewall table in place while it runs, leaf or not (ADR 0015 §4).
     const agent = hostAgent()
+    if (agent?.fleet) {
+      const { startPeerTableWatch } = await import('../hostagent/peer-repair.js')
+      startPeerTableWatch(agent)
+    }
+
+    // A fleet member installed with --serve-peers also answers peers, on the tailnet (ADR 0015).
     const serves = agent?.fleet?.serves
     if (agent && serves) {
       const { startPeerListener } = await import('../hostagent/peer-listener.js')

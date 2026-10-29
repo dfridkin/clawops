@@ -460,24 +460,53 @@ export async function remoteChecks(session: SshSession, signal?: AbortSignal): P
       : { name: 'Log rotation', status: 'warn', detail: 'not configured — logs may grow unbounded' },
   )
 
-  const policy = await fleetPolicyCheck(session, signal)
-  if (policy) checks.push(policy)
+  checks.push(...(await fleetChecks(session, signal)))
 
   return checks
 }
 
 /**
- * On a host that serves peers: whether the tailnet policy keeps other nodes off the peer port
- * (ADR 0015 §6). Absent on any other host.
+ * On a fleet member: whether the firewall table and its boot unit are in place, and on a host
+ * that serves peers, whether the tailnet policy keeps other nodes off the peer port (ADR 0015 §4,
+ * §6). None on any other host.
  */
-async function fleetPolicyCheck(session: SshSession, signal?: AbortSignal): Promise<Check | undefined> {
+async function fleetChecks(session: SshSession, signal?: AbortSignal): Promise<Check[]> {
   const { HOST_AGENT_CONFIG_PATH } = await import('../hostagent/config.js')
+  const agent = await execPrivileged(session, `cat ${HOST_AGENT_CONFIG_PATH} 2>/dev/null || true`, signal)
+  let fleet: { serves?: unknown; peerUid?: unknown } | undefined
+  try { fleet = (JSON.parse(agent.stdout) as { fleet?: typeof fleet }).fleet } catch { fleet = undefined }
+  if (!fleet) return []
+  const checks: Check[] = []
+  if (typeof fleet.peerUid === 'number') checks.push(await fleetFirewallCheck(session, fleet.peerUid, signal))
+  if (typeof fleet.serves === 'string') checks.push(await fleetPolicyCheck(session, fleet.serves, signal))
+  return checks
+}
+
+/**
+ * The table that keeps this host's containers and other users from querying peers as this host.
+ * The host agent restores it within a check interval; finding it wrong here means the agent is
+ * down or could not, and on a leaf nothing else stands in for it.
+ */
+async function fleetFirewallCheck(session: SshSession, peerUid: number, signal?: AbortSignal): Promise<Check> {
+  const { checkPeerTable, PEER_TABLE_LIST_CMD, PEER_FW_UNIT } = await import('../hostagent/peer-firewall.js')
+  const name = 'Fleet firewall'
+  const remedy = 'run `clawops agent install` again to restore it, and check `journalctl -u clawops-agent` for why the host agent did not'
+  const listed = await execPrivileged(session, `${PEER_TABLE_LIST_CMD} 2>/dev/null`, signal)
+  const table = checkPeerTable(listed.code === 0 ? listed.stdout : '', peerUid)
+  if (!table.ok) {
+    return { name, status: 'fail', detail: `${table.reason} Until it is back, any container or user here can query peers as this host`, remedy }
+  }
+  const unit = await session.exec(`systemctl is-enabled ${PEER_FW_UNIT} 2>/dev/null || true`, signal)
+  if (unit.stdout.trim() !== 'enabled') {
+    return { name, status: 'warn', detail: `the table is in place, but ${PEER_FW_UNIT} is ${unit.stdout.trim() || 'missing'}, so nothing loads it at the next boot before Docker starts`, remedy }
+  }
+  return { name, status: 'pass', detail: 'the table is the one install loaded, and its unit loads it at boot' }
+}
+
+/** On a host that serves peers: whether the tailnet policy keeps other nodes off the peer port (ADR 0015 §6). */
+async function fleetPolicyCheck(session: SshSession, serves: string, signal?: AbortSignal): Promise<Check> {
   const { TAILSCALED_SOCKET } = await import('../hostagent/tailscaled.js')
   const { peerPolicyCheck } = await import('../hostagent/peer-policy.js')
-  const agent = await execPrivileged(session, `cat ${HOST_AGENT_CONFIG_PATH} 2>/dev/null || true`, signal)
-  let serves: unknown
-  try { serves = (JSON.parse(agent.stdout) as { fleet?: { serves?: unknown } }).fleet?.serves } catch { serves = undefined }
-  if (typeof serves !== 'string') return undefined
   const rules = await execPrivileged(
     session,
     `curl -s --max-time 5 --unix-socket ${TAILSCALED_SOCKET} -H 'Host: local-tailscaled.sock' http://local-tailscaled.sock/localapi/v0/debug-packet-filter-rules 2>/dev/null || true`,

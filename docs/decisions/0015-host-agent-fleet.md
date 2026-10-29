@@ -144,6 +144,15 @@ The case found by combining the spikes is closed on the calling side:
   as root, as every `--network host` container does, so a rule naming root would let those
   through. Peer queries run as `clawops-peer` ([fleet plan](../fleet-plan.md)).
 
+  *Implementation note, pre-2.5 review (2026-10-29):* refusing peer queries while the table is
+  missing protects only the host agent's own queries. A leaf needs no `--strict`, so there the
+  table is the only barrier, and a container that connects itself is not refused by anything.
+  The host agent therefore reads the table back every 30 s and restores it when it is missing or
+  changed, auditing each repair, and `doctor` fails while it is not the one install loaded.
+  Making Docker require the unit was rejected: it covers only a failed boot load, not a flush
+  while running, and turns that into an outage of every container on the host. What remains is a
+  window of up to one check, and the boot case when the unit's load fails (docs/limitations.md).
+
 This leaves the case where root on a tagged host is compromised. Root can query every peer as that
 host, which is no more than root can already read through the host's own agent. It cannot change a
 peer.
