@@ -1,5 +1,23 @@
 # @clawops/cli
 
+## 2.5.0
+
+### Minor Changes
+
+- 73e1eea: Host agents on several stacks can now read each other over your tailnet (ADR 0015).
+
+  - **`clawops agent install --serve-peers <tag>`** makes a host agent answer other host agents on port 18800, on its tailnet address. It needs no token: for each request it asks tailscaled who is calling, and serves the 12 read tools, about this host only, to a node that carries the tag and is not this host.
+  - **`--peer <stack>=<tailnet name>`** lets a host agent query that peer. It requires `--strict`. A read naming the peer's stack is forwarded, and the answer names the host that gave it. A change naming a peer is refused, with the command for the operator to run, and is recorded on neither host.
+  - **The firewall table.** Every fleet member gets an nftables table that lets only a dedicated `clawops-peer` user reach peers. Neither the gateway container, nor other containers, nor root can get through, and a unit loads the table again at boot, before Docker. Peer queries are refused while the table is missing.
+  - **`clawops fleet status`** (and `clawops_stacks_list` with `fleet: true`) reads every stack's host agent, its peers, the firewall table and the tailnet. It reports any peer that can't work, on the host that names it. On a host agent, `clawops_stacks_list` lists this host and its peers, and `fleet: true` gives the fleet view from inside a gateway.
+  - **`clawops doctor`** warns on a fleet host when the tailnet policy lets nodes without the tag reach the peer port, as the default allow-all policy does.
+  - **Audit:** the calling host logs which peer a forwarded read went to, and the peer logs the caller's node, ID and tags with every answer and refusal.
+
+### Patch Changes
+
+- 0b1a9a3: Bootstrap retries `apt-get update` when a package mirror is caught mid-sync. Both the local bootstrap and the cloud startup script used to stop on the first `Hash Sum mismatch`. They now retry twice more, 30 s and then 60 s later, asking any cache in between for a fresh copy, and package downloads retry dropped connections.
+- b37b0db: A fleet member's firewall table now puts itself back. The host agent reads the table back every 30 s. If something removed or changed it (`nft flush ruleset`, a failed load at boot, another firewall tool), the agent restores the table install wrote and audits the repair as `peer_table_repair`. That matters most on a host that only serves peers: it needs no `--strict`, so the table is the only thing keeping its containers from querying peers as that host. `clawops doctor` now has a **Fleet firewall** check on every fleet member. It fails while the table is not the one install loaded, and warns when the boot unit that loads it is disabled.
+
 ## 2.4.1
 
 ### Patch Changes
