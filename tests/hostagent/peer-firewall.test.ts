@@ -8,29 +8,7 @@ import {
   PEER_PORT, PEER_FW_RULES_PATH,
 } from '../../src/hostagent/peer-firewall.js'
 import { validateFleetOpts, parsePeer, checkTailnet } from '../../src/hostagent/fleet.js'
-
-const UID = 998
-
-/** The table as `nft list` prints it after some traffic: tabs, and counters with running totals. */
-function listing(uid = UID, edit: (lines: string[]) => string[] = (l) => l): string {
-  const lines = [
-    'table inet clawops_peer {',
-    '\tchain pre {',
-    '\t\ttype filter hook prerouting priority mangle; policy accept;',
-    `\t\tiifname "docker0" ip daddr 100.64.0.0/10 tcp dport ${PEER_PORT} counter packets 12 bytes 720 drop`,
-    `\t\tiifname "br-*" ip daddr 100.64.0.0/10 tcp dport ${PEER_PORT} counter packets 3 bytes 180 drop`,
-    `\t\tiifname "docker0" ip6 daddr fd7a:115c:a1e0::/48 tcp dport ${PEER_PORT} counter packets 0 bytes 0 drop`,
-    `\t\tiifname "br-*" ip6 daddr fd7a:115c:a1e0::/48 tcp dport ${PEER_PORT} counter packets 0 bytes 0 drop`,
-    '\t}',
-    '',
-    '\tchain out {',
-    '\t\ttype filter hook output priority filter; policy accept;',
-    `\t\toifname "tailscale0" tcp dport ${PEER_PORT} meta skuid != ${uid} counter packets 30 bytes 1860 reject with tcp reset`,
-    '\t}',
-    '}',
-  ]
-  return edit(lines).join('\n') + '\n'
-}
+import { listing, UID } from '../helpers/peer-table.js'
 
 describe('the fleet firewall table', () => {
   it('names one interface per rule, because nft 1.0.2 rejects a wildcard inside a set', () => {

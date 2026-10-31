@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { FakeSshSession } from '../helpers/ssh.js'
+import { listing, UID } from '../helpers/peer-table.js'
 
 // ── mocks ─────────────────────────────────────────────────────────────────────
 vi.mock('../../src/config/store.js', () => ({
@@ -281,6 +282,31 @@ describe('runDiagnostics — remote checks', () => {
     expect(find(report, 'Fleet policy')).toMatchObject({ status: 'warn', detail: expect.stringMatching(/tag check is the only barrier/) })
     // A warning: the fleet still works, and the host agent still refuses untagged callers.
     expect(report.ok).toBe(true)
+  })
+
+  it('checks the fleet firewall on every fleet member, leaf or not, and fails a missing table', async () => {
+    expect(find(await runDiagnostics({ stack: 'prod' }, withHost(healthyHost())), 'Fleet firewall')).toBeUndefined()
+
+    // A leaf with --peer only would read the same; this one serves nobody, so no policy check.
+    const member = (table: string, unit = 'enabled') => healthyHost()
+      .respond(/cat \/etc\/clawops-agent\/agent\.json/, { stdout: `{"fleet":{"peers":[{"stack":"eu","node":"eu-gw"}],"peerUid":${UID}}}` })
+      .respond(/nft list table inet clawops_peer/, table ? { stdout: table } : { code: 1 })
+      .respond(/systemctl is-enabled clawops-peer-fw\.service/, { stdout: `${unit}\n` })
+
+    const held = await runDiagnostics({ stack: 'prod' }, withHost(member(listing())))
+    expect(find(held, 'Fleet firewall')).toMatchObject({ status: 'pass' })
+    expect(find(held, 'Fleet policy')).toBeUndefined()
+
+    const gone = await runDiagnostics({ stack: 'prod' }, withHost(member('')))
+    expect(find(gone, 'Fleet firewall')).toMatchObject({ status: 'fail', detail: expect.stringMatching(/is missing.*query peers as this host/), remedy: expect.stringMatching(/agent install/) })
+    expect(gone.ok).toBe(false)
+
+    // Every expected rule is there, but an accept ahead of the drops opens it: still a failure.
+    const opened = await runDiagnostics({ stack: 'prod' }, withHost(member(listing(UID, (l) => [...l.slice(0, 3), '\t\tiifname "docker0" accept', ...l.slice(3)]))))
+    expect(find(opened, 'Fleet firewall')?.status).toBe('fail')
+
+    const noBoot = await runDiagnostics({ stack: 'prod' }, withHost(member(listing(), 'disabled')))
+    expect(find(noBoot, 'Fleet firewall')).toMatchObject({ status: 'warn', detail: expect.stringMatching(/disabled.*next boot/) })
   })
 
   it('fails a full disk and warns a filling one', async () => {

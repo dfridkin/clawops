@@ -217,6 +217,16 @@ other users off port 18800 on the tailnet, and `clawops-peer-fw.service` loads i
 every boot, before Docker. Install adds `nftables` if the host lacks it, and the `clawops-peer`
 user. `agent uninstall` removes all of it.
 
+While it runs, the host agent reads the table back every 30 s and puts it back when it is
+missing or changed, as `nft flush ruleset`, a failed load at boot or another firewall tool could
+leave it. It loads the table install wrote, generated again from what install recorded, in one
+transaction, reads it back, and logs and audits each repair (`peer_table_repair`). It doesn't
+touch the rules file the boot unit loads: `/etc` is read-only to the agent. That covers leaves too: a
+host that only serves peers needs no `--strict`, so there the table is the only thing keeping its
+containers from querying peers as this host. `clawops doctor` checks the table and its boot unit
+on every fleet member (**Fleet firewall**), and fails while the table is not the one install
+loaded.
+
 With `--serve-peers` the host agent also listens for peers on port 18800: on its tailnet
 addresses, or on loopback where tailscaled runs in userspace networking. It needs no token. On
 each request it asks tailscaled who is calling, and answers only a tailnet node that carries the
@@ -263,7 +273,8 @@ A call naming a peer is checked in this order:
 1. **This host's guardrail** must pass, as for any call. Under `--strict`, which `--peer`
    requires, that includes the check that no other agent can act in the gateway container.
 2. **The fleet firewall table** must be the one install loaded. While it is missing or changed,
-   every peer query is refused, and `clawops agent install` restores it.
+   every peer query is refused. The host agent restores it within 30 s; where it can't,
+   `clawops agent install` does.
 3. **Only reads are forwarded.** `gateway restart`, `config set` and the other handoff tools are
    refused when they name a peer, with the command for the operator to run on their own machine.
    Nothing is recorded in either host's `handoffs.jsonl`.
