@@ -22,50 +22,6 @@ Remaining work falls into three groups:
 | **clawops 2.5 (planned)** | Host-agent fleet ([ADR 0015](decisions/0015-host-agent-fleet.md), accepted 2026-10-18) | Host agents that each manage only themselves and read each other over the tailnet, authenticated by tag, with no shared keys. Verified by SP-14–SP-16, including real Tailscale and a real-VM reboot. Built as [WO-67](fleet-plan.md): parts A (membership and the firewall table), B (`clawops fleet status`), C (the peer listener), D (peer queries) and E (the Headscale e2e suite, `doctor`'s policy check, docs) done ✅. Not WO-57, which is tenants on one host. Sandboxing other agents gets its own ADR with WO-53 |
 | **Housekeeping** | WO-64 `server.json` drift | ✅ shipped. Bumped at version time, with a test that it agrees with `package.json` |
 
-## Path to 3.0
-
-*Proposed 2026-11-05.* The next major target is **3.0: host agents that co-work.** Host agents on separate stacks hand
-tasks to each other over the tailnet, run them only in a sandbox, and can use a model on their own
-host. 2.5's fleet already gives them reachability; what 3.0 adds is coordination.
-
-The ordering rule: work that co-working depends on goes before 3.0, and work that only widens
-channel reach or tenancy goes after it. That schedules every item in the *2.x, unscheduled* row
-above, and adds two gaps that were not on it: audit that leaves the host (WO-62 precondition 5)
-and a provider budget with an enforcement action (the rest of precondition 1).
-
-| Milestone | Release | Scope | Done when |
-|---|---|---|---|
-| **M1** | 2.5 | Host-agent fleet (WO-67), WO-34's doctor check | 2.5.0 is on npm with the three pending changesets; the Headscale e2e suite is green in release CI; WO-34 is ✅ |
-| **M2** | 2.6 | WO-56 observability, off-host audit | clawops, host-agent and peer audit records export to an endpoint the operator owns, and an e2e shows the record survives `clawops destroy` of the host that wrote it |
-| **M3** | 2.7 | WO-53 sandboxing, opt-in | Tools run in sibling containers with `cap-drop=ALL` and `network=none` from the unmodified official image (SP-09); the workspace is intact after a gateway restart; e2e on local and on one cloud |
-| **M4** | 2.8 | WO-54 roles, named agents, credential store, telemetry | Each field ships with the code that reads it; secrets resolve from the credential store, not from `openclaw.json` |
-| **M5** | 2.9 | Local inference backend | `clawops up` provisions `llama-server` (CPU) or vLLM (GPU), chosen from the instance type, bound to the Docker bridge only, with weights cached across reboots; the gateway points at it and `doctor` checks it |
-| **M6** | none | Coordination ADR and spike | An ADR is accepted on agent identity, capability advertisement, task lease and handoff, including how a peer's request fits ADR 0014's rule that the operator runs every change; a two-host Headscale spike proves one handoff |
-| **M7** | 3.0 | Co-working | In e2e on Headscale, host A hands a task to host B, B runs it only in the sandbox, the result returns, and both hosts audit it; an untagged peer, or a host without the sandbox, is refused |
-| **M8** | 3.0 | Provider budget enforcement, safety pass | A peer-triggered retry loop hits the budget and stops in e2e; no peer can trigger a deploy; the tool count stays under the R1 cap; the threat model and tool-risk matrix are updated; 3.0.0 ships with a migration note |
-| **M9** | 3.1 | WO-55 TLS and public origin | A stack can serve the gateway on a public origin with TLS on every provider, which unblocks Portals, Teams, Slack and Discord Activities |
-| **M10** | 3.2 | WO-57 fleet multi-tenancy | Plan validation rejects tenant cells and sandboxing on the same host (§8.2 of the 2.0 plan); Fleet runs a pinned tag, not `:latest` (SP-05) |
-
-**Why each item sits where it does:**
-
-- **Observability and off-host audit come first** because they are small and every later
-  milestone needs a record that outlives the host. A sandboxed task or a peer handoff that can
-  erase its own trail is not reviewable.
-- **Sandboxing comes before anything a peer can ask for.** A handed-off task is untrusted input
-  that runs code.
-- **The config surface comes before coordination.** Roles and named agents are what a peer
-  advertises as capabilities, and the credential store keeps raw keys out of anything handed off.
-- **Local inference is small and independent.** An Ollama the operator runs already works through
-  `host.docker.internal` (see [limitations](limitations.md)); this milestone is clawops
-  provisioning one.
-- **Co-working changes ADR 0015.** Peers there only read each other. M6's ADR has to amend it
-  before M7 writes code.
-- **WO-55 waits until after 3.0.** It is the largest item, the tailnet already carries fleet
-  traffic, and nothing before 3.0 needs it. Pulling it forward because it is the most visible
-  item would delay everything co-working depends on.
-- **WO-57 goes last.** Tenants on one host cannot share that host with sandboxing, and nothing on
-  the 3.0 path needs them.
-
 ### WO-62 ships on its own, and only after its preconditions
 
 Running clawops *on* the gateway host is not a feature with risks attached. It is a change of
@@ -107,6 +63,52 @@ only the host it runs on, with local tools and no cloud identity. A host agent t
 deployments is a fleet design, deferred to ADR 0015 and 2.5. Each precondition is accepted by an e2e test
 on the 2.2 harness.
 Details are in the plan, under *Re-alignment after 2.2*.
+
+## Path to 3.0
+
+*Proposed 2026-11-05.* The next major target is **3.0: host agents that co-work.** Host agents on separate stacks hand
+tasks to each other over the tailnet, run them only in a sandbox, and can use a model on their own
+host. 2.5's fleet already gives them reachability; what 3.0 adds is coordination.
+
+The ordering rule: work that co-working depends on goes before 3.0, and work that only widens
+channel reach or tenancy goes after it. That schedules every item in the *2.x, unscheduled* row
+above, and adds two items that were not on it. Audit that leaves the host (WO-62 precondition 5)
+is met in 2.4 because every change runs on the operator's machine ([ADR 0014](decisions/0014-host-agent-operator-handoff.md)
+§5); it reopens once a peer's task runs on a host. And a cloud budget with an enforcement action,
+the rest of precondition 1, is still unbuilt.
+
+| Milestone | Release | Scope | Done when |
+|---|---|---|---|
+| **M1** | 2.5 | Host-agent fleet (WO-67), WO-34's doctor check | 2.5.0 is on npm with the three pending changesets; the Headscale e2e suite is green in the e2e workflow on the release commit; WO-34 is ✅ |
+| **M2** | 2.6 | WO-56 observability plugins, off-host audit | The gateway's observability plugins are configurable; clawops, host-agent and peer audit records export to an endpoint the operator owns, through a credential on the host that can append but not delete or rewrite; [telemetry](telemetry.md) describes only what is built (OTLP export is not, per [logging](logging.md)) |
+| **M3** | 2.7 | WO-53 sandboxing, opt-in | Tools run in sibling containers with `cap-drop=ALL` and `network=none` from the unmodified official image (SP-09); the workspace is intact after a gateway restart; e2e on local and on one cloud |
+| **M4** | 2.8 | WO-54 roles, named agents, credential store, telemetry | Each field ships with the code that reads it; secrets resolve from the credential store, not from `openclaw.json` |
+| **M5** | 2.9 | Local inference backend | `clawops up` provisions `llama-server` (CPU) or vLLM (GPU), chosen from the instance type, bound to the Docker bridge only, with weights cached across reboots; the gateway points at it and `doctor` checks it |
+| **M6** | none | Coordination ADR and spike | An ADR is accepted on agent identity, capability advertisement, task lease and handoff, including how a peer's request fits ADR 0014's rule that the operator runs every change; a two-host Headscale spike proves one handoff |
+| **M7** | 3.0 | Co-working | In e2e on Headscale, host A hands a task to host B, B runs it only in the sandbox, the result returns, and both hosts audit it; an untagged peer, or a host without the sandbox, is refused |
+| **M8** | 3.0 | Cloud budget enforcement, safety pass | A cloud budget with an enforcement action exists and `up` checks it, finishing precondition 1; no peer can trigger a deploy; the tool count stays under the R1 cap; the threat model and tool-risk matrix are updated; 3.0.0 ships with a migration note |
+| **M9** | 3.1 | WO-55 TLS and public origin | A stack can serve the gateway on a public origin with TLS on every provider, which unblocks Portals, Teams, Slack and Discord Activities |
+| **M10** | 3.2 | WO-57 fleet multi-tenancy | Plan validation rejects tenant cells and sandboxing on the same host (§8.2 of the 2.0 plan); Fleet runs a pinned tag, not `:latest` (SP-05) |
+
+**Why each item sits where it does:**
+
+- **Observability and off-host audit come first** because they are small and every later
+  milestone needs a record that outlives the host. A sandboxed task or a peer handoff that can
+  erase its own trail is not reviewable.
+- **Sandboxing comes before anything a peer can ask for.** A handed-off task is untrusted input
+  that runs code.
+- **The config surface comes before coordination.** Roles and named agents are what a peer
+  advertises as capabilities, and the credential store keeps raw keys out of anything handed off.
+- **Local inference is small and independent.** An Ollama the operator runs already works through
+  `host.docker.internal` (see [limitations](limitations.md)); this milestone is clawops
+  provisioning one.
+- **Co-working changes ADR 0015.** Peers there only read each other. M6's ADR has to amend it
+  before M7 writes code.
+- **WO-55 waits until after 3.0.** It is the largest item, the tailnet already carries fleet
+  traffic, and nothing before 3.0 needs it. Pulling it forward because it is the most visible
+  item would delay everything co-working depends on.
+- **WO-57 goes last.** Tenants on one host cannot share that host with sandboxing, and nothing on
+  the 3.0 path needs them.
 
 ## Development milestones
 
