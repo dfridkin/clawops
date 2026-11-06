@@ -15,7 +15,7 @@ Remaining work falls into three groups:
 
 | Group | Items | Notes |
 |---|---|---|
-| **Carried from the 1.x waves** | WO-34 (Tailscale), partly | Azure hardening landed in WO-32. Tailscale joins, repoints, goes private-only and reverts; the doctor check is still open |
+| **Carried from the 1.x waves** | WO-34 (Tailscale), partly | Azure hardening landed in WO-32. Tailscale joins, repoints, goes private-only and reverts; the doctor check is still open, scheduled for 2.5.1 |
 | **2.x backlog** | WO-53 sandboxing, WO-54 config surface, WO-55 TLS and public origin, WO-56 observability, WO-57 fleet multi-tenancy | Planned for 2.1 and not in it; 2.1 shipped private networking and hardening instead. WO-55 gates Portals, Teams, Slack and Discord Activities. Now scheduled in [Path to 3.0](#path-to-30) |
 | **clawops 2.3** | Spending limits (WO-62 precondition 1, in part), backlog fixes | Operator-set instance-type allowlist and stack cap, enforced on every surface |
 | **clawops 2.4: alone** | WO-62 host agent | ✅ shipped by itself, behind its preconditions (see below and [ADR 0014](decisions/0014-host-agent-operator-handoff.md)). It was 2.2, then 2.3, as other work shipped first |
@@ -79,7 +79,7 @@ the rest of precondition 1, is still unbuilt.
 
 | Milestone | Release | Scope | Done when |
 |---|---|---|---|
-| **P1** | 2.5 | Host-agent fleet (WO-67), WO-34's doctor check | 2.5.0 is on npm with the three pending changesets; the Headscale e2e suite is green in the e2e workflow on the release commit; WO-34 is ✅ |
+| **P1** | 2.5, 2.5.1 | Host-agent fleet (WO-67) in 2.5.0; WO-34's doctor check in 2.5.1, a fast follow | 2.5.0 is on npm with the three pending changesets, and the Headscale e2e suite is green in the e2e workflow on the release commit; 2.5.1 is on npm with WO-34's doctor check, and WO-34 is ✅ |
 | **P2** | none | Coordination ADR and spike, alongside P3 and P4 | An ADR is accepted, before P5 fixes any field, on agent identity, capability advertisement, task lease and handoff. It amends ADR 0015, whose peers only read each other, and says how a peer's task fits ADR 0014's rule that the operator runs every change and the host agent's operator-only binding ([disclosure review](security/host-agent-disclosure-review.md)). A two-host Headscale spike proves one handoff |
 | **P3** | 2.6 | WO-56 observability plugins, off-host audit | The gateway's observability plugins are configurable; clawops, host-agent and peer audit records export to an endpoint the operator owns, through a credential on the host that can append but not delete or rewrite; [telemetry](telemetry.md) describes only what is built (OTLP export is not, per [logging](logging.md)) |
 | **P4** | 2.7 | WO-53 sandboxing, opt-in | A sandboxing ADR is accepted, as ADR 0015 promises. The gateway, on the unmodified official image, spawns sibling sandboxes with `cap-drop=ALL` and `network=none` from a sandbox image built on the host (SP-04, SP-09). The workspace is intact after a gateway restart, and a test shows the Docker socket mount does not get a sandbox past the fleet firewall table. e2e on local and on one cloud |
@@ -152,7 +152,7 @@ Remaining WOs are batched into three releases to avoid a changeset per PR.
 |---|---|---|
 | **v1.6** | WO-35, WO-18, M8 stubs | ✅ shipped |
 | **v1.7** | WO-29, WO-33, WO-30 | ✅ shipped: hardening MVP, core + local/VPS + AWS |
-| **v1.8** | WO-31, WO-32, WO-34 | GCP and Azure hardening shipped. Tailscale joins, repoints, goes private-only and reverts; the doctor check moves to P1 in [Path to 3.0](#path-to-30) |
+| **v1.8** | WO-31, WO-32, WO-34 | GCP and Azure hardening shipped. Tailscale joins, repoints, goes private-only and reverts; the doctor check moves to 2.5.1 (P1 in [Path to 3.0](#path-to-30)) |
 
 ### R1. First-Run Experience
 
