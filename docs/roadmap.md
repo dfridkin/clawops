@@ -2,7 +2,7 @@
 
 This document tracks the public roadmap for clawops. Development milestones (M0–M8) cover the
 core implementation; adoption milestones (R1–R12) cover documentation, safety, operational
-maturity, and hardening.
+maturity, and hardening. The path to 3.0 (P1–P10) orders what comes next.
 
 **Current state (2.4.1):** all development milestones are complete, and adoption waves
 R1–R13 have shipped. Bug reporting (`clawops bug`) and the hardening MVP landed in the 1.7 line.
@@ -16,7 +16,7 @@ Remaining work falls into three groups:
 | Group | Items | Notes |
 |---|---|---|
 | **Carried from the 1.x waves** | WO-34 (Tailscale), partly | Azure hardening landed in WO-32. Tailscale joins, repoints, goes private-only and reverts; the doctor check is still open |
-| **2.x, unscheduled** | WO-53 sandboxing, WO-54 config surface, WO-55 TLS and public origin, WO-56 observability, WO-57 fleet multi-tenancy | Planned for 2.1 and not in it; 2.1 shipped private networking and hardening instead. WO-55 gates Portals, Teams, Slack and Discord Activities. Now scheduled in [Path to 3.0](#path-to-30) |
+| **2.x backlog** | WO-53 sandboxing, WO-54 config surface, WO-55 TLS and public origin, WO-56 observability, WO-57 fleet multi-tenancy | Planned for 2.1 and not in it; 2.1 shipped private networking and hardening instead. WO-55 gates Portals, Teams, Slack and Discord Activities. Now scheduled in [Path to 3.0](#path-to-30) |
 | **clawops 2.3** | Spending limits (WO-62 precondition 1, in part), backlog fixes | Operator-set instance-type allowlist and stack cap, enforced on every surface |
 | **clawops 2.4: alone** | WO-62 host agent | ✅ shipped by itself, behind its preconditions (see below and [ADR 0014](decisions/0014-host-agent-operator-handoff.md)). It was 2.2, then 2.3, as other work shipped first |
 | **clawops 2.5 (planned)** | Host-agent fleet ([ADR 0015](decisions/0015-host-agent-fleet.md), accepted 2026-10-18) | Host agents that each manage only themselves and read each other over the tailnet, authenticated by tag, with no shared keys. Verified by SP-14–SP-16, including real Tailscale and a real-VM reboot. Built as [WO-67](fleet-plan.md): parts A (membership and the firewall table), B (`clawops fleet status`), C (the peer listener), D (peer queries) and E (the Headscale e2e suite, `doctor`'s policy check, docs) done ✅. Not WO-57, which is tenants on one host. Sandboxing other agents gets its own ADR with WO-53 |
@@ -71,7 +71,7 @@ tasks to each other over the tailnet, run them only in a sandbox, and can use a 
 host. 2.5's fleet already gives them reachability; what 3.0 adds is coordination.
 
 The ordering rule: work that co-working depends on goes before 3.0, and work that only widens
-channel reach or tenancy goes after it. That schedules every item in the *2.x, unscheduled* row
+channel reach or tenancy goes after it. That schedules every item in the *2.x backlog* row
 above, and adds two items that were not on it. Audit that leaves the host (WO-62 precondition 5)
 is met in 2.4 because every change runs on the operator's machine ([ADR 0014](decisions/0014-host-agent-operator-handoff.md)
 §5); it reopens once a peer's task runs on a host. And a cloud budget with an enforcement action,
@@ -79,36 +79,37 @@ the rest of precondition 1, is still unbuilt.
 
 | Milestone | Release | Scope | Done when |
 |---|---|---|---|
-| **M1** | 2.5 | Host-agent fleet (WO-67), WO-34's doctor check | 2.5.0 is on npm with the three pending changesets; the Headscale e2e suite is green in the e2e workflow on the release commit; WO-34 is ✅ |
-| **M2** | 2.6 | WO-56 observability plugins, off-host audit | The gateway's observability plugins are configurable; clawops, host-agent and peer audit records export to an endpoint the operator owns, through a credential on the host that can append but not delete or rewrite; [telemetry](telemetry.md) describes only what is built (OTLP export is not, per [logging](logging.md)) |
-| **M3** | 2.7 | WO-53 sandboxing, opt-in | Tools run in sibling containers with `cap-drop=ALL` and `network=none` from the unmodified official image (SP-09); the workspace is intact after a gateway restart; e2e on local and on one cloud |
-| **M4** | 2.8 | WO-54 roles, named agents, credential store, telemetry | Each field ships with the code that reads it; secrets resolve from the credential store, not from `openclaw.json` |
-| **M5** | 2.9 | Local inference backend | `clawops up` provisions `llama-server` (CPU) or vLLM (GPU), chosen from the instance type, bound to the Docker bridge only, with weights cached across reboots; the gateway points at it and `doctor` checks it |
-| **M6** | none | Coordination ADR and spike | An ADR is accepted on agent identity, capability advertisement, task lease and handoff, including how a peer's request fits ADR 0014's rule that the operator runs every change; a two-host Headscale spike proves one handoff |
-| **M7** | 3.0 | Co-working | In e2e on Headscale, host A hands a task to host B, B runs it only in the sandbox, the result returns, and both hosts audit it; an untagged peer, or a host without the sandbox, is refused |
-| **M8** | 3.0 | Cloud budget enforcement, safety pass | A cloud budget with an enforcement action exists and `up` checks it, finishing precondition 1; no peer can trigger a deploy; the tool count stays under the R1 cap; the threat model and tool-risk matrix are updated; 3.0.0 ships with a migration note |
-| **M9** | 3.1 | WO-55 TLS and public origin | A stack can serve the gateway on a public origin with TLS on every provider, which unblocks Portals, Teams, Slack and Discord Activities |
-| **M10** | 3.2 | WO-57 fleet multi-tenancy | Plan validation rejects tenant cells and sandboxing on the same host (§8.2 of the 2.0 plan); Fleet runs a pinned tag, not `:latest` (SP-05) |
+| **P1** | 2.5 | Host-agent fleet (WO-67), WO-34's doctor check | 2.5.0 is on npm with the three pending changesets; the Headscale e2e suite is green in the e2e workflow on the release commit; WO-34 is ✅ |
+| **P2** | none | Coordination ADR and spike, alongside P3 and P4 | An ADR is accepted, before P5 fixes any field, on agent identity, capability advertisement, task lease and handoff. It amends ADR 0015, whose peers only read each other, and says how a peer's task fits ADR 0014's rule that the operator runs every change and the host agent's operator-only binding ([disclosure review](security/host-agent-disclosure-review.md)). A two-host Headscale spike proves one handoff |
+| **P3** | 2.6 | WO-56 observability plugins, off-host audit | The gateway's observability plugins are configurable; clawops, host-agent and peer audit records export to an endpoint the operator owns, through a credential on the host that can append but not delete or rewrite; [telemetry](telemetry.md) describes only what is built (OTLP export is not, per [logging](logging.md)) |
+| **P4** | 2.7 | WO-53 sandboxing, opt-in | A sandboxing ADR is accepted, as ADR 0015 promises. The gateway, on the unmodified official image, spawns sibling sandboxes with `cap-drop=ALL` and `network=none` from a sandbox image built on the host (SP-04, SP-09). The workspace is intact after a gateway restart, and a test shows the Docker socket mount does not get a sandbox past the fleet firewall table. e2e on local and on one cloud |
+| **P5** | 2.8 | WO-54 roles, named agents, credential store, telemetry | Each field ships with the code that reads it, and the roles fields follow P2's capability model; secrets resolve from the credential store, not from `openclaw.json` |
+| **P6** | 2.9 | Local inference backend, CPU | `clawops up` provisions `llama-server` bound to the Docker bridge only, with weights cached across reboots; the gateway points at it and `doctor` checks it. GPU (vLLM) comes later: it needs drivers and the container toolkit on each provider |
+| **P7** | 3.0 | Co-working | Merged to `main`: in e2e on Headscale, host A hands a task to host B, B runs it only in the sandbox, the result returns, and both hosts audit it; an untagged peer, or a host without the sandbox, is refused |
+| **P8** | 3.0 | Budgets, safety pass, release | A cloud budget with an enforcement action exists and `up` checks it, finishing precondition 1; in the P7 e2e, a handed-off task that exceeds its model-token budget stops; no peer can trigger a deploy; the tool count stays within the R1 cap; the threat model and tool-risk matrix are updated. 3.0.0 ships with a migration note: a major, because peers stop being read-only |
+| **P9** | 3.1 | WO-55 TLS and public origin | On AWS, GCP and Azure a stack serves the gateway on a public origin with TLS. The gateway stays on loopback behind a terminator on the host, and `harden` opens 443 only when TLS is enabled ([limitations](limitations.md#networking-and-tls)). This unblocks Portals, Teams, Slack and Discord Activities |
+| **P10** | 3.2 | WO-57 fleet multi-tenancy | `up` deploys tenant cells with the containerised `openclaw fleet` (SP-05's flags) on a pinned tag, not `:latest`; plan validation rejects tenant cells and sandboxing on the same host (§8.2 of the 2.0 plan) |
 
 **Why each item sits where it does:**
 
-- **Observability and off-host audit come first** because they are small and every later
+- **Coordination is designed first and built late.** Its ADR runs alongside P3 and P4 and is
+  accepted before P5, because roles are what a peer advertises and a schema field is a promise.
+  It has to amend ADR 0015 before P7 writes code.
+- **Observability and off-host audit come next** because they are small and every later
   milestone needs a record that outlives the host. A sandboxed task or a peer handoff that can
   erase its own trail is not reviewable.
 - **Sandboxing comes before anything a peer can ask for.** A handed-off task is untrusted input
   that runs code.
-- **The config surface comes before coordination.** Roles and named agents are what a peer
-  advertises as capabilities, and the credential store keeps raw keys out of anything handed off.
-- **Local inference is small and independent.** An Ollama the operator runs already works through
-  `host.docker.internal` (see [limitations](limitations.md)); this milestone is clawops
-  provisioning one.
-- **Co-working changes ADR 0015.** Peers there only read each other. M6's ADR has to amend it
-  before M7 writes code.
+- **The config surface follows the ADR.** It gives the capability model its fields, and the
+  credential store keeps raw keys out of anything handed off.
+- **Local inference is small and independent, on CPU.** An Ollama the operator runs already
+  works through `host.docker.internal` (see [limitations](limitations.md)); this milestone is
+  clawops provisioning one.
 - **WO-55 waits until after 3.0.** It is the largest item, the tailnet already carries fleet
   traffic, and nothing before 3.0 needs it. Pulling it forward because it is the most visible
   item would delay everything co-working depends on.
-- **WO-57 goes last.** Tenants on one host cannot share that host with sandboxing, and nothing on
-  the 3.0 path needs them.
+- **WO-57 goes last.** Tenants on one host cannot share that host with sandboxing, so tenant
+  hosts cannot co-work, and nothing on the 3.0 path needs them.
 
 ## Development milestones
 
@@ -151,7 +152,7 @@ Remaining WOs are batched into three releases to avoid a changeset per PR.
 |---|---|---|
 | **v1.6** | WO-35, WO-18, M8 stubs | ✅ shipped |
 | **v1.7** | WO-29, WO-33, WO-30 | ✅ shipped: hardening MVP, core + local/VPS + AWS |
-| **v1.8** | WO-31, WO-32, WO-34 | GCP and Azure hardening shipped. Tailscale joins, repoints, goes private-only and reverts; doctor check remains |
+| **v1.8** | WO-31, WO-32, WO-34 | GCP and Azure hardening shipped. Tailscale joins, repoints, goes private-only and reverts; the doctor check moves to P1 in [Path to 3.0](#path-to-30) |
 
 ### R1. First-Run Experience
 
@@ -284,7 +285,7 @@ Goal: let users report bugs without leaving the terminal, with system context pr
 The following are explicitly out of scope for the current roadmap. They may be revisited in a
 future major version:
 
-- High-availability or multi-node deployments
+- High-availability or multi-node deployments of one gateway (host agents co-working across stacks is [Path to 3.0](#path-to-30))
 - Kubernetes provider
 - OpenClaw skill/agent authoring
 - Scheduled / trigger-based secret rotation (manual rotation via `clawops secret rotate` is supported; automatic scheduling is not)
