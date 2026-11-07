@@ -19,7 +19,7 @@ import { GATEWAY_PORT } from '../openclaw/run-flags.js'
 import { probeCommand, interpretProbe } from '../openclaw/health.js'
 import { execPrivileged } from '../transport/privileged.js'
 import type { SshSession } from '../transport/ssh.js'
-import type { ClawopsConfig } from '../config/store.js'
+import type { ClawopsConfig, TailscaleOverride } from '../config/store.js'
 // Adapters register themselves on import, and every check here looks one up by name.
 import '../providers/register.js'
 
@@ -97,7 +97,7 @@ export async function runDiagnostics(
   const agent = hostAgent()
   if (agent) {
     sections.push({ title: 'Runtime', checks: [nodeCheck()] })
-    await pushRemoteSections(sections, agent.stack, opts.signal, deps)
+    await pushRemoteSections(sections, agent.stack, undefined, opts.signal, deps)
     return summarise(sections)
   }
 
@@ -118,7 +118,9 @@ export async function runDiagnostics(
   const account = await accountChecks(config, opts.stack, opts.provider, opts.instanceType)
   if (account.length > 0) sections.push({ title: 'Cloud account', checks: account })
 
-  if (opts.stack) await pushRemoteSections(sections, opts.stack, opts.signal, deps)
+  if (opts.stack) {
+    await pushRemoteSections(sections, opts.stack, config?.stacks[opts.stack]?.tailscale, opts.signal, deps)
+  }
 
   return summarise(sections)
 }
@@ -126,6 +128,7 @@ export async function runDiagnostics(
 async function pushRemoteSections(
   sections: Section[],
   stack: string,
+  tailnet: TailscaleOverride | undefined,
   signal: AbortSignal | undefined,
   deps: DiagnosticsDeps,
 ): Promise<void> {
@@ -136,14 +139,14 @@ async function pushRemoteSections(
   } catch (err) {
     sections.push({
       title: 'Remote health',
-      checks: [connectionCheck(messageOf(err))],
+      checks: [connectionCheck(messageOf(err)), ...(tailnet ? [unreachableTailnetCheck(stack, tailnet)] : [])],
     })
   }
   if (handle) {
     try {
       sections.push({
         title: 'Remote health',
-        checks: await remoteChecks(handle.session, signal),
+        checks: await remoteChecks(handle.session, signal, { stack, tailnet }),
       })
       sections.push({
         title: 'Hardening',
@@ -376,7 +379,11 @@ async function versionChecks(): Promise<Check[]> {
 
 // ── Remote checks ─────────────────────────────────────────────────────────────
 
-export async function remoteChecks(session: SshSession, signal?: AbortSignal): Promise<Check[]> {
+export async function remoteChecks(
+  session: SshSession,
+  signal?: AbortSignal,
+  opts: { stack?: string; tailnet?: TailscaleOverride } = {},
+): Promise<Check[]> {
   const checks: Check[] = []
 
   const { containerStatus } = await import('../openclaw/docker.js')
@@ -460,9 +467,131 @@ export async function remoteChecks(session: SshSession, signal?: AbortSignal): P
       : { name: 'Log rotation', status: 'warn', detail: 'not configured — logs may grow unbounded' },
   )
 
+  checks.push(...(await tailscaleChecks(session, opts, signal)))
   checks.push(...(await fleetChecks(session, signal)))
 
   return checks
+}
+
+/** A key that expires sooner than this is a warning: long enough to notice in a weekly doctor run. */
+export const TAILSCALE_KEY_WARN_DAYS = 14
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Tailscale on this host (WO-34): whether it is on its tailnet, whether its node key is about to
+ * expire, and, on a stack clawops reaches over the tailnet, that it did reach it there.
+ *
+ * None on a host without Tailscale that clawops does not reach over a tailnet. Where clawops
+ * does, a problem is a failure: the tailnet is its only way in on a private-only stack, and
+ * when the key expires the host leaves it. Elsewhere, a host agent's fleet say, it is a warning.
+ *
+ * The gateway itself is published on loopback, so nothing answers on the tailnet address but
+ * SSH. "Reachable on the tailnet" is this session having arrived there; the Gateway check above
+ * answered through it, and `clawops tunnel` reaches the gateway the same way.
+ */
+async function tailscaleChecks(
+  session: SshSession,
+  opts: { stack?: string; tailnet?: TailscaleOverride },
+  signal?: AbortSignal,
+): Promise<Check[]> {
+  const { parseStatusOutput } = await import('../harden/modules/tailscale.js')
+  const { tailnet } = opts
+  const stackFlag = opts.stack ? ` --stack ${opts.stack}` : ''
+  const r = await session.exec(
+    'if command -v tailscale >/dev/null 2>&1; then tailscale status --json 2>&1; else echo clawops:no-tailscale; fi; true',
+    signal,
+  )
+  if (r.stdout.trim() === 'clawops:no-tailscale' || r.stdout.trim() === '') {
+    return tailnet
+      ? [{ name: 'Tailscale', status: 'fail', detail: `not installed, though clawops reaches this stack at ${tailnet.ip}`, remedy: `run \`clawops harden${stackFlag} --options tailscale\`` }]
+      : []
+  }
+
+  const bad: CheckStatus = tailnet ? 'fail' : 'warn'
+  const s = parseStatusOutput(r.stdout)
+  if (s.daemonDown) {
+    return [{
+      name: 'Tailscale', status: bad,
+      detail: 'installed, but tailscaled is not running, so this host is on no tailnet',
+      remedy: 'run `systemctl start tailscaled`, and `systemctl status tailscaled` to see why it stopped',
+    }]
+  }
+  if (s.state === 'unknown') {
+    return [{ name: 'Tailscale', status: 'warn', detail: 'installed, but `tailscale status --json` did not report a status clawops could parse' }]
+  }
+
+  const checks: Check[] = []
+  const expiresAt = s.keyExpiry ? Date.parse(s.keyExpiry) : NaN
+  const expired = s.expired === true || (!Number.isNaN(expiresAt) && expiresAt <= Date.now())
+  const day = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+  const rejoin = `store a fresh auth key with \`clawops secret set TAILSCALE_AUTH_KEY\`, then run \`clawops harden${stackFlag} --options tailscale\``
+
+  if (s.state === 'Running' && s.ipv4) {
+    checks.push({ name: 'Tailscale', status: 'pass', detail: `running as ${s.hostname ?? 'this host'} on ${s.ipv4}` })
+  } else if (s.state === 'NeedsLogin') {
+    checks.push({
+      name: 'Tailscale', status: bad,
+      detail: expired
+        ? `this host's node key expired${Number.isNaN(expiresAt) ? '' : ` on ${day(expiresAt)}`}, so it has left its tailnet`
+        : 'this host is logged out of its tailnet',
+      remedy: rejoin,
+    })
+    return checks
+  } else {
+    const why = s.health?.[0] ? ` (${s.health[0]})` : ''
+    checks.push({ name: 'Tailscale', status: bad, detail: `not on its tailnet: state ${s.state}${why}`, remedy: 'run `tailscale up` on the host, or ' + rejoin })
+    return checks
+  }
+
+  // A tagged machine has key expiry off by default; an untagged one expires every 180 days unless
+  // someone turns it off. When it expires, the host drops off the tailnet until someone logs it in.
+  const consequence = tailnet
+    ? `, and clawops, which reaches this stack only at ${tailnet.ip}, cannot reach it there`
+    : ''
+  const keyRemedy = 'turn off key expiry for this machine in the Tailscale admin console, or re-authenticate it before then'
+  if (Number.isNaN(expiresAt)) {
+    checks.push({ name: 'Tailscale key', status: 'pass', detail: 'key expiry is off for this machine' })
+  } else if (expired) {
+    checks.push({ name: 'Tailscale key', status: bad, detail: `expired on ${day(expiresAt)}; this host will leave its tailnet${consequence}`, remedy: rejoin })
+  } else {
+    const days = Math.floor((expiresAt - Date.now()) / DAY_MS)
+    checks.push(
+      days < TAILSCALE_KEY_WARN_DAYS
+        ? { name: 'Tailscale key', status: 'warn', detail: `expires on ${day(expiresAt)}, in ${days} day${days === 1 ? '' : 's'}. Then this host leaves its tailnet${consequence}`, remedy: keyRemedy }
+        : { name: 'Tailscale key', status: 'pass', detail: `expires on ${day(expiresAt)}` },
+    )
+  }
+
+  if (tailnet) {
+    checks.push(
+      s.ipv4 === tailnet.ip
+        ? { name: 'Tailnet address', status: 'pass', detail: `clawops reached this host over the tailnet at ${tailnet.ip}; the gateway, on loopback, is reached through it` }
+        : {
+            name: 'Tailnet address', status: 'fail',
+            detail: `clawops is pointed at ${tailnet.ip}, but this host's tailnet address is ${s.ipv4}`,
+            remedy: `run \`clawops harden${stackFlag} --tailscale\` to verify and record the address it has now`,
+          },
+    )
+  }
+  return checks
+}
+
+/**
+ * Why a stack clawops reaches over its tailnet may not answer. The transport's diagnosis names
+ * the address; it cannot know the address is a tailnet one, or that a host leaves the tailnet
+ * when its node key expires.
+ */
+function unreachableTailnetCheck(stack: string, tailnet: TailscaleOverride): Check {
+  return {
+    name: 'Tailnet address',
+    status: 'warn',
+    detail: `clawops reaches "${stack}" only over its tailnet, at ${tailnet.ip}${tailnet.privateOnly ? ', and its public ports are closed' : ''}`,
+    remedy:
+      'check that this machine is on the tailnet (`tailscale status`) and that the host is too: a host whose ' +
+      'node key expired has left it, and shows as expired in the Tailscale admin console' +
+      (tailnet.privateOnly ? '' : `. To go back to the public address, run \`clawops harden --stack ${stack} --tailscale-revert\``),
+  }
 }
 
 /**

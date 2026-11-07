@@ -1,7 +1,7 @@
 # clawops. Technical Specification
 
 **Version:** 0.9
-**Status:** 2.5.0. M8 complete (2420 unit tests, plus e2e suites); Waves 1–13 complete. WO-01–WO-33, WO-35 done; WO-34 open (Tailscale: doctor check remains). WO-53–WO-57 deferred, unscheduled. WO-62 (host agent, ADR 0014) ✅ shipped alone as 2.4; WO-67 (host-agent fleet, ADR 0015) ✅ shipped in 2.5
+**Status:** 2.5.0. M8 complete (2443 unit tests, plus e2e suites); Waves 1–13 complete. WO-01–WO-35 done (WO-34's doctor check built for 2.5.1). WO-53–WO-57 deferred, unscheduled. WO-62 (host agent, ADR 0014) ✅ shipped alone as 2.4; WO-67 (host-agent fleet, ADR 0015) ✅ shipped in 2.5
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -1364,10 +1364,10 @@ Steps applied:
 
 Revert: `clawops harden --tailscale-revert` runs over the public address: it checks the public address answers, runs `tailscale logout` on the host (not `down`, which leaves the node holding its name), removes the override and forgets the tailnet host key. On a private-only stack it refuses and prints the plan/apply commands that reopen SSH first.
 
-`clawops doctor` extended: checks Tailscale status (`tailscale status`), verifies the gateway is reachable on the Tailscale IP, and reports if the Tailscale session has expired (auth key rotation needed).
+`clawops doctor` extended: checks Tailscale status (`tailscale status --json`), and reports a node key that has expired or expires within 14 days. On a stack clawops reaches over the tailnet, problems fail rather than warn, and a **Tailnet address** check confirms clawops reached the host at the address it recorded. (Corrected when built: the gateway is published on loopback, so nothing answers on the Tailscale IP but SSH; the gateway is reached through that connection. An expired key is not "auth key rotation": the auth key only joins the host, and an expired node key takes it off the tailnet. On a tailnet-only stack doctor cannot reach such a host, so its failed connection names the tailnet and that cause.)
 
 Status:
-- [ ] WO-34: Tailscale VPN integration (install, join, config update, optional private-only mode, doctor check)
+- [x] WO-34: Tailscale VPN integration (install, join, config update, optional private-only mode, doctor check)
 
 ---
 
@@ -1571,10 +1571,10 @@ Steps applied:
 
 Revert: `clawops harden --tailscale-revert` reads `_preTailscale` config, restores public access rules, and runs `tailscale down` on the server.
 
-`clawops doctor` extended: checks Tailscale status (`tailscale status`), verifies the gateway is reachable on the Tailscale IP, and reports if the Tailscale session has expired (auth key rotation needed).
+`clawops doctor` extended: checks Tailscale status (`tailscale status --json`), and reports a node key that has expired or expires within 14 days. On a stack clawops reaches over the tailnet, problems fail rather than warn, and a **Tailnet address** check confirms clawops reached the host at the address it recorded. (Corrected when built: the gateway is published on loopback, so nothing answers on the Tailscale IP but SSH; the gateway is reached through that connection. An expired key is not "auth key rotation": the auth key only joins the host, and an expired node key takes it off the tailnet. On a tailnet-only stack doctor cannot reach such a host, so its failed connection names the tailnet and that cause.)
 
 Status:
-- [ ] WO-34: Tailscale VPN integration (install, join, config update, optional private-only mode, doctor check)
+- [x] WO-34: Tailscale VPN integration (install, join, config update, optional private-only mode, doctor check)
 
 ---
 

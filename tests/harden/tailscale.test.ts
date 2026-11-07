@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { RemoteExec } from '../../src/harden/types.js'
 import {
   parseStatus,
+  parseStatusOutput,
   isTailscaleIpv4,
   tailnetHostname,
   redactKey,
@@ -49,6 +50,20 @@ describe('status parsing', () => {
   })
   it('a host that needs login has no address', () => {
     expect(parseStatus(JSON.stringify({ BackendState: 'NeedsLogin', Self: { TailscaleIPs: [] } })).ipv4).toBeUndefined()
+  })
+  it('reads the key expiry, whether it has expired, and what Tailscale says is wrong', () => {
+    // Shaped like tailscale 1.102's output: KeyExpiry is RFC 3339, Expired is omitted until true.
+    const stopped = parseStatus(JSON.stringify({
+      BackendState: 'Stopped', Health: ['Tailscale is stopped.'],
+      Self: { TailscaleIPs: [], KeyExpiry: '2027-03-21T11:16:44Z' },
+    }))
+    expect(stopped).toEqual({ state: 'Stopped', keyExpiry: '2027-03-21T11:16:44Z', health: ['Tailscale is stopped.'] })
+    expect(parseStatus(JSON.stringify({ BackendState: 'NeedsLogin', Self: { Expired: true } })).expired).toBe(true)
+    expect(parseStatus(RUNNING)).not.toHaveProperty('keyExpiry')
+  })
+  it('tells a stopped daemon from a status it cannot parse', () => {
+    expect(parseStatusOutput('failed to connect to local tailscaled; it doesn\'t appear to be running')).toEqual({ state: 'unknown', daemonDown: true })
+    expect(parseStatusOutput(RUNNING).state).toBe('Running')
   })
 })
 
