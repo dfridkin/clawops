@@ -21,11 +21,12 @@ export default function Home() {
         <div className={styles.strip}>
           <div className={styles.stripInner}>
             <span>
-              <strong>OpenClaw 2.0 support is live</strong> in clawops 2.0: state that survives a
-              restart, plugins installed for you, and <code>clawops migrate</code> to bring an
-              existing 1.x deployment across.
+              <strong>Host-agent fleets are live in clawops 2.5.</strong> Each gateway&apos;s host
+              agent still manages only its own host, and reads its peers over your tailnet,
+              authenticated by tag, with no shared keys. See them all with{' '}
+              <code>clawops fleet status</code>.
             </span>
-            <a href="/docs/migrating">Migrating from 1.x</a>
+            <a href="/docs/operations#fleet">Set up a fleet</a>
           </div>
         </div>
 
