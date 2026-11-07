@@ -23,11 +23,12 @@ the conversation, and `agent install` / `uninstall` decide what a host agent may
 agent should decide for itself. An agent asks you to run those in a terminal. Everything else, including
 backup, restore with `--activate`, migrate and gateway updates, is a tool.
 
-**Tailscale: no private-only mode on local stacks, and no `doctor` check yet.** `clawops harden
+**Tailscale: no private-only mode on local stacks.** `clawops harden
 --tailscale` joins any stack to a tailnet and moves clawops onto that address. Closing the public
 ports goes through `clawops plan --private-only`, which local stacks don't have. `clawops doctor`
-doesn't yet report tailnet status, except on a fleet host, where it checks what the tailnet
-policy lets reach the peer port.
+reports the host's tailnet status and key expiry, but a host whose key has already expired has
+left the tailnet, so on a tailnet-only stack doctor cannot reach it to say so; check the Tailscale
+admin console.
 
 ## Scope
 

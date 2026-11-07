@@ -44,6 +44,15 @@ export interface TailscaleStatus {
    * the service is masked, crashed, or there is no init to start it.
    */
   daemonDown?: boolean
+  /**
+   * When this machine's node key expires, ISO 8601. Absent when key expiry is off for it, which
+   * Tailscale does by default for a tagged machine. Measured against tailscale 1.102: `Self.KeyExpiry`
+   * is an RFC 3339 time, and `Self.Expired` is omitted until the key has expired.
+   */
+  keyExpiry?: string
+  expired?: boolean
+  /** Tailscale's own explanations of what is wrong, e.g. "Tailscale is stopped." */
+  health?: string[]
 }
 
 /**
@@ -60,12 +69,31 @@ export function parseStatus(json: string): TailscaleStatus {
   } catch {
     return { state: 'unknown' }
   }
-  const b = body as { BackendState?: unknown; Self?: { TailscaleIPs?: unknown; HostName?: unknown } }
+  const b = body as {
+    BackendState?: unknown
+    Health?: unknown
+    Self?: { TailscaleIPs?: unknown; HostName?: unknown; KeyExpiry?: unknown; Expired?: unknown }
+  }
   const state = typeof b.BackendState === 'string' ? (b.BackendState as BackendState) : 'unknown'
   const ips = Array.isArray(b.Self?.TailscaleIPs) ? (b.Self?.TailscaleIPs as unknown[]) : []
   const ipv4 = ips.find((i): i is string => typeof i === 'string' && isTailscaleIpv4(i))
   const hostname = typeof b.Self?.HostName === 'string' ? b.Self.HostName : undefined
-  return { state, ...(ipv4 ? { ipv4 } : {}), ...(hostname ? { hostname } : {}) }
+  const keyExpiry = typeof b.Self?.KeyExpiry === 'string' ? b.Self.KeyExpiry : undefined
+  const health = Array.isArray(b.Health) ? b.Health.filter((h): h is string => typeof h === 'string') : []
+  return {
+    state,
+    ...(ipv4 ? { ipv4 } : {}),
+    ...(hostname ? { hostname } : {}),
+    ...(keyExpiry ? { keyExpiry } : {}),
+    ...(b.Self?.Expired === true ? { expired: true } : {}),
+    ...(health.length > 0 ? { health } : {}),
+  }
+}
+
+/** `tailscale status --json 2>&1` output, read the way {@link status} reads it. */
+export function parseStatusOutput(output: string): TailscaleStatus {
+  if (DAEMON_DOWN.test(output)) return { state: 'unknown', daemonDown: true }
+  return parseStatus(output)
 }
 
 /**
@@ -98,8 +126,7 @@ const DAEMON_DOWN = /failed to connect to local tailscaled|is tailscaled running
 
 async function status(exec: RemoteExec): Promise<TailscaleStatus> {
   const r = await exec('tailscale status --json 2>&1 || true')
-  if (DAEMON_DOWN.test(r.stdout)) return { state: 'unknown', daemonDown: true }
-  return parseStatus(r.stdout)
+  return parseStatusOutput(r.stdout)
 }
 
 /**

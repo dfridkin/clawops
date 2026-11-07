@@ -18,7 +18,9 @@ clawops monitor                # resource and container dashboard
 trusting the container to be running. A running container means the process started, not that it
 serves. It also reports **which OpenClaw version the gateway is actually running**, which can differ
 from the requested version when the stack was created with a moving tag, and it exits non-zero
-when any check fails.
+when any check fails. On a host with Tailscale it reports whether the host is on its tailnet and
+warns two weeks before its node key expires, since an expired key takes the host off the tailnet.
+On a stack clawops reaches over its tailnet, those are failures.
 
 ## Logs
 

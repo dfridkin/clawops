@@ -603,7 +603,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (2420 tests, ~14s)
+pnpm test                  # vitest (2443 tests, ~14s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm test:e2e:local        # builds, then bootstrap, the host-touching MCP tools and a 1.x migration, in systemd containers
@@ -1368,7 +1368,7 @@ flowchart TD
     C -- yes --> D["container state"]
     D --> E["deployed OpenClaw version"]
     E --> F["probe /startupz<br/>and read the body"]
-    F --> G["published scope, disk,<br/>log rotation, hardening drift"]
+    F --> G["published scope, disk,<br/>log rotation, Tailscale,<br/>hardening drift"]
     G --> Z
     Z --> Y{"any check failed?"}
     Y -- no --> Y1["exit 0"]
