@@ -209,7 +209,7 @@ The following limitations are tracked in the roadmap and expected to be addresse
 
 | Limitation | Roadmap milestone |
 |---|---|
-| TLS/domain automation | R4: Production Operations |
+| TLS/domain automation | WO-55, P9 in [Path to 3.0](roadmap.md#path-to-30) |
 | Deeper health checks | R4: Production Operations |
 | Upgrade/rollback workflow | R4: Production Operations |
 | Config validation command | R5: Configuration and Secrets |
