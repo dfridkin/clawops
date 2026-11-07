@@ -244,3 +244,19 @@ export function auditPeerRefusal(remote: string, reason: string, peer?: PeerCall
     ...(peer ? { peer } : {}),
   })
 }
+
+/**
+ * The host agent putting the fleet firewall table back (peer-repair.ts), or failing to. `reason`
+ * is what was wrong with the table; `failure`, when present, is why it could not be restored.
+ */
+export function auditPeerTableRepair(reason: string, failure?: string): void {
+  auditLog({
+    ts: new Date().toISOString(),
+    sessionId: getSessionId(),
+    tool: 'peer_table_repair',
+    args: {},
+    durationMs: 0,
+    result: failure === undefined ? 'ok' : 'error',
+    reason: failure === undefined ? reason : `${reason} ${failure}`,
+  })
+}

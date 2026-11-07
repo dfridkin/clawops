@@ -41,7 +41,7 @@ One JSON object per line (NDJSON):
 | `result` | `"ok"` \| `"error"` | Whether the tool returned successfully |
 | `error` | string? | Present only when `result` is `"error"` |
 | `peer` | object? | On a host agent's peer listener only: the calling tailnet node's `name`, `stableId` and `tags`, from tailscaled's whois. The name is the peer's choice; the StableID and tags are not |
-| `reason` | string? | On the peer listener only: why a call was refused |
+| `reason` | string? | On the peer listener: why a call was refused. On `peer_table_repair`: what was wrong with the firewall table, and why it could not be restored when it could not |
 | `forwardedTo` | object? | On a host agent with `--peer` entries: the peer (`stack`, `node`) a read was forwarded to |
 
 A host agent that serves peers ([ADR 0015](../decisions/0015-host-agent-fleet.md) §7) records
@@ -51,6 +51,15 @@ tool ran is recorded with `tool: "peer_listener"` and the remote address it came
 ```json
 {"ts":"2026-10-21T14:05:14.364Z","sessionId":"89d7a138","tool":"clawops_stacks_list","args":{"fleet":false},"durationMs":0,"result":"ok","peer":{"name":"us-gw.tail1234.ts.net","stableId":"nUS1","tags":["tag:clawops-agent"]}}
 {"ts":"2026-10-21T14:05:32.093Z","sessionId":"89d7a138","tool":"peer_listener","args":{"remote":"100.64.0.3:44080"},"durationMs":0,"result":"error","reason":"Refused: laptop.tail1234.ts.net does not carry tag:clawops-agent (its tags: none).","peer":{"name":"laptop.tail1234.ts.net","stableId":"nLP7","tags":[]}}
+```
+
+Every fleet member's host agent also records each time it puts the fleet firewall table back
+(`src/hostagent/peer-repair.ts`), and each time it fails to, once per distinct reason. `result`
+is `"ok"` for a repair and `"error"` when the table could not be restored, in which case peer
+queries are refused until it is:
+
+```json
+{"ts":"2026-10-29T09:12:40.118Z","sessionId":"89d7a138","tool":"peer_table_repair","args":{},"durationMs":0,"result":"ok","reason":"The firewall table inet clawops_peer is missing."}
 ```
 
 ## Reading the log
