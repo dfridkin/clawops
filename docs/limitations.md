@@ -137,13 +137,20 @@ token, so no `notifications/progress` reach the client, and only `clawops_migrat
 `taskId` early. A slow call looks like a hung one until it returns. R12 asks for both; fixing it is
 one change to the registry and every long-running handler.
 
-**Tailscale: no private-only mode on local stacks, and no `doctor` check yet.** `clawops harden
+**Tailscale: no private-only mode on local stacks.** `clawops harden
 --tailscale` joins any stack to a tailnet and moves clawops onto that address. Closing the public
 ports goes through `clawops plan --private-only`, and local stacks have no plan/apply path, so on
-a local host the public SSH port stays open unless you close it yourself. `clawops doctor` doesn't
-yet report tailnet status or key expiry. On a fleet host it does check the fleet firewall table
-and, on a host that serves peers, what the tailnet policy lets reach the peer port, from the
-packet filter tailscaled holds.
+a local host the public SSH port stays open unless you close it yourself.
+
+**`clawops doctor` sees Tailscale only from the host.** It reports the host's tailnet status and
+node key expiry, but it cannot report an expired key on a stack clawops reaches only over the
+tailnet: that host has left the tailnet, so doctor cannot connect to ask. It says the stack is
+reached over the tailnet and that an expired key is one reason it would not answer; the Tailscale
+admin console is where to confirm it. It does not check this machine's own Tailscale. It does not
+probe the gateway on the tailnet address, because the gateway is published on loopback; the
+tailnet connection doctor arrived on is what reaches it. On a fleet host it also checks the fleet
+firewall table and, on a host that serves peers, what the tailnet policy lets reach the peer
+port.
 
 **The fleet firewall table can be open for up to 30 s** (2.5). The host agent puts the table back
 when something removes or changes it, but only on its next check, and only while it runs. At boot

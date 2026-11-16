@@ -1,7 +1,7 @@
 # clawops. Technical Specification
 
 **Version:** 0.9
-**Status:** 2.5.0. M8 complete (2420 unit tests, plus e2e suites); Waves 1–13 complete. WO-01–WO-33, WO-35 done; WO-34 open (Tailscale: doctor check remains). WO-53–WO-57 deferred, unscheduled. WO-62 (host agent, ADR 0014) ✅ shipped alone as 2.4; WO-67 (host-agent fleet, ADR 0015) ✅ shipped in 2.5
+**Status:** 2.5.0. M8 complete (2446 unit tests, plus e2e suites); Waves 1–13 complete. WO-01–WO-35 done (WO-34's doctor check built for 2.5.1). WO-53–WO-57 deferred, unscheduled. WO-62 (host agent, ADR 0014) ✅ shipped alone as 2.4; WO-67 (host-agent fleet, ADR 0015) ✅ shipped in 2.5
 **Companion docs:** PRD.md (requirements), DESIGN_RULES.md (R1–R25 normative rules)
 
 This document specifies *how* clawops is built. It assumes you've read the PRD and references the design rules by number throughout (e.g., "per R6, credentials are read from environment").
@@ -1364,10 +1364,10 @@ Steps applied:
 
 Revert: `clawops harden --tailscale-revert` runs over the public address: it checks the public address answers, runs `tailscale logout` on the host (not `down`, which leaves the node holding its name), removes the override and forgets the tailnet host key. On a private-only stack it refuses and prints the plan/apply commands that reopen SSH first.
 
-`clawops doctor` extended: checks Tailscale status (`tailscale status`), verifies the gateway is reachable on the Tailscale IP, and reports if the Tailscale session has expired (auth key rotation needed).
+`clawops doctor` extended: checks Tailscale status (`tailscale status --json`), and reports a node key that has expired or expires within 14 days. On a stack clawops reaches over the tailnet, problems fail rather than warn, and a **Tailnet address** check confirms clawops reached the host at the address it recorded. (Corrected when built: the gateway is published on loopback, so nothing answers on the Tailscale IP but SSH; the gateway is reached through that connection. An expired key is not "auth key rotation": the auth key only joins the host, and an expired node key takes it off the tailnet. On a tailnet-only stack doctor cannot reach such a host, so its failed connection names the tailnet and that cause.)
 
 Status:
-- [ ] WO-34: Tailscale VPN integration (install, join, config update, optional private-only mode, doctor check)
+- [x] WO-34: Tailscale VPN integration (install, join, config update, optional private-only mode, doctor check)
 
 ---
 
@@ -1555,26 +1555,10 @@ Status:
 
 Available on all providers. Converts a stack from public-internet exposure to private Tailscale network access, optionally removing public port exposure entirely.
 
-`clawops harden --tailscale [--tailscale-key <key>] [--private-only]`
-
-Steps applied:
-1. **Install Tailscale**. Runs the official install script (`https://tailscale.com/install.sh`) via SSH. Idempotent: checks for existing `tailscale` binary first.
-2. **Join network**. Runs `tailscale up --auth-key=<key> --hostname=clawops-<stackName> --accept-routes`. Auth key sourced from: `--tailscale-key` flag → `$secret:TAILSCALE_AUTH_KEY` → interactive prompt (stored as a secret if entered interactively).
-3. **Read Tailscale IP**. Runs `tailscale ip -4` to get the assigned `100.x.x.x` IP.
-4. **Update clawops config**. Rewrites `sshHost` to the Tailscale IP and `gatewayUrl` to `https://<tailscale-ip>:18789` in `~/.clawops/config.json`. Backs up the original values under `_preTailscale` so the change can be reverted.
-5. **Verify connectivity**. Opens a new SSH session via the Tailscale IP to confirm reachability before removing public access.
-6. **Private-only mode** (`--private-only`), after successful Tailscale verification, removes public port exposure:
-   - AWS: removes Security Group ingress rules for ports 22 and 18789.
-   - GCP: deletes `clawops-firewall-ssh` and `clawops-firewall-gateway` Firewall resources (via Pulumi update).
-   - Azure: updates NSG to deny ports 22 and 18789 from `Internet`.
-   - Local: adds UFW rules to deny the ports from non-Tailscale interfaces.
-
-Revert: `clawops harden --tailscale-revert` reads `_preTailscale` config, restores public access rules, and runs `tailscale down` on the server.
-
-`clawops doctor` extended: checks Tailscale status (`tailscale status`), verifies the gateway is reachable on the Tailscale IP, and reports if the Tailscale session has expired (auth key rotation needed).
+This is an earlier copy of WO-34, kept for the section it sits in. Steps 4–6, revert and the `doctor` check were rewritten as built (ADR 0013; `tailscale logout` on revert, not `down`); the WO-34 block earlier in this section is the one that describes them.
 
 Status:
-- [ ] WO-34: Tailscale VPN integration (install, join, config update, optional private-only mode, doctor check)
+- [x] WO-34: Tailscale VPN integration (install, join, config update, optional private-only mode, doctor check)
 
 ---
 

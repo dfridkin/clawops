@@ -93,6 +93,13 @@ With `--stack` it also connects to the host:
 - **Published:** whether the gateway port is bound to loopback or to every interface
 - **Disk:** usage on the state directory, where 2.0's SQLite lives
 - **Log rotation**, and **hardening** drift per module
+- **Tailscale**, on a host that has it: whether it is on its tailnet, and when its node key
+  expires. A key that expires within 14 days is a warning: when it does, the host leaves the
+  tailnet. On a stack clawops reaches over its tailnet (`clawops harden --tailscale`), a problem
+  here is a failure rather than a warning, and **Tailnet address** confirms clawops reached the
+  host at the address it recorded. The gateway stays on loopback, so it is reached through that
+  connection, as `clawops tunnel` does. When such a stack does not answer at all, doctor says it
+  is reached only over the tailnet and that an expired key takes a host off it
 
 Every check reports `pass`, `fail`, `warn` or `info`. **Exit code is `1` if any check
 failed**, `0` otherwise. Warnings do not fail it, so a machine that has not run
