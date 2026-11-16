@@ -282,6 +282,8 @@ describe('runDiagnostics — remote checks', () => {
     expect(find(report, 'Fleet policy')).toMatchObject({ status: 'warn', detail: expect.stringMatching(/tag check is the only barrier/) })
     // A warning: the fleet still works, and the host agent still refuses untagged callers.
     expect(report.ok).toBe(true)
+    // Read once, by the Tailscale checks, and handed on rather than run again.
+    expect(member.execCalls().filter((c) => /tailscale status --json/.test(c))).toHaveLength(1)
   })
 
   it('checks the fleet firewall on every fleet member, leaf or not, and fails a missing table', async () => {
@@ -465,6 +467,37 @@ describe('the Tailscale checks (WO-34)', () => {
 
     const gone = await runDiagnostics({ stack: 'prod' }, withHost(healthyHost().respond(/tailscale status --json/, { stdout: 'clawops:no-tailscale\n' })))
     expect(find(gone, 'Tailscale')).toMatchObject({ status: 'fail', detail: expect.stringContaining(IP) })
+  })
+
+  it('does not call a status it could not read "not installed", and reads the JSON past warnings on stderr', async () => {
+    overTailnet()
+    // Over the tailnet, Tailscale is installed by definition: an empty answer is a failed read.
+    const empty = await runDiagnostics({ stack: 'prod' }, withHost(onTailnet('')))
+    expect(find(empty, 'Tailscale')).toMatchObject({ status: 'warn', detail: 'could not read `tailscale status --json`: it printed nothing' })
+    expect(find(empty, 'Tailscale')?.detail).not.toMatch(/not installed/)
+    const said = await runDiagnostics({ stack: 'prod' }, withHost(healthyHost().respond(/tailscale status --json/, { stdout: '', stderr: 'tailscale: permission denied\n' })))
+    expect(find(said, 'Tailscale')?.detail).toBe('could not read `tailscale status --json`: tailscale: permission denied')
+
+    const warned = healthyHost().respond(/tailscale status --json/, { stdout: status(), stderr: 'Warning: client version "1.102.4" != tailscaled server version "1.100.0"\n' })
+    expect(find(await runDiagnostics({ stack: 'prod' }, withHost(warned)), 'Tailscale')?.status).toBe('pass')
+    // A dead daemon says so on stderr, with nothing on stdout.
+    const down = healthyHost().respond(/tailscale status --json/, { stdout: '', stderr: 'failed to connect to local tailscaled; it doesn\'t appear to be running\n' })
+    expect(find(await runDiagnostics({ stack: 'prod' }, withHost(down)), 'Tailscale')).toMatchObject({ status: 'fail', remedy: expect.stringMatching(/^run `sudo systemctl start tailscaled`/) })
+  })
+
+  it('reports a node that is up with no IPv4 as up, and lets the address check say what is missing', async () => {
+    const v6 = await runDiagnostics({ stack: 'prod' }, withHost(onTailnet(status({ ip: '' }))))
+    expect(find(v6, 'Tailscale')).toMatchObject({ status: 'pass', detail: 'running as clawops-prod with no IPv4 address' })
+
+    overTailnet()
+    const only = await runDiagnostics({ stack: 'prod' }, withHost(onTailnet(status({ ip: '' }))))
+    expect(find(only, 'Tailscale')?.status).toBe('pass')
+    expect(find(only, 'Tailnet address')).toMatchObject({ status: 'fail', detail: `clawops is pointed at ${IP}, but this host has no tailnet IPv4 address` })
+  })
+
+  it('warns on a key expiry it cannot read, rather than calling expiry off', async () => {
+    const odd = await runDiagnostics({ stack: 'prod' }, withHost(onTailnet(status({ keyExpiry: 'in about a week' }))))
+    expect(find(odd, 'Tailscale key')).toMatchObject({ status: 'warn', detail: 'could not read the key expiry Tailscale reported (in about a week)' })
   })
 
   it('when a tailnet-only stack does not answer, says it is reached over the tailnet and why that can stop', async () => {
