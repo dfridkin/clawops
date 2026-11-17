@@ -15,6 +15,11 @@
 //     migration required (audit-events-v2)" and is healthy only after a SECOND start. So
 //     the sequence gates, restarts, and re-gates rather than declaring success on the first.
 //
+// And a fourth, from the nightly e2e in November 2026: some 1.x workspaces stop 2.x from
+// starting at all, every time ("Legacy workspace setup state requires migration for
+// /home/node/.openclaw/workspace; run openclaw doctor --fix"). A second start cannot help
+// that, so when it fails the sequence runs SP-07's one-shot `doctor --fix` and starts once more.
+//
 // Measured on 2026-09-09 migrating 2026.7.1-2 → 2026.9.2: `deviceId` is preserved and
 // `identity/` is emptied — relocation into SQLite, not loss.
 
@@ -44,12 +49,21 @@ export interface MigrateSteps {
   start: () => Promise<void>
   /** Poll `/startupz`. */
   gate: () => Promise<{ ok: boolean; reason?: string }>
+  /** Stop the gateway and run a one-shot `openclaw doctor --fix` on its state (SP-07 step 6). */
+  repair: () => Promise<void>
   /** Read the deviceId, for continuity reporting. */
   deviceId: () => Promise<string | undefined>
 }
 
 export type MigrateOutcome =
-  | { kind: 'migrated'; entries: string[]; identity: 'preserved' | 'changed' | 'unknown'; restarts: number }
+  | {
+      kind: 'migrated'
+      entries: string[]
+      identity: 'preserved' | 'changed' | 'unknown'
+      restarts: number
+      /** What the gateway said before `doctor --fix` ran, when the second start was not enough. */
+      repaired?: string
+    }
   | { kind: 'nothing-to-migrate'; reason: string }
   | { kind: 'already-current'; reason: string }
   | { kind: 'refused'; reason: string }
@@ -156,6 +170,16 @@ export async function migrate(steps: MigrateSteps, opts: MigrateOptions = {}): P
     gate = await steps.gate()
   }
 
+  // One repair, not a loop, as in `gateway update`: a gateway that still will not start after
+  // it has some other problem, and the operator has the backup.
+  let repaired: string | undefined
+  if (!gate.ok) {
+    repaired = gate.reason ?? 'the gateway did not start'
+    await steps.repair()
+    await steps.start()
+    gate = await steps.gate()
+  }
+
   if (!gate.ok) {
     return {
       kind: 'failed',
@@ -172,7 +196,7 @@ export async function migrate(steps: MigrateSteps, opts: MigrateOptions = {}): P
         ? 'preserved'
         : 'changed'
 
-  return { kind: 'migrated', entries: extracted.entries, identity, restarts }
+  return { kind: 'migrated', entries: extracted.entries, identity, restarts, ...(repaired ? { repaired } : {}) }
 }
 
 /** Human report. Kept beside the state machine so message and branch cannot drift. */
@@ -186,6 +210,12 @@ export function describeMigration(o: MigrateOutcome): string {
         lines.push(
           'The gateway needed a second start to finish its state-schema migration, which is ' +
             'expected for a 1.x database.',
+        )
+      }
+      if (o.repaired) {
+        lines.push(
+          'It still did not start after that, so clawops ran a one-shot `openclaw doctor --fix` ' +
+            `on its state, and it started. What it said before the repair: ${o.repaired.split('\n')[0]}`,
         )
       }
       if (o.identity === 'preserved') {

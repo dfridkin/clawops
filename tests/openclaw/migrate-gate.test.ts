@@ -75,3 +75,21 @@ describe('the migration start gate', () => {
     expect(asked).toMatch(/else docker logs --tail 15 openclaw/)
   })
 })
+
+describe('the migration repair on the host', () => {
+  it('stops the gateway, repairs its state in a throwaway container, then hands it back to uid 1000', async () => {
+    const ran: string[] = []
+    const steps = migrationSteps(async (cmd) => { ran.push(cmd); return { stdout: '', stderr: '', code: 0 } }, {
+      targetImage: 'img:2026.9.2',
+      sleep: async () => {},
+    })
+    await steps.repair()
+    const at = (re: RegExp) => ran.findIndex((c) => re.test(c))
+    const stop = at(/systemctl stop openclaw/)
+    const fix = at(/^docker run --rm -v \S+:\/home\/node\/\.openclaw img:2026\.9\.2 openclaw doctor --fix --non-interactive --yes$/)
+    const chown = at(/^chown -R 1000:1000 /)
+    expect(stop, ran.join('\n')).toBeGreaterThanOrEqual(0)
+    expect(fix, ran.join('\n')).toBeGreaterThan(stop)
+    expect(chown, ran.join('\n')).toBeGreaterThan(fix)
+  })
+})
