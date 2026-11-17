@@ -159,10 +159,14 @@ export function migrationSteps(
       // "No response" is all a probe can say, and it is the same words for a gateway still
       // starting, one that exited, and one systemd is restart-looping. What the container and
       // the gateway said is the difference, and the operator reading this is mid-migration.
+      // Under systemd the container runs with --rm, so one that exited has no logs left to
+      // read; what it and `docker run` printed is in the unit's journal.
       const said = await run(
         "echo \"container: $(docker ps -a --filter name=^openclaw$ --format '{{.Status}}' | head -1)\"; " +
-          "systemctl is-enabled openclaw >/dev/null 2>&1 && echo \"unit: $(systemctl is-active openclaw)\"; " +
-          'docker logs --tail 15 openclaw 2>&1 | tail -15',
+          'if systemctl is-enabled openclaw >/dev/null 2>&1; then ' +
+          'echo "unit: $(systemctl is-active openclaw)"; ' +
+          'journalctl -u openclaw -n 15 --no-pager -o cat 2>&1 | tail -15; ' +
+          'else docker logs --tail 15 openclaw 2>&1 | tail -15; fi',
       )
       const detail = said.stdout.trim()
       return { ok: false, reason: (last ?? 'no response') + (detail ? `\n${detail}` : '') }

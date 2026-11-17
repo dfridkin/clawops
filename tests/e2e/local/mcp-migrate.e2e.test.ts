@@ -54,9 +54,17 @@ describe.skipIf(!enabled)('clawops_migrate against a deployment clawops 1.7.9 ma
    * registry being consistent at that moment. On 2026-10-09 the nightly asked for express 5.3.0
    * five minutes after it was published, when the registry listed it but served a 404 for its
    * tarball. Install failures of that kind are retried; anything clawops itself says is not.
+   *
+   * The same goes for the network under 1.7.9's bootstrap, which has no retries of its own: on
+   * 2026-11-16 its `docker pull` of the 1.x image had a connection reset mid-layer ("failed to
+   * copy: ... connection reset by peer"). Re-running `up` repeats the bootstrap from the top.
    */
   function legacy(args: string[]): string {
-    const transient = /npm error (code E404|code ETIMEDOUT|code ECONNRESET|code EAI_AGAIN|code ETARGET)|npm error network/
+    const transient = new RegExp([
+      /npm error (code E404|code ETIMEDOUT|code ECONNRESET|code EAI_AGAIN|code ETARGET)|npm error network/.source,
+      // Only when the bootstrap itself failed: the 18789 wait `up` is expected to fail is not this.
+      /Bootstrap script failed[\s\S]*(connection reset by peer|TLS handshake timeout|i\/o timeout|Temporary failure resolving|Hash Sum mismatch)/.source,
+    ].join('|'))
     for (let attempt = 1; ; attempt++) {
       try {
         return execFileSync('npx', ['-y', LEGACY_CLI, ...args], {
@@ -150,7 +158,12 @@ describe.skipIf(!enabled)('clawops_migrate against a deployment clawops 1.7.9 ma
         await new Promise((res) => setTimeout(res, 5_000))
       }
     }
-    expect(outcome, outcome).not.toMatch(/"status"\s*:\s*"failed"/)
+    if (/"status"\s*:\s*"failed"/.test(outcome)) {
+      // The report says what the gateway said; this is everything the unit said, for a run
+      // nobody can repeat.
+      const journal = await vm.inspect('systemctl status openclaw --no-pager -l 2>&1; journalctl -u openclaw -n 80 --no-pager 2>&1')
+      expect.fail(`${outcome}\n--- the unit, from the host ---\n${journal.stdout}`)
+    }
 
     expect(await runningImage()).toBe(`ghcr.io/openclaw/openclaw:${TARGET_VERSION}`)
     const probe = await vm.inspect('curl -s --max-time 5 http://127.0.0.1:18789/startupz')
