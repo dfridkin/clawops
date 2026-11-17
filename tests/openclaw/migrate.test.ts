@@ -18,6 +18,7 @@ function steps(over: Partial<MigrateSteps> = {}, log: string[] = []) {
     writeConfig: async () => { log.push('config') },
     start: async () => { log.push('start') },
     gate: async () => { log.push('gate'); return { ok: true } },
+    repair: async () => { log.push('repair') },
     deviceId: async () => 'abc123',
   }
   return { steps: { ...base, ...over }, log }
@@ -106,11 +107,39 @@ describe('migrate — the sequence', () => {
     expect(log.filter((l) => l === 'start')).toHaveLength(2)
   })
 
-  it('does not restart forever', async () => {
+  it('does not repair when a second start is enough', async () => {
+    let calls = 0
+    const { steps: s, log } = steps({
+      gate: async () => { calls++; return calls === 1 ? { ok: false, reason: 'still starting' } : { ok: true } },
+    })
+    const out = await migrate(s)
+    expect(log).not.toContain('repair')
+    expect(describeMigration(out)).not.toMatch(/doctor --fix/)
+  })
+
+  // Nightly e2e, 2026-11-17: 2.x exited on every start with "Legacy workspace setup state
+  // requires migration ...; run openclaw doctor --fix", and the migration gave up after two.
+  it('runs one `doctor --fix` when the second start fails too, then starts again', async () => {
+    const said = 'no response from the gateway\nGateway failed to start: Legacy workspace setup state requires migration'
+    let calls = 0
+    const { steps: s, log } = steps({
+      gate: async () => { calls++; log.push('gate'); return calls <= 2 ? { ok: false, reason: said } : { ok: true } },
+    })
+    const out = await migrate(s)
+    expect(out.kind).toBe('migrated')
+    expect(log.filter((l) => l === 'repair')).toHaveLength(1)
+    expect(log.slice(log.indexOf('repair'))).toEqual(['repair', 'start', 'gate'])
+    const text = describeMigration(out)
+    expect(text).toMatch(/one-shot `openclaw doctor --fix`/)
+    expect(text).toContain('no response from the gateway')
+  })
+
+  it('does not restart or repair forever', async () => {
     const { steps: s, log } = steps({ gate: async () => ({ ok: false, reason: 'dead' }) })
     const out = await migrate(s)
     expect(out.kind).toBe('failed')
-    expect(log.filter((l) => l === 'start')).toHaveLength(2)
+    expect(log.filter((l) => l === 'start')).toHaveLength(3)
+    expect(log.filter((l) => l === 'repair')).toHaveLength(1)
   })
 })
 

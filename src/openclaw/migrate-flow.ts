@@ -12,6 +12,7 @@ import type { SshExecResult } from '../transport/ssh.js'
 import {
   STATE_DIR_HOST_LINUX, CONFIG_FILENAME, CONTAINER_UID, GATEWAY_PORT, gatewayRunCommand, GATEWAY_STOP_COMMAND,
 } from './runtime.js'
+import { repairCommand } from './upgrade.js'
 import { probeCommand, interpretProbe } from './health.js'
 import { migrate, describeMigration, type MigrateSteps, type MigrateOutcome } from './migrate.js'
 
@@ -159,13 +160,27 @@ export function migrationSteps(
       // "No response" is all a probe can say, and it is the same words for a gateway still
       // starting, one that exited, and one systemd is restart-looping. What the container and
       // the gateway said is the difference, and the operator reading this is mid-migration.
+      // Under systemd the container runs with --rm, so one that exited has no logs left to
+      // read; what it and `docker run` printed is in the unit's journal.
       const said = await run(
         "echo \"container: $(docker ps -a --filter name=^openclaw$ --format '{{.Status}}' | head -1)\"; " +
-          "systemctl is-enabled openclaw >/dev/null 2>&1 && echo \"unit: $(systemctl is-active openclaw)\"; " +
-          'docker logs --tail 15 openclaw 2>&1 | tail -15',
+          'if systemctl is-enabled openclaw >/dev/null 2>&1; then ' +
+          'echo "unit: $(systemctl is-active openclaw)"; ' +
+          'journalctl -u openclaw -n 15 --no-pager -o cat 2>&1 | tail -15; ' +
+          'else docker logs --tail 15 openclaw 2>&1 | tail -15; fi',
       )
       const detail = said.stdout.trim()
       return { ok: false, reason: (last ?? 'no response') + (detail ? `\n${detail}` : '') }
+    },
+
+    repair: async () => {
+      step('The gateway did not start; running a one-shot `openclaw doctor --fix`...')
+      // Stopped first: under systemd the unit is restart-looping on this same state, and the
+      // repair must not race a gateway starting on it.
+      await run(GATEWAY_STOP_COMMAND)
+      await run(repairCommand(opts.targetImage, STATE_DIR_HOST_LINUX))
+      // Whatever the repair wrote, the gateway runs as this uid and exits 1 on files it cannot write (G25).
+      await run(`chown -R ${CONTAINER_UID}:${CONTAINER_UID} ${STATE_DIR_HOST_LINUX}`)
     },
 
     deviceId: async () => {

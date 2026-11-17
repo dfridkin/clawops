@@ -603,7 +603,7 @@ pnpm dev doctor        # verify toolchain
 ```bash
 pnpm dev                   # run CLI from src/ via tsx
 pnpm build                 # tsup → dist/
-pnpm test                  # vitest (2446 tests, ~14s)
+pnpm test                  # vitest (2451 tests, ~14s)
 pnpm test:changed          # vitest --changed (fast edit loop)
 pnpm test:integration      # Docker-based SSH integration tests
 pnpm test:e2e:local        # builds, then bootstrap, the host-touching MCP tools and a 1.x migration, in systemd containers
@@ -1124,7 +1124,9 @@ clawops mounted was read by nothing. Your old settings are reported as *intent t
 never applied blindly. Their channel blocks would not validate against 2.0 anyway.
 
 The gateway also needs two starts: the first performs the state-schema migration and reports
-it as pending. `migrate` waits for the second rather than declaring success early.
+it as pending. `migrate` waits for the second rather than declaring success early. Some 1.x
+workspaces stop 2.x from starting at all until `openclaw doctor --fix` has run, so if the second
+start fails too, `migrate` runs that once in a throwaway container and starts the gateway again.
 
 If you ran `gateway restart`, `gateway update` or `config set` on a clawops before 2.0, your
 state is already gone, nothing was mounted to survive the container replacement. `migrate`

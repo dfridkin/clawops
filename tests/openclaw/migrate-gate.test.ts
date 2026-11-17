@@ -11,8 +11,11 @@ import { migrationSteps } from '../../src/openclaw/migrate-flow.js'
 const STARTED = '{"ok":true,"status":"started"}'
 const PENDING = '{"ok":false,"status":"migration-required"}'
 
-/** A host whose /startupz answers `bodies[i]` on the i-th probe, and the last one forever after. */
-function gateOn(bodies: string[]) {
+/**
+ * A host whose /startupz answers `bodies[i]` on the i-th probe, and the last one forever after.
+ * Any other command is answered by `shell`, which stands in for the host's shell.
+ */
+function gateOn(bodies: string[], shell: (cmd: string) => string = () => '') {
   let probes = 0
   const run = async (cmd: string) => {
     if (cmd.includes('startupz')) {
@@ -20,7 +23,7 @@ function gateOn(bodies: string[]) {
       probes++
       return { stdout: body, stderr: '', code: 0 }
     }
-    return { stdout: '', stderr: '', code: 0 }
+    return { stdout: shell(cmd), stderr: '', code: 0 }
   }
   const steps = migrationSteps(run, { targetImage: 'img:2026.9.2', sleep: async () => {} })
   return { gate: () => steps.gate(), probes: () => probes }
@@ -47,5 +50,46 @@ describe('the migration start gate', () => {
     const out = await g.gate()
     expect(out.ok).toBe(false)
     expect(g.probes()).toBe(15)
+  })
+
+  // Under systemd the gateway runs with --rm: a container that exited is gone, and
+  // `docker logs` says only "No such container". Seen in the nightly e2e on 2026-11-07 and
+  // 2026-11-09, where that was the whole report.
+  it('reports the unit journal on a systemd host, where an exited container leaves no logs', async () => {
+    const g = gateOn([''], (cmd) => {
+      // The shell would run one branch; this answers as a host with the unit enabled.
+      const systemdBranch = /then (.*); else/.exec(cmd)?.[1] ?? ''
+      return systemdBranch.includes('journalctl -u openclaw')
+        ? 'container: \nunit: activating\nError: Config validation failed: gateway.mode'
+        : 'Error response from daemon: No such container: openclaw'
+    })
+    const out = await g.gate()
+    expect(out.reason).toContain('unit: activating')
+    expect(out.reason).toContain('Config validation failed')
+  })
+
+  it('reads the container logs on a host without the unit', async () => {
+    let asked = ''
+    const g = gateOn([''], (cmd) => ((asked = cmd), ''))
+    await g.gate()
+    expect(asked).toMatch(/else docker logs --tail 15 openclaw/)
+  })
+})
+
+describe('the migration repair on the host', () => {
+  it('stops the gateway, repairs its state in a throwaway container, then hands it back to uid 1000', async () => {
+    const ran: string[] = []
+    const steps = migrationSteps(async (cmd) => { ran.push(cmd); return { stdout: '', stderr: '', code: 0 } }, {
+      targetImage: 'img:2026.9.2',
+      sleep: async () => {},
+    })
+    await steps.repair()
+    const at = (re: RegExp) => ran.findIndex((c) => re.test(c))
+    const stop = at(/systemctl stop openclaw/)
+    const fix = at(/^docker run --rm -v \S+:\/home\/node\/\.openclaw img:2026\.9\.2 openclaw doctor --fix --non-interactive --yes$/)
+    const chown = at(/^chown -R 1000:1000 /)
+    expect(stop, ran.join('\n')).toBeGreaterThanOrEqual(0)
+    expect(fix, ran.join('\n')).toBeGreaterThan(stop)
+    expect(chown, ran.join('\n')).toBeGreaterThan(fix)
   })
 })

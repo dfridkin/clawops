@@ -138,3 +138,18 @@ DB is written on every start. The reliable instrument is the install fingerprint
 3. Post-migration `/startupz` returns started. *(VM)*
 4. Install fingerprint is stable across a post-migration container replacement. *(VM)*
 5. `clawops migrate` refuses to run without a verified backup. *(unit)*
+
+## Correction, 2026-11-17: the repair is needed after all, on some workspaces
+
+The nightly e2e migrates a deployment clawops 1.7.9 made, and on about one night in four the 2.x
+gateway (2026.9.2) exited on every start, before answering anything:
+
+```
+Gateway failed to start: Legacy workspace setup state requires migration for
+/home/node/.openclaw/workspace; run openclaw doctor --fix.
+```
+
+A second start cannot clear that, and `migrate` gave up after two. It now runs step 6 above as
+written: stop the gateway, one-shot `doctor --fix` in a throwaway container, start, re-gate. The
+evidence was hidden for weeks because the failure report read `docker logs` of a container that
+`--rm` had already removed; it now reads the unit's journal.
